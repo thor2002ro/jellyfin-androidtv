@@ -238,6 +238,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 		}
 
 		// Update data refresh service
+		dataRefreshService.lastPlayedItem = item
 		dataRefreshService.lastPlayback = Instant.now()
 		when (item.type) {
 			BaseItemKind.MOVIE -> dataRefreshService.lastMoviePlayback = Instant.now()
