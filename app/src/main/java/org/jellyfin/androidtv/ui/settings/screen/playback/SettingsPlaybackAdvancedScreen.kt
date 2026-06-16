@@ -108,6 +108,53 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
+			var skipBackLength by rememberPreference(userSettingPreferences, UserSettingPreferences.skipBackLength)
+			val interactionSource = remember { MutableInteractionSource() }
+
+			ListControl(
+				headingContent = { Text(stringResource(R.string.skip_back_length)) },
+				interactionSource = interactionSource,
+			) {
+				Row(
+					verticalAlignment = Alignment.CenterVertically,
+				) {
+					RangeControl(
+						modifier = Modifier
+							.height(4.dp)
+							.weight(1f),
+						interactionSource = interactionSource,
+						// 5 - 30 seconds with 5 second increment
+						min = 5_000f,
+						max = 30_000f,
+						stepForward = 5_000f,
+						value = skipBackLength.toFloat(),
+						onValueChange = { skipBackLength = it.roundToInt() }
+					)
+
+					Spacer(Modifier.width(Tokens.Space.spaceSm))
+
+					Box(
+						modifier = Modifier.sizeIn(minWidth = 32.dp),
+						contentAlignment = Alignment.CenterEnd
+					) {
+						Text("${skipBackLength / 1000}s")
+					}
+				}
+			}
+		}
+
+		item {
+			var seekConfirmationRequired by rememberPreference(userPreferences, UserPreferences.seekConfirmationRequired)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.lbl_seek_confirmation)) },
+				captionContent = { Text(stringResource(R.string.sum_seek_confirmation)) },
+				trailingContent = { Checkbox(checked = seekConfirmationRequired) },
+				onClick = { seekConfirmationRequired = !seekConfirmationRequired }
+			)
+		}
+
+		item {
 			var bufferLength by rememberPreference(userPreferences, UserPreferences.bufferLength)
 
 			ListButton(
