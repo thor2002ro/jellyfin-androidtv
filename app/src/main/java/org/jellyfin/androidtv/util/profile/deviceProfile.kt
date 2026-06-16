@@ -1,10 +1,19 @@
 package org.jellyfin.androidtv.util.profile
 
 import android.content.Context
+import android.media.AudioFormat
+import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.audio.AudioCapabilities
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
+import org.jellyfin.androidtv.preference.constant.HdrFormat
+import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.CodecType
 import org.jellyfin.sdk.model.api.DlnaProfileType
@@ -27,6 +36,7 @@ private val supportedAudioCodecs = arrayOf(
 	Codec.Audio.AAC,
 	Codec.Audio.AAC_LATM,
 	Codec.Audio.AC3,
+	Codec.Audio.AC4,
 	Codec.Audio.ALAC,
 	Codec.Audio.DCA,
 	Codec.Audio.DTS,
@@ -74,6 +84,20 @@ private fun UserPreferences.getMaxBitrate(): Int {
 	return (maxBitrate * 1_000_000).roundToInt()
 }
 
+private fun UserPreferences.getHdrRangeTypesFor(mode: HdrOverrideMode): Set<VideoRangeType> =
+	HdrFormat.entries
+		.filter { this[it.preference] == mode }
+		.flatMapTo(mutableSetOf()) { it.videoRangeTypes }
+
+private fun UserPreferences.getLegacyDolbyVisionHdrDisabledRangeTypes(): Set<VideoRangeType> =
+	if (this[UserPreferences.disableHDR10]) buildSet {
+		add(VideoRangeType.DOVI_WITH_HDR10)
+		if (!KnownDefects.hevcDoviHdr10PlusBug) {
+			add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
+			add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+		}
+	} else emptySet()
+
 fun createDeviceProfile(
 	context: Context,
 	userPreferences: UserPreferences,
@@ -81,28 +105,47 @@ fun createDeviceProfile(
 ) = createDeviceProfile(
 	mediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled]),
 	maxBitrate = userPreferences.getMaxBitrate(),
-	isAC3Enabled = userPreferences[UserPreferences.ac3Enabled],
+	isAC3PrefEnabled = userPreferences[UserPreferences.ac3Enabled],
+	isEAC3PrefEnabled = userPreferences[UserPreferences.eac3Enabled],
+	isDTSPrefEnabled = userPreferences[UserPreferences.dtsEnabled],
+	isTrueHDPrefEnabled = userPreferences[UserPreferences.truehdEnabled],
 	downMixAudio = userPreferences[UserPreferences.audioBehaviour] == AudioBehavior.DOWNMIX_TO_STEREO,
 	assDirectPlay = userPreferences[UserPreferences.assDirectPlay],
 	pgsDirectPlay = userPreferences[UserPreferences.pgsDirectPlay],
 	userAVCLevel = userPreferences[UserPreferences.userAVCLevel].level,
 	userHEVCLevel = userPreferences[UserPreferences.userHEVCLevel].level,
+	forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE),
+	forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE) +
+		userPreferences.getLegacyDolbyVisionHdrDisabledRangeTypes(),
 )
 
 fun createDeviceProfile(
 	mediaTest: MediaCodecCapabilitiesTest,
 	maxBitrate: Int,
-	isAC3Enabled: Boolean,
+	isAC3PrefEnabled: Boolean,
+	isEAC3PrefEnabled: Boolean,
+	isDTSPrefEnabled: Boolean,
+	isTrueHDPrefEnabled: Boolean,
 	downMixAudio: Boolean,
 	assDirectPlay: Boolean,
 	pgsDirectPlay: Boolean,
 	userAVCLevel: Int?,
 	userHEVCLevel: Int?,
+	forceEnabledHdr: Set<VideoRangeType>,
+	forceDisabledHdr: Set<VideoRangeType>
 ) = buildDeviceProfile {
 	val allowedAudioCodecs = when {
 		downMixAudio -> downmixSupportedAudioCodecs
-		!isAC3Enabled -> supportedAudioCodecs.filterNot { it == Codec.Audio.EAC3 || it == Codec.Audio.AC3 }.toTypedArray()
-		else -> supportedAudioCodecs
+		else -> supportedAudioCodecs.filterNot { supportedPassthroughAudioCodecs ->
+			when (supportedPassthroughAudioCodecs) {
+				// Remove codec if false.
+				Codec.Audio.AC3 -> !isAC3PrefEnabled
+				Codec.Audio.EAC3 -> !isEAC3PrefEnabled
+				Codec.Audio.TRUEHD -> !isTrueHDPrefEnabled
+				Codec.Audio.DTS -> !isDTSPrefEnabled
+				else -> false
+			}
+		}.toTypedArray()
 	}
 
 	val supportsHevc = mediaTest.supportsHevc()
@@ -442,19 +485,31 @@ fun createDeviceProfile(
 
 			if (!mediaTest.supportsAV1HDR10()) add(VideoRangeType.HDR10)
 		}
-	}
+	} - forceEnabledHdr + forceDisabledHdr
 
 	val unsupportedRangeTypesHevc = buildSet {
 		add(VideoRangeType.DOVI_INVALID)
 
 		if (!supportsHevcDolbyVisionEL) {
-			add(VideoRangeType.DOVI_WITH_EL)
-			if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+			val canPlayHevcDoviProfile7 = if (KnownDefects.unreportedDoviProfile7Support) {
+				supportsHevcDolbyVision && supportsHevcMain10 && supportsHevcHDR10
+			} else {
+				// DV profile 7 uses an HDR base layer. If HDR10 is supported we can safely direct play and let the player fall back.
+				supportsHevcHDR10
+			}
+
+			if (!canPlayHevcDoviProfile7) {
+				add(VideoRangeType.DOVI_WITH_EL)
+
+				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) {
+					add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+				}
+			}
 
 			if (!supportsHevcDolbyVision) {
 				add(VideoRangeType.DOVI)
 				if (!supportsHevcHDR10) add(VideoRangeType.DOVI_WITH_HDR10)
-				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
+				if (!supportsHevcHDR10 && !supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
 			}
 		}
 
@@ -464,10 +519,11 @@ fun createDeviceProfile(
 		}
 
 		if (KnownDefects.hevcDoviHdr10PlusBug) {
+			add(VideoRangeType.DOVI_WITH_HDR10)
 			add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
 			add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
 		}
-	}
+	} - forceEnabledHdr + forceDisabledHdr
 
 	// Note: The codec profiles use a workaround to create correct behavior
 	// The notEquals condition will always fail the ConditionProcessor test in the server so we use applyConditions to only have the codec
@@ -546,4 +602,30 @@ private fun DeviceProfileBuilder.subtitleProfile(
 	if (external) subtitleProfile(format, SubtitleDeliveryMethod.EXTERNAL)
 	if (hls) subtitleProfile(format, SubtitleDeliveryMethod.HLS)
 	if (encode) subtitleProfile(format, SubtitleDeliveryMethod.ENCODE)
+}
+
+@OptIn(UnstableApi::class)
+fun isPassthroughAudioAvailable(context: Context, mimetype: String): Boolean {
+	// Def audio attributes
+	val audioAttributes = AudioAttributes.Builder()
+		.setUsage(C.USAGE_MEDIA)
+		.setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+		.build()
+	// Get audio capabilities
+	val audioCapabilities = AudioCapabilities.getCapabilities(
+		context,
+		audioAttributes,
+		null,
+		listOf(
+			AudioFormat.CHANNEL_OUT_STEREO,
+			AudioFormat.CHANNEL_OUT_5POINT1 )
+	)
+	// Set audio format for a passthrough audio codec 2.0 check
+	val format = Format.Builder()
+		.setSampleMimeType(mimetype)
+		.setChannelCount(Integer.bitCount(AudioFormat.CHANNEL_OUT_STEREO))
+		.setSampleRate(Format.NO_VALUE)
+		.build()
+	// Test Passthrough Direct Playback
+	return audioCapabilities.isPassthroughPlaybackSupported(format, audioAttributes)
 }
