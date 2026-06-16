@@ -26,6 +26,7 @@ import org.jellyfin.androidtv.preference.constant.ZoomMode;
 import org.jellyfin.androidtv.ui.InteractionTrackerViewModel;
 import org.jellyfin.androidtv.ui.livetv.TvManager;
 import org.jellyfin.androidtv.util.TimeUtils;
+import org.jellyfin.androidtv.util.TrackSelectionManager;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.ReportingHelper;
 import org.jellyfin.androidtv.util.apiclient.Response;
@@ -542,6 +543,14 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             internalOptions.setSubtitleStreamIndex(mCurrentOptions.getSubtitleStreamIndex());
             internalOptions.setAudioStreamIndex(mCurrentOptions.getAudioStreamIndex());
         }
+
+        // Check for stored track selections from detail screen
+        Integer storedAudioIndex = TrackSelectionManager.INSTANCE.getSelectedAudioTrack(item.getId());
+        Integer storedSubtitleIndex = TrackSelectionManager.INSTANCE.getSelectedSubtitleTrack(item.getId());
+
+        if (TrackSelectionManager.INSTANCE.hasSelectedSubtitleTrack(item.getId())) {
+            internalOptions.setSubtitleStreamIndex(storedSubtitleIndex);
+        }
         if (forcedSubtitleIndex != null) {
             internalOptions.setSubtitleStreamIndex(forcedSubtitleIndex);
         }
@@ -554,6 +563,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
                     break;
                 }
             }
+        }
+        if (storedAudioIndex != null) {
+            internalOptions.setAudioStreamIndex(storedAudioIndex);
         }
         if (!isLiveTv && currentMediaSource != null) {
             internalOptions.setMediaSourceId(currentMediaSource.getId());
@@ -659,26 +671,28 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             return;
         }
 
-        // get subtitle info - prefer saved language preference over server default
-        String lastSubtitleLanguage = videoQueueManager.getValue().getLastPlayedSubtitleLanguageIsoCode();
-        if (lastSubtitleLanguage != null) {
-            if (lastSubtitleLanguage.isEmpty()) {
-                // User explicitly disabled subtitles
-                mCurrentOptions.setSubtitleStreamIndex(null);
-            } else if (response.getMediaSource().getMediaStreams() != null) {
-                // Find subtitle stream matching saved language
-                Integer matchingIndex = null;
-                for (MediaStream stream : response.getMediaSource().getMediaStreams()) {
-                    if (stream.getType() == MediaStreamType.SUBTITLE && lastSubtitleLanguage.equals(stream.getLanguage())) {
-                        matchingIndex = stream.getIndex();
-                        break;
+        if (!TrackSelectionManager.INSTANCE.hasSelectedSubtitleTrack(item.getId())) {
+            // get subtitle info - prefer saved language preference over server default
+            String lastSubtitleLanguage = videoQueueManager.getValue().getLastPlayedSubtitleLanguageIsoCode();
+            if (lastSubtitleLanguage != null) {
+                if (lastSubtitleLanguage.isEmpty()) {
+                    // User explicitly disabled subtitles
+                    mCurrentOptions.setSubtitleStreamIndex(null);
+                } else if (response.getMediaSource().getMediaStreams() != null) {
+                    // Find subtitle stream matching saved language
+                    Integer matchingIndex = null;
+                    for (MediaStream stream : response.getMediaSource().getMediaStreams()) {
+                        if (stream.getType() == MediaStreamType.SUBTITLE && lastSubtitleLanguage.equals(stream.getLanguage())) {
+                            matchingIndex = stream.getIndex();
+                            break;
+                        }
                     }
+                    mCurrentOptions.setSubtitleStreamIndex(matchingIndex);
                 }
-                mCurrentOptions.setSubtitleStreamIndex(matchingIndex);
+            } else {
+                // No saved preference, use server default
+                mCurrentOptions.setSubtitleStreamIndex(response.getMediaSource().getDefaultSubtitleStreamIndex());
             }
-        } else {
-            // No saved preference, use server default
-            mCurrentOptions.setSubtitleStreamIndex(response.getMediaSource().getDefaultSubtitleStreamIndex());
         }
         setDefaultAudioIndex(response);
         Timber.i("default audio index set to %s remote default %s", mDefaultAudioIndex, response.getMediaSource().getDefaultAudioStreamIndex());
