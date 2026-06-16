@@ -50,6 +50,9 @@ fun SettingsPlaybackAdvancedScreen() {
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
 
+	var ac3Enabled by rememberPreference(userPreferences, UserPreferences.ac3Enabled)
+	var eac3Enabled by rememberPreference(userPreferences, UserPreferences.eac3Enabled)
+
 	SettingsColumn {
 		item {
 			ListSection(
@@ -188,6 +191,24 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
+			var disableHDR10 by rememberPreference(userPreferences, UserPreferences.disableHDR10)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_disable_hdr10_playback)) },
+				trailingContent = { Checkbox(checked = disableHDR10) },
+				onClick = { disableHDR10 = !disableHDR10 }
+			)
+		}
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_hdr_overrides)) },
+				captionContent = { Text(stringResource(R.string.preference_hdr_overrides_summary)) },
+				onClick = { router.push(Routes.PLAYBACK_HDR_OVERRIDES) }
+			)
+		}
+
+		item {
 			var videoStartDelay by rememberPreference(userPreferences, UserPreferences.videoStartDelay)
 			val interactionSource = remember { MutableInteractionSource() }
 
@@ -312,12 +333,44 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
-			var ac3Enabled by rememberPreference(userPreferences, UserPreferences.ac3Enabled)
-
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_bitstream_ac3)) },
 				trailingContent = { Checkbox(checked = ac3Enabled) },
-				onClick = { ac3Enabled = !ac3Enabled }
+				onClick = {
+					val newValue = !ac3Enabled
+					ac3Enabled = newValue
+					if (!newValue) {
+						eac3Enabled = false
+					}
+				}
+			)
+		}
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.lbl_bitstream_eac3)) },
+				trailingContent = { Checkbox(checked = eac3Enabled) },
+				onClick = { eac3Enabled = !eac3Enabled }, enabled = ac3Enabled
+			)
+		}
+
+		item {
+			var dtsEnabled by rememberPreference(userPreferences, UserPreferences.dtsEnabled)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.lbl_bitstream_dts)) },
+				trailingContent = { Checkbox(checked = dtsEnabled) },
+				onClick = { dtsEnabled = !dtsEnabled }
+			)
+		}
+
+		item {
+			var truehdEnabled by rememberPreference(userPreferences, UserPreferences.truehdEnabled)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.lbl_bitstream_truehd)) },
+				trailingContent = { Checkbox(checked = truehdEnabled) },
+				onClick = { truehdEnabled = !truehdEnabled }
 			)
 		}
 

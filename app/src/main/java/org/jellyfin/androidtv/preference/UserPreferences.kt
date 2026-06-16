@@ -9,6 +9,7 @@ import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.constant.BackdropBehavior
 import org.jellyfin.androidtv.preference.constant.BufferLength
 import org.jellyfin.androidtv.preference.constant.ClockBehavior
+import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.HEVCLevel
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior
@@ -97,6 +98,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var externalPlayerComponentName = stringPreference("external_player_component", "")
 
 		/**
+		 * Allows the user to manually disable HDR10/HDR10+ Playback
+		 */
+		var disableHDR10 = booleanPreference("disable_hdr10", false)
+
+		/**
 		 * Change refresh rate to match media when device supports it
 		 */
 		var refreshRateSwitchingBehavior = enumPreference("refresh_rate_switching_behavior", RefreshRateSwitchingBehavior.DISABLED)
@@ -136,6 +142,46 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Enable AC3
 		 */
 		var ac3Enabled = booleanPreference("pref_bitstream_ac3", true)
+
+		/**
+		 * HDR10 device profile override.
+		 */
+		var hdr10Override = enumPreference("pref_hdr10_mode", HdrOverrideMode.AUTO)
+
+		/**
+		 * HDR10+ device profile override.
+		 */
+		var hdr10PlusOverride = enumPreference("pref_hdr10_plus_mode", HdrOverrideMode.AUTO)
+
+		/**
+		 * Dolby Vision Profile 5 device profile override.
+		 */
+		var doviProfile5Override = enumPreference("pref_dovi_profile_5_mode", HdrOverrideMode.AUTO)
+
+		/**
+		 * Dolby Vision Profile 7 device profile override.
+		 */
+		var doviProfile7Override = enumPreference("pref_dovi_profile_7_mode", HdrOverrideMode.AUTO)
+
+		/**
+		 * Dolby Vision Profile 8 device profile override.
+		 */
+		var doviProfile8Override = enumPreference("pref_dovi_profile_8_mode", HdrOverrideMode.AUTO)
+
+		/**
+		 * Enable EAC3
+		 */
+		var eac3Enabled = booleanPreference("pref_bitstream_eac3", true)
+
+		/**
+		 * Enable DTS
+		 */
+		var dtsEnabled = booleanPreference("pref_bitstream_dts", true)
+
+		/**
+		 * Enable TrueHD
+		 */
+		var truehdEnabled = booleanPreference("pref_bitstream_truehd", true)
 
 		/* Live TV */
 		/**
