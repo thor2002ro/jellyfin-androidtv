@@ -62,10 +62,15 @@ object Utils : KoinComponent {
 		return themeColor
 	}
 
+	private const val MIN_SAFE_SEEK_POSITION_MS = 100L
+	private const val END_POSITION_BUFFER_MS = 1000L
+
 	@JvmStatic
-	fun getSafeSeekPosition(position: Long, duration: Long): Long = when {
-		position >= duration -> (duration - 1000).coerceAtLeast(0)
-		else -> position.coerceAtLeast(0)
+	fun getSafeSeekPosition(position: Long, duration: Long): Long {
+		val maxSafePosition = duration - END_POSITION_BUFFER_MS
+		if (maxSafePosition < MIN_SAFE_SEEK_POSITION_MS) return 0L
+
+		return position.coerceIn(MIN_SAFE_SEEK_POSITION_MS, maxSafePosition)
 	}
 
 	@JvmStatic
