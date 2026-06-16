@@ -141,6 +141,16 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
+			var disableHDR10 by rememberPreference(userPreferences, UserPreferences.disableHDR10)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_disable_hdr10_playback)) },
+				trailingContent = { Checkbox(checked = disableHDR10) },
+				onClick = { disableHDR10 = !disableHDR10 }
+			)
+		}
+
+		item {
 			var videoStartDelay by rememberPreference(userPreferences, UserPreferences.videoStartDelay)
 			val interactionSource = remember { MutableInteractionSource() }
 

@@ -87,6 +87,7 @@ fun createDeviceProfile(
 	pgsDirectPlay = userPreferences[UserPreferences.pgsDirectPlay],
 	userAVCLevel = userPreferences[UserPreferences.userAVCLevel].level,
 	userHEVCLevel = userPreferences[UserPreferences.userHEVCLevel].level,
+	dolbyVisionHDR10Disabled = userPreferences[UserPreferences.disableHDR10],
 )
 
 fun createDeviceProfile(
@@ -98,6 +99,7 @@ fun createDeviceProfile(
 	pgsDirectPlay: Boolean,
 	userAVCLevel: Int?,
 	userHEVCLevel: Int?,
+	dolbyVisionHDR10Disabled: Boolean,
 ) = buildDeviceProfile {
 	val allowedAudioCodecs = when {
 		downMixAudio -> downmixSupportedAudioCodecs
@@ -464,8 +466,17 @@ fun createDeviceProfile(
 		}
 
 		if (KnownDefects.hevcDoviHdr10PlusBug) {
+			add(VideoRangeType.DOVI_WITH_HDR10)
 			add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
 			add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+		}
+
+		if (dolbyVisionHDR10Disabled) {
+			add(VideoRangeType.DOVI_WITH_HDR10)
+			if (!KnownDefects.hevcDoviHdr10PlusBug) {
+				add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
+				add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+			}
 		}
 	}
 
