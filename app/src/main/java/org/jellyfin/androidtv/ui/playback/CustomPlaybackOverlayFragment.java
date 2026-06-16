@@ -70,6 +70,7 @@ import org.jellyfin.androidtv.util.CoroutineUtils;
 import org.jellyfin.androidtv.util.DateTimeExtensionsKt;
 import org.jellyfin.androidtv.util.ImageHelper;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
+import org.jellyfin.androidtv.util.KeyEventExtensionsKt;
 import org.jellyfin.androidtv.util.PlaybackHelper;
 import org.jellyfin.androidtv.util.TextUtilsKt;
 import org.jellyfin.androidtv.util.TimeUtils;
@@ -113,6 +114,8 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private int mCurrentDisplayChannelEndNdx = 0;
     private List<BaseItemDto> mAllChannels;
     private UUID mFirstFocusChannelId;
+    private int guideRowHeightPx;
+    private int guideVisibleRows;
 
     private List<BaseItemDto> mItemsToPlay;
 
@@ -430,6 +433,9 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 event.startTracking();
                 return true;
             }
+            if (mGuideVisible && KeyEventExtensionsKt.isPageKey(keyCode)) {
+                return true;
+            }
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
             if (keyListener.onKey(v, keyCode, event)) return true;
 
@@ -448,6 +454,8 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 }
                 return false;
             }
+
+            if (handleGuideChannelPageKey(keyCode)) return true;
 
             PlaybackController playbackController = playbackControllerContainer.getValue().getPlaybackController();
 
@@ -472,6 +480,27 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         }
 
         return false;
+    }
+
+    private boolean handleGuideChannelPageKey(int keyCode) {
+        if (!mGuideVisible) return false;
+        if (!KeyEventExtensionsKt.isPageKey(keyCode)) return false;
+        if (mDetailPopup != null && mDetailPopup.isShowing()) {
+            return true;
+        }
+        if (tvGuideBinding == null || tvGuideBinding.spinner.getVisibility() == View.VISIBLE || mAllChannels == null || mAllChannels.isEmpty()) {
+            return true;
+        }
+
+        if (guideVisibleRows == 0) {
+            guideRowHeightPx = Utils.convertDpToPixel(requireContext(), LiveTvGuideFragment.GUIDE_ROW_HEIGHT_DP);
+            guideVisibleRows = Math.max(1, tvGuideBinding.channelScroller.getHeight() / guideRowHeightPx);
+        }
+        LiveTvGuideFragmentHelperKt.pageGuideChannels(
+                requireActivity(), tvGuideBinding.programRows, tvGuideBinding.channels, guideVisibleRows,
+                KeyEventExtensionsKt.isPageForward(keyCode)
+        );
+        return true;
     }
 
     public void refreshFavorite(UUID channelId) {
