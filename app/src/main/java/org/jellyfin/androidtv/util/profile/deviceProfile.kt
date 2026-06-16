@@ -491,9 +491,20 @@ fun createDeviceProfile(
 		add(VideoRangeType.DOVI_INVALID)
 
 		if (!supportsHevcDolbyVisionEL) {
-			// DV profile 7 uses an HDR base layer. If HDR10 is supported we can safely direct play and let the player fall back.
-			if (!supportsHevcHDR10) add(VideoRangeType.DOVI_WITH_EL)
-			if (!supportsHevcHDR10 && !supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+			val canPlayHevcDoviProfile7 = if (KnownDefects.unreportedDoviProfile7Support) {
+				supportsHevcDolbyVision && supportsHevcMain10 && supportsHevcHDR10
+			} else {
+				// DV profile 7 uses an HDR base layer. If HDR10 is supported we can safely direct play and let the player fall back.
+				supportsHevcHDR10
+			}
+
+			if (!canPlayHevcDoviProfile7) {
+				add(VideoRangeType.DOVI_WITH_EL)
+
+				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) {
+					add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
+				}
+			}
 
 			if (!supportsHevcDolbyVision) {
 				add(VideoRangeType.DOVI)
