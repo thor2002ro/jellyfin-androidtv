@@ -261,6 +261,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var pgsDirectPlay = booleanPreference("pgs_enabled", true)
 
 		/**
+		 * Require confirmation before seeking. When disabled, D-pad left/right seeks immediately.
+		 */
+		var seekConfirmationRequired = booleanPreference("seek_confirmation", true)
+
+		/**
 		 * Enable the use of software-based codecs.
 		 */
 		var softwareCodecsEnabled = booleanPreference("software_codecs_enabled", true)
