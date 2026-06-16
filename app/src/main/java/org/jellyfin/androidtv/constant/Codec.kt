@@ -31,6 +31,7 @@ object Codec {
 		const val AAC = "aac"
 		const val AAC_LATM = "aac_latm"
 		const val AC3 = "ac3"
+		const val AC4 = "ac4"
 		const val ALAC = "alac"
 		const val APE = "ape"
 		const val DCA = "dca"
@@ -56,6 +57,8 @@ object Codec {
 		const val WEBMA = "webma"
 		const val WMA = "wma"
 		const val WMAV2 = "wmav2"
+		const val DTS_HD = "dts_hd"
+		const val EAC3_JOC = "eac3_joc"
 	}
 
 	object Video {
