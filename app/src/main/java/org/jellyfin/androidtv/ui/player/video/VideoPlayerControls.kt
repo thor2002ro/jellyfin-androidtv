@@ -73,6 +73,8 @@ fun VideoPlayerControls(
 			Spacer(Modifier.weight(1f))
 
 			PlaybackInfoButton(onClick = onPlaybackInfoClick)
+			AudioTrackButton(playbackManager)
+			SubtitleTrackButton(playbackManager)
 
 			MoreOptionsButton {
 				Column(
