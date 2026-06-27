@@ -220,7 +220,8 @@ object BrowsingUtils {
 		personIds = setOf(personId),
 		recursive = true,
 		includeItemTypes = setOf(itemType),
-		sortBy = setOf(ItemSortBy.SORT_NAME),
+		sortBy = setOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME),
+		sortOrder = setOf(SortOrder.DESCENDING),
 	)
 
 	@JvmStatic
