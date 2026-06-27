@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.player.video
 
+import android.view.KeyEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +52,8 @@ import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
+import org.jellyfin.playback.media3.exoplayer.mapping.getFfmpegSubtitleMimeType
+import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
@@ -63,6 +67,10 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 private val POPOVER_VERTICAL_OFFSET = 5.dp
+private val SUBTITLE_OFFSET_POPOVER_MIN_WIDTH = 250.dp
+private val SUBTITLE_OFFSET_POPOVER_MAX_WIDTH = 430.dp
+private val SUBTITLE_OFFSET_STEP_SMALL = 100.milliseconds
+private val SUBTITLE_OFFSET_STEP_LARGE = 500.milliseconds
 
 @Composable
 fun AudioTrackButton(
@@ -133,10 +141,14 @@ fun SubtitleTrackButton(
 	val coroutineScope = rememberCoroutineScope()
 
 	var expanded by remember { mutableStateOf(false) }
+	var offsetControlsExpanded by remember { mutableStateOf(false) }
 	var refreshTick by remember { mutableStateOf(0) }
 
 	val availableTracks = remember(currentStream, refreshTick) {
 		trackBackend.getAvailableTracks(TrackType.SUBTITLE)
+	}
+	val hasOffsetCapableSubtitle = remember(availableTracks) {
+		availableTracks.any(PlayerTrack::supportsSubtitleTimingOffset)
 	}
 
 	if (availableTracks.isEmpty()) return
@@ -146,6 +158,7 @@ fun SubtitleTrackButton(
 		IconButton(
 			onClick = {
 				refreshTick++
+				offsetControlsExpanded = false
 				expanded = true
 			},
 			tooltip = tooltip,
@@ -163,7 +176,13 @@ fun SubtitleTrackButton(
 			title = stringResource(R.string.lbl_subtitle_track),
 			showNoneOption = true,
 			beforeTracks = {
-				SubtitleOffsetControls(playbackManager)
+				if (hasOffsetCapableSubtitle) {
+					SubtitleOffsetTrackItem(
+						playbackManager = playbackManager,
+						expanded = offsetControlsExpanded,
+						onClick = { offsetControlsExpanded = !offsetControlsExpanded },
+					)
+				}
 			},
 			onTrackSelected = { track ->
 				val trackIndex = track?.index ?: -1
@@ -179,9 +198,55 @@ fun SubtitleTrackButton(
 						refreshTick++
 					}
 				}
+				offsetControlsExpanded = false
 				expanded = false
 			},
 		)
+	}
+}
+
+@Composable
+fun SubtitleOffsetButton(
+	playbackManager: PlaybackManager,
+) {
+	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
+	if (!subtitleTimingOffsetSupported) return
+
+	var expanded by remember { mutableStateOf(false) }
+
+	Box {
+		val tooltip = stringResource(R.string.lbl_subtitle_offset)
+		IconButton(
+			onClick = { expanded = true },
+			tooltip = tooltip,
+		) {
+			Icon(
+				imageVector = ImageVector.vectorResource(R.drawable.ic_time),
+				contentDescription = tooltip,
+			)
+		}
+
+		Popover(
+			expanded = expanded,
+			onDismissRequest = { expanded = false },
+			alignment = Alignment.TopCenter,
+			offset = DpOffset(0.dp, -POPOVER_VERTICAL_OFFSET),
+		) {
+			SubtitleOffsetControls(
+				playbackManager = playbackManager,
+				modifier = Modifier
+					.widthIn(
+						min = SUBTITLE_OFFSET_POPOVER_MIN_WIDTH,
+						max = SUBTITLE_OFFSET_POPOVER_MAX_WIDTH,
+					)
+					.onPreviewKeyEvent { event ->
+						handleSubtitleOffsetKeyEvent(
+							keyEvent = event.nativeKeyEvent,
+							playbackManager = playbackManager,
+						)
+					},
+			)
+		}
 	}
 }
 
@@ -338,16 +403,73 @@ private fun TrackItem(
 }
 
 @Composable
-private fun SubtitleOffsetControls(
+private fun SubtitleOffsetTrackItem(
 	playbackManager: PlaybackManager,
+	expanded: Boolean,
+	onClick: () -> Unit,
 ) {
 	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
-	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
-	if (!subtitleTimingOffsetSupported) return
+	val label = if (subtitleTimingOffset == kotlin.time.Duration.ZERO) {
+		stringResource(R.string.lbl_subtitle_offset)
+	} else {
+		stringResource(
+			R.string.lbl_subtitle_offset_current,
+			stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(subtitleTimingOffset)),
+		)
+	}
+
+	Button(
+		onClick = onClick,
+		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+	) {
+		Row(
+			horizontalArrangement = Arrangement.spacedBy(8.dp),
+			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+		) {
+			Icon(
+				imageVector = ImageVector.vectorResource(R.drawable.ic_time),
+				contentDescription = null,
+				modifier = Modifier.size(18.dp),
+			)
+			ProvideTextStyle(JellyfinTheme.typography.listHeadline.copy(fontSize = 13.sp)) {
+				Text(
+					text = label,
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+				)
+			}
+		}
+	}
+
+	if (expanded) {
+		SubtitleOffsetControls(
+			playbackManager = playbackManager,
+			modifier = Modifier
+				.widthIn(
+					min = SUBTITLE_OFFSET_POPOVER_MIN_WIDTH,
+					max = SUBTITLE_OFFSET_POPOVER_MAX_WIDTH,
+				)
+				.onPreviewKeyEvent { event ->
+					handleSubtitleOffsetKeyEvent(
+						keyEvent = event.nativeKeyEvent,
+						playbackManager = playbackManager,
+					)
+				},
+		)
+	}
+}
+
+@Composable
+private fun SubtitleOffsetControls(
+	playbackManager: PlaybackManager,
+	modifier: Modifier = Modifier,
+) {
+	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
 
 	Column(
 		verticalArrangement = Arrangement.spacedBy(6.dp),
-		modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+		modifier = modifier.padding(horizontal = 10.dp, vertical = 6.dp),
 	) {
 		Text(
 			text = stringResource(
@@ -359,28 +481,28 @@ private fun SubtitleOffsetControls(
 
 		Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
 			Button(
-				onClick = { playbackManager.state.adjustSubtitleTimingOffset((-500).milliseconds) },
+				onClick = { playbackManager.state.adjustSubtitleTimingOffset(-SUBTITLE_OFFSET_STEP_LARGE) },
 				contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
 			) {
-				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds((-500).milliseconds)), fontSize = 12.sp)
+				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(-SUBTITLE_OFFSET_STEP_LARGE)), fontSize = 12.sp)
 			}
 			Button(
-				onClick = { playbackManager.state.adjustSubtitleTimingOffset((-100).milliseconds) },
+				onClick = { playbackManager.state.adjustSubtitleTimingOffset(-SUBTITLE_OFFSET_STEP_SMALL) },
 				contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
 			) {
-				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds((-100).milliseconds)), fontSize = 12.sp)
+				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(-SUBTITLE_OFFSET_STEP_SMALL)), fontSize = 12.sp)
 			}
 			Button(
-				onClick = { playbackManager.state.adjustSubtitleTimingOffset(100.milliseconds) },
+				onClick = { playbackManager.state.adjustSubtitleTimingOffset(SUBTITLE_OFFSET_STEP_SMALL) },
 				contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
 			) {
-				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(100.milliseconds)), fontSize = 12.sp)
+				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(SUBTITLE_OFFSET_STEP_SMALL)), fontSize = 12.sp)
 			}
 			Button(
-				onClick = { playbackManager.state.adjustSubtitleTimingOffset(500.milliseconds) },
+				onClick = { playbackManager.state.adjustSubtitleTimingOffset(SUBTITLE_OFFSET_STEP_LARGE) },
 				contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
 			) {
-				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(500.milliseconds)), fontSize = 12.sp)
+				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(SUBTITLE_OFFSET_STEP_LARGE)), fontSize = 12.sp)
 			}
 			Button(
 				onClick = { playbackManager.state.resetSubtitleTimingOffset() },
@@ -390,6 +512,27 @@ private fun SubtitleOffsetControls(
 			}
 		}
 	}
+}
+
+private fun handleSubtitleOffsetKeyEvent(
+	keyEvent: KeyEvent,
+	playbackManager: PlaybackManager,
+): Boolean = when (keyEvent.keyCode) {
+	KeyEvent.KEYCODE_DPAD_UP -> {
+		if (keyEvent.action == KeyEvent.ACTION_DOWN) {
+			playbackManager.state.adjustSubtitleTimingOffset(SUBTITLE_OFFSET_STEP_SMALL)
+		}
+		true
+	}
+
+	KeyEvent.KEYCODE_DPAD_DOWN -> {
+		if (keyEvent.action == KeyEvent.ACTION_DOWN) {
+			playbackManager.state.adjustSubtitleTimingOffset(-SUBTITLE_OFFSET_STEP_SMALL)
+		}
+		true
+	}
+
+	else -> false
 }
 
 private val PlayerTrack.displayLabel: String
@@ -407,3 +550,10 @@ private val PlayerTrack.displayLabel: String
 			}
 		}
 	}
+
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun PlayerTrack.supportsSubtitleTimingOffset(): Boolean {
+	if (type != TrackType.SUBTITLE) return false
+	val codec = codec ?: return false
+	return isSubtitleTimingOffsetSupported(getFfmpegSubtitleMimeType(codec, ""))
+}
