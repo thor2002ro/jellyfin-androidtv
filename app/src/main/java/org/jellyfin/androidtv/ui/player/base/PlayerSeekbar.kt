@@ -22,6 +22,7 @@ fun PlayerSeekbar(
 	playbackManager: PlaybackManager = koinInject<PlaybackManager>(),
 	progress: Duration? = null,
 	markers: List<Duration> = emptyList(),
+	enabled: Boolean = true,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
 	val positionInfo = playbackManager.state.positionInfo
@@ -43,7 +44,7 @@ fun PlayerSeekbar(
 		onSeek = { progress -> playbackManager.state.seek(progress) },
 		modifier = modifier,
 		colors = colors,
-		enabled = positionInfo.duration > Duration.ZERO,
+		enabled = enabled && positionInfo.duration > Duration.ZERO,
 		markers = markers,
 	)
 }

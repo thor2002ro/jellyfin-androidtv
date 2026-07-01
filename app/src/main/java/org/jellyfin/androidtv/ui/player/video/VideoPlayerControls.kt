@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -93,6 +94,7 @@ fun VideoPlayerControls(
 	val topControlsFocusRequester = remember { FocusRequester() }
 	val isLiveTv = item?.isLiveTv() == true
 	val playPauseEnabled = currentQueueEntry?.isLiveTv != true
+	val seekEnabled = currentQueueEntry?.isDirectPlayLiveTv != true
 	val coroutineScope = rememberCoroutineScope()
 	val liveTvChannelNavigator = rememberLiveTvChannelNavigator()
 	val showPreviousEntry = isLiveTv || entryIndex > 0
@@ -180,8 +182,8 @@ fun VideoPlayerControls(
 					enabled = playPauseEnabled,
 				)
 				StopButton(onClick = onStopClick)
-				RewindButton(playbackManager)
-				FastForwardButton(playbackManager)
+				RewindButton(playbackManager, seekEnabled)
+				FastForwardButton(playbackManager, seekEnabled)
 
 				Spacer(Modifier.weight(1f))
 
@@ -213,6 +215,7 @@ fun VideoPlayerControls(
 			markers = chapterMarkers,
 			liveTvProgramTimeline = liveTvProgramTimeline,
 			liveTvProgramPosition = liveTvProgramPosition,
+			enabled = seekEnabled,
 			modifier = Modifier
 				.fillMaxWidth()
 				.height(4.dp),
@@ -300,6 +303,7 @@ fun VideoPlayerSeekControls(
 	trickPlayEnabled: Boolean = false,
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	enabled: Boolean = true,
 ) {
 	Column(
 		horizontalAlignment = Alignment.CenterHorizontally,
@@ -317,6 +321,7 @@ fun VideoPlayerSeekControls(
 			position = position,
 			liveTvProgramTimeline = liveTvProgramTimeline,
 			liveTvProgramPosition = liveTvProgramPosition,
+			enabled = enabled,
 			modifier = Modifier
 				.fillMaxWidth()
 				.height(4.dp),
@@ -426,10 +431,12 @@ private fun StopButton(
 @Composable
 private fun RewindButton(
 	playbackManager: PlaybackManager,
+	enabled: Boolean,
 ) {
 	val tooltip = stringResource(R.string.rewind)
 	IconButton(
 		onClick = { playbackManager.state.rewind() },
+		enabled = enabled,
 		tooltip = tooltip,
 	) {
 		Icon(
@@ -442,10 +449,12 @@ private fun RewindButton(
 @Composable
 private fun FastForwardButton(
 	playbackManager: PlaybackManager,
+	enabled: Boolean,
 ) {
 	val tooltip = stringResource(R.string.fast_forward)
 	IconButton(
 		onClick = { playbackManager.state.fastForward() },
+		enabled = enabled,
 		tooltip = tooltip,
 	) {
 		Icon(
@@ -601,6 +610,7 @@ private fun TimelineSeekbar(
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
 	modifier: Modifier = Modifier,
+	enabled: Boolean = true,
 ) {
 	if (liveTvProgramTimeline != null) {
 		Seekbar(
@@ -615,6 +625,7 @@ private fun TimelineSeekbar(
 			playbackManager = playbackManager,
 			progress = position,
 			markers = markers,
+			enabled = enabled,
 			modifier = modifier,
 		)
 	}
