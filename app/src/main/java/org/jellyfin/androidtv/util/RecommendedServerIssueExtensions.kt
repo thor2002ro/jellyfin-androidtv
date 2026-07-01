@@ -10,12 +10,13 @@ import org.jellyfin.sdk.discovery.RecommendedServerIssue
  */
 fun RecommendedServerIssue.getFriendlyMessage(context: Context): String = when (this) {
 	// Connection issues
-	is RecommendedServerIssue.SecureConnectionFailed -> context.getString(R.string.server_issue_ssl_handshake)
+	is RecommendedServerIssue.SecureConnectionFailed -> sslException.getConnectionErrorReason(context)
 	is RecommendedServerIssue.SlowResponse -> context.getString(R.string.server_issue_timeout)
-	is RecommendedServerIssue.ServerUnreachable -> context.getString(R.string.server_issue_unable_to_connect)
+	is RecommendedServerIssue.ServerUnreachable -> throwable.getConnectionErrorReason(context)
 
 	// Response issues
-	is RecommendedServerIssue.MissingSystemInfo -> context.getString(R.string.server_issue_unable_to_connect)
+	is RecommendedServerIssue.MissingSystemInfo -> throwable?.getConnectionErrorReason(context)
+		?: context.getString(R.string.server_issue_invalid_response)
 	is RecommendedServerIssue.InvalidProductName -> context.getString(R.string.server_issue_invalid_product)
 	RecommendedServerIssue.MissingVersion -> context.getString(R.string.server_issue_missing_version)
 
@@ -37,7 +38,7 @@ fun RecommendedServerIssue.getFriendlyMessage(context: Context): String = when (
  * passed trough [RecommendedServerIssue.getFriendlyMessage].
  */
 @Suppress("MagicNumber")
-fun Collection<RecommendedServerIssue>.getSummary(context: Context): String? = maxByOrNull {
+fun Collection<RecommendedServerIssue>.getSummary(context: Context): String = maxByOrNull {
 	// Assign a score to each issue type so we can return the most important one. Higher number
 	// means more important.
 	when (it) {
@@ -50,4 +51,15 @@ fun Collection<RecommendedServerIssue>.getSummary(context: Context): String? = m
 		RecommendedServerIssue.MissingVersion -> 1
 		is RecommendedServerIssue.InvalidProductName -> 0
 	}
-}?.getFriendlyMessage(context)
+}?.getFriendlyMessage(context) ?: context.getString(R.string.server_issue_unable_to_connect)
+
+fun RecommendedServerIssue.getLogSummary(): String = when (this) {
+	is RecommendedServerIssue.SecureConnectionFailed -> "secure connection failed: ${sslException.getConnectionErrorLogReason()}"
+	is RecommendedServerIssue.SlowResponse -> "slow response: ${responseTime}ms"
+	is RecommendedServerIssue.ServerUnreachable -> "server unreachable: ${throwable.getConnectionErrorLogReason()}"
+	is RecommendedServerIssue.MissingSystemInfo -> "missing system info: ${throwable?.getConnectionErrorLogReason() ?: "no response"}"
+	is RecommendedServerIssue.InvalidProductName -> "invalid product name: $productName"
+	RecommendedServerIssue.MissingVersion -> "missing server version"
+	is RecommendedServerIssue.UnsupportedServerVersion -> "unsupported server version: $version"
+	is RecommendedServerIssue.OutdatedServerVersion -> "outdated server version: $version"
+}
