@@ -34,6 +34,18 @@
     <color name="channel_scroller_bg">#201b1c</color>
     <color name="program_scroller_bg">#0b0e14</color>
     <color name="timeline_bg">#201b1c</color>
+    <color name="guide_screen_top">#141821</color>
+    <color name="guide_screen_bottom">#07090D</color>
+    <color name="guide_panel_bg">#CC151922</color>
+    <color name="guide_panel_border">#2AFFFFFF</color>
+    <color name="guide_grid_bg">#D90B0F15</color>
+    <color name="guide_timeline_bg">#E01B202A</color>
+    <color name="guide_program_cell_bg">#252A34</color>
+    <color name="guide_channel_cell_bg">#202631</color>
+    <color name="guide_grid_line">#26FFFFFF</color>
+    <color name="guide_text_secondary">#B8C3CE</color>
+    <color name="guide_button_bg">#2F3744</color>
+    <color name="guide_button_focused">#00A4DC</color>
     <!-- ProgramGridCell Background Colors -->
     <color name="guide_movie_bg">#328E24AA</color>
     <color name="guide_sports_bg">#323949AB</color>
