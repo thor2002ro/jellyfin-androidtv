@@ -36,6 +36,7 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
@@ -315,7 +316,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("IDs", subtitleIds(selectedSubtitle, selectedSubtitleStream))
 					row("Title", selectedSubtitle?.label ?: selectedSubtitleStream?.title ?: selectedExternalSubtitle?.title)
 					row("Codec", subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle).formatCodec())
-					row("Language", selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language)
+					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
 					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
@@ -379,7 +380,8 @@ private object NewPlayerStreamStatusBuilder {
 		}
 	}
 
-	private fun audioLanguage(selectedTrack: PlayerTrack?): String? = selectedTrack?.language
+	private fun audioLanguage(selectedTrack: PlayerTrack?): String? =
+		selectedTrack?.language.toIso2LanguageDisplayOrSelf()
 
 	private fun subtitleStatus(
 		track: PlayerTrack?,
