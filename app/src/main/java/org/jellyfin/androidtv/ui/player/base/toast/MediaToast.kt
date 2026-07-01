@@ -5,11 +5,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
@@ -18,10 +23,12 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.LocalTextStyle
 import org.jellyfin.androidtv.ui.base.ProvideTextStyle
+import org.jellyfin.androidtv.ui.base.Text
 
 data class MediaToastColors(
 	val backgroundColor: Color,
@@ -53,6 +60,7 @@ fun MediaToast(
 	icon: @Composable () -> Unit,
 	modifier: Modifier = Modifier,
 	progress: Float? = null,
+	text: String? = null,
 	colors: MediaToastColors = MediaToastDefaults.colors(),
 ) {
 	AnimatedVisibility(
@@ -63,9 +71,36 @@ fun MediaToast(
 			.fillMaxSize()
 			.wrapContentSize(Alignment.Center)
 	) {
+		if (text != null) {
+			Row(
+				horizontalArrangement = Arrangement.spacedBy(14.dp),
+				verticalAlignment = Alignment.CenterVertically,
+				modifier = Modifier
+					.widthIn(max = 520.dp)
+					.background(colors.backgroundColor, RoundedCornerShape(4.dp))
+					.padding(horizontal = 22.dp, vertical = 16.dp),
+			) {
+				Box(
+					contentAlignment = Alignment.Center,
+					modifier = Modifier.size(32.dp),
+				) {
+					ProvideTextStyle(LocalTextStyle.current.copy(color = colors.iconColor)) {
+						icon()
+					}
+				}
+				Text(
+					text = text,
+					style = JellyfinTheme.typography.default.copy(color = colors.iconColor),
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+				)
+			}
+			return@AnimatedVisibility
+		}
+
 		Box(
 			modifier = Modifier
-				.size(96.dp)
+				.size(128.dp)
 				.drawWithContent {
 					// Toast background
 					drawCircle(colors.backgroundColor)

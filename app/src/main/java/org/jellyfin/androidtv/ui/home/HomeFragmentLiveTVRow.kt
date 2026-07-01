@@ -23,6 +23,8 @@ class HomeFragmentLiveTVRow(
 		val header = HeaderItem(rowsAdapter.size().toLong(), activity.getString(R.string.pref_live_tv_cat))
 		val adapter = ArrayObjectAdapter(GridButtonPresenter())
 
+		// Live TV Channels button
+		adapter.add(GridButton(LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID, activity.getString(R.string.channels)))
 		// Live TV Guide button
 		adapter.add(GridButton(LiveTvOption.LIVE_TV_GUIDE_OPTION_ID, activity.getString(R.string.lbl_live_tv_guide)))
 		// Live TV Recordings button

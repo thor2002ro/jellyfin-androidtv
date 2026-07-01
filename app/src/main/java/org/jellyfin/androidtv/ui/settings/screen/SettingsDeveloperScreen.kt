@@ -20,6 +20,7 @@ import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.focus.focusKey
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.androidtv.util.AppLogging
 import org.jellyfin.androidtv.util.isTvDevice
 import org.koin.compose.koinInject
 
@@ -48,6 +49,20 @@ fun SettingsDeveloperScreen() {
 				captionContent = { Text(stringResource(R.string.desc_debug)) },
 				onClick = { debuggingEnabled = !debuggingEnabled },
 				modifier = Modifier.focusKey("debugging_enabled")
+			)
+		}
+
+		item {
+			var verboseLoggingEnabled by rememberPreference(userPreferences, UserPreferences.verboseLoggingEnabled)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.lbl_verbose_logging)) },
+				trailingContent = { Checkbox(checked = verboseLoggingEnabled) },
+				captionContent = { Text(stringResource(R.string.desc_verbose_logging)) },
+				onClick = {
+					val enabled = !verboseLoggingEnabled
+					verboseLoggingEnabled = enabled
+					AppLogging.setVerboseLogging(context, enabled)
+				}
 			)
 		}
 

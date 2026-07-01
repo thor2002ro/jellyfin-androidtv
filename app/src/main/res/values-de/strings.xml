@@ -664,5 +664,4 @@
     <string name="preference_enable_ass">ASS Untertitel direkt wiedergeben</string>
     <string name="preference_enable_pgs_description">Benötigt Transkodierung falls deaktiviert</string>
     <string name="preference_enable_ass_description">Experimentelles Feature, könnte nicht zuverlässig arbeiten</string>
-    <string name="preference_disable_hdr10_playback">DolbyVision HDR10/HDR10+ Playback deaktivieren</string>
 </resources>

@@ -29,7 +29,10 @@ class PlaybackLauncher(
 			BaseItemKind.SEASON,
 			BaseItemKind.RECORDING,
 			BaseItemKind.TV_CHANNEL,
+			BaseItemKind.LIVE_TV_CHANNEL,
 			BaseItemKind.PROGRAM,
+			BaseItemKind.TV_PROGRAM,
+			BaseItemKind.LIVE_TV_PROGRAM,
 				-> true
 
 			else -> false
@@ -60,12 +63,13 @@ class PlaybackLauncher(
 			if (userPreferences[UserPreferences.useExternalPlayer] && items.all { it.supportsExternalPlayer }) {
 				context.startActivity(ActivityDestinations.externalPlayer(context, position?.milliseconds ?: Duration.ZERO))
 				navigationRepository.goNowhere(true)
-			} else if (userPreferences[UserPreferences.playbackRewriteVideoEnabled]) {
-				val destination = Destinations.videoPlayerNew(position)
-				navigationRepository.navigate(destination, replace)
 			} else {
-				val destination = Destinations.videoPlayer(position)
-				navigationRepository.navigate(destination, replace)
+				val destination = if (userPreferences[UserPreferences.playbackRewriteVideoEnabled]) {
+					Destinations.videoPlayerNew(position)
+				} else {
+					Destinations.videoPlayer(position)
+				}
+				navigationRepository.navigate(destination, replace = replace)
 			}
 		}
 	}
