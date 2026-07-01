@@ -5,6 +5,7 @@ import org.jellyfin.playback.core.model.PlayState
 
 abstract class PlayerBackendEventListener {
 	open fun onPlayStateChange(state: PlayState) = Unit
+	open fun onPlaybackError(error: PlaybackError) = Unit
 	open fun onVideoSizeChange(width: Int, height: Int) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream) = Unit
 	open fun onSubtitleTimingOffsetSupportChange(supported: Boolean) = Unit

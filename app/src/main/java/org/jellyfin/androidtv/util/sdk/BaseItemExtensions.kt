@@ -66,12 +66,9 @@ fun BaseItemDto.isLiveTv() = when (type) {
 	else -> false
 }
 
-fun BaseItemDto.trackSelectionIds() = listOfNotNull(
-	liveTvChannelId(),
-	currentProgram?.parentId,
-	currentProgram?.channelId,
-	id,
-).distinct()
+fun BaseItemDto.trackSelectionIds() = liveTvChannelId()
+	?.let(::listOf)
+	?: listOfNotNull(id)
 
 fun BaseItemDto.isNew() = isSeries == true && isNews != true && isRepeat != true
 
