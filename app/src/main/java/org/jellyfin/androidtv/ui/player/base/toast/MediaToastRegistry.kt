@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui.player.base.toast
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,13 +23,17 @@ class MediaToastRegistry(
 	private var unsetJob: Job? = null
 
 	fun emit(data: MediaToastData) {
+		emit(data, TOAST_DURATION)
+	}
+
+	fun emit(data: MediaToastData, duration: kotlin.time.Duration) {
 		if (current.value == data) return
 
 		_current.value = data
 
 		unsetJob?.cancel()
 		unsetJob = coroutineScope.launch {
-			delay(TOAST_DURATION)
+			delay(duration)
 			_current.value = null
 		}
 	}
@@ -36,12 +41,14 @@ class MediaToastRegistry(
 	fun emit(
 		@DrawableRes icon: Int,
 		progress: Float? = null,
+		@StringRes text: Int? = null,
+		duration: kotlin.time.Duration = TOAST_DURATION,
 	) {
 		val data = MediaToastData(
 			icon = icon,
 			progress = progress,
+			text = text,
 		)
-		emit(data)
+		emit(data, duration)
 	}
 }
-

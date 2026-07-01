@@ -64,11 +64,16 @@ class QueueService internal constructor() : PlayerService(), Queue {
 
 	// Entry management
 
-	override fun addSupplier(supplier: QueueSupplier) {
+	override fun addSupplier(supplier: QueueSupplier, startIndex: Int) {
 		suppliers.add(supplier)
 
 		if (_entryIndex.value == Queue.INDEX_NONE) {
-			coroutineScope.launch { setIndex(0) }
+			coroutineScope.launch {
+				val requestedIndex = startIndex.coerceAtLeast(0)
+				if (setIndex(requestedIndex) == null && requestedIndex != 0) {
+					setIndex(0)
+				}
+			}
 		}
 	}
 

@@ -20,10 +20,12 @@ fun PlayerSeekbar(
 	modifier: Modifier = Modifier,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
 	playbackManager: PlaybackManager = koinInject<PlaybackManager>(),
+	progress: Duration? = null,
+	markers: List<Duration> = emptyList(),
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
 	val positionInfo = playbackManager.state.positionInfo
-	val progress by rememberPlayerProgress(
+	val animatedProgress by rememberPlayerProgress(
 		playing = playState == PlayState.PLAYING,
 		active = positionInfo.active,
 		duration = positionInfo.duration,
@@ -32,7 +34,7 @@ fun PlayerSeekbar(
 	val seekRewindAmount = remember { playbackManager.options.defaultRewindAmount() }
 
 	Seekbar(
-		progress = progress.toDouble() * positionInfo.duration,
+		progress = progress ?: animatedProgress.toDouble() * positionInfo.duration,
 		buffer = positionInfo.buffer,
 		duration = positionInfo.duration,
 		seekForwardAmount = seekForwardAmount,
@@ -42,5 +44,6 @@ fun PlayerSeekbar(
 		modifier = modifier,
 		colors = colors,
 		enabled = positionInfo.duration > Duration.ZERO,
+		markers = markers,
 	)
 }

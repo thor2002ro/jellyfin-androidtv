@@ -71,6 +71,13 @@ fun <T : Any> ItemRowAdapter.setItems(
 	itemsLoaded = allItems.size
 }
 
+private fun BaseRowItem.resumeSignature() = listOf(
+	itemId,
+	baseItem?.userData?.played,
+	baseItem?.userData?.playedPercentage,
+	baseItem?.userData?.playbackPositionTicks,
+)
+
 fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		runCatching {
@@ -78,18 +85,20 @@ fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequ
 				api.itemsApi.getResumeItems(query).content
 			}
 
-			setItems(
-				items = response.items,
-				transform = { item, _ ->
-					BaseItemDtoBaseRowItem(
-						item,
-						preferParentThumb,
-						isStaticHeight
-					)
-				}
-			)
+			val items = response.items.map {
+				BaseItemDtoBaseRowItem(
+					it,
+					preferParentThumb,
+					isStaticHeight
+				)
+			}
 
-			if (response.items.isEmpty()) removeRow()
+			val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
+			if (oldItems.map { it?.resumeSignature() } != items.map { it.resumeSignature() }) {
+				replaceAll(items)
+			}
+			itemsLoaded = items.size
+			totalItems = items.size
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -233,8 +242,7 @@ fun ItemRowAdapter.retrieveUserViews(api: ApiClient, userViewsRepository: UserVi
 				api.userViewsApi.getUserViews().content
 			}
 
-			val filteredItems = response.items
-				.filter { userViewsRepository.isSupported(it.collectionType) }
+			val filteredItems = userViewsRepository.withSpecialViews(response.items)
 
 			setItems(
 				items = filteredItems,
@@ -405,6 +413,13 @@ fun ItemRowAdapter.retrieveLiveTvSeriesTimers(
 
 			setItems(
 				items = buildList {
+					add(
+						GridButton(
+							LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID,
+							context.getString(R.string.channels)
+						)
+					)
+
 					add(
 						GridButton(
 							LiveTvOption.LIVE_TV_RECORDINGS_OPTION_ID,

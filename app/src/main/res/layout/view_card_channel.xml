@@ -1,74 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="200dp"
-    android:layout_height="wrap_content"
     xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:background="@drawable/channel_card_background"
     android:duplicateParentState="true"
-    android:padding="14dp"
-    android:gravity="center">
+    android:gravity="center"
+    android:padding="10dp">
 
     <ImageView
         android:id="@+id/favImage"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
         android:layout_alignParentTop="true"
-        android:layout_alignParentStart="true"
-        android:layout_marginEnd="4dp"
+        android:layout_alignParentEnd="true"
         android:layout_centerVertical="false"
         android:src="@drawable/ic_heart_red"
         android:visibility="gone" />
 
     <ImageView
         android:id="@+id/recIndicator"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:layout_alignParentTop="true"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
         android:layout_alignParentEnd="true"
+        android:layout_below="@id/favImage"
+        android:layout_marginTop="4dp"
         android:layout_marginStart="4dp"
         android:scaleType="fitCenter"
         android:visibility="gone"
         tools:src="@drawable/ic_record_series_red" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceMedium"
-        tools:text="WBTV 3.1"
-        android:id="@+id/name"
+    <org.jellyfin.androidtv.ui.AsyncImageView
+        android:id="@+id/channelImage"
+        android:layout_width="62dp"
+        android:layout_height="40dp"
+        android:layout_alignParentStart="true"
         android:layout_alignParentTop="true"
-        android:layout_toEndOf="@+id/favImage"
-        android:layout_toStartOf="@+id/recIndicator"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:scaleType="centerInside"
+        tools:src="@drawable/ic_tv" />
 
     <TextView
-        android:layout_width="wrap_content"
+        android:id="@+id/channelNumber"
+        android:layout_width="62dp"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/channelImage"
+        android:layout_alignParentStart="true"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:textStyle="bold"
+        tools:text="3.1" />
+
+    <TextView
+        android:id="@+id/channelName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_marginStart="10dp"
+        android:layout_toEndOf="@id/channelImage"
+        android:layout_toStartOf="@id/favImage"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:textStyle="bold"
+        tools:text="WBTV" />
+
+    <TextView
+        android:id="@+id/program"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceSmall"
         tools:text="Bewitched"
-        android:id="@+id/program"
-        android:layout_below="@+id/name"
-        android:layout_alignParentStart="true"
+        android:layout_below="@id/channelName"
+        android:layout_alignStart="@id/channelName"
+        android:layout_toStartOf="@id/recIndicator"
         android:ellipsize="end"
         android:maxLines="1" />
+
     <TextView
-        android:layout_width="wrap_content"
+        android:id="@+id/time"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceSmall"
-        tools:text="9:00am - 9:30am"
-        android:id="@+id/time"
-        android:layout_below="@+id/program"
-        android:layout_alignParentStart="true" />
+        tools:text="9:00 AM - 9:30 AM"
+        android:layout_below="@id/program"
+        android:layout_alignStart="@id/channelName"
+        android:layout_toStartOf="@id/recIndicator"
+        android:ellipsize="end"
+        android:maxLines="1" />
+
     <ProgressBar
+        android:id="@+id/progress"
         style="@style/overlay_progress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:id="@+id/progress"
-        android:layout_below="@+id/time"
-        android:maxHeight="5sp"
+        android:layout_alignStart="@id/channelName"
+        android:layout_below="@id/time"
+        android:layout_marginTop="4dp"
+        android:layout_toStartOf="@id/recIndicator"
         android:max="100"
-        android:progress="60"
-        android:layout_marginTop="2dp" />
+        android:maxHeight="5sp" />
 
 </RelativeLayout>

@@ -43,6 +43,7 @@ import org.jellyfin.androidtv.ui.playback.overlay.action.SelectAudioAction;
 import org.jellyfin.androidtv.ui.playback.overlay.action.SelectQualityAction;
 import org.jellyfin.androidtv.ui.playback.overlay.action.SkipNextAction;
 import org.jellyfin.androidtv.ui.playback.overlay.action.SkipPreviousAction;
+import org.jellyfin.androidtv.ui.playback.overlay.action.StreamStatusAction;
 import org.jellyfin.androidtv.ui.playback.overlay.action.ZoomAction;
 import org.jellyfin.androidtv.util.DateTimeExtensionsKt;
 import org.jellyfin.androidtv.util.Utils;
@@ -65,6 +66,7 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
     private PlaybackSpeedAction playbackSpeedAction;
     private ZoomAction zoomAction;
     private ChapterAction chapterAction;
+    private StreamStatusAction streamStatusAction;
 
     // TV actions
     private PreviousLiveTvChannelAction previousLiveTvChannelAction;
@@ -86,6 +88,7 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
 
     private LinearLayout mButtonRef;
     private View mSeekBar;
+    private Integer skipOverlayKeyCode;
 
     private ThumbnailPreviewHandler mThumbnailPreviewHandler;
 
@@ -187,6 +190,7 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
             protected void onBindRowViewHolder(RowPresenter.ViewHolder vh, Object item) {
                 super.onBindRowViewHolder(vh, item);
                 vh.setOnKeyListener(CustomPlaybackTransportControlGlue.this);
+                PlaybackControlTooltips.install(vh.view);
                 mSeekBar = vh.view.findViewById(androidx.leanback.R.id.playback_progress);
 
                 if (mThumbnailPreviewHandler != null) return;
@@ -230,6 +234,8 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
         zoomAction.setLabels(new String[]{context.getString(R.string.lbl_zoom)});
         chapterAction = new ChapterAction(context, this);
         chapterAction.setLabels(new String[]{context.getString(R.string.lbl_chapters)});
+        streamStatusAction = new StreamStatusAction(context, this);
+        streamStatusAction.setLabels(new String[]{context.getString(R.string.playback_info)});
 
         previousLiveTvChannelAction = new PreviousLiveTvChannelAction(context, this);
         previousLiveTvChannelAction.setLabels(new String[]{context.getString(R.string.lbl_prev_item)});
@@ -308,11 +314,16 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
             secondaryActionsAdapter.add(selectQualityAction);
         }
 
+        secondaryActionsAdapter.add(streamStatusAction);
         secondaryActionsAdapter.add(zoomAction);
     }
 
-    @Override
-    public void onActionClicked(Action action) {
+	@Override
+	public void onActionClicked(Action action) {
+		if (action == playPauseAction && getPlayerAdapter().consumeSkipOverlay()) {
+			return;
+		}
+
         if (action instanceof AndroidAction) {
             ((AndroidAction) action).onActionClicked(getPlayerAdapter());
         }
@@ -446,6 +457,16 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
 
     @Override
     public boolean onKey(View v, int keyCode, KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_UP && skipOverlayKeyCode != null && skipOverlayKeyCode == keyCode) {
+            skipOverlayKeyCode = null;
+            return true;
+        }
+
+        if (event.getAction() == KeyEvent.ACTION_DOWN && isSkipOverlayConfirmKey(keyCode) && getPlayerAdapter().consumeSkipOverlay()) {
+            skipOverlayKeyCode = keyCode;
+            return true;
+        }
+
         if (event.getAction() != KeyEvent.ACTION_UP) {
             // The below actions are only handled on key up
             return super.onKey(v, keyCode, event);
@@ -460,6 +481,13 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
             selectAudioAction.handleClickAction(playbackController, getPlayerAdapter(), getContext(), v);
         }
         return super.onKey(v, keyCode, event);
+    }
+
+    private boolean isSkipOverlayConfirmKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_A;
     }
 
     public void updateThumbnailPreview(long previewSeekPosition) {
