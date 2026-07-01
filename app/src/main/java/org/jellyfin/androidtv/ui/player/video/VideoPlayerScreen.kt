@@ -81,6 +81,7 @@ private const val BufferingBlockCount = 5
 fun VideoPlayerScreen(
 	onRemoteKeyEventHandlerChanged: (((keyCode: Int, event: android.view.KeyEvent?) -> Boolean)?) -> Unit = {},
 	onClosePlayer: () -> Unit = {},
+	openLiveTvGuideOnStart: Boolean = false,
 ) {
 	val playbackManager = koinInject<PlaybackManager>()
 	val userPreferences = koinInject<UserPreferences>()
@@ -150,6 +151,7 @@ fun VideoPlayerScreen(
 			onZoomModeSelected = { zoomMode = it },
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
+			openLiveTvGuideOnStart = openLiveTvGuideOnStart,
 		)
 	}
 }
