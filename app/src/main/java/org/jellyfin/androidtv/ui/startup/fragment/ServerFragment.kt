@@ -30,9 +30,7 @@ import org.jellyfin.androidtv.auth.model.Server
 import org.jellyfin.androidtv.auth.model.ServerUnavailableState
 import org.jellyfin.androidtv.auth.model.ServerVersionNotSupported
 import org.jellyfin.androidtv.auth.model.User
-import org.jellyfin.androidtv.auth.repository.AuthenticationRepository
 import org.jellyfin.androidtv.auth.repository.ServerRepository
-import org.jellyfin.androidtv.auth.repository.ServerUserRepository
 import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.databinding.FragmentServerBinding
 import org.jellyfin.androidtv.ui.ServerButtonView
@@ -41,6 +39,7 @@ import org.jellyfin.androidtv.ui.startup.StartupViewModel
 import org.jellyfin.androidtv.util.ListAdapter
 import org.jellyfin.androidtv.util.MarkdownRenderer
 import org.jellyfin.androidtv.util.createBundle
+import org.jellyfin.androidtv.util.getConnectionErrorMessage
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
@@ -52,8 +51,6 @@ class ServerFragment : Fragment() {
 
 	private val startupViewModel: StartupViewModel by activityViewModel()
 	private val markdownRenderer: MarkdownRenderer by inject()
-	private val authenticationRepository: AuthenticationRepository by inject()
-	private val serverUserRepository: ServerUserRepository by inject()
 	private val backgroundService: BackgroundService by inject()
 	private var _binding: FragmentServerBinding? = null
 	private val binding get() = _binding!!
@@ -70,7 +67,7 @@ class ServerFragment : Fragment() {
 
 		_binding = FragmentServerBinding.inflate(inflater, container, false)
 
-		val userAdapter = UserAdapter(requireContext(), server, startupViewModel, authenticationRepository, serverUserRepository)
+		val userAdapter = UserAdapter(requireContext(), server, startupViewModel)
 		userAdapter.onItemPressed = { user ->
 			startupViewModel.authenticate(server, user).onEach { state ->
 				when (state) {
@@ -83,8 +80,18 @@ class ServerFragment : Fragment() {
 						putString(UserLoginFragment.ARG_USERNAME, user.name)
 					})
 					// Errors
-					ServerUnavailableState,
-					is ApiClientErrorLoginState -> Toast.makeText(context, R.string.server_connection_failed, Toast.LENGTH_LONG).show()
+					is ServerUnavailableState -> Toast.makeText(
+						context,
+						state.error?.getConnectionErrorMessage(requireContext())
+							?: getString(R.string.server_connection_failed),
+						Toast.LENGTH_LONG
+					).show()
+
+					is ApiClientErrorLoginState -> Toast.makeText(
+						context,
+						state.error.getConnectionErrorMessage(requireContext()),
+						Toast.LENGTH_LONG
+					).show()
 
 					is ServerVersionNotSupported -> Toast.makeText(
 						context,
@@ -109,6 +116,11 @@ class ServerFragment : Fragment() {
 				binding.noUsersWarning.isVisible = users.isEmpty()
 				binding.root.requestFocus()
 			}.launchIn(viewLifecycleOwner.lifecycleScope)
+
+		startupViewModel.serverConnectionError
+			.flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+			.onEach { error -> updateNotification(server, error?.takeIf { it.serverId == server.id }?.error) }
+			.launchIn(viewLifecycleOwner.lifecycleScope)
 
 		startupViewModel.loadUsers(server)
 
@@ -153,7 +165,19 @@ class ServerFragment : Fragment() {
 			navigateFragment<SelectServerFragment>(keepToolbar = true)
 		}
 
-		if (!server.versionSupported) {
+		updateNotification(
+			server,
+			startupViewModel.serverConnectionError.value
+				?.takeIf { it.serverId == server.id }
+				?.error,
+		)
+	}
+
+	private fun updateNotification(server: Server, connectionError: Throwable?) {
+		if (connectionError != null) {
+			binding.notification.isVisible = true
+			binding.notification.text = connectionError.getConnectionErrorMessage(requireContext())
+		} else if (!server.versionSupported) {
 			binding.notification.isVisible = true
 			binding.notification.text = getString(
 				R.string.server_unsupported_notification,
@@ -202,8 +226,6 @@ class ServerFragment : Fragment() {
 		private val context: Context,
 		private val server: Server,
 		private val startupViewModel: StartupViewModel,
-		private val authenticationRepository: AuthenticationRepository,
-		private val serverUserRepository: ServerUserRepository,
 	) : ListAdapter<User, UserAdapter.ViewHolder>() {
 		var onItemPressed: (User) -> Unit = {}
 
@@ -215,29 +237,28 @@ class ServerFragment : Fragment() {
 			return ViewHolder(cardView)
 		}
 
-		override fun onBindViewHolder(holder: ViewHolder, user: User) {
-			holder.cardView.name = user.name
-			holder.cardView.image = startupViewModel.getUserImage(server, user)
+		override fun onBindViewHolder(holder: ViewHolder, item: User) {
+			holder.cardView.name = item.name
+			holder.cardView.image = startupViewModel.getUserImage(server, item)
 
 			holder.cardView.setPopupMenu {
 				// Logout button
-				if (user is PrivateUser && user.accessToken != null) {
+				if (item is PrivateUser && item.accessToken != null) {
 					item(context.getString(R.string.lbl_sign_out)) {
-						authenticationRepository.logout(user)
+						startupViewModel.logoutUser(item, server)
 					}
 				}
 
 				// Remove button
-				if (user is PrivateUser) {
+				if (item is PrivateUser) {
 					item(context.getString(R.string.lbl_remove)) {
-						serverUserRepository.deleteStoredUser(user)
-						startupViewModel.loadUsers(server)
+						startupViewModel.deleteUser(item, server)
 					}
 				}
 			}
 
 			holder.cardView.setOnClickListener {
-				onItemPressed(user)
+				onItemPressed(item)
 			}
 		}
 
@@ -246,4 +267,3 @@ class ServerFragment : Fragment() {
 		) : RecyclerView.ViewHolder(cardView)
 	}
 }
-
