@@ -72,6 +72,7 @@ fun String?.toIso2LanguageCodeOrNull(): String? {
 		?.substringBefore(' ')
 		?.substringBefore('-')
 		?.substringBefore('_')
+		?.takeUnless { it == "und" }
 		?.takeIf { it.isNotBlank() }
 		?: return null
 
