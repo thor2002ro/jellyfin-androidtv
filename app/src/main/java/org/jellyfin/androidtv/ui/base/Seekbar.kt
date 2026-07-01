@@ -69,6 +69,7 @@ fun Seekbar(
 	seekRewindAmount: Duration = duration / 100,
 	onScrubbing: ((scrubbing: Boolean) -> Unit)? = null,
 	onSeek: ((progress: Duration) -> Unit)? = null,
+	onPreviewSeek: ((progress: Duration?) -> Unit)? = null,
 	enabled: Boolean = true,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
 	markers: List<Duration> = emptyList(),
@@ -94,6 +95,9 @@ fun Seekbar(
 		seekRewindAmount = seekRewindPercentage,
 		onScrubbing = onScrubbing,
 		onSeek = if (onSeek == null) null else { progress -> onSeek(progress.toDouble() * duration) },
+		onPreviewSeek = if (onPreviewSeek == null) null else { progress ->
+			onPreviewSeek(progress?.let { it.toDouble() * duration })
+		},
 		enabled = enabled,
 		colors = colors,
 		markers = markerPercentages,
@@ -110,6 +114,7 @@ fun Seekbar(
 	seekRewindAmount: Float = 0.01f,
 	onScrubbing: ((scrubbing: Boolean) -> Unit)? = null,
 	onSeek: ((progress: Float) -> Unit)? = null,
+	onPreviewSeek: ((progress: Float?) -> Unit)? = null,
 	enabled: Boolean = true,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
 	markers: List<Float> = emptyList(),
@@ -143,21 +148,23 @@ fun Seekbar(
 					else -> visibleProgress
 				}
 
-				if (isScrubbing && isKeyDown && onScrubbing != null) {
+				if (isScrubbing && isKeyDown && (onScrubbing != null || onPreviewSeek != null)) {
 					scrubCancelJob?.cancel()
-					onScrubbing(true)
+					onScrubbing?.invoke(true)
 				}
 
 				if (visibleProgress != newProgress) {
 					progressOverride = newProgress
+					onPreviewSeek?.invoke(newProgress)
 					if (onSeek != null) onSeek(newProgress)
 				}
 
-				if (isScrubbing && isKeyUp && onScrubbing != null) {
+				if (isScrubbing && isKeyUp && (onScrubbing != null || onPreviewSeek != null)) {
 					scrubCancelJob?.cancel()
 					scrubCancelJob = coroutineScope.launch {
 						delay(300.milliseconds)
-						onScrubbing(false)
+						onScrubbing?.invoke(false)
+						onPreviewSeek?.invoke(null)
 						progressOverride = null
 					}
 				}
