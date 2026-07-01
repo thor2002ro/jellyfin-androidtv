@@ -21,8 +21,10 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DecoderCounters
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -91,6 +93,14 @@ class ExoPlayerBackend(
 		private fun formatTsExtractorFlags(flags: Int) =
 			if (flags == 0) "none (0)" else "$LIVE_TV_TS_EXTRACTOR_FLAG_NAMES ($flags)"
 
+		private fun Player.playbackStateName(): String = when (playbackState) {
+			Player.STATE_IDLE -> "IDLE"
+			Player.STATE_BUFFERING -> "BUFFERING"
+			Player.STATE_READY -> "READY"
+			Player.STATE_ENDED -> "ENDED"
+			else -> playbackState.toString()
+		}
+
 		private fun MediaItem.safeUriForLogging(): String = localConfiguration
 			?.uri
 			?.buildUpon()
@@ -117,6 +127,9 @@ class ExoPlayerBackend(
 	private val subtitleTimingOffsetState = SubtitleTimingOffsetState()
 	private val startHandler = Handler(Looper.getMainLooper())
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
+	private var videoDecoderName: String? = null
+	private var audioDecoderName: String? = null
+	private var reportedPlayState: PlayState? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
@@ -272,6 +285,7 @@ class ExoPlayerBackend(
 			.build()
 			.also { player ->
 				player.addListener(PlayerListener())
+				player.addAnalyticsListener(DecoderAnalyticsListener())
 
 				if (exoPlayerOptions.enableDebugLogging) {
 					player.addAnalyticsListener(EventLogger())
@@ -283,12 +297,73 @@ class ExoPlayerBackend(
 			}
 	}
 
+	inner class DecoderAnalyticsListener : AnalyticsListener {
+		override fun onVideoDecoderInitialized(
+			eventTime: AnalyticsListener.EventTime,
+			decoderName: String,
+			initializedTimestampMs: Long,
+			initializationDurationMs: Long,
+		) {
+			videoDecoderName = decoderName
+		}
+
+		override fun onVideoDecoderReleased(
+			eventTime: AnalyticsListener.EventTime,
+			decoderName: String,
+		) {
+			if (videoDecoderName == decoderName) videoDecoderName = null
+		}
+
+		override fun onVideoDisabled(
+			eventTime: AnalyticsListener.EventTime,
+			decoderCounters: DecoderCounters,
+		) {
+			videoDecoderName = null
+		}
+
+		override fun onAudioDecoderInitialized(
+			eventTime: AnalyticsListener.EventTime,
+			decoderName: String,
+			initializedTimestampMs: Long,
+			initializationDurationMs: Long,
+		) {
+			audioDecoderName = decoderName
+		}
+
+		override fun onAudioDecoderReleased(
+			eventTime: AnalyticsListener.EventTime,
+			decoderName: String,
+		) {
+			if (audioDecoderName == decoderName) audioDecoderName = null
+		}
+
+		override fun onAudioDisabled(
+			eventTime: AnalyticsListener.EventTime,
+			decoderCounters: DecoderCounters,
+		) {
+			audioDecoderName = null
+		}
+	}
+
 	inner class PlayerListener : Player.Listener {
 		override fun onIsPlayingChanged(isPlaying: Boolean) {
 			val state = when {
 				isPlaying -> PlayState.PLAYING
+				exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_BUFFERING -> PlayState.BUFFERING
 				exoPlayer.playbackState == Player.STATE_IDLE || exoPlayer.playbackState == Player.STATE_ENDED -> PlayState.STOPPED
 				else -> PlayState.PAUSED
+			}
+			if (state != reportedPlayState) {
+				Timber.i(
+					"ExoPlayer play state changed mappedState=%s playbackState=%s playWhenReady=%s positionMs=%s bufferedMs=%s mediaId=%s",
+					state,
+					exoPlayer.playbackStateName(),
+					exoPlayer.playWhenReady,
+					exoPlayer.currentPosition,
+					exoPlayer.bufferedPosition,
+					exoPlayer.currentMediaItem?.mediaId,
+				)
+				reportedPlayState = state
 			}
 			listener?.onPlayStateChange(state)
 		}
@@ -335,6 +410,7 @@ class ExoPlayerBackend(
 			if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
 				listener?.onMediaStreamEnd(requireNotNull(currentStream))
 			}
+			onIsPlayingChanged(exoPlayer.isPlaying)
 		}
 
 		override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -554,12 +630,14 @@ class ExoPlayerBackend(
 	)
 
 	override fun getFrameStats(): PlaybackFrameStats {
-		val counters = exoPlayer.videoDecoderCounters ?: return PlaybackFrameStats.EMPTY
-		counters.ensureUpdated()
+		val counters = exoPlayer.videoDecoderCounters
+		counters?.ensureUpdated()
 
 		return PlaybackFrameStats(
-			droppedFrames = counters.droppedBufferCount,
-			corruptedFrames = counters.skippedInputBufferCount,
+			droppedFrames = counters?.droppedBufferCount ?: 0,
+			corruptedFrames = counters?.skippedInputBufferCount ?: 0,
+			videoDecoderName = videoDecoderName,
+			audioDecoderName = audioDecoderName,
 		)
 	}
 

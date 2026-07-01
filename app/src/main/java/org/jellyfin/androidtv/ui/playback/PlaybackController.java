@@ -279,7 +279,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     public void playerErrorEncountered() {
         // reset the retry count if it's been more than 30s since previous error
         if (playbackRetries > 0 && Instant.now().toEpochMilli() - lastPlaybackError > 30000) {
-            Timber.i("playback stabilized - retry count reset to 0 from %s", playbackRetries);
+            Timber.d("Playback stabilized - retry count reset to 0 from %s", playbackRetries);
             playbackRetries = 0;
         }
 
@@ -306,9 +306,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             return;
         Display display = mFragment.requireActivity().getWindowManager().getDefaultDisplay();
         mDisplayModes = display.getSupportedModes();
-        Timber.i("** Available display refresh rates:");
+        Timber.d("Available display refresh rates:");
         for (Display.Mode mDisplayMode : mDisplayModes) {
-            Timber.i("display mode %s - %dx%d@%f", mDisplayMode.getModeId(), mDisplayMode.getPhysicalWidth(), mDisplayMode.getPhysicalHeight(), mDisplayMode.getRefreshRate());
+            Timber.v("display mode %s - %dx%d@%f", mDisplayMode.getModeId(), mDisplayMode.getPhysicalWidth(), mDisplayMode.getPhysicalHeight(), mDisplayMode.getRefreshRate());
         }
     }
 
@@ -338,7 +338,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             if (rate != sourceRate && rate != sourceRate * 2 && rate != Math.round(sourceRate * 2.5)) // Skip inappropriate rates
                 continue;
 
-            Timber.i("qualifying display mode: %s - %dx%d@%f", mode.getModeId(), mode.getPhysicalWidth(), mode.getPhysicalHeight(), mode.getRefreshRate());
+            Timber.d("qualifying display mode: %s - %dx%d@%f", mode.getModeId(), mode.getPhysicalWidth(), mode.getPhysicalHeight(), mode.getRefreshRate());
 
             // if scaling on-device, keep native resolution modes at diff 0 (best score)
             // for other resolutions when scaling on device, or if scaling on tv, score based on distance from media resolution
@@ -370,26 +370,26 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
     private void setRefreshRate(MediaStream videoStream) {
         if (videoStream == null || mFragment == null) {
-            Timber.e("Null video stream attempting to set refresh rate");
+            Timber.w("No video stream available to set refresh rate");
             return;
         }
 
         Display.Mode current = mFragment.requireActivity().getWindowManager().getDefaultDisplay().getMode();
         Display.Mode best = findBestDisplayMode(videoStream);
         if (best != null) {
-            Timber.i("*** Best refresh mode is: %s - %dx%d/%f",
+            Timber.i("Best refresh mode is: %s - %dx%d/%f",
                     best.getModeId(), best.getPhysicalWidth(), best.getPhysicalHeight(), best.getRefreshRate());
             if (current.getModeId() != best.getModeId()) {
-                Timber.i("*** Attempting to change refresh rate from: %s - %dx%d@%f", current.getModeId(), current.getPhysicalWidth(),
+                Timber.i("Attempting to change refresh rate from: %s - %dx%d@%f", current.getModeId(), current.getPhysicalWidth(),
                         current.getPhysicalHeight(), current.getRefreshRate());
                 WindowManager.LayoutParams params = mFragment.requireActivity().getWindow().getAttributes();
                 params.preferredDisplayModeId = best.getModeId();
                 mFragment.requireActivity().getWindow().setAttributes(params);
             } else {
-                Timber.i("Display is already in best mode");
+                Timber.d("Display is already in best mode");
             }
         } else {
-            Timber.i("*** Unable to find display mode for refresh rate: %f", videoStream.getRealFrameRate());
+            Timber.i("Unable to find display mode for refresh rate: %f", videoStream.getRealFrameRate());
         }
     }
 
@@ -439,7 +439,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         }
 
         if (position < 0) {
-            Timber.i("Negative start requested - adjusting to zero");
+            Timber.d("Negative start requested - adjusting to zero");
             position = 0;
         }
 
@@ -740,8 +740,8 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             }
         }
         setDefaultAudioIndex(response);
-        Timber.i("default audio index set to %s remote default %s", mDefaultAudioIndex, response.getMediaSource().getDefaultAudioStreamIndex());
-        Timber.i("default sub index set to %s remote default %s", mCurrentOptions.getSubtitleStreamIndex(), response.getMediaSource().getDefaultSubtitleStreamIndex());
+        Timber.d("default audio index set to %s remote default %s", mDefaultAudioIndex, response.getMediaSource().getDefaultAudioStreamIndex());
+        Timber.d("default sub index set to %s remote default %s", mCurrentOptions.getSubtitleStreamIndex(), response.getMediaSource().getDefaultSubtitleStreamIndex());
 
         Long mbPos = position * 10000;
 
@@ -904,7 +904,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         if (currAudioIndex == index) {
             Timber.d("skipping setting audio stream, already set to requested index %s", index);
             if (mCurrentOptions.getAudioStreamIndex() == null || mCurrentOptions.getAudioStreamIndex() != index) {
-                Timber.i("setting mCurrentOptions audio stream index from %s to %s", mCurrentOptions.getAudioStreamIndex(), index);
+                Timber.d("setting mCurrentOptions audio stream index from %s to %s", mCurrentOptions.getAudioStreamIndex(), index);
                 mCurrentOptions.setAudioStreamIndex(index);
             }
             return;
@@ -928,6 +928,10 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
     public void pause() {
         Timber.i("pause called at %s", mCurrentPosition);
+        if (isLiveTv) {
+            Timber.d("Ignoring pause request for Live TV");
+            return;
+        }
         // if playback is paused and the seekbar is scrubbed, it will call pause even if already paused
         if (mPlaybackState == PlaybackState.PAUSED) {
             Timber.d("already paused, ignoring");
@@ -948,6 +952,10 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
     public void playPause() {
         if (mFragment != null && mFragment.consumeSkipOverlay()) {
+            return;
+        }
+        if (isLiveTv) {
+            Timber.d("Ignoring play/pause request for Live TV");
             return;
         }
 
@@ -1161,8 +1169,8 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             refreshCurrentPosition();
             currentSkipPos = Utils.getSafeSeekPosition((currentSkipPos == 0 ? mCurrentPosition : currentSkipPos) + msec, getDuration());
 
-            Timber.i("Skip amount requested was %s. Calculated position is %s", msec, currentSkipPos);
-            Timber.i("Duration reported as: %s current pos: %s", getDuration(), mCurrentPosition);
+            Timber.d("Skip amount requested was %s. Calculated position is %s", msec, currentSkipPos);
+            Timber.d("Duration reported as: %s current pos: %s", getDuration(), mCurrentPosition);
 
             mSeekPosition = currentSkipPos;
             mHandler.postDelayed(skipRunnable, 800);

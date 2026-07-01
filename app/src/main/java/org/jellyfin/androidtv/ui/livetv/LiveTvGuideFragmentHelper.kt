@@ -131,11 +131,12 @@ fun LiveTvGuideFragment.toggleFavorite() {
 
 fun LiveTvGuideFragment.refreshSelectedProgram() {
 	val api by inject<ApiClient>()
+	val selectedProgram = mSelectedProgram ?: return
 
 	lifecycleScope.launch {
 		runCatching {
 			val item = withContext(Dispatchers.IO) {
-				api.userLibraryApi.getItem(mSelectedProgram.id).content
+				api.userLibraryApi.getItem(selectedProgram.id).content
 			}
 			mSelectedProgram = item
 		}.onFailure { error ->

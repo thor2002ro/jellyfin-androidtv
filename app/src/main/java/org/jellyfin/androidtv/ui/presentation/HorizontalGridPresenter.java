@@ -177,7 +177,7 @@ public class HorizontalGridPresenter extends Presenter {
         if (mNumRows == -1) {
             throw new IllegalStateException("Number of rows must be set");
         }
-        Timber.d("mNumRows %s", mNumRows);
+        Timber.v("mNumRows %s", mNumRows);
         vh.getGridView().setNumRows(mNumRows);
         vh.mInitialized = true;
 
@@ -237,7 +237,7 @@ public class HorizontalGridPresenter extends Presenter {
 
     @Override
     public void onBindViewHolder(Presenter.ViewHolder viewHolder, Object item) {
-        Timber.d("onBindViewHolder %s", item);
+        Timber.v("onBindViewHolder %s", item);
         mViewHolder = (ViewHolder) viewHolder;
         mViewHolder.mItemBridgeAdapter.setAdapter((ObjectAdapter) item);
         mViewHolder.getGridView().setAdapter(mViewHolder.mItemBridgeAdapter);
@@ -245,7 +245,7 @@ public class HorizontalGridPresenter extends Presenter {
 
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
-        Timber.d("onUnbindViewHolder");
+        Timber.v("onUnbindViewHolder");
         ViewHolder vh = (ViewHolder) viewHolder;
         vh.mItemBridgeAdapter.setAdapter(null);
         vh.getGridView().setAdapter(null);
@@ -295,4 +295,3 @@ public class HorizontalGridPresenter extends Presenter {
         }
     }
 }
-

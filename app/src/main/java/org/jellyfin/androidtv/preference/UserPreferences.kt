@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.preference
 
 import android.content.Context
 import androidx.preference.PreferenceManager
+import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.preference.UserPreferences.Companion.screensaverInAppEnabled
 import org.jellyfin.androidtv.preference.constant.AVCLevel
 import org.jellyfin.androidtv.preference.constant.AppTheme
@@ -198,7 +199,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Enable verbose app logging.
 		 */
-		var verboseLoggingEnabled = booleanPreference("pref_verbose_logging", false)
+		var verboseLoggingEnabled = booleanPreference("pref_verbose_logging", BuildConfig.DEBUG)
 
 		/**
 		 * Use playback rewrite module for video

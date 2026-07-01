@@ -253,11 +253,11 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 if (lastPlaybackTime != null && (lastPlaybackTime.isAfter(mLastUpdated) || Instant.now().toEpochMilli() - lastPlaybackTime.toEpochMilli() < 2000) && mBaseItem.getType() != BaseItemKind.MUSIC_ARTIST) {
                     BaseItemDto lastPlayedItem = dataRefreshService.getValue().getLastPlayedItem();
                     if (mBaseItem.getType() == BaseItemKind.EPISODE && lastPlayedItem != null && !mBaseItem.getId().equals(lastPlayedItem.getId()) && lastPlayedItem.getType() == BaseItemKind.EPISODE) {
-                        Timber.i("Re-loading after new episode playback");
+                        Timber.i("Reloading details after new episode playback");
                         loadItem(lastPlayedItem.getId());
                         dataRefreshService.getValue().setLastPlayedItem(null); //blank this out so a detail screen we back up to doesn't also do this
                     } else {
-                        Timber.i("Updating info after playback");
+                        Timber.d("Updating item details after playback");
                         FullDetailsFragmentHelperKt.getItem(FullDetailsFragment.this, mBaseItem.getId(), item -> {
                             if (item == null) return null;
 
@@ -745,7 +745,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     }
 
     private void deleteItem() {
-        Timber.i("Showing item delete confirmation");
+        Timber.d("Showing item delete confirmation");
         new AlertDialog.Builder(requireContext())
                 .setTitle(getString(R.string.item_delete_confirm_title))
                 .setMessage(getString(R.string.item_delete_confirm_message))

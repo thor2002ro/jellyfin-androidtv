@@ -39,7 +39,7 @@ public class ItemLauncher {
     private final Lazy<PlaybackHelper> playbackHelper = KoinJavaComponent.<PlaybackHelper>inject(PlaybackHelper.class);
 
     public void launchUserView(@Nullable final BaseItemDto baseItem) {
-        Timber.d("**** Collection type: %s", baseItem.getCollectionType());
+        Timber.d("Collection type: %s", baseItem.getCollectionType());
 
         Destination destination = getUserViewDestination(baseItem);
 

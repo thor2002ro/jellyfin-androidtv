@@ -266,9 +266,11 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
         if (secondaryActionsAdapter.size() > 0)
             secondaryActionsAdapter.clear();
 
-        // Primary Items
-        primaryActionsAdapter.add(playPauseAction);
         VideoPlayerAdapter playerAdapter = getPlayerAdapter();
+        // Primary Items
+        if (!playerAdapter.isLiveTv()) {
+            primaryActionsAdapter.add(playPauseAction);
+        }
 
         if (playerAdapter.canSeek()) {
             primaryActionsAdapter.add(rewindAction);
@@ -320,6 +322,10 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
 
 	@Override
 	public void onActionClicked(Action action) {
+		if (action == playPauseAction && getPlayerAdapter().isLiveTv()) {
+			return;
+		}
+
 		if (action == playPauseAction && getPlayerAdapter().consumeSkipOverlay()) {
 			return;
 		}

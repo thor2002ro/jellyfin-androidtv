@@ -266,7 +266,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             //and then manage our fade timer
             if (mFadeEnabled) startFadeTimer();
 
-            Timber.d("Got touch event.");
+            Timber.v("Got touch event.");
             return false;
         });
         binding.skipOverlay.setOnSkipClickListener(() -> {
@@ -1123,7 +1123,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     @Override
     public void onStop() {
         super.onStop();
-        Timber.i("Stopping!");
+        Timber.d("Stopping playback overlay");
 
         if (leanbackOverlayFragment != null)
             leanbackOverlayFragment.setOnKeyInterceptListener(null);
@@ -1131,7 +1131,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         // end playback from here if this fragment belongs to the current session.
         // if it doesn't, playback has already been stopped elsewhere, and the references to this have been replaced
         if (playbackControllerContainer.getValue().getPlaybackController() != null && playbackControllerContainer.getValue().getPlaybackController().getFragment() == this) {
-            Timber.i("this fragment belongs to the current session, ending it");
+            Timber.d("This fragment belongs to the current session, ending it");
             playbackControllerContainer.getValue().getPlaybackController().endPlayback();
         }
 
@@ -1237,7 +1237,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
         mCurrentDisplayChannelStartNdx = start;
         mCurrentDisplayChannelEndNdx = end - 1;
-        Timber.d("*** Display channels pre-execute");
+        Timber.v("Display channels pre-execute");
         tvGuideBinding.spinner.setVisibility(View.VISIBLE);
 
         tvGuideBinding.channels.removeAllViews();
@@ -1249,7 +1249,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             @Override
             public void onResponse() {
                 if (!isActive()) return;
-                Timber.d("*** Programs response");
+                Timber.v("Programs response");
                 if (mDisplayProgramsTask != null) mDisplayProgramsTask.cancel(true);
                 mDisplayProgramsTask = new DisplayProgramsTask(self);
                 mDisplayProgramsTask.execute(mCurrentDisplayChannelStartNdx, mCurrentDisplayChannelEndNdx);
@@ -1272,7 +1272,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
         @Override
         protected void onPreExecute() {
-            Timber.d("*** Display programs pre-execute");
+            Timber.v("Display programs pre-execute");
             tvGuideBinding.channels.removeAllViews();
             tvGuideBinding.programRows.removeAllViews();
             mFirstFocusChannelId = playbackControllerContainer.getValue().getPlaybackController().getCurrentlyPlayingItem().getId();
@@ -1299,7 +1299,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
             boolean first = true;
 
-            Timber.d("*** About to iterate programs");
+            Timber.v("About to iterate programs");
             LinearLayout prevRow = null;
             for (int i = start; i <= end; i++) {
                 if (isCancelled()) return null;
@@ -1339,7 +1339,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
         @Override
         protected void onPostExecute(Void aVoid) {
-            Timber.d("*** Display programs post execute");
+            Timber.v("Display programs post execute");
             if (mCurrentDisplayChannelEndNdx < mAllChannels.size() - 1) {
                 // Show a paging row for channels below
                 int pageDnEnd = mCurrentDisplayChannelEndNdx + PAGE_SIZE;
