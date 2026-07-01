@@ -17,11 +17,11 @@ import org.jellyfin.androidtv.ui.home.HomeFragment
 import org.jellyfin.androidtv.ui.itemdetail.FullDetailsFragment
 import org.jellyfin.androidtv.ui.itemdetail.ItemListFragment
 import org.jellyfin.androidtv.ui.itemdetail.MusicFavoritesListFragment
-import org.jellyfin.androidtv.ui.livetv.LiveTvGuideFragment
 import org.jellyfin.androidtv.ui.playback.AudioNowPlayingFragment
 import org.jellyfin.androidtv.ui.playback.CustomPlaybackOverlayFragment
 import org.jellyfin.androidtv.ui.playback.nextup.NextUpFragment
 import org.jellyfin.androidtv.ui.playback.stillwatching.StillWatchingFragment
+import org.jellyfin.androidtv.ui.player.video.LiveTvGuidePlayerFragment
 import org.jellyfin.androidtv.ui.player.photo.PhotoPlayerFragment
 import org.jellyfin.androidtv.ui.player.video.VideoPlayerFragment
 import org.jellyfin.androidtv.ui.search.SearchFragment
@@ -125,7 +125,7 @@ object Destinations {
 	fun liveTvChannels(name: String) = fragmentDestination<LiveTvChannelsFragment> {
 		putString(Extras.Folder, Json.encodeToString(createLiveTvView(name)))
 	}
-	val liveTvGuide = fragmentDestination<LiveTvGuideFragment>()
+	val liveTvGuide = fragmentDestination<LiveTvGuidePlayerFragment>()
 	val liveTvSchedule = fragmentDestination<BrowseScheduleFragment>()
 	val liveTvRecordings = fragmentDestination<BrowseRecordingsFragment>()
 	val liveTvSeriesRecordings = fragmentDestination<BrowseViewFragment> {
@@ -151,8 +151,14 @@ object Destinations {
 		position?.let { putInt("Position", it) }
 	}
 
-	fun videoPlayerNew(position: Int?) = fragmentDestination<VideoPlayerFragment> {
+	fun videoPlayerNew(
+		position: Int?,
+		closeToLiveTvLibrary: Boolean = false,
+		liveTvChannelId: UUID? = null,
+	) = fragmentDestination<VideoPlayerFragment> {
 		position?.let { putInt(VideoPlayerFragment.EXTRA_POSITION, it) }
+		putBoolean(VideoPlayerFragment.EXTRA_CLOSE_TO_LIVE_TV_LIBRARY, closeToLiveTvLibrary)
+		liveTvChannelId?.let { putString(VideoPlayerFragment.EXTRA_LIVE_TV_CHANNEL_ID, it.toString()) }
 	}
 
 	fun nextUp(item: UUID) = fragmentDestination<NextUpFragment> {

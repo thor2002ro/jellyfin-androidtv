@@ -28,7 +28,7 @@ class VideoQueueManager(
 	fun getCurrentVideoQueue(): List<BaseItemDto> = _currentVideoQueue
 
 	fun setCurrentMediaPosition(currentMediaPosition: Int) {
-		if (currentMediaPosition !in 0.._currentVideoQueue.size) return
+		if (currentMediaPosition !in _currentVideoQueue.indices) return
 
 		_currentMediaPosition = currentMediaPosition
 	}

@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -95,6 +96,7 @@ fun VideoPlayerControls(
 	val topControlsFocusRequester = remember { FocusRequester() }
 	val isLiveTv = item?.isLiveTv() == true
 	val playPauseEnabled = currentQueueEntry?.isLiveTv != true
+	val seekEnabled = currentQueueEntry?.isDirectPlayLiveTv != true
 	val coroutineScope = rememberCoroutineScope()
 	val liveTvChannelNavigator = rememberLiveTvChannelNavigator()
 	val showPreviousEntry = isLiveTv || entryIndex > 0
@@ -201,7 +203,7 @@ fun VideoPlayerControls(
 				FastForwardButton(
 					playbackManager = playbackManager,
 					enabled = seekEnabled,
-					 onPreview = { previewRelativeSeek(playbackManager.options.defaultFastForwardAmount()) },
+					onPreview = { previewRelativeSeek(playbackManager.options.defaultFastForwardAmount()) },
 				)
 
 				Spacer(Modifier.weight(1f))
@@ -329,6 +331,7 @@ fun VideoPlayerSeekControls(
 	position: Duration? = null,
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	enabled: Boolean = true,
 ) {
 	Column(
 		horizontalAlignment = Alignment.CenterHorizontally,
@@ -340,6 +343,7 @@ fun VideoPlayerSeekControls(
 			position = position,
 			liveTvProgramTimeline = liveTvProgramTimeline,
 			liveTvProgramPosition = liveTvProgramPosition,
+			enabled = enabled,
 			modifier = Modifier
 				.fillMaxWidth()
 				.height(4.dp),
@@ -634,6 +638,7 @@ private fun TimelineSeekbar(
 	onPreviewSeek: ((Duration?) -> Unit)? = null,
 	onSeek: ((Duration) -> Unit)? = null,
 	modifier: Modifier = Modifier,
+	enabled: Boolean = true,
 ) {
 	if (liveTvProgramTimeline != null) {
 		Seekbar(
@@ -649,8 +654,8 @@ private fun TimelineSeekbar(
 			progress = position,
 			markers = markers,
 			onPreviewSeek = onPreviewSeek,
-		onSeek = onSeek,
-		enabled = enabled,
+			onSeek = onSeek,
+			enabled = enabled,
 			modifier = modifier,
 		)
 	}

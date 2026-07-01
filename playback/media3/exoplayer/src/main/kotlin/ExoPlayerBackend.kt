@@ -151,6 +151,7 @@ class ExoPlayerBackend(
 	private val subtitleTimingOffsetState = SubtitleTimingOffsetState()
 	private val startHandler = Handler(Looper.getMainLooper())
 	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
+	private var pendingLiveStartStream: PlayableMediaStream? = null
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
 	private var pendingInitialTrackSelectionRetryCount = 0
 	private var videoDecoderName: String? = null
@@ -229,6 +230,11 @@ class ExoPlayerBackend(
 		initialTrackSelectionHandler.removeCallbacksAndMessages(null)
 		pendingInitialTrackSelectionRetryCount = 0
 		pendingInitialTrackSelection = selection
+	}
+
+	private fun clearPendingLiveStart() {
+		startHandler.removeCallbacksAndMessages(null)
+		pendingLiveStartStream = null
 	}
 
 	private fun clearPendingInitialTrackSelection() {
@@ -547,6 +553,7 @@ class ExoPlayerBackend(
 		override fun onIsPlayingChanged(isPlaying: Boolean) {
 			val state = when {
 				isPlaying -> PlayState.PLAYING
+				pendingLiveStartStream != null && pendingLiveStartStream == currentStream -> PlayState.BUFFERING
 				exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_BUFFERING -> PlayState.BUFFERING
 				exoPlayer.playbackState == Player.STATE_IDLE || exoPlayer.playbackState == Player.STATE_ENDED -> PlayState.STOPPED
 				else -> PlayState.PAUSED
@@ -792,12 +799,17 @@ class ExoPlayerBackend(
 			exoPlayer.play()
 		}
 
-		startHandler.removeCallbacksAndMessages(null)
+		clearPendingLiveStart()
 		val liveStartDelay = item.liveTvBufferDuration().takeIf { delayLiveStart }
 		if (liveStartDelay != null && liveStartDelay > Duration.ZERO) {
+			pendingLiveStartStream = stream
 			exoPlayer.pause()
+			listener?.onPlayStateChange(PlayState.BUFFERING)
 			startHandler.postDelayed({
-				if (currentStream == stream) startPlayback()
+				if (pendingLiveStartStream == stream && currentStream == stream) {
+					pendingLiveStartStream = null
+					startPlayback()
+				}
 			}, liveStartDelay.inWholeMilliseconds)
 		} else {
 			startPlayback()
@@ -805,7 +817,7 @@ class ExoPlayerBackend(
 	}
 
 	override fun replaceItem(item: QueueEntry) {
-		startHandler.removeCallbacksAndMessages(null)
+		clearPendingLiveStart()
 		val stream = requireNotNull(item.mediaStream)
 		val player = exoPlayer
 		val currentIndex = player.currentMediaItemIndex.takeIf { index ->
@@ -834,7 +846,11 @@ class ExoPlayerBackend(
 	}
 
 	override fun play() {
-		startHandler.removeCallbacksAndMessages(null)
+		if (pendingLiveStartStream != null && pendingLiveStartStream == currentStream) {
+			listener?.onPlayStateChange(PlayState.BUFFERING)
+			return
+		}
+		clearPendingLiveStart()
 		// If the item has ended, revert first so the item will start over again
 		if (exoPlayer.playbackState == Player.STATE_ENDED) {
 			reportedEndedStream = null
@@ -844,12 +860,12 @@ class ExoPlayerBackend(
 	}
 
 	override fun pause() {
-		startHandler.removeCallbacksAndMessages(null)
+		clearPendingLiveStart()
 		exoPlayer.pause()
 	}
 
 	override fun stop() {
-		startHandler.removeCallbacksAndMessages(null)
+		clearPendingLiveStart()
 		exoPlayer.stop()
 		clearSubtitleCues()
 		currentStream = null
