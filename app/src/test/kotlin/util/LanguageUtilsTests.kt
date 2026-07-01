@@ -15,6 +15,8 @@ class LanguageUtilsTests : FunSpec({
 		"fre".toIso2LanguageCodeOrNull() shouldBe "fr"
 		"ger".toIso2LanguageCodeOrNull() shouldBe "de"
 		"rum".toIso2LanguageCodeOrNull() shouldBe "ro"
+		"und".toIso2LanguageCodeOrNull() shouldBe null
+		"UND".toIso2LanguageCodeOrNull() shouldBe null
 		"zz".toIso2LanguageCodeOrNull() shouldBe null
 		"foo".toIso2LanguageCodeOrNull() shouldBe null
 	}

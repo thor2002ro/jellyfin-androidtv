@@ -208,10 +208,11 @@ private data class LanguageOption(
 private fun languageOptions(currentLanguage: String?): List<LanguageOption> {
 	val options = Locale.getISOLanguages()
 		.mapNotNull { code ->
+			val iso2 = code.toIso2LanguageCodeOrNull() ?: return@mapNotNull null
 			runCatching {
-				val locale = Locale.forLanguageTag(code)
+				val locale = Locale.forLanguageTag(iso2)
 				LanguageOption(
-					code = code.lowercase(Locale.ROOT),
+					code = iso2,
 					label = locale.getDisplayLanguage(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) },
 				)
 			}.getOrNull()
