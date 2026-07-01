@@ -34,21 +34,27 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
+import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
 import org.jellyfin.androidtv.ui.player.base.PlayerOverlayLayout
 import org.jellyfin.androidtv.ui.player.base.rememberPlayerOverlayVisibility
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToasts
+import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.isLiveTv
+import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.koin.compose.koinInject
+import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -72,10 +78,13 @@ fun VideoPlayerOverlay(
 	onClosePlayer: () -> Unit = {},
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
+	val videoQueueManager = koinInject<VideoQueueManager>()
+	val userPreferences = koinInject<UserPreferences>()
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
 	var showPlaybackInfo by remember { mutableStateOf(false) }
 	var skipPromptTarget by remember { mutableStateOf<Duration?>(null) }
 	var overlayWakeKeyCode by remember { mutableStateOf<Int?>(null) }
+	var nextUpPromptKeyCode by remember { mutableStateOf<Int?>(null) }
 	var skipPromptKeyCode by remember { mutableStateOf<Int?>(null) }
 	var centerShortcutKeyCode by remember { mutableStateOf<Int?>(null) }
 	var seekPauseOverlaySuppressed by remember { mutableStateOf(false) }
@@ -91,17 +100,36 @@ fun VideoPlayerOverlay(
 	var centerLongPressJob by remember { mutableStateOf<Job?>(null) }
 	var previousPlayState by remember { mutableStateOf(playState) }
 	var showLiveTvGuide by remember { mutableStateOf(false) }
+	var nextUpStartInProgress by remember { mutableStateOf(false) }
 	val coroutineScope = rememberCoroutineScope()
 	val keepOverlayVisible = playState == PlayState.PAUSED && !pausedOverlayDismissed && !seekPauseOverlaySuppressed
 	val visibilityState = rememberPlayerOverlayVisibility(keepVisible = keepOverlayVisible)
 	val windowInfo = LocalWindowInfo.current
 	val entry by rememberQueueEntry(playbackManager)
+	val entryIndex by playbackManager.queue.entryIndex.collectAsState()
 	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val videoQueue = videoQueueManager.getCurrentVideoQueue()
+	val nextItem = videoQueue
+		.getOrNull(entryIndex + 1)
+		.takeIf { entryIndex >= 0 && entryIndex < videoQueue.lastIndex }
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
 	val playPauseEnabled = entry?.isLiveTv != true
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
+	val nextUpBehavior = userPreferences[UserPreferences.nextUpBehavior]
+	val nextUpPositionInfo by rememberPlayerPositionInfo(
+		playbackManager = playbackManager,
+		precision = NextUpProgressCheckInterval,
+		resetKey = entryIndex,
+		resetToEmpty = true,
+		updateImmediately = false,
+	)
+	val nextUpPromptVisible = item.isNextUpPromptVisible(
+		nextItem = nextItem,
+		nextUpBehavior = nextUpBehavior,
+		positionInfo = nextUpPositionInfo,
+	)
 
 	fun hideOverlay() {
 		pausedOverlayDismissed = true
@@ -133,6 +161,33 @@ fun VideoPlayerOverlay(
 		visibilityState.show()
 	}
 
+	fun shouldHandleNextUpPrompt() = nextUpPromptVisible || nextUpStartInProgress
+
+	fun startNextItemNow() {
+		if (nextUpStartInProgress) return
+		val nextIndex = playbackManager.queue.entryIndex.value + 1
+		if (nextIndex <= 0 || nextIndex > videoQueueManager.getCurrentVideoQueue().lastIndex) return
+
+		nextUpStartInProgress = true
+		centerShortcutKeyCode = null
+		coroutineScope.launch {
+			val nextEntry = playbackManager.queue.peekNext(usePlaybackOrder = false, useRepeatMode = false)
+			if (nextEntry == null) {
+				nextUpStartInProgress = false
+				return@launch
+			}
+
+			// The next entry may have been preloaded before the latest subtitle selection was known.
+			nextEntry.mediaStream = null
+
+			if (playbackManager.queue.next(usePlaybackOrder = false, useRepeatMode = false) == null) {
+				nextUpStartInProgress = false
+			} else {
+				videoQueueManager.setCurrentMediaPosition(nextIndex)
+			}
+		}
+	}
+
 	BackHandler(enabled = windowInfo.isWindowFocused) {
 		if (showLiveTvGuide) {
 			dismissLiveTvGuide()
@@ -150,6 +205,19 @@ fun VideoPlayerOverlay(
 			pausedOverlayDismissed = false
 		}
 		previousPlayState = playState
+	}
+
+	LaunchedEffect(entryIndex) {
+		nextUpStartInProgress = false
+	}
+
+	LaunchedEffect(item?.id, nextItem?.id, nextUpPromptVisible) {
+		val next = nextItem ?: return@LaunchedEffect
+		if (!nextUpPromptVisible) return@LaunchedEffect
+
+		Timber.i(
+			"Showing in-player Next Up for item ${next.id} at ${nextUpPositionInfo.active} of ${nextUpPositionInfo.duration}"
+		)
 	}
 
 	fun togglePlayback() {
@@ -248,6 +316,11 @@ fun VideoPlayerOverlay(
 				return@handler true
 			}
 
+			if (keyEvent.action == KeyEvent.ACTION_UP && nextUpPromptKeyCode == keyCode) {
+				nextUpPromptKeyCode = null
+				return@handler true
+			}
+
 			if (keyEvent.isCenterKey()) {
 				val promptTarget = skipPromptTarget
 				if (promptTarget != null) {
@@ -259,6 +332,25 @@ fun VideoPlayerOverlay(
 						skipPromptTarget = null
 					}
 					return@handler true
+				}
+			}
+
+			if (shouldHandleNextUpPrompt() && keyEvent.isCenterKey()) {
+				when (keyEvent.action) {
+					KeyEvent.ACTION_DOWN -> {
+						if (keyEvent.repeatCount == 0) {
+							clearCenterLongPress()
+							centerShortcutKeyCode = null
+							nextUpPromptKeyCode = keyCode
+							startNextItemNow()
+						}
+						return@handler true
+					}
+
+					KeyEvent.ACTION_UP -> {
+						nextUpPromptKeyCode = null
+						return@handler true
+					}
 				}
 			}
 
@@ -401,6 +493,11 @@ fun VideoPlayerOverlay(
 					return@PlayerOverlayLayout true
 				}
 
+				if (shouldHandleNextUpPrompt()) {
+					startNextItemNow()
+					return@PlayerOverlayLayout true
+				}
+
 				togglePlayback()
 				true
 			},
@@ -451,6 +548,12 @@ fun VideoPlayerOverlay(
 			)
 		}
 
+		val promptBottomPadding = when {
+			visibilityState.visible -> 220.dp
+			seekOverlayVisible -> 140.dp
+			else -> 48.dp
+		}
+
 		VideoPlayerMediaSegmentOverlay(
 			playbackManager = playbackManager,
 			item = item,
@@ -461,11 +564,23 @@ fun VideoPlayerOverlay(
 					start = 48.dp,
 					top = 48.dp,
 					end = 48.dp,
-					bottom = when {
-						visibilityState.visible -> 220.dp
-						seekOverlayVisible -> 140.dp
-						else -> 48.dp
-					},
+					bottom = promptBottomPadding,
+				)
+		)
+
+		VideoPlayerNextUpOverlay(
+			nextItem = nextItem,
+			nextUpBehavior = nextUpBehavior,
+			visible = nextUpPromptVisible,
+			controlsVisible = visibilityState.visible,
+			seekOverlayVisible = seekOverlayVisible,
+			modifier = Modifier
+				.align(Alignment.BottomEnd)
+				.padding(
+					start = 48.dp,
+					top = 48.dp,
+					end = 48.dp,
+					bottom = promptBottomPadding + if (skipPromptTarget != null) 56.dp else 0.dp,
 				)
 		)
 
