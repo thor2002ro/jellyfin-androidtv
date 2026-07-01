@@ -1,10 +1,14 @@
 package org.jellyfin.playback.media3.exoplayer
 
 import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.ViewGroup
 import androidx.annotation.OptIn
+import androidx.core.graphics.TypefaceCompat
 import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -41,6 +45,7 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleParser
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import io.github.peerless2012.ass.media.AssHandler
 import io.github.peerless2012.ass.media.AssHandlerConfig
@@ -72,6 +77,7 @@ import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.core.support.PlaySupportReport
 import org.jellyfin.playback.core.timedevent.TimedEvent
+import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetRenderersFactory
@@ -134,6 +140,7 @@ class ExoPlayerBackend(
 	}
 
 	private var currentStream: PlayableMediaStream? = null
+	private var subtitleSurfaceView: PlayerSubtitleView? = null
 	private var subtitleView: SubtitleView? = null
 	private val audioPipeline = ExoPlayerAudioPipeline()
 	private val audioAttributeState = AudioAttributeState()
@@ -286,10 +293,15 @@ class ExoPlayerBackend(
 		}
 
 		fun DefaultMediaSourceFactory.configureSubtitles(subtitleParserFactory: SubtitleParser.Factory) = apply {
+			// Timing offsets are applied by SubtitleTimingOffsetDecoderFactory in the renderer.
+			// Extraction-time parsing emits pre-timed Media3 cue samples and bypasses that decoder.
 			@Suppress("DEPRECATION")
 			experimentalParseSubtitlesDuringExtraction(exoPlayerOptions.parseSubtitlesDuringExtraction)
 			setSubtitleParserFactory(subtitleParserFactory)
 		}
+
+		fun MediaSource.Factory.withExternalSubtitlesInRenderer() =
+			ExternalSubtitleMediaSourceFactory(this, dataSourceFactory)
 
 		val normalExtractorsFactory = createExtractorsFactory()
 		val liveTvExtractorsFactory = createExtractorsFactory(LIVE_TV_TS_EXTRACTOR_FLAGS)
@@ -305,6 +317,7 @@ class ExoPlayerBackend(
 				liveTvExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
 			).configureSubtitles(assSubtitleParserFactory)
 			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
+				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
@@ -329,6 +342,7 @@ class ExoPlayerBackend(
 				liveTvExtractorsFactory,
 			).configureSubtitles(defaultSubtitleParserFactory)
 			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
+				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
@@ -568,6 +582,9 @@ class ExoPlayerBackend(
 	}
 
 	override fun setSubtitleView(surfaceView: PlayerSubtitleView?) {
+		subtitleSurfaceView?.onSubtitleStyleChanged = null
+		subtitleSurfaceView = surfaceView
+
 		if (surfaceView != null) {
 			if (subtitleView == null) {
 				subtitleView = SubtitleView(surfaceView.context).apply {
@@ -577,11 +594,36 @@ class ExoPlayerBackend(
 				}
 			}
 
+			subtitleView?.applySubtitleStyle(surfaceView.subtitleStyle)
+			surfaceView.onSubtitleStyleChanged = { subtitleStyle ->
+				subtitleView?.applySubtitleStyle(subtitleStyle)
+			}
 			surfaceView.addView(subtitleView)
 		} else {
 			(subtitleView?.parent as? ViewGroup)?.removeView(subtitleView)
 			subtitleView = null
 		}
+	}
+
+	private fun SubtitleView.applySubtitleStyle(subtitleStyle: PlayerSubtitleStyle) {
+		val edgeType = if (Color.alpha(subtitleStyle.edgeColor) == 0) {
+			CaptionStyleCompat.EDGE_TYPE_NONE
+		} else {
+			CaptionStyleCompat.EDGE_TYPE_OUTLINE
+		}
+
+		setFixedTextSize(TypedValue.COMPLEX_UNIT_DIP, subtitleStyle.textSizeDp)
+		setBottomPaddingFraction(subtitleStyle.bottomPaddingFraction)
+		setStyle(
+			CaptionStyleCompat(
+				subtitleStyle.textColor,
+				subtitleStyle.backgroundColor,
+				Color.TRANSPARENT,
+				edgeType,
+				subtitleStyle.edgeColor,
+				TypefaceCompat.create(context, Typeface.DEFAULT, subtitleStyle.textWeight, false),
+			)
+		)
 	}
 
 	override fun prepareItem(item: QueueEntry) {
@@ -845,7 +887,7 @@ class ExoPlayerBackend(
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
 		return getSourceTracks(type).mapIndexed { index, track ->
 			val supportedTrack = if (currentStream?.conversionMethod == MediaConversionMethod.None) {
-				findSupportedTrack(type.exoTrackType, index)
+				findSupportedTrack(type, index, track)
 			} else null
 			val isSelected = supportedTrack?.groupInfo?.isTrackSelected(supportedTrack.trackIndex)
 				?: isSelectedSourceTrack(type, track.index)
@@ -880,7 +922,8 @@ class ExoPlayerBackend(
 
 		if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
 
-		val match = findSupportedTrack(type.exoTrackType, index)
+		val sourceTrack = getSourceTracks(type).getOrNull(index)
+		val match = findSupportedTrack(type, index, sourceTrack)
 		if (match == null) {
 			Timber.w("Could not find track with index $index")
 			return false
@@ -902,6 +945,85 @@ class ExoPlayerBackend(
 			}
 		}
 		return null
+	}
+
+	private fun findSupportedTrack(type: TrackType, sourceTrackIndex: Int, sourceTrack: MediaStreamTrack?): SupportedTrack? =
+		when (type) {
+			TrackType.AUDIO -> findSupportedTrack(type.exoTrackType, sourceTrackIndex)
+			TrackType.SUBTITLE -> (sourceTrack as? MediaStreamSubtitleTrack)?.let(::findSupportedSubtitleTrack)
+		}
+
+	private fun findSupportedSubtitleTrack(track: MediaStreamSubtitleTrack): SupportedTrack? {
+		val streamIndex = track.index ?: return null
+		return if (track.isExternal) {
+			val match = findSupportedTextTrack { group, trackIndex ->
+				group.isExternalSubtitleTrack(trackIndex, streamIndex)
+			}
+			if (match == null) {
+				Timber.w(
+					"External subtitle track selection failed streamIndex=%s title=%s language=%s",
+					streamIndex,
+					track.displayTitle ?: "none",
+					track.displayLanguage ?: "unknown",
+				)
+			} else {
+				val format = match.group.getFormat(match.trackIndex)
+				Timber.i(
+					"External subtitle track matched streamIndex=%s groupIndex=%d trackIndex=%d groupId=%s formatId=%s mime=%s label=%s",
+					streamIndex,
+					match.groupIndex,
+					match.trackIndex,
+					match.group.id,
+					format.id ?: "none",
+					format.sampleMimeType ?: "unknown",
+					format.label ?: "none",
+				)
+			}
+			match
+		} else {
+			val internalSubtitleIndex = getSourceTracks(TrackType.SUBTITLE)
+				.filterIsInstance<MediaStreamSubtitleTrack>()
+				.filterNot(MediaStreamSubtitleTrack::isExternal)
+				.indexOfFirst { subtitle -> subtitle.index == streamIndex }
+
+			if (internalSubtitleIndex < 0) return null
+
+			var currentIndex = 0
+			findSupportedTextTrack { group, trackIndex ->
+				if (group.isExternalSubtitleTrack(trackIndex)) return@findSupportedTextTrack false
+				currentIndex++ == internalSubtitleIndex
+			}
+		}
+	}
+
+	private fun findSupportedTextTrack(predicate: (TrackGroup, Int) -> Boolean): SupportedTrack? {
+		for ((groupIndex, groupInfo) in exoPlayer.currentTracks.groups.withIndex()) {
+			if (groupInfo.type != C.TRACK_TYPE_TEXT) continue
+
+			val group = groupInfo.mediaTrackGroup
+			for (i in 0 until group.length) {
+				if (!groupInfo.isTrackSupported(i)) continue
+				if (predicate(group, i)) return SupportedTrack(groupInfo, group, groupIndex, i)
+			}
+		}
+		return null
+	}
+
+	private fun TrackGroup.isExternalSubtitleTrack(trackIndex: Int, streamIndex: Int? = null): Boolean {
+		val formatId = getFormat(trackIndex).id
+		return id.isExternalSubtitleId(streamIndex) || formatId.isExternalSubtitleId(streamIndex)
+	}
+
+	private fun String?.isExternalSubtitleId(streamIndex: Int? = null): Boolean {
+		if (this == null) return false
+		if (streamIndex == null) {
+			return contains("external:", ignoreCase = true) || contains("JF_EXTERNAL:", ignoreCase = true)
+		}
+
+		val externalMarkers = listOf("external:$streamIndex", "JF_EXTERNAL:$streamIndex")
+		return externalMarkers.any { marker ->
+			equals(marker, ignoreCase = true) || endsWith(":$marker", ignoreCase = true)
+		}
 	}
 
 	private fun getSourceTracks(type: TrackType): List<MediaStreamTrack> = when (type) {
@@ -963,7 +1085,8 @@ class ExoPlayerBackend(
 			return true
 		}
 
-		val match = findSupportedTrack(type.exoTrackType, sourceTrackIndex)
+		val sourceTrack = getSourceTracks(type).getOrNull(sourceTrackIndex)
+		val match = findSupportedTrack(type, sourceTrackIndex, sourceTrack)
 			?: return false
 
 		return if (applyTrackOverride(type.exoTrackType, match.group, match.trackIndex)) {
