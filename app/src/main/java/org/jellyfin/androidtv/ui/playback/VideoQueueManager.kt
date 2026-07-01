@@ -33,7 +33,7 @@ class VideoQueueManager {
 		return _lastPlayedAudioLanguageIsoCode
 	}
 
-	fun setLastPlayedAudioLanguageIsoCode(isoCode: String) {
+	fun setLastPlayedAudioLanguageIsoCode(isoCode: String?) {
 		_lastPlayedAudioLanguageIsoCode = isoCode
 	}
 
@@ -41,7 +41,7 @@ class VideoQueueManager {
 		return _lastPlayedAudioCodec
 	}
 
-	fun setLastPlayedAudioCodec(codec: String) {
+	fun setLastPlayedAudioCodec(codec: String?) {
 		_lastPlayedAudioCodec = codec
 	}
 
