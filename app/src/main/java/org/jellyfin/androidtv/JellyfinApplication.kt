@@ -15,6 +15,7 @@ import org.jellyfin.androidtv.data.eventhandling.SocketHandler
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.integration.LeanbackChannelWorker
 import org.jellyfin.androidtv.telemetry.TelemetryService
+import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.TrackSelectionManager
 import org.jellyfin.androidtv.util.TrackSelectionStore
@@ -31,6 +32,7 @@ class JellyfinApplication : Application() {
 
 		TrackSelectionManager.initialize(TrackSelectionStore(this))
 		LiveTvTrackCache.initialize(this)
+		SeriesStreamBadgeCache.initialize(this)
 
 		val notificationsRepository by inject<NotificationsRepository>()
 		notificationsRepository.addDefaultNotifications()
