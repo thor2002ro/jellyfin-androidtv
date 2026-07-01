@@ -12,6 +12,7 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
+import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
@@ -55,7 +56,10 @@ fun SettingsLiveTvGuideOptionsScreen() {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_start_favorites)) },
 				trailingContent = { Checkbox(checked = favsAtTop) },
-				onClick = { favsAtTop = !favsAtTop }
+				onClick = {
+					favsAtTop = !favsAtTop
+					TvManager.forceReload()
+				}
 			)
 		}
 
