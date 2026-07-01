@@ -6,7 +6,9 @@ import android.os.Looper
 import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.core.net.toUri
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -22,9 +24,12 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DecoderCounters
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioCapabilitiesReceiver
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -128,9 +133,30 @@ class ExoPlayerBackend(
 	private val startHandler = Handler(Looper.getMainLooper())
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
 	private var videoDecoderName: String? = null
+	private var videoInputFormat: Format? = null
 	private var audioDecoderName: String? = null
+	private var audioInputFormat: Format? = null
+	private var audioPassthroughSupported: Boolean? = null
+	private var audioPassthroughSupportDirty = true
+	private var audioCapabilities: AudioCapabilities? = null
+	private var audioCapabilitiesReceiverRegistered = false
+	private var audioCapabilitiesReceiverFailed = false
 	private var reportedPlayState: PlayState? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
+	private val audioCapabilitiesReceiver by lazy {
+		AudioCapabilitiesReceiver(
+			context,
+			AudioCapabilitiesReceiver.Listener { capabilities ->
+				audioCapabilities = capabilities
+				refreshAudioPassthroughSupport(
+					capabilities = capabilities,
+					allowReceiverRegistration = false,
+				)
+			},
+			audioAttributeState.audioAttributes ?: AudioAttributes.DEFAULT,
+			null,
+		)
+	}
 
 	private fun currentMediaItemMatchesCurrentStream(): Boolean {
 		val mediaId = currentStream?.hashCode()?.toString() ?: return false
@@ -160,6 +186,26 @@ class ExoPlayerBackend(
 		val liveStreamOffset = liveStreamTargetOffset ?: return null
 		val configuredOffset = exoPlayerOptions.liveTvBufferDuration ?: return liveStreamOffset
 		return maxOf(liveStreamOffset, configuredOffset)
+	}
+
+	private fun resetPlaybackStats() {
+		videoDecoderName = null
+		videoInputFormat = null
+		audioDecoderName = null
+		audioInputFormat = null
+		audioPassthroughSupported = null
+		audioPassthroughSupportDirty = true
+		audioCapabilitiesReceiverFailed = false
+	}
+
+	private fun unregisterAudioCapabilitiesReceiver() {
+		if (!audioCapabilitiesReceiverRegistered) return
+
+		runCatching { audioCapabilitiesReceiver.unregister() }
+			.onFailure { error -> Timber.w(error, "Failed to unregister audio capabilities receiver") }
+		audioCapabilitiesReceiverRegistered = false
+		audioCapabilities = null
+		audioPassthroughSupportDirty = true
 	}
 
 	private fun QueueEntry.toMediaItem(stream: PlayableMediaStream): MediaItem = MediaItem.Builder().apply {
@@ -345,11 +391,20 @@ class ExoPlayerBackend(
 			if (videoDecoderName == decoderName) videoDecoderName = null
 		}
 
+		override fun onVideoInputFormatChanged(
+			eventTime: AnalyticsListener.EventTime,
+			format: Format,
+			decoderReuseEvaluation: DecoderReuseEvaluation?,
+		) {
+			videoInputFormat = format
+		}
+
 		override fun onVideoDisabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
 		) {
 			videoDecoderName = null
+			videoInputFormat = null
 		}
 
 		override fun onAudioDecoderInitialized(
@@ -368,11 +423,31 @@ class ExoPlayerBackend(
 			if (audioDecoderName == decoderName) audioDecoderName = null
 		}
 
+		override fun onAudioInputFormatChanged(
+			eventTime: AnalyticsListener.EventTime,
+			format: Format,
+			decoderReuseEvaluation: DecoderReuseEvaluation?,
+		) {
+			audioInputFormat = format
+			audioPassthroughSupported = null
+			audioPassthroughSupportDirty = true
+			audioCapabilitiesReceiverFailed = false
+			refreshAudioPassthroughSupport(
+				format = format,
+				allowReceiverRegistration = false,
+			)
+		}
+
 		override fun onAudioDisabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
 		) {
 			audioDecoderName = null
+			audioInputFormat = null
+			audioPassthroughSupported = null
+			audioPassthroughSupportDirty = true
+			audioCapabilitiesReceiverFailed = false
+			unregisterAudioCapabilitiesReceiver()
 		}
 	}
 
@@ -520,6 +595,7 @@ class ExoPlayerBackend(
 		if (currentStream == stream) return
 
 		currentStream = stream
+		resetPlaybackStats()
 		pendingInitialTrackSelection = stream.initialTrackSelection()
 
 		var preparedItemIndex = (0 until exoPlayer.mediaItemCount).firstOrNull { index ->
@@ -555,6 +631,12 @@ class ExoPlayerBackend(
 			},
 			onChange = { audioAttributes ->
 				exoPlayer.setAudioAttributes(audioAttributes, true)
+				audioPassthroughSupported = null
+				audioPassthroughSupportDirty = true
+				refreshAudioPassthroughSupport(
+					attributes = audioAttributes,
+					allowReceiverRegistration = false,
+				)
 			}
 		)
 
@@ -633,6 +715,8 @@ class ExoPlayerBackend(
 		exoPlayer.stop()
 		currentStream = null
 		pendingInitialTrackSelection = null
+		unregisterAudioCapabilitiesReceiver()
+		resetPlaybackStats()
 	}
 
 	override fun seekTo(position: Duration) {
@@ -660,13 +744,74 @@ class ExoPlayerBackend(
 	override fun getFrameStats(): PlaybackFrameStats {
 		val counters = exoPlayer.videoDecoderCounters
 		counters?.ensureUpdated()
+		refreshAudioPassthroughSupport(allowReceiverRegistration = true)
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
 			corruptedFrames = counters?.skippedInputBufferCount ?: 0,
+			videoDecodedFrames = counters?.let {
+				it.renderedOutputBufferCount + it.skippedOutputBufferCount + it.droppedBufferCount
+			} ?: 0,
 			videoDecoderName = videoDecoderName,
+			videoHdrMode = videoInputFormat.hdrMode(),
 			audioDecoderName = audioDecoderName,
+			audioPassthroughSupported = audioPassthroughSupported,
 		)
+	}
+
+	private fun refreshAudioPassthroughSupport(
+		format: Format? = audioInputFormat,
+		attributes: AudioAttributes = audioAttributeState.audioAttributes ?: AudioAttributes.DEFAULT,
+		capabilities: AudioCapabilities? = null,
+		allowReceiverRegistration: Boolean,
+	) {
+		if (!audioPassthroughSupportDirty && capabilities == null) return
+
+		if (format == null) {
+			audioPassthroughSupported = null
+			audioPassthroughSupportDirty = false
+			return
+		}
+
+		if (!allowReceiverRegistration && !audioCapabilitiesReceiverRegistered && capabilities == null) return
+
+		val resolvedCapabilities = capabilities ?: getAudioCapabilities(
+			attributes = attributes,
+			allowReceiverRegistration = allowReceiverRegistration,
+		)
+		audioPassthroughSupported = format.passthroughSupport(resolvedCapabilities, attributes)
+		audioPassthroughSupportDirty = false
+	}
+
+	private fun getAudioCapabilities(
+		attributes: AudioAttributes,
+		allowReceiverRegistration: Boolean,
+	): AudioCapabilities? {
+		if (audioCapabilitiesReceiverFailed) return audioCapabilities
+		if (!allowReceiverRegistration && !audioCapabilitiesReceiverRegistered) return audioCapabilities
+
+		return runCatching {
+			audioCapabilitiesReceiver.setAudioAttributes(attributes)
+			if (allowReceiverRegistration && !audioCapabilitiesReceiverRegistered) {
+				audioCapabilities = audioCapabilitiesReceiver.register()
+				audioCapabilitiesReceiverRegistered = true
+			}
+			audioCapabilities
+		}.onFailure { error ->
+			Timber.w(error, "Failed to observe audio capabilities")
+			runCatching { audioCapabilitiesReceiver.unregister() }
+			audioCapabilitiesReceiverRegistered = false
+			audioCapabilitiesReceiverFailed = true
+			audioCapabilities = null
+		}.getOrNull()
+	}
+
+	private fun Format.passthroughSupport(
+		capabilities: AudioCapabilities?,
+		attributes: AudioAttributes,
+	): Boolean? {
+		if (sampleMimeType.isNullOrBlank()) return null
+		return capabilities?.isPassthroughPlaybackSupported(this, attributes)
 	}
 
 	override fun setTimedEvents(timedEvents: List<TimedEvent>) {
@@ -912,3 +1057,33 @@ class ExoPlayerBackend(
 		}
 	}
 }
+
+internal fun Format?.hdrMode(): String? {
+	val format = this ?: return null
+	if (format.sampleMimeType == "video/dolby-vision") return format.dolbyVisionMode()
+
+	return when (format.colorInfo?.colorTransfer) {
+		C.COLOR_TRANSFER_ST2084 -> "HDR10/PQ"
+		C.COLOR_TRANSFER_HLG -> "HLG"
+		C.COLOR_TRANSFER_SDR -> "SDR"
+		C.COLOR_TRANSFER_SRGB -> "sRGB"
+		C.COLOR_TRANSFER_LINEAR -> "Linear"
+		C.COLOR_TRANSFER_GAMMA_2_2 -> "Gamma 2.2"
+		else -> null
+	}
+}
+
+private fun Format.dolbyVisionMode(): String = codecs
+	?.split(',')
+	?.firstNotNullOfOrNull { codec ->
+		val parts = codec.trim().split('.')
+		val prefix = parts.firstOrNull()
+		val profile = parts.getOrNull(1)?.toIntOrNull()
+		when {
+			profile == null -> null
+			prefix == "dav1" -> "DV AV1 P$profile"
+			prefix?.startsWith("dv") == true -> "DV P$profile"
+			else -> null
+		}
+	}
+	?: "Dolby Vision"
