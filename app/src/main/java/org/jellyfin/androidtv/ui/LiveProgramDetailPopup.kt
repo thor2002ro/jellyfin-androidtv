@@ -207,10 +207,13 @@ class LiveProgramDetailPopup(
 		val favorite = addFavoriteButton(buttonRow, isFavorite)
 		updateFavoriteButton(favorite, isFavorite)
 		favorite.setOnClickListener {
-			setFavorite(channelId, !isFavorite) {
-				isFavorite = !isFavorite
+			val newFavorite = !isFavorite
+			setFavorite(channelId, newFavorite) { userData ->
+				isFavorite = userData.isFavorite
+				favoriteChannel = favoriteChannel?.copy(userData = userData)
+				TvManager.updateChannelUserData(channelId, userData)
 				updateFavoriteButton(favorite, isFavorite)
-				notifyFavoriteChanged(channelId)
+				notifyFavoriteChanged(channelId, isFavorite)
 			}
 		}
 
@@ -227,8 +230,8 @@ class LiveProgramDetailPopup(
 		button.imageTintList = if (isFavorite) null else ContextCompat.getColorStateList(mContext, R.color.program_detail_action_icon)
 	}
 
-	private fun notifyFavoriteChanged(channelId: UUID) {
-		tvGuide.refreshFavorite(channelId)
+	private fun notifyFavoriteChanged(channelId: UUID, isFavorite: Boolean) {
+		tvGuide.refreshFavorite(channelId, isFavorite)
 	}
 
 	private fun addFavoriteButton(layout: LinearLayout, isFavorite: Boolean): ImageButton {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -39,15 +40,31 @@ fun Tooltip(
 ) {
 	val focused by interactionSource.collectIsFocusedAsState()
 	val hovered by interactionSource.collectIsHoveredAsState()
+	val pressed by interactionSource.collectIsPressedAsState()
 	val active = enabled && !text.isNullOrBlank() && (focused || hovered)
 	var visible by remember { mutableStateOf(false) }
+	var suppressed by remember { mutableStateOf(false) }
 
-	LaunchedEffect(active, text) {
-		if (active) {
-			delay(TooltipDelayMillis)
-			visible = true
-		} else {
-			visible = false
+	LaunchedEffect(active, pressed, suppressed, text) {
+		when {
+			pressed -> {
+				suppressed = true
+				visible = false
+			}
+
+			!active -> {
+				suppressed = false
+				visible = false
+			}
+
+			suppressed -> {
+				visible = false
+			}
+
+			else -> {
+				delay(TooltipDelayMillis)
+				visible = true
+			}
 		}
 	}
 

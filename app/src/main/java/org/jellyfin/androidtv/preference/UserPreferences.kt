@@ -12,6 +12,10 @@ import org.jellyfin.androidtv.preference.constant.BufferLength
 import org.jellyfin.androidtv.preference.constant.ClockBehavior
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.HEVCLevel
+import org.jellyfin.androidtv.preference.constant.LibassCacheSize
+import org.jellyfin.androidtv.preference.constant.LibassGlyphSize
+import org.jellyfin.androidtv.preference.constant.LibassMaxRenderPixels
+import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior
@@ -296,6 +300,31 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Enable libass.
 		 */
 		var assDirectPlay = booleanPreference("libass_enabled", true)
+
+		/**
+		 * Preferred libass renderer.
+		 */
+		var libassRenderType = enumPreference("libass_render_type", LibassRenderType.OVERLAY_OPEN_GL)
+
+		/**
+		 * Maximum libass render surface size in pixels.
+		 */
+		var libassMaxRenderPixels = enumPreference("libass_max_render_pixels", LibassMaxRenderPixels.FULL_SURFACE)
+
+		/**
+		 * Libass bitmap cache size.
+		 */
+		var libassCacheSize = enumPreference("libass_cache_size", LibassCacheSize.MB_256)
+
+		/**
+		 * Libass glyph cache size.
+		 */
+		var libassGlyphSize = enumPreference("libass_glyph_size", LibassGlyphSize.GLYPHS_20000)
+
+		/**
+		 * Parse subtitles in Media3's extractor path.
+		 */
+		var libassParseSubtitlesDuringExtraction = booleanPreference("libass_parse_subtitles_during_extraction", true)
 
 		/**
 		 * Always burn in subtitles when transcoding.
