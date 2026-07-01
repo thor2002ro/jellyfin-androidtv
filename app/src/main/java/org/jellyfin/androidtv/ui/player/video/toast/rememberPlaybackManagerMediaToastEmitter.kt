@@ -9,6 +9,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import kotlin.time.Duration.Companion.milliseconds
 
 private val PauseToastDelay = 750.milliseconds
@@ -26,12 +27,13 @@ fun rememberPlaybackManagerMediaToastEmitter(
 		playbackManager.state.playState
 			.collect { playState ->
 				if (!active) {
-					active = playState == PlayState.PLAYING
+					active = playState.isActivePlayback
 					return@collect
 				}
 
 				when (playState) {
-					PlayState.PLAYING -> {
+					PlayState.PLAYING,
+					PlayState.BUFFERING -> {
 						if (pauseToastJob?.isActive == true) {
 							pauseToastJob?.cancel()
 						} else if (pauseToastEmitted) {

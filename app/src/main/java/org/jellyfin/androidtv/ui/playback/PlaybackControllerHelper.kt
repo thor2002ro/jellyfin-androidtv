@@ -41,7 +41,7 @@ fun PlaybackController.getLiveTvChannel(
 
 @OptIn(UnstableApi::class)
 fun PlaybackController.disableDefaultSubtitles() {
-	Timber.i("Disabling non-baked subtitles")
+	Timber.d("Disabling non-baked subtitles")
 
 	with(mVideoManager.mExoPlayer.trackSelector!!) {
 		parameters = parameters.buildUpon()
@@ -79,7 +79,7 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 		mCurrentOptions.subtitleStreamIndex = -1
 
 		if (burningSubs) {
-			Timber.i("Disabling subtitle baking")
+			Timber.i("Restarting playback to disable subtitle baking")
 
 			stop()
 			burningSubs = false
@@ -161,7 +161,7 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 			}
 
 			stream.deliveryMethod == SubtitleDeliveryMethod.DROP || stream.deliveryMethod == null -> {
-				Timber.i("Dropping subtitles")
+				Timber.d("Dropping subtitles")
 				setSubtitleIndex(-1)
 			}
 		}
