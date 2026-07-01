@@ -47,9 +47,11 @@ import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.util.TimeUtils
+import org.jellyfin.androidtv.util.apiclient.getTrickplayImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
 import kotlin.time.Duration
@@ -67,6 +69,9 @@ internal fun ChapterListPopover(
 	expanded: Boolean,
 	onDismissRequest: () -> Unit,
 	chapters: List<ChapterItemInfo>,
+	item: BaseItemDto?,
+	mediaSourceId: String?,
+	trickPlayEnabled: Boolean,
 	width: Dp,
 	playbackManager: PlaybackManager,
 ) {
@@ -116,6 +121,9 @@ internal fun ChapterListPopover(
 			) { index, chapter ->
 				ChapterListItem(
 					chapter = chapter,
+					item = item,
+					mediaSourceId = mediaSourceId,
+					trickPlayEnabled = trickPlayEnabled,
 					index = index,
 					isSelected = index == currentChapterIndex,
 					onClick = {
@@ -153,6 +161,9 @@ internal fun getCurrentChapterIndex(
 @Composable
 private fun ChapterListItem(
 	chapter: ChapterItemInfo,
+	item: BaseItemDto?,
+	mediaSourceId: String?,
+	trickPlayEnabled: Boolean,
 	index: Int,
 	isSelected: Boolean,
 	onClick: () -> Unit,
@@ -170,6 +181,9 @@ private fun ChapterListItem(
 		) {
 			ChapterThumbnail(
 				chapter = chapter,
+				item = item,
+				mediaSourceId = mediaSourceId,
+				trickPlayEnabled = trickPlayEnabled,
 				modifier = Modifier.matchParentSize(),
 			)
 
@@ -239,6 +253,9 @@ private fun ChapterListItem(
 @Composable
 private fun ChapterThumbnail(
 	chapter: ChapterItemInfo,
+	item: BaseItemDto?,
+	mediaSourceId: String?,
+	trickPlayEnabled: Boolean,
 	modifier: Modifier = Modifier,
 	api: ApiClient = koinInject(),
 ) {
@@ -260,6 +277,17 @@ private fun ChapterThumbnail(
 				scaleType = ImageView.ScaleType.CENTER_CROP,
 				modifier = Modifier.fillMaxSize(),
 			)
+		} else if (trickPlayEnabled && item != null) {
+			val timeMs = chapter.startPositionTicks.ticks.inWholeMilliseconds
+			val trickplayImage = remember(item.id, item.trickplay, mediaSourceId, timeMs, api.accessToken) {
+				item.getTrickplayImage(api, mediaSourceId, timeMs)
+			}
+			if (trickplayImage != null) {
+				VideoPlayerTrickplayImage(
+					request = rememberVideoPlayerTrickplayImageRequest(trickplayImage),
+					modifier = Modifier.fillMaxSize(),
+				)
+			}
 		}
 	}
 }

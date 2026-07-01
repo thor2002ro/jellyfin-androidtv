@@ -16,6 +16,8 @@ class GuidePagingButton @JvmOverloads constructor(
 	attrs: AttributeSet? = null,
 ) : RelativeLayout(context, attrs) {
 	private var modernStyle = false
+	private var pageRequested = false
+	private var pageRequest: (() -> Unit)? = null
 
 	@JvmOverloads
 	constructor(
@@ -24,8 +26,19 @@ class GuidePagingButton @JvmOverloads constructor(
 		start: Int,
 		label: String,
 		modernStyle: Boolean = false,
+	) : this(context, guide, start, LiveTvGuideFragment.PAGE_SIZE, label, modernStyle)
+
+	@JvmOverloads
+	constructor(
+		context: Context,
+		guide: LiveTvGuide,
+		start: Int,
+		max: Int,
+		label: String,
+		modernStyle: Boolean = false,
 	) : this(context) {
 		this.modernStyle = modernStyle
+		pageRequest = { guide.displayChannels(start, max) }
 		val programName = LayoutInflater.from(context)
 			.inflate(if (modernStyle) R.layout.guide_paging_button_guide else R.layout.guide_paging_button, this, true)
 			.findViewById<TextView>(R.id.programName)
@@ -35,7 +48,7 @@ class GuidePagingButton @JvmOverloads constructor(
 		else setBackgroundColor(Utils.getThemeColor(context, R.attr.buttonDefaultNormalBackground))
 		isFocusable = true
 		setOnClickListener {
-			guide.displayChannels(start, LiveTvGuideFragment.PAGE_SIZE)
+			requestPage()
 		}
 	}
 
@@ -52,9 +65,22 @@ class GuidePagingButton @JvmOverloads constructor(
 				)
 			)
 		}
+
+		if (hasFocus) {
+			post {
+				if (hasFocus()) requestPage()
+			}
+		}
 	}
 
 	private fun applyBackground(focused: Boolean) {
 		GuideCellBackgrounds.applyButtonBackground(this, focused)
+	}
+
+	private fun requestPage() {
+		val request = pageRequest ?: return
+		if (pageRequested) return
+		pageRequested = true
+		request()
 	}
 }

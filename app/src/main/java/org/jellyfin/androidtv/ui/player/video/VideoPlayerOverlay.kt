@@ -53,6 +53,7 @@ import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
+import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.koin.compose.koinInject
 import timber.log.Timber
 import kotlin.time.Duration
@@ -118,6 +119,7 @@ fun VideoPlayerOverlay(
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
 	val nextUpBehavior = userPreferences[UserPreferences.nextUpBehavior]
+	val trickPlayEnabled = userPreferences[UserPreferences.trickPlayEnabled]
 	val nextUpPositionInfo by rememberPlayerPositionInfo(
 		playbackManager = playbackManager,
 		precision = NextUpProgressCheckInterval,
@@ -477,6 +479,8 @@ fun VideoPlayerOverlay(
 				VideoPlayerControls(
 					playbackManager = playbackManager,
 					item = item,
+					mediaSourceId = entry?.mediaSourceId,
+					trickPlayEnabled = trickPlayEnabled,
 					zoomMode = zoomMode,
 					onZoomModeSelected = onZoomModeSelected,
 					onPlaybackInfoClick = { showPlaybackInfo = !showPlaybackInfo },
@@ -531,7 +535,10 @@ fun VideoPlayerOverlay(
 			) {
 				VideoPlayerSeekControls(
 					playbackManager = playbackManager,
+					item = item,
+					mediaSourceId = entry?.mediaSourceId,
 					position = pendingSeekPosition,
+					trickPlayEnabled = trickPlayEnabled,
 					liveTvProgramTimeline = liveTvProgramTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
 				)
