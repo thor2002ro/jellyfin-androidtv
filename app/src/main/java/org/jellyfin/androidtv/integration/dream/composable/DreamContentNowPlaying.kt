@@ -46,7 +46,7 @@ import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.jellyfin.lyrics.lyrics
 import org.jellyfin.playback.jellyfin.lyrics.lyricsFlow
 import org.jellyfin.sdk.api.client.ApiClient
@@ -90,7 +90,7 @@ fun DreamContentNowPlaying(
 			lyricDto = lyrics,
 			currentTimestamp = positionInfo.active,
 			duration = positionInfo.duration,
-			paused = playState != PlayState.PLAYING,
+			paused = !playState.isActivePlayback,
 			fontSize = 22.sp,
 			color = Color.White,
 			modifier = Modifier

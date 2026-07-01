@@ -219,7 +219,7 @@ public class ItemListFragment extends Fragment implements View.OnKeyListener {
     private AudioEventListener mAudioEventListener = new AudioEventListener() {
         @Override
         public void onPlaybackStateChange(@NonNull PlaybackController.PlaybackState newState, @Nullable BaseItemDto currentItem) {
-            Timber.i("Got playback state change event %s for item %s", newState.toString(), currentItem != null ? currentItem.getName() : "<unknown>");
+            Timber.d("Got playback state change event %s for item %s", newState.toString(), currentItem != null ? currentItem.getName() : "<unknown>");
 
             if (newState != PlaybackController.PlaybackState.PLAYING || currentItem == null) {
                 if (mCurrentlyPlayingRow != null) mCurrentlyPlayingRow.updateCurrentTime(-1);
@@ -351,7 +351,7 @@ public class ItemListFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void play(List<BaseItemDto> items, int ndx, boolean shuffle) {
-        Timber.i("play items: %d, ndx: %d, shuffle: %b", items.size(), ndx, shuffle);
+        Timber.i("Starting playback for %d items, index %d, shuffle: %b", items.size(), ndx, shuffle);
 
         int pos = 0;
         BaseItemDto item = items.size() > 0 ? items.get(ndx) : null;
