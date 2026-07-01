@@ -13,10 +13,24 @@
         android:layout_width="14dp"
         android:layout_height="14dp"
         android:layout_alignParentTop="true"
-        android:layout_alignParentEnd="true"
+        android:layout_toStartOf="@id/trackCounts"
+        android:layout_marginEnd="4dp"
         android:layout_centerVertical="false"
         android:src="@drawable/ic_heart_red"
         android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/trackCounts"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="A:2 S:1" />
 
     <ImageView
         android:id="@+id/recIndicator"

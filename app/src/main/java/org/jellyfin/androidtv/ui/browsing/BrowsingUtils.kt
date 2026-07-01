@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.repository.ItemRepository
+import org.jellyfin.androidtv.ui.livetv.liveTvChannelFields
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.extensions.itemsApi
@@ -171,13 +172,13 @@ object BrowsingUtils {
 	@JvmStatic
 	fun createLiveTVChannelsRequest() = GetLiveTvChannelsRequest(
 		addCurrentProgram = true,
-		fields = ItemRepository.itemFields,
+		fields = liveTvChannelFields,
 	)
 
 	@JvmStatic
 	fun createLiveTVRecentlyPlayedChannelsRequest() = GetLiveTvChannelsRequest(
 		addCurrentProgram = true,
-		fields = ItemRepository.itemFields,
+		fields = liveTvChannelFields,
 		sortBy = setOf(ItemSortBy.DATE_PLAYED),
 		sortOrder = SortOrder.DESCENDING,
 		enableFavoriteSorting = false,
@@ -187,7 +188,7 @@ object BrowsingUtils {
 	@JvmStatic
 	fun createLiveTVMostPlayedChannelsRequest() = GetLiveTvChannelsRequest(
 		addCurrentProgram = true,
-		fields = ItemRepository.itemFields,
+		fields = liveTvChannelFields,
 		sortBy = setOf(ItemSortBy.PLAY_COUNT),
 		sortOrder = SortOrder.DESCENDING,
 		enableFavoriteSorting = false,
@@ -197,7 +198,7 @@ object BrowsingUtils {
 	@JvmStatic
 	fun createLiveTVChannelsRequest(isFavorite: Boolean) = GetLiveTvChannelsRequest(
 		addCurrentProgram = true,
-		fields = ItemRepository.itemFields,
+		fields = liveTvChannelFields,
 		isFavorite = isFavorite,
 	)
 
@@ -236,8 +237,8 @@ object BrowsingUtils {
 		fields = ItemRepository.itemFields,
 		parentId = seasonId,
 		includeItemTypes = setOf(BaseItemKind.EPISODE),
-		startIndex = indexNumber,
-		limit = 20,
+		startIndex = 0,
+		limit = indexNumber + 20,
 	)
 
 	@JvmStatic
