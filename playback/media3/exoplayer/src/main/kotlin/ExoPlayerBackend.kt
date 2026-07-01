@@ -99,6 +99,8 @@ class ExoPlayerBackend(
 		const val MEDIA_ITEM_COUNT_MAX = 10
 		private val LIVE_TV_TS_EXTRACTOR_FLAGS =
 			DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+		private const val INITIAL_TRACK_SELECTION_RETRY_LIMIT = 8
+		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
 
 		private fun formatTsExtractorFlags(flags: Int) =
 			if (flags == 0) "none (0)" else "ALLOW_NON_IDR_KEYFRAMES ($flags)"
@@ -146,7 +148,9 @@ class ExoPlayerBackend(
 	private var lastKnownDuration: Duration? = null
 	private val subtitleTimingOffsetState = SubtitleTimingOffsetState()
 	private val startHandler = Handler(Looper.getMainLooper())
+	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
+	private var pendingInitialTrackSelectionRetryCount = 0
 	private var videoDecoderName: String? = null
 	private var videoInputFormat: Format? = null
 	private var audioDecoderName: String? = null
@@ -217,6 +221,48 @@ class ExoPlayerBackend(
 
 	private fun clearSubtitleCues() {
 		subtitleView?.setCues(emptyList())
+	}
+
+	private fun setPendingInitialTrackSelection(selection: PendingInitialTrackSelection?) {
+		initialTrackSelectionHandler.removeCallbacksAndMessages(null)
+		pendingInitialTrackSelectionRetryCount = 0
+		pendingInitialTrackSelection = selection
+	}
+
+	private fun clearPendingInitialTrackSelection() {
+		setPendingInitialTrackSelection(null)
+	}
+
+	private fun schedulePendingInitialTrackSelectionRetry() {
+		if (pendingInitialTrackSelection == null) return
+		if (pendingInitialTrackSelectionRetryCount >= INITIAL_TRACK_SELECTION_RETRY_LIMIT) return
+
+		initialTrackSelectionHandler.removeCallbacksAndMessages(null)
+		initialTrackSelectionHandler.postDelayed(
+			{ retryPendingInitialTrackSelection() },
+			INITIAL_TRACK_SELECTION_RETRY_DELAY_MS,
+		)
+	}
+
+	private fun retryPendingInitialTrackSelection() {
+		val pending = pendingInitialTrackSelection ?: return
+
+		applyPendingInitialTrackSelection()
+		if (pendingInitialTrackSelection == null) return
+
+		pendingInitialTrackSelectionRetryCount++
+		if (pendingInitialTrackSelectionRetryCount >= INITIAL_TRACK_SELECTION_RETRY_LIMIT) {
+			Timber.w(
+				"Initial track selection still pending after %d retries mediaId=%s audioStreamIndex=%s subtitleStreamIndex=%s",
+				pendingInitialTrackSelectionRetryCount,
+				currentStream?.hashCode()?.toString() ?: "none",
+				pending.audioStreamIndex?.toString() ?: "none",
+				pending.subtitleStreamIndex?.toString() ?: "none",
+			)
+			return
+		}
+
+		schedulePendingInitialTrackSelectionRetry()
 	}
 
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
@@ -558,6 +604,7 @@ class ExoPlayerBackend(
 
 		override fun onTracksChanged(tracks: Tracks) {
 			applyPendingInitialTrackSelection()
+			schedulePendingInitialTrackSelectionRetry()
 
 			val canAdjustSubtitleTiming = tracks.groups
 				.asSequence()
@@ -582,6 +629,7 @@ class ExoPlayerBackend(
 		override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
 			val queueEntry = mediaItem?.localConfiguration?.tag as? QueueEntry
 			audioPipeline.normalizationGain = queueEntry?.normalizationGain
+			schedulePendingInitialTrackSelectionRetry()
 		}
 
 		override fun onTimelineChanged(timeline: Timeline, reason: Int) {
@@ -681,7 +729,7 @@ class ExoPlayerBackend(
 		currentStream = stream
 		reportedEndedStream = null
 		resetPlaybackStats()
-		pendingInitialTrackSelection = stream.initialTrackSelection()
+		setPendingInitialTrackSelection(stream.initialTrackSelection())
 
 		var preparedItemIndex = (0 until exoPlayer.mediaItemCount).firstOrNull { index ->
 			exoPlayer.getMediaItemAt(index).mediaId == stream.hashCode().toString()
@@ -700,6 +748,7 @@ class ExoPlayerBackend(
 			exoPlayer.currentMediaItemIndex -> Unit
 			else -> exoPlayer.seekTo(preparedItemIndex, 0)
 		}
+		schedulePendingInitialTrackSelectionRetry()
 
 		// Update audio attributes
 		val contentType = when (item.mediaType) {
@@ -802,7 +851,7 @@ class ExoPlayerBackend(
 		clearSubtitleCues()
 		currentStream = null
 		reportedEndedStream = null
-		pendingInitialTrackSelection = null
+		clearPendingInitialTrackSelection()
 		unregisterAudioCapabilitiesReceiver()
 		resetPlaybackStats()
 	}
@@ -935,7 +984,7 @@ class ExoPlayerBackend(
 	}
 
 	override fun selectTrack(type: TrackType, index: Int): Boolean {
-		pendingInitialTrackSelection = null
+		clearPendingInitialTrackSelection()
 
 		// Handle subtitle disable
 		if (type == TrackType.SUBTITLE && index == -1) {
@@ -1082,7 +1131,7 @@ class ExoPlayerBackend(
 		val pending = pendingInitialTrackSelection ?: return
 		val stream = currentStream ?: return
 		if (pending.stream !== stream) {
-			pendingInitialTrackSelection = null
+			clearPendingInitialTrackSelection()
 			return
 		}
 		if (!currentMediaItemMatchesCurrentStream()) return
@@ -1103,7 +1152,7 @@ class ExoPlayerBackend(
 		}
 
 		if (pending.audioStreamIndex == null && pending.subtitleStreamIndex == null) {
-			pendingInitialTrackSelection = null
+			clearPendingInitialTrackSelection()
 		}
 	}
 
