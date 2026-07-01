@@ -133,6 +133,9 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private List<BaseItemDto> mAllChannels;
     private UUID mFirstFocusChannelId;
     private boolean mPreserveGuideFocusOnNextLoad = false;
+    private boolean mIgnoreNextGuideFocusAutoLoad = false;
+    private int mGuideLoadRequestId = 0;
+    private int mProgramLoadRequestId = 0;
     private int guideRowHeightPx;
     private int guideVisibleRows;
 
@@ -1124,6 +1127,8 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     @Override
     public void onPause() {
         super.onPause();
+        mGuideLoadRequestId++;
+        mProgramLoadRequestId++;
         if (mItemsToPlay == null || mItemsToPlay.isEmpty()) return;
 
         setPlayPauseActionState(0);
@@ -1206,7 +1211,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             LocalDateTime needLoadTime = mCurrentGuideStart.plusMinutes(30);
             needLoad = now.isAfter(needLoadTime);
             if (mSelectedProgramView != null)
-                mSelectedProgramView.requestFocus();
+                requestGuideFocusWithoutAutoLoad(mSelectedProgramView);
         }
         if (needLoad) {
             loadGuide();
@@ -1218,13 +1223,27 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         tvGuideBinding.getRoot().setVisibility(View.GONE);
         playbackControllerContainer.getValue().getPlaybackController().mVideoManager.setVideoFullSize(true);
         mGuideVisible = false;
+        mGuideLoadRequestId++;
+        mProgramLoadRequestId++;
         updateSkipOverlayAvailability();
+    }
+
+    private void requestGuideFocusWithoutAutoLoad(View view) {
+        mIgnoreNextGuideFocusAutoLoad = true;
+        if (view.requestFocus()) {
+            view.post(() -> mIgnoreNextGuideFocusAutoLoad = false);
+        } else {
+            mIgnoreNextGuideFocusAutoLoad = false;
+        }
     }
 
     private void loadGuide() {
         tvGuideBinding.spinner.setVisibility(View.VISIBLE);
         fillTimeLine(GUIDE_HOURS);
+        final int requestId = ++mGuideLoadRequestId;
         TvManager.loadAllChannels(this, ndx -> {
+            if (requestId != mGuideLoadRequestId) return null;
+
             if (ndx >= PAGE_SIZE) {
                 // last channel is not in first page so grab a set where it will be in the middle
                 ndx = ndx - (PAGE_SIZE / 2);
@@ -1266,10 +1285,11 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         tvGuideBinding.channelsStatus.setText("");
         tvGuideBinding.filterStatus.setText("");
         final CustomPlaybackOverlayFragment self = this;
+        final int requestId = ++mProgramLoadRequestId;
         TvManager.getProgramsAsync(this, mCurrentDisplayChannelStartNdx, mCurrentDisplayChannelEndNdx, mCurrentGuideStart, mCurrentGuideEnd, new EmptyResponse(getLifecycle()) {
             @Override
             public void onResponse() {
-                if (!isActive()) return;
+                if (!isActive() || requestId != mProgramLoadRequestId) return;
                 Timber.v("Programs response");
                 if (mDisplayProgramsTask != null) mDisplayProgramsTask.cancel(true);
                 mDisplayProgramsTask = new DisplayProgramsTask(self);
@@ -1383,7 +1403,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             tvGuideBinding.spinner.setVisibility(View.GONE);
             mPreserveGuideFocusOnNextLoad = false;
 
-            if (firstRow != null) firstRow.requestFocus();
+            if (firstRow != null) requestGuideFocusWithoutAutoLoad(firstRow);
         }
     }
 
@@ -1587,7 +1607,11 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     public void setSelectedProgram(RelativeLayout programView) {
         mSelectedProgramView = programView;
-        programView.post(() -> maybeAutoLoadAdjacentChannels(programView));
+        if (mIgnoreNextGuideFocusAutoLoad) {
+            mIgnoreNextGuideFocusAutoLoad = false;
+        } else {
+            programView.post(() -> maybeAutoLoadAdjacentChannels(programView));
+        }
         if (mSelectedProgramView instanceof ProgramGridCell) {
             mSelectedProgram = ((ProgramGridCell) mSelectedProgramView).getProgram();
             mHandler.removeCallbacks(detailUpdateTask);
