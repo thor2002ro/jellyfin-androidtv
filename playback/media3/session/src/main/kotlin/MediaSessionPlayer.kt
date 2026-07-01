@@ -45,6 +45,12 @@ internal class MediaSessionPlayer(
 		// Invalidate mediasession state when certain player state changes
 		manager.queue.entry.invalidateStateOnEach(scope)
 		manager.queue.entries.invalidateStateOnEach(scope)
+		manager.queue.entry.onEach { entry ->
+			if (entry != null) {
+				runCatching { manager.queue.peekNext() }
+					.onFailure { err -> Timber.w(err, "Unable to preload next media session item") }
+			}
+		}.launchIn(scope)
 		manager.queue.entry
 			.flatMapLatest { entry -> entry?.mediaStreamFlow ?: flowOf(null) }
 			.invalidateStateOnEach(scope)

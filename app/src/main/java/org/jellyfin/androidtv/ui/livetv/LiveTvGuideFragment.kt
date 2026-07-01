@@ -26,7 +26,6 @@ import org.jellyfin.androidtv.databinding.LiveTvGuideBinding
 import org.jellyfin.androidtv.ui.AsyncImageView
 import org.jellyfin.androidtv.ui.FriendlyDateButton
 import org.jellyfin.androidtv.ui.GuideChannelHeader
-import org.jellyfin.androidtv.ui.GuidePagingButton
 import org.jellyfin.androidtv.ui.HorizontalScrollViewListener
 import org.jellyfin.androidtv.ui.LiveProgramDetailPopup
 import org.jellyfin.androidtv.ui.ObservableHorizontalScrollView
@@ -42,7 +41,6 @@ import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.androidtv.util.apiclient.Response
-import org.jellyfin.androidtv.util.getLoadChannelsLabel
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.androidtv.util.isPageForward
 import org.jellyfin.androidtv.util.readCustomMessagesOnLifecycle
@@ -97,8 +95,13 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private var dateDialog: AlertDialog? = null
 	private var mDetailPopup: LiveProgramDetailPopup? = null
 	private var mDisplayProgramsTask: DisplayProgramsTask? = null
+	private var guideLoadRequestId = 0
+	private var programLoadRequestId = 0
+	private var programLoadInFlight = false
+	private var pendingGuideScrollY: Int? = null
 	private var handledCenterLongPress = false
 	private var popupTuneChannelId: UUID? = null
+	private var ignoreNextFocusAutoLoad = false
 	private val noOpRecordingIndicator = object : RecordingIndicatorView {
 		override fun setRecTimer(id: String?) = Unit
 		override fun setRecSeriesTimer(id: String?) = Unit
@@ -157,6 +160,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		val programVScroller = binding.programVScroller
 		programVScroller.setScrollViewListener(ScrollViewListener { _, x, y, _, _ ->
 			mChannelScroller.scrollTo(x, y)
+			maybeAutoLoadScrolledChannels(y)
 		})
 		mChannelScroller.setScrollViewListener(ScrollViewListener { _, x, y, _, _ ->
 			programVScroller.scrollTo(x, y)
@@ -191,16 +195,16 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private fun load() {
 		mCurrentGuideStart = LocalDateTime.now()
 		fillTimeLine(mCurrentGuideStart, getGuideHours())
-		TvManager.loadAllChannels(this) { index ->
-			val startIndex = if (index >= PAGE_SIZE) {
-				index - (PAGE_SIZE / 2)
-			} else {
-				0
-			}
+		val requestId = ++guideLoadRequestId
+		TvManager.loadAllChannels(this) loadChannels@ { _ ->
+			if (requestId != guideLoadRequestId) return@loadChannels null
+
+			val pageSize = guidePageSize()
 
 			mAllChannels = TvManager.getAllChannels().orEmpty()
 			if (mAllChannels.isNotEmpty()) {
-				displayChannels(startIndex, PAGE_SIZE)
+				displayChannelList()
+				displayChannels(0, pageSize)
 			} else {
 				mSpinner.visibility = View.GONE
 			}
@@ -231,17 +235,29 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		if (
 			TvManager.shouldForceReload() ||
 			mCurrentGuideStart.plusMinutes(30).isBefore(LocalDateTime.now()) ||
-			mChannels.childCount == 0
+			mChannels.childCount == 0 ||
+			mProgramRows.childCount == 0
 		) {
+			mFirstFocusChannelId = null
 			load()
-			mFirstFocusChannelId = TvManager.getLastLiveTvChannel()
 		}
+	}
+
+	internal fun reloadGuide() {
+		mFilters.load()
+		TvManager.forceReload()
+		doLoad()
 	}
 
 	override fun onPause() {
 		super.onPause()
 
 		mDisplayProgramsTask?.cancel(true)
+		guideLoadRequestId++
+		programLoadRequestId++
+		programLoadInFlight = false
+		pendingGuideScrollY = null
+		mHandler.removeCallbacks(idleGuidePrefetchTask)
 		mDetailPopup?.dismiss()
 	}
 
@@ -371,16 +387,14 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	private fun handleChannelPageKey(keyCode: Int): Boolean {
 		if (mDetailPopup?.isShowing() == true) return true
-		if (mSpinner.visibility == View.VISIBLE || mAllChannels.isEmpty()) return true
+		if (programLoadInFlight || mAllChannels.isEmpty()) return true
 
-		if (guideVisibleRows == 0) {
-			guideVisibleRows = maxOf(1, mChannelScroller.height / guideRowHeightPx)
-		}
+		updateGuideVisibleRows()
 		pageGuideChannels(
 			requireActivity(),
 			mProgramRows,
 			mChannels,
-			guideVisibleRows,
+			guideVisibleRows.takeIf { it > 0 } ?: DEFAULT_VISIBLE_ROWS,
 			isPageForward(keyCode),
 		)
 		return true
@@ -426,7 +440,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		var targetStartTime = startTime
 		if (targetStartTime.isBefore(LocalDateTime.now())) targetStartTime = LocalDateTime.now()
 		Timber.i("Paging Live TV guide to %s", targetStartTime)
-		TvManager.forceReload()
 		mSelectedProgram?.let { selectedProgram ->
 			mFirstFocusChannelId = selectedProgram.channelId
 		}
@@ -489,10 +502,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	}
 
 	private fun findProgramCellForChannelHeader(header: GuideChannelHeader): ProgramGridCell? {
-		val channelRowIndex = (0 until mChannels.childCount)
-			.firstOrNull { index -> mChannels.getChildAt(index) == header }
-			?: return null
-		val programRow = mProgramRows.getChildAt(channelRowIndex) as? LinearLayout ?: return null
+		val programRow = findProgramRowForChannel(header.channel.id) ?: return null
 		val selectedProgramId = mSelectedProgram?.id
 		val now = LocalDateTime.now()
 
@@ -507,11 +517,27 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				}
 	}
 
+	private fun findProgramRowForChannel(channelId: UUID): LinearLayout? =
+		(0 until mProgramRows.childCount)
+			.mapNotNull { index -> mProgramRows.getChildAt(index) as? LinearLayout }
+			.firstOrNull { row ->
+				(0 until row.childCount)
+					.mapNotNull { index -> row.getChildAt(index) as? ProgramGridCell }
+					.firstOrNull()
+					?.getProgram()
+					?.channelId == channelId
+			}
+
 	override fun displayChannels(start: Int, max: Int) {
-		displayChannels(start, max, getCurrentFocusChannelId().takeIf { max > PAGE_SIZE })
+		displayChannels(start, max, getCurrentFocusChannelId().takeIf { max > guidePageSize() })
 	}
 
-	private fun displayChannels(start: Int, max: Int, focusChannelId: UUID?) {
+	private fun displayChannels(
+		start: Int,
+		max: Int,
+		focusChannelId: UUID?,
+		showSpinner: Boolean = true,
+	) {
 		var end = start + max
 		if (end > mAllChannels.size) {
 			end = mAllChannels.size
@@ -530,16 +556,21 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		}
 
 		Timber.v("Display channels pre-execute")
-		mSpinner.visibility = View.VISIBLE
 
-		loadProgramData()
+		loadProgramData(showSpinner)
 	}
 
-	private fun loadProgramData() {
-		mProgramRows.removeAllViews()
-		mChannels.removeAllViews()
-		mChannelStatus.text = ""
-		mFilterStatus.text = ""
+	private fun loadProgramData(showSpinner: Boolean = true) {
+		if (showSpinner) {
+			mSpinner.visibility = View.VISIBLE
+			mProgramRows.removeAllViews()
+			if (mFilters.any()) mChannels.removeAllViews()
+			mChannelStatus.text = ""
+			mFilterStatus.text = ""
+		}
+		mHandler.removeCallbacks(idleGuidePrefetchTask)
+		programLoadInFlight = true
+		val requestId = ++programLoadRequestId
 		TvManager.getProgramsAsync(
 			this,
 			mCurrentDisplayChannelStartNdx,
@@ -548,58 +579,53 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			mCurrentGuideEnd,
 			object : EmptyResponse(lifecycle) {
 				override fun onResponse() {
-					if (!isActive) return
+					if (!isActive || requestId != programLoadRequestId) return
 					Timber.v("Programs response")
 					mDisplayProgramsTask?.cancel(true)
-					mDisplayProgramsTask = DisplayProgramsTask()
+					mDisplayProgramsTask = DisplayProgramsTask(showSpinner)
 					mDisplayProgramsTask?.execute(mCurrentDisplayChannelStartNdx, mCurrentDisplayChannelEndNdx)
 				}
 			},
 		)
 	}
 
-	private inner class DisplayProgramsTask : AsyncTask<Int, Int, Void?>() {
+	private data class GuideRow(
+		val channel: BaseItemDto,
+		val row: LinearLayout,
+		val index: Int,
+	)
+
+	private inner class DisplayProgramsTask(
+		private val clearBeforeBuild: Boolean,
+	) : AsyncTask<Int, Int, List<GuideRow>>() {
 		private var firstFocusView: View? = null
-		private var displayedChannels = 0
+		private var focusChannelFound = false
 
 		override fun onPreExecute() {
 			Timber.v("Display programs pre-execute")
-			mChannels.removeAllViews()
-			mProgramRows.removeAllViews()
-
-			if (mCurrentDisplayChannelStartNdx > 0) {
-				var pageUpStart = mCurrentDisplayChannelStartNdx - PAGE_SIZE
-				if (pageUpStart < 0) {
-					pageUpStart = 0
-				}
-
-				displayedChannels = 0
-
-				val label = getLoadChannelsLabel(
-					requireContext(),
-					mAllChannels[pageUpStart].number,
-					mAllChannels[mCurrentDisplayChannelStartNdx - 1].number,
-				)
-				addPagingRow(pageUpStart, mCurrentDisplayChannelEndNdx - pageUpStart + 1, label)
+			if (clearBeforeBuild) {
+				mProgramRows.removeAllViews()
+				if (mFilters.any()) mChannels.removeAllViews()
 			}
 		}
 
-		override fun doInBackground(vararg params: Int?): Void? {
-			val start = params.getOrNull(0) ?: return null
-			val end = params.getOrNull(1) ?: return null
+		override fun doInBackground(vararg params: Int?): List<GuideRow> {
+			val start = params.getOrNull(0) ?: return emptyList()
+			val end = params.getOrNull(1) ?: return emptyList()
+			val rows = mutableListOf<GuideRow>()
 			var first = true
 			var prevRow: LinearLayout? = null
 
 			Timber.v("About to iterate programs")
 			for (i in start..end) {
-				if (isCancelled) return null
+				if (isCancelled) return emptyList()
 				val channel = TvManager.getChannel(i)
 				val programs = TvManager.getProgramsForChannel(channel.id, mFilters)
 				val row = getProgramRow(programs, channel.id) ?: continue
 
 				if (first) {
 					first = false
-					firstFocusView = row
+					firstFocusView = row.preferredFocusChild()
 				}
 
 				prevRow?.let { previous ->
@@ -608,40 +634,45 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				}
 				prevRow = row
 
-				requireActivity().runOnUiThread {
-					if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@runOnUiThread
-
-					val header = getChannelHeader(channel)
-					mChannels.addView(header)
-					header.loadImage()
-					mProgramRows.addView(row)
-					if (channel.id == mFirstFocusChannelId) {
-						firstFocusView = if (focusAtEnd) row.getChildAt(row.childCount - 1) else row
-						focusAtEnd = false
-						mFirstFocusChannelId = null
-					}
+				if (channel.id == mFirstFocusChannelId) {
+					firstFocusView = row.preferredFocusChild(focusAtEnd)
+					focusChannelFound = true
 				}
-
-				displayedChannels++
+				rows.add(GuideRow(channel, row, i))
 			}
-			return null
+			return rows
 		}
 
-		override fun onPostExecute(result: Void?) {
+		override fun onPostExecute(result: List<GuideRow>) {
 			Timber.v("Display programs post execute")
-			if (mCurrentDisplayChannelEndNdx < mAllChannels.size - 1 && !mFilters.any()) {
-				var pageDnEnd = mCurrentDisplayChannelEndNdx + PAGE_SIZE
-				if (pageDnEnd >= mAllChannels.size) pageDnEnd = mAllChannels.size - 1
+			val currentFocus = requireActivity().currentFocus
+			val guideHadFocus = isGuideFocus(currentFocus)
+			val keepChannelFocus = !mFilters.any() && currentFocus is GuideChannelHeader
+			val restoreScrollY = if (clearBeforeBuild) null else pendingGuideScrollY ?: mChannelScroller.scrollY
+			val restoreFocusIndex = restoreScrollY?.let { (it / guideRowHeightPx).coerceIn(0, mAllChannels.lastIndex) }
+			val restoreFocusView = restoreFocusIndex?.let { index ->
+				result.firstOrNull { it.index == index }?.row?.preferredFocusChild()
+			}
+			pendingGuideScrollY = null
+			mProgramRows.removeAllViews()
+			if (mFilters.any()) mChannels.removeAllViews()
+			updateGuideScrollPadding()
 
-				val label = getLoadChannelsLabel(
-					requireContext(),
-					mAllChannels[mCurrentDisplayChannelEndNdx + 1].number,
-					mAllChannels[pageDnEnd].number,
-				)
-				addPagingRow(mCurrentDisplayChannelStartNdx, pageDnEnd - mCurrentDisplayChannelStartNdx + 1, label)
+			result.forEach { guideRow ->
+				if (mFilters.any()) {
+					val header = getChannelHeader(guideRow.channel)
+					mChannels.addView(header)
+					header.loadImage()
+				}
+				mProgramRows.addView(guideRow.row)
 			}
 
-			mChannelStatus.text = "$displayedChannels of ${mAllChannels.size} channels"
+			if (focusChannelFound) {
+				focusAtEnd = false
+			}
+			mFirstFocusChannelId = null
+
+			mChannelStatus.text = "${result.size} of ${mAllChannels.size} channels"
 			mFilterStatus.text = "${mFilters} for ${getGuideHours()} hours"
 			mFilterStatus.setTextColor(
 				ContextCompat.getColor(
@@ -652,68 +683,184 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 			mResetButton.visibility = if (mCurrentGuideStart.isAfter(LocalDateTime.now())) View.VISIBLE else View.GONE
 
+			programLoadInFlight = false
 			mSpinner.visibility = View.GONE
-			firstFocusView?.requestFocus()
+			val focusView = when {
+				clearBeforeBuild || focusChannelFound -> firstFocusView
+				guideHadFocus && !keepChannelFocus -> restoreFocusView
+				else -> null
+			}
+			if (focusView != null) {
+				ignoreNextFocusAutoLoad = true
+				if (focusView.requestFocus()) {
+					focusView.post { ignoreNextFocusAutoLoad = false }
+				} else {
+					ignoreNextFocusAutoLoad = false
+					if (clearBeforeBuild) scrollToDisplayWindowStart()
+				}
+			} else if (clearBeforeBuild) {
+				scrollToDisplayWindowStart()
+			}
+			if (!clearBeforeBuild) {
+				mChannelScroller.post {
+					mChannelScroller.scrollTo(0, restoreScrollY ?: mChannelScroller.scrollY)
+					maybeAutoLoadScrolledChannels(mChannelScroller.scrollY)
+				}
+			}
 		}
+	}
+
+	private fun LinearLayout.preferredFocusChild(atEnd: Boolean = false): View {
+		if (childCount == 0) return this
+		return getChildAt(if (atEnd) childCount - 1 else 0)
 	}
 
 	private fun getChannelHeader(channel: BaseItemDto) =
 		GuideChannelHeader(requireContext(), this, channel, STANDALONE_GUIDE_ROW_HEIGHT_DP, true)
 
-	private fun addPagingRow(start: Int, max: Int, label: String) {
-		mChannels.addView(TextView(requireContext()), guideRowLayoutParams())
-		mProgramRows.addView(
-			GuidePagingButton(requireContext(), this, start, max, label, true),
-			guideRowLayoutParams(),
-		)
-	}
+	private fun displayChannelList() {
+		if (mFilters.any()) return
+		if (
+			mChannels.childCount == mAllChannels.size &&
+			mAllChannels.indices.all { index -> (mChannels.getChildAt(index) as? GuideChannelHeader)?.channel?.id == mAllChannels[index].id }
+		) {
+			return
+		}
 
-	private fun maybeAutoLoadAdjacentChannels(programView: RelativeLayout) {
-		if (mFilters.any() || mSpinner.visibility == View.VISIBLE || mAllChannels.isEmpty()) return
-
-		val channelIndex = getDisplayedChannelIndex(programView) ?: return
-		val focusChannelId = getFocusChannelId(programView) ?: return
-
-		when {
-			channelIndex >= mCurrentDisplayChannelEndNdx - AUTO_LOAD_CHANNEL_THRESHOLD &&
-				mCurrentDisplayChannelEndNdx < mAllChannels.size - 1 -> {
-				val newEnd = minOf(mAllChannels.size - 1, mCurrentDisplayChannelEndNdx + PAGE_SIZE)
-				displayChannels(
-					mCurrentDisplayChannelStartNdx,
-					newEnd - mCurrentDisplayChannelStartNdx + 1,
-					focusChannelId,
-				)
-			}
-			channelIndex <= mCurrentDisplayChannelStartNdx + AUTO_LOAD_CHANNEL_THRESHOLD &&
-				mCurrentDisplayChannelStartNdx > 0 -> {
-				val newStart = maxOf(0, mCurrentDisplayChannelStartNdx - PAGE_SIZE)
-				displayChannels(
-					newStart,
-					mCurrentDisplayChannelEndNdx - newStart + 1,
-					focusChannelId,
-				)
-			}
+		mChannels.removeAllViews()
+		mChannels.setVerticalPadding(0, 0)
+		mAllChannels.forEach { channel ->
+			val header = getChannelHeader(channel)
+			mChannels.addView(header)
+			header.loadImage()
 		}
 	}
 
+	private fun maybeAutoLoadAdjacentChannels(programView: RelativeLayout) {
+		if (mFilters.any() || programLoadInFlight || mAllChannels.isEmpty()) return
+
+		val channelIndex = getDisplayedChannelIndex(programView) ?: return
+		val focusChannelId = getFocusChannelId(programView).takeUnless { programView is GuideChannelHeader }
+		if (
+			channelIndex <= mCurrentDisplayChannelStartNdx + CHANNEL_BUFFER_ROWS ||
+			channelIndex >= mCurrentDisplayChannelEndNdx - CHANNEL_BUFFER_ROWS
+		) {
+			loadVisibleChannelWindow(focusChannelId)
+		}
+	}
+
+	private fun maybeAutoLoadScrolledChannels(scrollY: Int) {
+		if (mFilters.any() || mAllChannels.isEmpty()) return
+		if (programLoadInFlight) {
+			pendingGuideScrollY = scrollY
+			return
+		}
+
+		val focusChannelId = getCurrentFocusChannelId().takeUnless { requireActivity().currentFocus is GuideChannelHeader }
+		loadVisibleChannelWindow(focusChannelId, scrollY)
+	}
+
+	private fun loadVisibleChannelWindow(
+		focusChannelId: UUID?,
+		scrollY: Int = mChannelScroller.scrollY,
+	) {
+		updateGuideVisibleRows()
+		val visibleRows = guideVisibleRows.takeIf { it > 0 } ?: DEFAULT_VISIBLE_ROWS
+		val firstVisibleChannel = (scrollY / guideRowHeightPx).coerceIn(0, mAllChannels.lastIndex)
+		val lastVisibleChannel = minOf(mAllChannels.lastIndex, firstVisibleChannel + visibleRows - 1)
+
+		if (
+			firstVisibleChannel >= mCurrentDisplayChannelStartNdx + CHANNEL_BUFFER_ROWS &&
+			lastVisibleChannel <= mCurrentDisplayChannelEndNdx - CHANNEL_BUFFER_ROWS
+		) {
+			return
+		}
+
+		loadChannelWindow(firstVisibleChannel, focusChannelId)
+	}
+
+	private fun loadChannelWindow(firstVisibleChannel: Int, focusChannelId: UUID?) {
+		if (programLoadInFlight) return
+
+		val pageSize = guidePageSize()
+		val maxStart = maxOf(0, mAllChannels.size - pageSize)
+		val newStart = (firstVisibleChannel - CHANNEL_BUFFER_ROWS).coerceIn(0, maxStart)
+		val newEnd = minOf(mAllChannels.size - 1, newStart + pageSize - 1)
+
+		if (newStart == mCurrentDisplayChannelStartNdx && newEnd == mCurrentDisplayChannelEndNdx) return
+
+		displayChannels(
+			newStart,
+			newEnd - newStart + 1,
+			focusChannelId,
+			showSpinner = false,
+		)
+	}
+
 	private fun getDisplayedChannelIndex(programView: RelativeLayout): Int? {
-		val rowIndex = when (programView) {
-			is GuideChannelHeader -> (0 until mChannels.childCount)
-				.firstOrNull { index -> mChannels.getChildAt(index) == programView }
-			is ProgramGridCell -> {
-				val parent = programView.parent as? View ?: return null
-				(0 until mProgramRows.childCount)
-					.firstOrNull { index -> mProgramRows.getChildAt(index) == parent }
-			}
+		val channelId = when (programView) {
+			is GuideChannelHeader -> programView.channel.id
+			is ProgramGridCell -> programView.getProgram().channelId
 			else -> null
 		} ?: return null
 
-		val topPagingRows = if (mCurrentDisplayChannelStartNdx > 0 && !mFilters.any()) 1 else 0
-		val displayedOffset = rowIndex - topPagingRows
-		val displayedChannelCount = mCurrentDisplayChannelEndNdx - mCurrentDisplayChannelStartNdx + 1
-		if (displayedOffset !in 0 until displayedChannelCount) return null
+		return mAllChannels.indexOfFirst { channel -> channel.id == channelId }.takeIf { it >= 0 }
+	}
 
-		return mCurrentDisplayChannelStartNdx + displayedOffset
+	private fun guidePageSize(): Int {
+		updateGuideVisibleRows()
+		return (guideVisibleRows.takeIf { it > 0 } ?: DEFAULT_VISIBLE_ROWS) + (CHANNEL_BUFFER_ROWS * 2)
+	}
+
+	private fun updateGuideVisibleRows() {
+		if (guideRowHeightPx == 0) return
+		val visibleRows = mChannelScroller.height / guideRowHeightPx
+		if (visibleRows > 0) guideVisibleRows = visibleRows
+	}
+
+	private fun updateGuideScrollPadding() {
+		val topRows = if (mFilters.any()) 0 else mCurrentDisplayChannelStartNdx
+		val bottomRows = if (mFilters.any() || mAllChannels.isEmpty()) {
+			0
+		} else {
+			mAllChannels.lastIndex - mCurrentDisplayChannelEndNdx
+		}
+		mChannels.setVerticalPadding(0, 0)
+		mProgramRows.setVerticalPadding(topRows, bottomRows)
+	}
+
+	private fun scrollToDisplayWindowStart() {
+		if (mCurrentDisplayChannelStartNdx > 0) {
+			mChannelScroller.post { mChannelScroller.scrollTo(0, mCurrentDisplayChannelStartNdx * guideRowHeightPx) }
+		}
+	}
+
+	private fun isGuideFocus(view: View?): Boolean {
+		var current = view
+		while (current != null) {
+			if (current == mChannels || current == mProgramRows) return true
+			current = current.parent as? View
+		}
+		return false
+	}
+
+	private fun View.setVerticalPadding(topRows: Int, bottomRows: Int) {
+		setPadding(
+			paddingLeft,
+			topRows * guideRowHeightPx,
+			paddingRight,
+			bottomRows * guideRowHeightPx,
+		)
+	}
+
+	private val idleGuidePrefetchTask = Runnable {
+		if (mFilters.any() || programLoadInFlight || mAllChannels.isEmpty()) return@Runnable
+		loadVisibleChannelWindow(getCurrentFocusChannelId())
+	}
+
+	private fun scheduleIdleGuidePrefetch() {
+		mHandler.removeCallbacks(idleGuidePrefetchTask)
+		mHandler.postDelayed(idleGuidePrefetchTask, IDLE_GUIDE_PREFETCH_DELAY_MS)
 	}
 
 	private fun getCurrentFocusChannelId(): UUID? =
@@ -724,11 +871,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		is ProgramGridCell -> programView.getProgram().channelId
 		else -> mSelectedProgram?.channelId
 	}
-
-	private fun guideRowLayoutParams() = LinearLayout.LayoutParams(
-		LinearLayout.LayoutParams.MATCH_PARENT,
-		guideRowHeightPx,
-	)
 
 	private fun getProgramRow(programs: List<BaseItemDto>, channelId: UUID): LinearLayout? {
 		val programRow = LinearLayout(requireContext())
@@ -905,7 +1047,12 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	override fun setSelectedProgram(programView: RelativeLayout) {
 		mSelectedProgramView = programView
-		programView.post { maybeAutoLoadAdjacentChannels(programView) }
+		if (ignoreNextFocusAutoLoad) {
+			ignoreNextFocusAutoLoad = false
+		} else {
+			programView.post { maybeAutoLoadAdjacentChannels(programView) }
+			scheduleIdleGuidePrefetch()
+		}
 
 		when (programView) {
 			is ProgramGridCell -> {
@@ -914,22 +1061,18 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				mHandler.postDelayed(detailUpdateTask, 500)
 			}
 			is GuideChannelHeader -> {
-				for (i in 0 until mChannels.childCount) {
-					if (programView == mChannels.getChildAt(i)) {
-						val programRow = mProgramRows.getChildAt(i) as? LinearLayout ?: return
-						for (ii in 0 until programRow.childCount) {
-							val programCell = programRow.getChildAt(ii) as ProgramGridCell
-							val program = programCell.getProgram()
-							if (
-								program.startDate?.isBefore(LocalDateTime.now()) == true &&
-								program.endDate?.isAfter(LocalDateTime.now()) == true
-							) {
-								mSelectedProgram = program
-								mHandler.removeCallbacks(detailUpdateTask)
-								mHandler.postDelayed(detailUpdateTask, 500)
-								return
-							}
-						}
+				val programRow = findProgramRowForChannel(programView.channel.id) ?: return
+				for (i in 0 until programRow.childCount) {
+					val programCell = programRow.getChildAt(i) as ProgramGridCell
+					val program = programCell.getProgram()
+					if (
+						program.startDate?.isBefore(LocalDateTime.now()) == true &&
+						program.endDate?.isAfter(LocalDateTime.now()) == true
+					) {
+						mSelectedProgram = program
+						mHandler.removeCallbacks(detailUpdateTask)
+						mHandler.postDelayed(detailUpdateTask, 500)
+						return
 					}
 				}
 			}
@@ -941,10 +1084,12 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	companion object {
 		private const val STANDALONE_GUIDE_ROW_HEIGHT_DP = 64
-		private const val AUTO_LOAD_CHANNEL_THRESHOLD = 8
+		private const val CHANNEL_BUFFER_ROWS = 1
+		private const val DEFAULT_VISIBLE_ROWS = 8
+		private const val IDLE_GUIDE_PREFETCH_DELAY_MS = 700L
 		const val GUIDE_ROW_HEIGHT_DP = 55
 		const val GUIDE_ROW_WIDTH_PER_MIN_DP = 7
-		const val PAGE_SIZE = 75
+		const val PAGE_SIZE = DEFAULT_VISIBLE_ROWS + (CHANNEL_BUFFER_ROWS * 2)
 		const val NORMAL_HOURS = 9
 		const val FILTERED_HOURS = 4
 	}
