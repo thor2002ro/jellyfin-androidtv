@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,11 +46,14 @@ import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
+import org.jellyfin.androidtv.util.sdk.getHighHeaderTitle
+import org.jellyfin.androidtv.util.sdk.getLowHeaderTitle
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.jellyfin.lyrics.lyrics
 import org.jellyfin.playback.jellyfin.lyrics.lyricsFlow
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ImageType
 import org.koin.compose.koinInject
 import kotlin.time.Duration
@@ -62,7 +66,10 @@ fun DreamContentNowPlaying(
 ) {
 	val api = koinInject<ApiClient>()
 	val playbackManager = koinInject<PlaybackManager>()
+	val context = LocalContext.current
 	val lyrics = content.entry.run { lyricsFlow.collectAsState(lyrics) }.value
+	val highHeaderTitle = remember(context, content.item) { content.item.getHighHeaderTitle(context) }
+	val lowHeaderTitle = remember(context, content.item) { content.item.getLowHeaderTitle(context) }
 
 	val primaryImage = content.item.itemImages[ImageType.PRIMARY]
 		?: content.item.albumPrimaryImage
@@ -124,7 +131,7 @@ fun DreamContentNowPlaying(
 				.padding(bottom = 10.dp)
 		) {
 			Text(
-				text = content.item.name.orEmpty(),
+				text = highHeaderTitle,
 				style = TextStyle(
 					color = Color.White,
 					fontSize = 26.sp,
@@ -132,16 +139,7 @@ fun DreamContentNowPlaying(
 			)
 
 			Text(
-				text = content.item.run {
-					val artistNames = artists.orEmpty()
-					val albumArtistNames = albumArtists?.mapNotNull { it.name }.orEmpty()
-
-					when {
-						artistNames.isNotEmpty() -> artistNames
-						albumArtistNames.isNotEmpty() -> albumArtistNames
-						else -> listOfNotNull(albumArtist)
-					}.joinToString(", ")
-				},
+				text = lowHeaderTitle ?: content.item.artistDisplayName(),
 				style = TextStyle(
 					color = Color(0.8f, 0.8f, 0.8f),
 					fontSize = 18.sp,
@@ -173,7 +171,10 @@ fun BoxScope.DreamPausedNowPlayingBadge(
 
 	val api = koinInject<ApiClient>()
 	val playbackManager = koinInject<PlaybackManager>()
+	val context = LocalContext.current
 	val positionInfo by rememberPlayerPositionInfo(playbackManager)
+	val highHeaderTitle = remember(context, content.item) { content.item.getHighHeaderTitle(context) }
+	val lowHeaderTitle = remember(context, content.item) { content.item.getLowHeaderTitle(context) }
 	val image = content.item.itemImages[ImageType.PRIMARY]
 		?: content.item.itemImages[ImageType.THUMB]
 		?: content.item.albumPrimaryImage
@@ -207,8 +208,8 @@ fun BoxScope.DreamPausedNowPlayingBadge(
 				.widthIn(max = 300.dp)
 		) {
 			Text(
-				text = content.item.name.orEmpty(),
-				maxLines = 2,
+				text = highHeaderTitle,
+				maxLines = if (lowHeaderTitle == null) 2 else 1,
 				overflow = TextOverflow.Ellipsis,
 				style = TextStyle(
 					color = Color.White,
@@ -216,6 +217,18 @@ fun BoxScope.DreamPausedNowPlayingBadge(
 					fontWeight = FontWeight.SemiBold,
 				),
 			)
+
+			if (lowHeaderTitle != null) {
+				Text(
+					text = lowHeaderTitle,
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+					style = TextStyle(
+						color = Color(0.8f, 0.8f, 0.8f),
+						fontSize = 16.sp,
+					),
+				)
+			}
 
 			Text(
 				text = positionInfo.formatPausedPosition(),
@@ -228,6 +241,17 @@ fun BoxScope.DreamPausedNowPlayingBadge(
 			)
 		}
 	}
+}
+
+private fun BaseItemDto.artistDisplayName(): String {
+	val artistNames = artists.orEmpty()
+	val albumArtistNames = albumArtists?.mapNotNull { it.name }.orEmpty()
+
+	return when {
+		artistNames.isNotEmpty() -> artistNames
+		albumArtistNames.isNotEmpty() -> albumArtistNames
+		else -> listOfNotNull(albumArtist)
+	}.joinToString(", ")
 }
 
 private fun org.jellyfin.playback.core.model.PositionInfo.formatPausedPosition(): String {
