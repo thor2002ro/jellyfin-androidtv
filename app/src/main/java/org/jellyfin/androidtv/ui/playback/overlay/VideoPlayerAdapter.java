@@ -166,6 +166,14 @@ public class VideoPlayerAdapter extends PlayerAdapter {
         return customPlaybackOverlayFragment;
     }
 
+	public boolean consumeSkipOverlay() {
+		return customPlaybackOverlayFragment != null && customPlaybackOverlayFragment.consumeSkipOverlay();
+	}
+
+	public boolean consumeAutoSelectedSkipOverlay() {
+		return customPlaybackOverlayFragment != null && customPlaybackOverlayFragment.consumeAutoSelectedSkipOverlay();
+	}
+
     @NonNull
     public LeanbackOverlayFragment getLeanbackOverlayFragment() {
         return leanbackOverlayFragment;

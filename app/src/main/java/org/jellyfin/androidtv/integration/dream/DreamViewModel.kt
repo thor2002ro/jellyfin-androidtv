@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.integration.dream.model.DreamContent
@@ -27,6 +26,7 @@ import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemBackdropImages
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.sdk.api.client.ApiClient
@@ -51,11 +51,23 @@ class DreamViewModel(
 ) : ViewModel() {
 	@OptIn(ExperimentalCoroutinesApi::class)
 	private val _mediaContent = playbackManager.queue.entry
-		.map { entry ->
+		.combine(playbackManager.state.playState) { entry, playState ->
 			entry
+				?.takeIf { playState == PlayState.PLAYING }
 				?.takeIf { it.visibleInScreensaver }
-				?.baseItem
-				?.let { baseItem -> DreamContent.NowPlaying(entry, baseItem) }
+				?.let { visibleEntry ->
+					visibleEntry.baseItem?.let { baseItem -> DreamContent.NowPlaying(visibleEntry, baseItem) }
+				}
+		}
+		.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
+
+	val pausedContent = playbackManager.queue.entry
+		.combine(playbackManager.state.playState) { entry, playState ->
+			entry
+				?.takeIf { playState == PlayState.PAUSED }
+				?.let { visibleEntry ->
+					visibleEntry.baseItem?.let { baseItem -> DreamContent.NowPlaying(visibleEntry, baseItem) }
+				}
 		}
 		.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
