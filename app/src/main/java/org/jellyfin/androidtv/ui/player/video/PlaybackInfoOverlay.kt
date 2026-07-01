@@ -390,7 +390,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("IDs", subtitleIds(selectedSubtitle, selectedSubtitleStream))
 					row("Title", selectedSubtitle?.label ?: selectedSubtitleStream?.title ?: selectedExternalSubtitle?.title)
 					row("Codec", subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle).formatCodec())
-					row("Language", selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language)
+					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
 					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
@@ -466,7 +466,8 @@ private object NewPlayerStreamStatusBuilder {
 		}
 	}
 
-	private fun audioLanguage(selectedTrack: PlayerTrack?): String? = selectedTrack?.language
+	private fun audioLanguage(selectedTrack: PlayerTrack?): String? =
+		selectedTrack?.language.toIso2LanguageDisplayOrSelf()
 
 	private fun subtitleStatus(
 		track: PlayerTrack?,

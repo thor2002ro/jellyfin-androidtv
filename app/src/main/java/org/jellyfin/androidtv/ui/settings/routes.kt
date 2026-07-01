@@ -49,11 +49,13 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibass
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibassScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackMaxBitrateScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPlayerScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPreferredLanguageScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPrerollsScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackRefreshRateSwitchingBehaviorScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackResumeSubtractDurationScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackZoomModeScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.PreferredLanguageType
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentsScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.nextup.SettingsPlaybackNextUpBehaviorScreen
@@ -96,6 +98,8 @@ object Routes {
 	const val LIVETV_GUIDE_CHANNEL_ORDER = "/livetv/guide/channel-order"
 	const val PLAYBACK = "/playback"
 	const val PLAYBACK_PLAYER = "/playback/player"
+	const val PLAYBACK_AUDIO_LANGUAGE = "/playback/audio-language"
+	const val PLAYBACK_SUBTITLE_LANGUAGE = "/playback/subtitle-language"
 	const val PLAYBACK_NEXT_UP = "/playback/next-up"
 	const val PLAYBACK_NEXT_UP_BEHAVIOR = "/playback/next-up/behavior"
 	const val PLAYBACK_INACTIVITY_PROMPT = "/playback/inactivity-prompt"
@@ -231,6 +235,12 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.PLAYBACK_PLAYER to {
 		SettingsPlaybackPlayerScreen()
+	},
+	Routes.PLAYBACK_AUDIO_LANGUAGE to {
+		SettingsPlaybackPreferredLanguageScreen(PreferredLanguageType.AUDIO)
+	},
+	Routes.PLAYBACK_SUBTITLE_LANGUAGE to {
+		SettingsPlaybackPreferredLanguageScreen(PreferredLanguageType.SUBTITLE)
 	},
 	Routes.PLAYBACK_NEXT_UP to {
 		SettingsPlaybackNextUpScreen()

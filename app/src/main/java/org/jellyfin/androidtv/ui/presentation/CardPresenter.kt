@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.findViewTreeCompositionContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,14 +90,17 @@ class CardPresenter(
 
 	private inner class CardViewHolder(composeView: ComposeView) : ViewHolder(composeView) {
 		private val _item = MutableStateFlow<BaseRowItem?>(null)
+		private val _focused = MutableStateFlow(false)
 
 		init {
+			composeView.setOnFocusChangeListener { _, hasFocus -> _focused.value = hasFocus }
 			composeView.setContent {
 				val item by _item.collectAsState()
+				val focused by _focused.collectAsState()
 
 				CardViewHolderContent(
 					item = item,
-					focused = false,
+					focused = focused,
 					showInfo = showInfo,
 					imageType = imageType,
 					staticHeight = staticHeight,
@@ -119,6 +123,7 @@ private data class BaseRowItemDisplayConfig(
 	val image: JellyfinImage?,
 	val iconRes: Int,
 	val aspectRatio: Float,
+	val backgroundColor: Color = Tokens.Color.colorBluegrey900,
 	val overrideShowInfo: Boolean? = null,
 	val scaleType: ImageView.ScaleType? = null,
 )
@@ -159,18 +164,21 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 
 			BaseItemKind.SEASON, BaseItemKind.SERIES -> base.copy(
 				aspectRatio = if (imageType == ImageType.POSTER) ImageHelper.ASPECT_RATIO_2_3.toFloat() else base.aspectRatio,
-				iconRes = R.drawable.ic_tv
+				iconRes = R.drawable.ic_tv,
+				backgroundColor = Tokens.Color.colorBlue850,
 			)
 
 			BaseItemKind.EPISODE -> when (preferSeriesPoster) {
 				true -> base.copy(
 					aspectRatio = ImageHelper.ASPECT_RATIO_2_3.toFloat(),
-					iconRes = R.drawable.ic_tv
+					iconRes = R.drawable.ic_tv,
+					backgroundColor = Tokens.Color.colorBlue850,
 				)
 
 				false -> base.copy(
 					aspectRatio = ImageHelper.ASPECT_RATIO_16_9.toFloat(),
 					iconRes = R.drawable.ic_tv,
+					backgroundColor = Tokens.Color.colorBlue850,
 					overrideShowInfo = true,
 				)
 			}
@@ -178,10 +186,12 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 			BaseItemKind.COLLECTION_FOLDER, BaseItemKind.USER_VIEW -> base.copy(
 				aspectRatio = ImageHelper.ASPECT_RATIO_16_9.toFloat(),
 				iconRes = R.drawable.ic_folder,
+				backgroundColor = Tokens.Color.colorBlue800,
 			)
 
 			BaseItemKind.FOLDER, BaseItemKind.GENRE, BaseItemKind.MUSIC_GENRE -> base.copy(
 				iconRes = R.drawable.ic_folder,
+				backgroundColor = Tokens.Color.colorBlue800,
 			)
 
 			BaseItemKind.PHOTO -> base.copy(
@@ -189,7 +199,8 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 			)
 
 			BaseItemKind.PHOTO_ALBUM, BaseItemKind.PLAYLIST -> base.copy(
-				iconRes = R.drawable.ic_folder
+				iconRes = R.drawable.ic_folder,
+				backgroundColor = Tokens.Color.colorBlue800,
 			)
 
 			BaseItemKind.MOVIE, BaseItemKind.VIDEO -> base.copy(
@@ -198,6 +209,7 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 					else -> base.aspectRatio
 				},
 				iconRes = R.drawable.ic_clapperboard,
+				backgroundColor = Tokens.Color.colorBlue900,
 			)
 
 			else -> base
@@ -294,6 +306,8 @@ private fun CardViewHolderContent(
 
 	val card = @Composable {
 		ItemCard(
+			backgroundColor = displayConfig.backgroundColor,
+			focused = focused,
 			image = {
 				if (image != null) {
 					val api = koinInject<ApiClient>()
@@ -331,6 +345,7 @@ private fun CardViewHolderContent(
 				item.baseItem?.let { baseItem ->
 					ItemCardBaseItemOverlay(
 						item = baseItem,
+						streamBadgeItem = (item as? BaseItemDtoBaseRowItem)?.streamBadgeItem ?: baseItem,
 						footer = {
 							if (showInfo && title != null) {
 								val focusModifier = if (focused) Modifier.basicMarquee(
