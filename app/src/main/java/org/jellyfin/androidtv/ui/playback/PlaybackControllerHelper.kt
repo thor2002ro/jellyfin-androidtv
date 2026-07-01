@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.ui.playback.segment.MediaSegmentAction
 import org.jellyfin.androidtv.ui.playback.segment.MediaSegmentRepository
+import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.sdk.end
 import org.jellyfin.androidtv.util.sdk.start
 import org.jellyfin.sdk.api.client.ApiClient
@@ -55,24 +56,13 @@ fun PlaybackController.disableDefaultSubtitles() {
 @JvmOverloads
 fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 	Timber.i("Switching subtitles from index ${mCurrentOptions.subtitleStreamIndex} to $index")
+
+	val videoQueueManager by fragment.inject<VideoQueueManager>()
+	val item = getCurrentlyPlayingItem() ?: return
+	TrackSelectionResolver.storeSelectedSubtitleTrack(item, currentMediaSource, videoQueueManager, index)
+
 	// Already using this subtitle index
 	if (mCurrentOptions.subtitleStreamIndex == index && !force) return
-
-	// Save subtitle language preference for restoration after NextUp screen
-	val videoQueueManager by fragment.inject<VideoQueueManager>()
-	if (index == -1) {
-		// Use empty string to indicate "subtitles explicitly disabled" vs null meaning "no preference"
-		videoQueueManager.setLastPlayedSubtitleLanguageIsoCode("")
-		videoQueueManager.setLastPlayedSubtitleForcedState(false)
-		videoQueueManager.setLastPlayedSubtitleCodec(null)
-		videoQueueManager.setLastPlayedSubtitleTitle(null)
-	} else {
-		val stream = currentMediaSource.mediaStreams?.firstOrNull { it.type == MediaStreamType.SUBTITLE && it.index == index }
-		videoQueueManager.setLastPlayedSubtitleLanguageIsoCode(stream?.language)
-		videoQueueManager.setLastPlayedSubtitleForcedState(stream?.isForced ?: false)
-		videoQueueManager.setLastPlayedSubtitleCodec(stream?.codec)
-		videoQueueManager.setLastPlayedSubtitleTitle(stream?.title)
-	}
 
 	// Disable subtitles
 	if (index == -1) {
