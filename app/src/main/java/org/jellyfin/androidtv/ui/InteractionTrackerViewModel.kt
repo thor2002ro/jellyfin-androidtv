@@ -9,9 +9,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.playback.PlaybackControllerContainer
+import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import kotlin.time.Duration
@@ -19,12 +25,14 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class InteractionTrackerViewModel(
 	private val userPreferences: UserPreferences,
-	private val playbackControllerContainer: PlaybackControllerContainer
+	private val playbackControllerContainer: PlaybackControllerContainer,
+	playbackManager: PlaybackManager,
 ) : ViewModel() {
 	// Screensaver
 
 	private var timer: Job? = null
 	private var locks = 0
+	private var playbackBuffering = false
 
 	// Still Watching
 
@@ -54,6 +62,15 @@ class InteractionTrackerViewModel(
 		}
 
 	init {
+		playbackManager.state.playState
+			.map { playState -> playState == PlayState.BUFFERING }
+			.distinctUntilChanged()
+			.onEach { buffering ->
+				playbackBuffering = buffering
+				notifyInteraction(canCancel = true, userInitiated = false)
+			}
+			.launchIn(viewModelScope)
+
 		notifyInteraction(canCancel = true, userInitiated = false)
 	}
 
@@ -104,7 +121,7 @@ class InteractionTrackerViewModel(
 		}
 
 		// Create new timer to show screensaver when enabled
-		if (inAppEnabled && !activityPaused && locks == 0) {
+		if (inAppEnabled && !activityPaused && locks == 0 && !playbackBuffering) {
 			timer = viewModelScope.launch {
 				delay(timeout)
 				_screensaverVisible.value = true
@@ -112,7 +129,7 @@ class InteractionTrackerViewModel(
 		}
 
 		// Update KEEP_SCREEN_ON flag value
-		_keepScreenOn.value = inAppEnabled || locks > 0
+		_keepScreenOn.value = inAppEnabled || locks > 0 || playbackBuffering
 	}
 
 	/**

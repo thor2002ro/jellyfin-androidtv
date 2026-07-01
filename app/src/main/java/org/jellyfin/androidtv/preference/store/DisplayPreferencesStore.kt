@@ -72,7 +72,7 @@ abstract class DisplayPreferencesStore(
 			Timber.e(err, "Unable to retrieve displaypreferences. (displayPreferencesId=$displayPreferencesId, app=$app)")
 
 			if (displayPreferencesDto == null) {
-				Timber.i("Creating an empty DisplayPreferencesDto for next commit.")
+				Timber.d("Creating an empty DisplayPreferencesDto for next commit.")
 				displayPreferencesDto = DisplayPreferencesDto.empty()
 			}
 
