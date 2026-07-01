@@ -205,7 +205,6 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private fun shouldReturnToLiveTvGuide(): Boolean =
 		arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
 			playbackManager.queue.entry.value?.isLiveTv == true
-
 	private fun closePlayerIfVideoQueueEnded() {
 		if (
 			!hasSeenVideoQueueEntry ||
