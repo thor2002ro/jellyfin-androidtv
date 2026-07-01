@@ -10,9 +10,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -53,6 +55,7 @@ import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
+import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.koin.compose.koinInject
 import timber.log.Timber
 import kotlin.time.Duration
@@ -61,8 +64,9 @@ import kotlin.time.Duration.Companion.seconds
 
 private val CenterLongPressDuration = 2.seconds
 private val SeekOverlayDuration = 2.seconds
+private val SeekPreviewDuration = 2500.milliseconds
 private val DpadSeekScrubDuration = 750.milliseconds
-private val DpadSeekCommitDelay = 500.milliseconds
+private val DpadSeekCommitDelay = 1500.milliseconds
 private val DpadSeekToastDuration = 1500.milliseconds
 private val BackToStopTimeout = 2.seconds
 private val BackDuplicateGuardDuration = 250.milliseconds
@@ -92,6 +96,8 @@ fun VideoPlayerOverlay(
 	var seekOverlayVisible by remember { mutableStateOf(false) }
 	var seekOverlayJob by remember { mutableStateOf<Job?>(null) }
 	var pendingSeekPosition by remember { mutableStateOf<Duration?>(null) }
+	var seekPreviewPosition by remember { mutableStateOf<Duration?>(null) }
+	var seekPreviewJob by remember { mutableStateOf<Job?>(null) }
 	var pendingSeekCommitJob by remember { mutableStateOf<Job?>(null) }
 	var seekScrubJob by remember { mutableStateOf<Job?>(null) }
 	var backToStopDeadline by remember { mutableStateOf(0L) }
@@ -119,6 +125,7 @@ fun VideoPlayerOverlay(
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
 	val nextUpBehavior = userPreferences[UserPreferences.nextUpBehavior]
+	val trickPlayEnabled = userPreferences[UserPreferences.trickPlayEnabled]
 	val nextUpPositionInfo by rememberPlayerPositionInfo(
 		playbackManager = playbackManager,
 		precision = NextUpProgressCheckInterval,
@@ -252,6 +259,15 @@ fun VideoPlayerOverlay(
 		}
 	}
 
+	fun showSeekPreview(position: Duration) {
+		seekPreviewPosition = position
+		seekPreviewJob?.cancel()
+		seekPreviewJob = coroutineScope.launch {
+			delay(SeekPreviewDuration)
+			seekPreviewPosition = null
+		}
+	}
+
 	fun clampSeekPosition(position: Duration, duration: Duration): Duration {
 		if (duration <= Duration.ZERO) return position.coerceAtLeast(Duration.ZERO)
 		return position.coerceIn(Duration.ZERO, duration)
@@ -275,6 +291,18 @@ fun VideoPlayerOverlay(
 		}
 	}
 
+	fun previewSeek(position: Duration) {
+		val positionInfo = playbackManager.state.positionInfo
+		val target = clampSeekPosition(position, positionInfo.duration)
+		pendingSeekPosition = target
+		showSeekPreview(target)
+		pendingSeekCommitJob?.cancel()
+		pendingSeekCommitJob = coroutineScope.launch {
+			delay(DpadSeekCommitDelay)
+			commitPendingSeek()
+		}
+	}
+
 	fun dpadSeek(forward: Boolean) {
 		val positionInfo = playbackManager.state.positionInfo
 		val amount = if (forward) {
@@ -284,12 +312,7 @@ fun VideoPlayerOverlay(
 		}
 		val basePosition = pendingSeekPosition ?: positionInfo.active
 
-		pendingSeekPosition = clampSeekPosition(basePosition + amount, positionInfo.duration)
-		pendingSeekCommitJob?.cancel()
-		pendingSeekCommitJob = coroutineScope.launch {
-			delay(DpadSeekCommitDelay)
-			commitPendingSeek()
-		}
+		previewSeek(basePosition + amount)
 
 		mediaToastRegistry.emit(
 			icon = if (forward) R.drawable.ic_fast_forward else R.drawable.ic_rewind,
@@ -368,7 +391,6 @@ fun VideoPlayerOverlay(
 			}
 
 			if (keyEvent.action == KeyEvent.ACTION_UP && overlayWakeKeyCode == keyCode) {
-				if (keyEvent.isSeekKey()) commitPendingSeek()
 				overlayWakeKeyCode = null
 				return@handler true
 			}
@@ -437,6 +459,16 @@ fun VideoPlayerOverlay(
 				return@handler true
 			}
 
+			if (seekEnabled && keyEvent.isMediaSeekKey()) {
+				if (keyEvent.action == KeyEvent.ACTION_DOWN) {
+					clearCenterLongPress()
+					overlayWakeKeyCode = keyCode
+					showSeekOverlay()
+					dpadSeek(forward = keyEvent.isForwardSeekKey())
+				}
+				return@handler true
+			}
+
 			if (keyEvent.action == KeyEvent.ACTION_DOWN && !keyEvent.isSystem && !visibilityState.visible) {
 				clearCenterLongPress()
 				overlayWakeKeyCode = keyCode
@@ -452,6 +484,7 @@ fun VideoPlayerOverlay(
 		onDispose {
 			centerLongPressJob?.cancel()
 			seekOverlayJob?.cancel()
+			seekPreviewJob?.cancel()
 			pendingSeekCommitJob?.cancel()
 			seekScrubJob?.cancel()
 			playbackManager.state.setScrubbing(false)
@@ -479,6 +512,10 @@ fun VideoPlayerOverlay(
 				VideoPlayerControls(
 					playbackManager = playbackManager,
 					item = item,
+					mediaSourceId = entry?.mediaSourceId,
+					trickPlayEnabled = trickPlayEnabled,
+					seekPreviewPosition = seekPreviewPosition,
+					onSeekPreview = { previewSeek(it) },
 					zoomMode = zoomMode,
 					onZoomModeSelected = onZoomModeSelected,
 					onPlaybackInfoClick = { showPlaybackInfo = !showPlaybackInfo },
@@ -520,11 +557,11 @@ fun VideoPlayerOverlay(
 			enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
 			exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
 		) {
-			Box(
+			BoxWithConstraints(
 				contentAlignment = Alignment.BottomCenter,
 				modifier = Modifier
 					.fillMaxWidth()
-					.fillMaxHeight(1f / 4)
+					.fillMaxHeight(1f / 3)
 					.background(
 						brush = Brush.verticalGradient(
 							colors = listOf(
@@ -536,11 +573,33 @@ fun VideoPlayerOverlay(
 					.overscan()
 					.padding(bottom = 40.dp)
 			) {
+				val previewPosition = pendingSeekPosition ?: seekPreviewPosition
+				val duration = playbackManager.state.positionInfo.duration
+				val progress = if (previewPosition != null && duration > Duration.ZERO) {
+					previewPosition.inWholeMilliseconds.toFloat()
+						.div(duration.inWholeMilliseconds.toFloat())
+						.coerceIn(0f, 1f)
+				} else {
+					0f
+				}
+				val maxThumbnailX = (maxWidth - TrickplayThumbnailWidth).coerceAtLeast(0.dp)
+				val thumbnailX = (maxWidth * progress - TrickplayThumbnailWidth / 2)
+					.coerceIn(0.dp, maxThumbnailX)
+
 				VideoPlayerSeekControls(
 					playbackManager = playbackManager,
-					position = pendingSeekPosition,
+					position = previewPosition,
 					liveTvProgramTimeline = liveTvProgramTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
+				)
+				VideoPlayerTrickplayThumbnail(
+					item = item,
+					mediaSourceId = entry?.mediaSourceId,
+					position = previewPosition.takeIf { liveTvProgramTimeline == null },
+					enabled = trickPlayEnabled,
+					modifier = Modifier
+						.align(Alignment.BottomStart)
+						.offset(x = thumbnailX, y = (-72).dp),
 				)
 			}
 		}
@@ -627,6 +686,26 @@ private fun KeyEvent.isBackKey() = when (keyCode) {
 private fun KeyEvent.isSeekKey() = when (keyCode) {
 	KeyEvent.KEYCODE_DPAD_LEFT,
 	KeyEvent.KEYCODE_DPAD_RIGHT -> true
+
+	else -> false
+}
+
+private fun KeyEvent.isMediaSeekKey() = when (keyCode) {
+	KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+	KeyEvent.KEYCODE_MEDIA_REWIND,
+	KeyEvent.KEYCODE_BUTTON_R1,
+	KeyEvent.KEYCODE_BUTTON_R2,
+	KeyEvent.KEYCODE_BUTTON_L1,
+	KeyEvent.KEYCODE_BUTTON_L2 -> true
+
+	else -> false
+}
+
+private fun KeyEvent.isForwardSeekKey() = when (keyCode) {
+	KeyEvent.KEYCODE_DPAD_RIGHT,
+	KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+	KeyEvent.KEYCODE_BUTTON_R1,
+	KeyEvent.KEYCODE_BUTTON_R2 -> true
 
 	else -> false
 }
