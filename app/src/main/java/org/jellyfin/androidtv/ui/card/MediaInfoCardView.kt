@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.text.bold
 import org.jellyfin.androidtv.databinding.ViewCardMediaInfoBinding
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import java.text.NumberFormat
@@ -22,7 +23,7 @@ class MediaInfoCardView @JvmOverloads constructor(
 	fun setMediaStream(mediaStream: MediaStream) {
 		binding.title.text = mediaStream.type.toString()
 		binding.entries.text = SpannableStringBuilder().apply {
-			if (mediaStream.type != MediaStreamType.VIDEO) mediaStream.language?.let { addRow("Language", it) }
+			if (mediaStream.type != MediaStreamType.VIDEO) mediaStream.language.toIso2LanguageDisplayOrSelf()?.let { addRow("Language", it) }
 			mediaStream.codec?.let { addRow("Codec", it) }
 			mediaStream.profile?.let { addRow("Profile", it) }
 			mediaStream.level?.let { addRow("Level", it.toString()) }

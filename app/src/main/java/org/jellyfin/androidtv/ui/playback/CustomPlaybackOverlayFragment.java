@@ -73,6 +73,7 @@ import org.jellyfin.androidtv.util.DateTimeExtensionsKt;
 import org.jellyfin.androidtv.util.ImageHelper;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
 import org.jellyfin.androidtv.util.KeyEventExtensionsKt;
+import org.jellyfin.androidtv.util.LanguageUtils;
 import org.jellyfin.androidtv.util.PlaybackHelper;
 import org.jellyfin.androidtv.util.TextUtilsKt;
 import org.jellyfin.androidtv.util.TimeUtils;
@@ -2093,7 +2094,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         StringBuilder summary = new StringBuilder("Audio:");
         appendInline(summary, stream.getCodec() == null ? null : stream.getCodec().toUpperCase());
         if (stream.getChannels() != null) appendInline(summary, stream.getChannels() + "ch");
-        appendInline(summary, stream.getLanguage());
+        appendInline(summary, LanguageUtils.toIso2LanguageDisplayOrSelf(stream.getLanguage()));
         return summary.toString();
     }
 
@@ -2103,7 +2104,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
         StringBuilder summary = new StringBuilder("Sub:");
         appendInline(summary, stream.getCodec() == null ? null : stream.getCodec().toUpperCase());
-        appendInline(summary, stream.getLanguage());
+        appendInline(summary, LanguageUtils.toIso2LanguageDisplayOrSelf(stream.getLanguage()));
         if (stream.isForced()) appendInline(summary, "forced");
         return summary.toString();
     }

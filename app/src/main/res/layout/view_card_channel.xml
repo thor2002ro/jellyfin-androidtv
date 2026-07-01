@@ -13,24 +13,60 @@
         android:layout_width="14dp"
         android:layout_height="14dp"
         android:layout_alignParentTop="true"
-        android:layout_toStartOf="@id/trackCounts"
+        android:layout_toStartOf="@id/trackBadges"
         android:layout_marginEnd="4dp"
         android:layout_centerVertical="false"
         android:src="@drawable/ic_heart_red"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/trackCounts"
+    <LinearLayout
+        android:id="@+id/trackBadges"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
         android:layout_alignParentEnd="true"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="?android:attr/textAppearanceSmall"
-        android:textStyle="bold"
-        android:visibility="gone"
-        tools:text="A:2 S:1" />
+        android:gravity="end"
+        android:orientation="vertical"
+        android:translationY="-8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/audioBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/block_text_bg"
+            android:drawableStart="@drawable/ic_badge_speaker"
+            android:drawablePadding="1dp"
+            android:ellipsize="end"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:paddingStart="1dp"
+            android:paddingEnd="1dp"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            tools:text="EN" />
+
+        <TextView
+            android:id="@+id/subtitleBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:background="@drawable/block_text_bg"
+            android:drawableStart="@drawable/ic_badge_subtitles"
+            android:drawablePadding="1dp"
+            android:ellipsize="end"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:paddingStart="1dp"
+            android:paddingEnd="1dp"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            tools:text="RO" />
+    </LinearLayout>
 
     <ImageView
         android:id="@+id/recIndicator"

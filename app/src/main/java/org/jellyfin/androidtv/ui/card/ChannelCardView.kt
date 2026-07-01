@@ -17,6 +17,7 @@ import org.jellyfin.androidtv.ui.copyWithTimerId
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.ImageHelper
 import org.jellyfin.androidtv.util.getTimeFormatter
+import org.jellyfin.androidtv.util.toIso2LanguageBadgeOrNull
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.java.KoinJavaComponent
@@ -98,12 +99,19 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 			return
 		}
 
-		binding.trackCounts.visibility = View.GONE
+		binding.trackBadges.visibility = View.GONE
 	}
 
 	private fun showTrackBadge(tracks: LiveTvTrackCache.Tracks) {
-		binding.trackCounts.text = "A:${tracks.audio.size} S:${tracks.subtitles.size}"
-		binding.trackCounts.visibility = View.VISIBLE
+		val audio = tracks.audio.selectedTrack(tracks.selectedAudioTrackIndex)?.languageBadge()
+		val subtitle = tracks.subtitles
+			.takeUnless { tracks.selectedSubtitleTrackIndex == -1 }
+			?.selectedTrack(tracks.selectedSubtitleTrackIndex)
+			?.languageBadge()
+
+		binding.audioBadge.setBadgeText(audio)
+		binding.subtitleBadge.setBadgeText(subtitle)
+		binding.trackBadges.visibility = if (audio == null && subtitle == null) View.GONE else View.VISIBLE
 	}
 
 	private fun getChannelNumber(item: BaseItemDto) = if (isProgram(item)) {
@@ -203,7 +211,8 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 		setTextSize(binding.channelName, 16f, scale)
 		setTextSize(binding.program, 13f, scale)
 		setTextSize(binding.time, 13f, scale)
-		setTextSize(binding.trackCounts, 10f, scale)
+		setTextSize(binding.audioBadge, 7f, scale)
+		setTextSize(binding.subtitleBadge, 7f, scale)
 
 		val progressParams = binding.progress.layoutParams
 		progressParams.height = scaledDp(5f, scale)
@@ -238,6 +247,19 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 	private fun setTextSize(view: TextView, sp: Float, scale: Float) {
 		view.setTextSize(TypedValue.COMPLEX_UNIT_SP, max(6f, sp * scale))
 	}
+
+	private fun TextView.setBadgeText(value: String?) {
+		text = value.orEmpty()
+		visibility = if (value == null) View.GONE else View.VISIBLE
+	}
+
+	private fun List<LiveTvTrackCache.Track>.selectedTrack(index: Int?) =
+		index?.takeIf { it >= 0 }?.let { selected -> firstOrNull { track -> track.index == selected } }
+			?: firstOrNull { track -> track.isDefault }
+			?: firstOrNull()
+
+	private fun LiveTvTrackCache.Track.languageBadge(): String? =
+		language.toIso2LanguageBadgeOrNull()
 
 	private fun scaledDp(value: Float, scale: Float): Int {
 		if (value <= 0f) return 0

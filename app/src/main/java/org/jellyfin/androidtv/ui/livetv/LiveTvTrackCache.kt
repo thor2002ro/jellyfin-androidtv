@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
+import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.mediaInfoApi
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -247,8 +249,8 @@ object LiveTvTrackCache {
 
 	private fun MediaStream.toCacheTrack() = Track(
 		index = index,
-		language = language,
-		title = displayTitle ?: title,
+		language = language.toIso2LanguageDisplayOrSelf(),
+		title = displayTitle.withoutUndeterminedLanguagePrefix() ?: title.withoutUndeterminedLanguagePrefix(),
 		codec = codec,
 		isDefault = isDefault,
 	)
