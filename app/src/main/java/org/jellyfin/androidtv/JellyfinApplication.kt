@@ -15,6 +15,8 @@ import org.jellyfin.androidtv.data.eventhandling.SocketHandler
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.integration.LeanbackChannelWorker
 import org.jellyfin.androidtv.telemetry.TelemetryService
+import org.jellyfin.androidtv.util.TrackSelectionManager
+import org.jellyfin.androidtv.util.TrackSelectionStore
 import org.koin.android.ext.android.inject
 import java.util.concurrent.TimeUnit
 
@@ -25,6 +27,8 @@ class JellyfinApplication : Application() {
 
 		// Don't run in ACRA service
 		if (ACRA.isACRASenderServiceProcess()) return
+
+		TrackSelectionManager.initialize(TrackSelectionStore(this))
 
 		val notificationsRepository by inject<NotificationsRepository>()
 		notificationsRepository.addDefaultNotifications()

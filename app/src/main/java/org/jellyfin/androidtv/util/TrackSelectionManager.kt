@@ -10,52 +10,49 @@ object TrackSelectionManager {
 
 	private val selectedAudioTracks = mutableMapOf<UUID, Int?>()
 	private val selectedSubtitleTracks = mutableMapOf<UUID, Int?>()
+	private var store: TrackSelectionStore? = null
+	private var scope: String? = null
 
-	fun setSelectedAudioTrack(itemId: UUID, trackIndex: Int?) {
+	fun initialize(store: TrackSelectionStore) {
 		synchronized(this) {
-			selectedAudioTracks[itemId] = trackIndex
+			if (this.store != null) return
+
+			this.store = store
+			loadScope(scope)
+		}
+	}
+
+	fun setScope(scope: String?) {
+		synchronized(this) {
+			if (this.scope == scope) return
+
+			this.scope = scope
+			loadScope(scope)
 		}
 	}
 
 	fun setSelectedAudioTracks(itemIds: Collection<UUID>, trackIndex: Int?) {
 		synchronized(this) {
-			itemIds.forEach { itemId -> selectedAudioTracks[itemId] = trackIndex }
-		}
-	}
-
-	fun setSelectedSubtitleTrack(itemId: UUID, trackIndex: Int?) {
-		synchronized(this) {
-			selectedSubtitleTracks[itemId] = trackIndex
+			itemIds.forEach { itemId ->
+				if (trackIndex == null) selectedAudioTracks.remove(itemId)
+				else selectedAudioTracks[itemId] = trackIndex
+			}
+			persistAudioTracks()
 		}
 	}
 
 	fun setSelectedSubtitleTracks(itemIds: Collection<UUID>, trackIndex: Int?) {
 		synchronized(this) {
-			itemIds.forEach { itemId -> selectedSubtitleTracks[itemId] = trackIndex }
+			itemIds.forEach { itemId ->
+				if (trackIndex == null) selectedSubtitleTracks.remove(itemId)
+				else selectedSubtitleTracks[itemId] = trackIndex
+			}
+			persistSubtitleTracks()
 		}
-	}
-
-	fun getSelectedAudioTrack(itemId: UUID): Int? = synchronized(this) {
-		selectedAudioTracks[itemId]
 	}
 
 	fun getSelectedAudioTrack(itemIds: Collection<UUID>): Int? = synchronized(this) {
 		itemIds.firstNotNullOfOrNull { itemId -> selectedAudioTracks[itemId] }
-	}
-
-	fun getSelectedSubtitleTrack(itemId: UUID): Int? = synchronized(this) {
-		selectedSubtitleTracks[itemId]
-	}
-
-	fun hasSelectedSubtitleTrack(itemId: UUID): Boolean = synchronized(this) {
-		selectedSubtitleTracks.containsKey(itemId)
-	}
-
-	fun getSelectedSubtitleTrackSelection(itemId: UUID): TrackSelection = synchronized(this) {
-		TrackSelection(
-			hasSelection = selectedSubtitleTracks.containsKey(itemId),
-			trackIndex = selectedSubtitleTracks[itemId],
-		)
 	}
 
 	fun getSelectedSubtitleTrackSelection(itemIds: Collection<UUID>): TrackSelection = synchronized(this) {
@@ -66,17 +63,22 @@ object TrackSelectionManager {
 		)
 	}
 
-	fun clearSelections(itemId: UUID) {
-		synchronized(this) {
-			selectedAudioTracks.remove(itemId)
-			selectedSubtitleTracks.remove(itemId)
-		}
+	private fun loadScope(scope: String?) {
+		selectedAudioTracks.clear()
+		selectedSubtitleTracks.clear()
+
+		val store = store ?: return
+		if (scope == null) return
+
+		selectedAudioTracks.putAll(store.getSelectedAudioTracks(scope))
+		selectedSubtitleTracks.putAll(store.getSelectedSubtitleTracks(scope))
 	}
 
-	fun clearAllSelections() {
-		synchronized(this) {
-			selectedAudioTracks.clear()
-			selectedSubtitleTracks.clear()
-		}
+	private fun persistAudioTracks() {
+		scope?.let { store?.setSelectedAudioTracks(it, selectedAudioTracks) }
+	}
+
+	private fun persistSubtitleTracks() {
+		scope?.let { store?.setSelectedSubtitleTracks(it, selectedSubtitleTracks) }
 	}
 }
