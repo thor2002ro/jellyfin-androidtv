@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.databinding.ViewCardChannelBinding
 import org.jellyfin.androidtv.ui.RecordingIndicatorView
@@ -53,14 +54,16 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 
 		binding.channelNumber.text = getChannelNumber(item)
 		binding.channelName.text = getChannelName(item)
+		val channelImageUrl = if (isProgramItem) {
+			imageHelper.getChannelPrimaryImageUrl(item, null, ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
+		} else {
+			imageHelper.getPrimaryImageUrl(item, null, ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
+		}
+		binding.channelImage.alpha = if (channelImageUrl == null) CHANNEL_IMAGE_FALLBACK_ALPHA else 1f
 		binding.channelImage.load(
-			if (isProgramItem) {
-				imageHelper.getChannelPrimaryImageUrl(item, null, ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
-			} else {
-				imageHelper.getPrimaryImageUrl(item, null, ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
-			},
+			channelImageUrl,
 			null,
-			null,
+			ContextCompat.getDrawable(context, R.drawable.ic_tv),
 			0.0,
 			0,
 		)
@@ -231,6 +234,7 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 	private companion object {
 		const val BASE_CARD_WIDTH_DP = 260f
 		const val BASE_CARD_HEIGHT_DP = 128f
+		const val CHANNEL_IMAGE_FALLBACK_ALPHA = 0.55f
 		const val MIN_CONTENT_SCALE = 0.35f
 		const val MAX_CONTENT_SCALE = 1.4f
 	}
