@@ -2,12 +2,15 @@ package org.jellyfin.androidtv.di
 
 import android.content.Context
 import androidx.lifecycle.ProcessLifecycleOwner
+import coil3.disk.DiskCache
 import coil3.ImageLoader
 import coil3.annotation.ExperimentalCoilApi
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
+import coil3.memory.MemoryCache
 import coil3.network.NetworkFetcher
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.CachePolicy
 import coil3.serviceLoaderEnabled
 import coil3.svg.SvgDecoder
 import coil3.util.Logger
@@ -34,6 +37,7 @@ import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.navigation.NavigationRepositoryImpl
 import org.jellyfin.androidtv.ui.playback.PlaybackControllerContainer
+import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.ui.playback.external.DefaultExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.MpvExternalPlayerApi
@@ -71,6 +75,7 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.bind
 import org.koin.dsl.module
+import okio.Path.Companion.toPath
 import org.jellyfin.sdk.Jellyfin as JellyfinSdk
 
 val defaultDeviceInfo = named("defaultDeviceInfo")
@@ -124,6 +129,19 @@ val appModule = module {
 		ImageLoader.Builder(androidContext()).apply {
 			serviceLoaderEnabled(false)
 			logger(CoilTimberLogger(if (BuildConfig.DEBUG) Logger.Level.Warn else Logger.Level.Error))
+			memoryCachePolicy(CachePolicy.ENABLED)
+			diskCachePolicy(CachePolicy.ENABLED)
+			memoryCache {
+				MemoryCache.Builder()
+					.maxSizePercent(androidContext(), percent = 0.25)
+					.build()
+			}
+			diskCache {
+				DiskCache.Builder()
+					.directory(androidContext().cacheDir.resolve("image_cache").absolutePath.toPath())
+					.maximumMaxSizeBytes(512L * 1024L * 1024L)
+					.build()
+			}
 
 			components {
 				add(get<NetworkFetcher.Factory>())
@@ -138,10 +156,11 @@ val appModule = module {
 	// Non API related
 	single { DataRefreshService() }
 	single { PlaybackControllerContainer() }
+	single { TranscodingStatusRepository(get()) }
 	single { InteractionTrackerViewModel(get(), get()) }
 
 	single<UserRepository> { UserRepositoryImpl() }
-	single<UserViewsRepository> { UserViewsRepositoryImpl(get()) }
+	single<UserViewsRepository> { UserViewsRepositoryImpl(get(), androidContext(), get()) }
 	single<NotificationsRepository> { NotificationsRepositoryImpl(get(), get()) }
 	single<ItemMutationRepository> { ItemMutationRepositoryImpl(get(), get()) }
 	single<CustomMessageRepository> { CustomMessageRepositoryImpl() }

@@ -1,9 +1,11 @@
 package org.jellyfin.androidtv.integration.dream.composable
 
 import android.widget.ImageView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -23,6 +26,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +41,7 @@ import org.jellyfin.androidtv.ui.composable.modifier.fadingEdges
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.player.base.PlayerSeekbar
+import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
@@ -47,6 +53,7 @@ import org.jellyfin.playback.jellyfin.lyrics.lyricsFlow
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.ImageType
 import org.koin.compose.koinInject
+import kotlin.time.Duration
 
 @Composable
 fun DreamContentNowPlaying(
@@ -157,4 +164,76 @@ fun DreamContentNowPlaying(
 			)
 		}
 	}
+}
+
+@Composable
+fun BoxScope.DreamPausedNowPlayingBadge(
+	content: DreamContent.NowPlaying?,
+) {
+	if (content == null) return
+
+	val api = koinInject<ApiClient>()
+	val playbackManager = koinInject<PlaybackManager>()
+	val positionInfo by rememberPlayerPositionInfo(playbackManager)
+	val image = content.item.itemImages[ImageType.PRIMARY]
+		?: content.item.itemImages[ImageType.THUMB]
+		?: content.item.albumPrimaryImage
+		?: content.item.parentImages[ImageType.PRIMARY]
+		?: content.item.parentImages[ImageType.THUMB]
+
+	Row(
+		verticalAlignment = Alignment.CenterVertically,
+		horizontalArrangement = Arrangement.spacedBy(14.dp),
+		modifier = Modifier
+			.align(Alignment.BottomEnd)
+			.overscan()
+			.widthIn(max = 440.dp)
+			.background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(5.dp))
+			.padding(12.dp),
+	) {
+		if (image != null) {
+			AsyncImage(
+				url = image.getUrl(api),
+				blurHash = image.blurHash,
+				scaleType = ImageView.ScaleType.CENTER_CROP,
+				modifier = Modifier
+					.size(88.dp)
+					.clip(RoundedCornerShape(5.dp))
+			)
+		}
+
+		Column(
+			verticalArrangement = Arrangement.spacedBy(6.dp),
+			modifier = Modifier
+				.widthIn(max = 300.dp)
+		) {
+			Text(
+				text = content.item.name.orEmpty(),
+				maxLines = 2,
+				overflow = TextOverflow.Ellipsis,
+				style = TextStyle(
+					color = Color.White,
+					fontSize = 20.sp,
+					fontWeight = FontWeight.SemiBold,
+				),
+			)
+
+			Text(
+				text = positionInfo.formatPausedPosition(),
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+				style = TextStyle(
+					color = Color(0.8f, 0.8f, 0.8f),
+					fontSize = 16.sp,
+				),
+			)
+		}
+	}
+}
+
+private fun org.jellyfin.playback.core.model.PositionInfo.formatPausedPosition(): String {
+	val activeFormatted = TimeUtils.formatMillis(active.coerceAtLeast(Duration.ZERO).inWholeMilliseconds)
+	if (duration <= Duration.ZERO) return activeFormatted
+
+	return "$activeFormatted / ${TimeUtils.formatMillis(duration.inWholeMilliseconds)}"
 }

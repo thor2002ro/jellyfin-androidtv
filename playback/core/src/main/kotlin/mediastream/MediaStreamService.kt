@@ -1,5 +1,6 @@
 package org.jellyfin.playback.core.mediastream
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -37,18 +38,26 @@ internal class MediaStreamService(
 		}.launchIn(coroutineScope + Dispatchers.Main)
 	}
 
-	private suspend fun QueueEntry.ensureMediaStream(): Boolean {
-		mediaStream = mediaStream ?: mediaStreamResolvers.firstNotNullOfOrNull { resolver ->
-			runCatching {
-				withContext(Dispatchers.IO) {
-					resolver.getStream(this@ensureMediaStream)
-				}
-			}.onFailure {
-				Timber.e(it, "Media stream resolver failed for $this")
-			}.getOrNull()
-		}
-
+	private suspend fun QueueEntry.ensureMediaStream(
+		startPosition: Duration? = null,
+	): Boolean {
+		mediaStream = mediaStream ?: resolveMediaStream(startPosition)
 		return mediaStream != null
+	}
+
+	private suspend fun QueueEntry.resolveMediaStream(
+		startPosition: Duration? = null,
+	): PlayableMediaStream? = mediaStreamResolvers.firstNotNullOfOrNull { resolver ->
+		try {
+			withContext(Dispatchers.IO) {
+				resolver.getStream(this@resolveMediaStream, startPosition)
+			}
+		} catch (error: CancellationException) {
+			throw error
+		} catch (error: Exception) {
+			Timber.e(error, "Media stream resolver failed for $this")
+			null
+		}
 	}
 
 	private fun QueueEntry.ensurePreloadTimedEvent() {
@@ -67,12 +76,13 @@ internal class MediaStreamService(
 		)
 	}
 
-	private suspend fun playEntry(entry: QueueEntry) {
+	private suspend fun playEntry(entry: QueueEntry): Boolean {
 		val backend = requireNotNull(manager.backend)
 		val hasMediaStream = entry.ensureMediaStream()
 
 		if (hasMediaStream) {
 			backend.playItem(entry)
+			return true
 		} else {
 			Timber.e("Unable to resolve stream for entry $entry")
 
@@ -82,7 +92,29 @@ internal class MediaStreamService(
 			} else {
 				backend.stop()
 			}
+
+			return false
 		}
+	}
+
+	suspend fun reloadCurrentEntry(
+		position: Duration? = null,
+		playWhenReady: Boolean = true,
+	): Boolean {
+		val entry = manager.queue.entry.value ?: return false
+		val newStream = entry.resolveMediaStream(startPosition = position) ?: return false
+		val backend = requireNotNull(manager.backend)
+
+		manager.queue.entries.value.forEach { queuedEntry ->
+			if (queuedEntry === entry) return@forEach
+			queuedEntry.mediaStream = null
+		}
+		entry.mediaStream = newStream
+		backend.replaceItem(entry)
+		position?.let(manager.state::seek)
+		if (!playWhenReady) manager.state.pause()
+
+		return true
 	}
 
 	private fun preloadNextEntry() = coroutineScope.launch(Dispatchers.Main) {
