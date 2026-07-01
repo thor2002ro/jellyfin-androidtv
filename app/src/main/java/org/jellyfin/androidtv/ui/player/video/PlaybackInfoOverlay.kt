@@ -42,6 +42,7 @@ import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkaroun
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
@@ -76,7 +77,9 @@ fun PlaybackInfoOverlay(
 	val forceTranscodingSourceBitrate = entry?.forceTranscodingSourceBitrate
 	val speed by playbackManager.state.speed.collectAsState()
 	val subtitleOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
+	val subtitleOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
 	val softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled]
+	val parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction]
 	val mediaTest = remember(softwareCodecsEnabled) { MediaCodecCapabilitiesTest(softwareCodecsEnabled) }
 	val forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE)
 	val forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)
@@ -134,6 +137,8 @@ fun PlaybackInfoOverlay(
 		stream,
 		speed,
 		subtitleOffset,
+		subtitleOffsetSupported,
+		parseSubtitlesDuringExtraction,
 		transcodingInfo,
 		clientWorkaroundInfo,
 		positionInfo,
@@ -145,6 +150,8 @@ fun PlaybackInfoOverlay(
 			stream = stream,
 			speed = speed,
 			subtitleOffset = subtitleOffset,
+			subtitleOffsetSupported = subtitleOffsetSupported,
+			parseSubtitlesDuringExtraction = parseSubtitlesDuringExtraction,
 			positionInfo = positionInfo,
 			frameStats = frameStats,
 			transcodingInfo = transcodingInfo,
@@ -229,6 +236,8 @@ private object NewPlayerStreamStatusBuilder {
 		stream: MediaStream,
 		speed: Float,
 		subtitleOffset: Duration,
+		subtitleOffsetSupported: Boolean,
+		parseSubtitlesDuringExtraction: Boolean,
 		positionInfo: PositionInfo,
 		frameStats: PlaybackFrameStats,
 		transcodingInfo: TranscodingInfo?,
@@ -249,6 +258,13 @@ private object NewPlayerStreamStatusBuilder {
 			.filterIsInstance<MediaStreamSubtitleTrack>()
 			.firstOrNull { subtitle ->
 				subtitle.index == selectedSubtitle?.streamIndex || subtitle.index == selectedSubtitle?.index
+			}
+		val selectedExternalSubtitle = (stream as? PlayableMediaStream)
+			?.externalSubtitles
+			?.firstOrNull { externalSubtitle ->
+				externalSubtitle.index == selectedSubtitleStream?.index ||
+					externalSubtitle.index == selectedSubtitle?.streamIndex ||
+					externalSubtitle.index == selectedSubtitle?.index
 			}
 
 		return listOf(
@@ -285,11 +301,24 @@ private object NewPlayerStreamStatusBuilder {
 						"Subtitle conversion",
 						TranscodingStatusFormatter.subtitleConversion(
 							transcodingInfo,
-							selectedSubtitleStream?.codec ?: selectedSubtitle?.codec,
+							subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle),
 							isBurnedIn = false,
-							deliveryMethod = selectedSubtitleStream?.takeIf { it.isExternal }?.let { "External" },
+							deliveryMethod = subtitleDeliveryLabel(selectedSubtitleStream, selectedExternalSubtitle),
 						)
 					)
+				},
+			),
+			PlaybackInfoSection(
+				title = "Subtitle Info",
+				rows = rows {
+					row("Status", subtitleStatus(selectedSubtitle, selectedSubtitleStream))
+					row("IDs", subtitleIds(selectedSubtitle, selectedSubtitleStream))
+					row("Title", selectedSubtitle?.label ?: selectedSubtitleStream?.title ?: selectedExternalSubtitle?.title)
+					row("Codec", subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle).formatCodec())
+					row("Language", selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language)
+					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
+					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
+					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
 				},
 			),
 			PlaybackInfoSection(
@@ -304,8 +333,6 @@ private object NewPlayerStreamStatusBuilder {
 					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
 					row("Audio sample rate", audioTrack?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" })
-					row("Subtitle", subtitleSummary(selectedSubtitle, selectedSubtitleStream, subtitleOffset))
-					row("Subtitle lang/delivery", subtitleLanguageDelivery(selectedSubtitle, selectedSubtitleStream))
 				},
 			),
 		).filter { it.rows.isNotEmpty() }
@@ -353,6 +380,68 @@ private object NewPlayerStreamStatusBuilder {
 	}
 
 	private fun audioLanguage(selectedTrack: PlayerTrack?): String? = selectedTrack?.language
+
+	private fun subtitleStatus(
+		track: PlayerTrack?,
+		stream: MediaStreamSubtitleTrack?,
+	): String = when {
+		track == null && stream == null -> "Off"
+		else -> "Selected"
+	}
+
+	private fun subtitleIds(
+		track: PlayerTrack?,
+		stream: MediaStreamSubtitleTrack?,
+	): String? = buildString {
+		track?.index?.let { appendInline("track $it") }
+		(stream?.index ?: track?.streamIndex)?.let { appendInline("stream $it") }
+		track?.let { appendInline("group ${it.groupIndex}/${it.trackIndex}") }
+	}.takeIf { it.isNotBlank() }
+
+	private fun subtitleCodec(
+		track: PlayerTrack?,
+		stream: MediaStreamSubtitleTrack?,
+		externalSubtitle: ExternalSubtitle?,
+	): String? = track?.codec ?: stream?.codec ?: externalSubtitle?.mimeType
+
+	private fun subtitleDeliveryLabel(
+		stream: MediaStreamSubtitleTrack?,
+		externalSubtitle: ExternalSubtitle?,
+	): String? = when {
+		externalSubtitle != null || stream?.isExternal == true -> "External"
+		stream != null -> "Embedded"
+		else -> null
+	}
+
+	private fun subtitleSource(
+		stream: MediaStreamSubtitleTrack?,
+		externalSubtitle: ExternalSubtitle?,
+		parseSubtitlesDuringExtraction: Boolean,
+	): String? = when {
+		stream == null && externalSubtitle == null -> null
+		externalSubtitle != null || stream?.isExternal == true -> "External renderer"
+		parseSubtitlesDuringExtraction -> "Embedded extractor"
+		else -> "Embedded renderer"
+	}
+
+	private fun subtitleFlags(
+		stream: MediaStreamSubtitleTrack?,
+		externalSubtitle: ExternalSubtitle?,
+	): String? = buildString {
+		if (stream?.isExternal == true || externalSubtitle != null) appendInline("External")
+		if (externalSubtitle?.isDefault == true) appendInline("Default")
+		if (externalSubtitle?.isForced == true) appendInline("Forced")
+	}.takeIf { it.isNotBlank() }
+
+	private fun subtitleOffsetInfo(
+		track: PlayerTrack?,
+		stream: MediaStreamSubtitleTrack?,
+		offset: Duration,
+		supported: Boolean,
+	): String? = when {
+		track == null && stream == null -> null
+		else -> "${offset.formatSignedSeconds()} ${if (supported) "supported" else "unsupported"}"
+	}
 
 	private fun streamBitrate(
 		videoTrack: MediaStreamVideoTrack?,
@@ -409,37 +498,6 @@ private object NewPlayerStreamStatusBuilder {
 		.split(' ')
 		.filter(String::isNotBlank)
 		.joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
-
-	private fun subtitleSummary(
-		track: PlayerTrack?,
-		stream: MediaStreamSubtitleTrack?,
-		offset: Duration,
-	) = buildString {
-		if (track == null && stream == null) {
-			append("off")
-		} else {
-			appendInline(track?.codec.formatCodec() ?: stream?.codec.formatCodec())
-			appendInline(track?.language ?: stream?.language)
-		}
-		if (offset != Duration.ZERO) appendInline(offset.formatSignedSeconds())
-	}
-
-	private fun subtitleLanguageDelivery(
-		track: PlayerTrack?,
-		stream: MediaStreamSubtitleTrack?,
-	): String? = when {
-		track == null && stream == null -> null
-		else -> buildString {
-			appendInline(track?.language ?: stream?.language)
-			appendInline(
-				when {
-					stream?.isExternal == true -> "External"
-					stream != null -> "Embedded"
-					else -> null
-				}
-			)
-		}.takeIf { it.isNotBlank() }
-	}
 
 	private fun MediaConversionMethod.displayName() = when (this) {
 		MediaConversionMethod.None -> "Direct play"
