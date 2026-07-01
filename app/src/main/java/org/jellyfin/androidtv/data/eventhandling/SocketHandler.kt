@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
@@ -15,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
+import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.MediaManager
@@ -42,6 +44,8 @@ import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
 import java.time.Instant
 import java.util.UUID
+
+private const val SERIES_STREAM_BADGE_INVALIDATION_RESOLVE_LIMIT = 50
 
 class SocketHandler(
 	private val context: Context,
@@ -98,7 +102,7 @@ class SocketHandler(
 	private fun subscribe(coroutineScope: CoroutineScope) = api.webSocket.apply {
 		// Library
 		subscribe<LibraryChangedMessage>()
-			.onEach { message -> message.data?.let(::onLibraryChanged) }
+			.onEach { message -> message.data?.let { info -> onLibraryChanged(info) } }
 			.launchIn(coroutineScope)
 
 		// Media playback
@@ -158,7 +162,7 @@ class SocketHandler(
 			.launchIn(coroutineScope)
 	}
 
-	private fun onLibraryChanged(info: LibraryUpdateInfo) {
+	private suspend fun onLibraryChanged(info: LibraryUpdateInfo) {
 		Timber.d(buildString {
 			appendLine("Library changed.")
 			appendLine("Added ${info.itemsAdded.size} items")
@@ -166,8 +170,35 @@ class SocketHandler(
 			appendLine("Updated ${info.itemsUpdated.size} items")
 		})
 
-		if (info.itemsAdded.any() || info.itemsRemoved.any())
+		val changedItemIds = (info.itemsAdded + info.itemsRemoved + info.itemsUpdated)
+			.mapNotNull { itemId -> itemId.toUUIDOrNull() }
+			.toSet()
+		if (changedItemIds.isNotEmpty()) {
+			SeriesStreamBadgeCache.remove(resolveSeriesStreamBadgeInvalidationIds(info, changedItemIds))
 			dataRefreshService.lastLibraryChange = Instant.now()
+		}
+	}
+
+	private suspend fun resolveSeriesStreamBadgeInvalidationIds(info: LibraryUpdateInfo, changedItemIds: Set<UUID>): Set<UUID> {
+		val resolvedIds = ((info.foldersAddedTo + info.foldersRemovedFrom)
+			.mapNotNull { itemId -> itemId.toUUIDOrNull() } + changedItemIds)
+			.toMutableSet()
+		if (changedItemIds.size > SERIES_STREAM_BADGE_INVALIDATION_RESOLVE_LIMIT) return resolvedIds
+
+		for (itemId in changedItemIds) {
+			try {
+				val item = api.userLibraryApi.getItem(itemId = itemId).content
+				item.seriesId?.let(resolvedIds::add)
+				item.seasonId?.let(resolvedIds::add)
+				item.parentId?.let(resolvedIds::add)
+			} catch (error: CancellationException) {
+				throw error
+			} catch (error: Exception) {
+				Timber.d(error, "Unable to resolve library changed item $itemId for stream badge cache")
+			}
+		}
+
+		return resolvedIds
 	}
 
 	private fun onPlayMessage(message: PlayMessage) {

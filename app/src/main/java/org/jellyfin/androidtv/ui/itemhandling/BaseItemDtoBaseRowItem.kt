@@ -42,10 +42,9 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	selectAction = selectAction,
 	baseItem = item,
 ) {
-	val streamBadgeItem: BaseItemDto?
-		get() = streamBadgeMediaSources
-			?.let { sources -> baseItem?.copy(mediaSources = sources) }
-			?: baseItem
+	val streamBadgeItem: BaseItemDto? = streamBadgeMediaSources
+			?.let { sources -> item.copy(mediaSources = sources) }
+			?: item
 
 	override val showCardInfoOverlay
 		get() = when (baseItem?.type) {
@@ -131,7 +130,11 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	}
 
 	override fun equals(other: Any?): Boolean {
-		if (other is BaseItemDtoBaseRowItem) return other.baseItem == baseItem
+		if (other is BaseItemDtoBaseRowItem) {
+			return other.baseItem == baseItem && other.streamBadgeMediaSources == streamBadgeMediaSources
+		}
 		return super.equals(other)
 	}
+
+	override fun hashCode() = 31 * (baseItem?.hashCode() ?: 0) + (streamBadgeMediaSources?.hashCode() ?: 0)
 }
