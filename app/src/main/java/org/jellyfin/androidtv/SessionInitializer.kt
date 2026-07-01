@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.di.KoinInitializer
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.TrackSelectionManager
 import org.jellyfin.androidtv.util.TrackSelectionStore
 
@@ -16,6 +17,7 @@ import org.jellyfin.androidtv.util.TrackSelectionStore
 class SessionInitializer : Initializer<Unit> {
 	override fun create(context: Context) {
 		TrackSelectionManager.initialize(TrackSelectionStore(context))
+		LiveTvTrackCache.initialize(context)
 
 		val koin = AppInitializer.getInstance(context)
 			.initializeComponent(KoinInitializer::class.java)
