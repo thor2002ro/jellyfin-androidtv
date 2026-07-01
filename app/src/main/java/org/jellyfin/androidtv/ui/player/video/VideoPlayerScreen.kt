@@ -40,13 +40,22 @@ import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
 import org.jellyfin.androidtv.ui.ScreensaverLock
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.ui.player.base.PlayerSubtitles
 import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
+import org.jellyfin.androidtv.util.sdk.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
+import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.queue.queue
+import org.jellyfin.playback.jellyfin.queue.baseItem
+import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.koin.compose.koinInject
 
 private const val DefaultVideoAspectRatio = 16f / 9f
@@ -67,6 +76,7 @@ fun VideoPlayerScreen(
 	}
 
 	val playState by playbackManager.state.playState.collectAsState()
+	LiveTvTrackCacheUpdater(playbackManager)
 	val playing = playState.isActivePlayback
 	ScreensaverLock(
 		enabled = playing,
@@ -114,6 +124,46 @@ fun VideoPlayerScreen(
 			onZoomModeSelected = { zoomMode = it },
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
+		)
+	}
+}
+
+@Composable
+private fun LiveTvTrackCacheUpdater(playbackManager: PlaybackManager) {
+	val entry by playbackManager.queue.entry.collectAsState()
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val stream = entry?.run { mediaStreamFlow.collectAsState(mediaStream) }?.value
+	val channelId = item?.liveTvChannelId()
+	val audio = stream?.tracks
+		?.filterIsInstance<MediaStreamAudioTrack>()
+		?.map { track ->
+			LiveTvTrackCache.Track(
+				index = track.index,
+				language = track.language,
+				title = track.title,
+				codec = track.codec,
+			)
+		}
+		.orEmpty()
+	val subtitles = stream?.tracks
+		?.filterIsInstance<MediaStreamSubtitleTrack>()
+		?.map { track ->
+			LiveTvTrackCache.Track(
+				index = track.index,
+				language = track.language,
+				title = track.title,
+				codec = track.codec,
+			)
+		}
+		.orEmpty()
+
+	LaunchedEffect(channelId, audio, subtitles) {
+		LiveTvTrackCache.update(
+			channelId = channelId,
+			audio = audio,
+			subtitles = subtitles,
+			selectedAudioTrackIndex = stream?.selectedAudioStreamIndex,
+			selectedSubtitleTrackIndex = stream?.selectedSubtitleStreamIndex,
 		)
 	}
 }

@@ -24,6 +24,7 @@ import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior;
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
 import org.jellyfin.androidtv.ui.InteractionTrackerViewModel;
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache;
 import org.jellyfin.androidtv.ui.livetv.TvManager;
 import org.jellyfin.androidtv.util.TimeUtils;
 import org.jellyfin.androidtv.util.TrackSelectionManager;
@@ -61,6 +62,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     private final static long PROGRESS_REPORTING_INTERVAL = TimeUtils.secondsToMillis(3);
     // Frequency to report paused state
     private static final long PROGRESS_REPORTING_PAUSE_INTERVAL = TimeUtils.secondsToMillis(15);
+    private static final long LIVE_TV_ERROR_RETRY_INTERVAL = TimeUtils.secondsToMillis(5);
 
     private Lazy<PlaybackManager> playbackManager = inject(PlaybackManager.class);
     private Lazy<UserPreferences> userPreferences = inject(UserPreferences.class);
@@ -107,6 +109,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     private float mRequestedPlaybackSpeed = -1.0f;
 
     private Runnable mReportLoop;
+    private Runnable mLiveTvRetryRunnable;
     private Handler mHandler;
 
     private long mStartPosition = 0;
@@ -287,6 +290,11 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         playbackRetries++;
         lastPlaybackError = Instant.now().toEpochMilli();
 
+        if (isLiveTv) {
+            scheduleLiveTvErrorRetry();
+            return;
+        }
+
         if (playbackRetries < 3) {
             if (mFragment != null)
                 Utils.showToast(mFragment.getContext(), mFragment.getString(R.string.player_error));
@@ -300,6 +308,33 @@ public class PlaybackController implements PlaybackControllerNotifiable {
                 mFragment.closePlayer();
             }
         }
+    }
+
+    private void scheduleLiveTvErrorRetry() {
+        if (mHandler == null || mFragment == null || mVideoManager == null) return;
+
+        cancelLiveTvErrorRetry();
+        Timber.i("Live TV playback error encountered - retrying in %s ms", LIVE_TV_ERROR_RETRY_INTERVAL);
+        stopForLiveTvRetry();
+
+        mLiveTvRetryRunnable = new Runnable() {
+            @Override
+            public void run() {
+                mLiveTvRetryRunnable = null;
+                if (!isLiveTv || mFragment == null || mVideoManager == null) return;
+
+                Timber.i("Retrying Live TV playback after error");
+                play(mCurrentPosition);
+            }
+        };
+        mHandler.postDelayed(mLiveTvRetryRunnable, LIVE_TV_ERROR_RETRY_INTERVAL);
+    }
+
+    private void cancelLiveTvErrorRetry() {
+        if (mHandler != null && mLiveTvRetryRunnable != null) {
+            mHandler.removeCallbacks(mLiveTvRetryRunnable);
+        }
+        mLiveTvRetryRunnable = null;
     }
 
     private void getDisplayModes() {
@@ -546,8 +581,8 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         internalOptions.setItemId(item.getId());
         internalOptions.setMediaSources(item.getMediaSources());
         internalOptions.setAlwaysBurnInSubtitleWhenTranscoding(userPreferences.getValue().get(UserPreferences.Companion.getSubtitlesBurnDuringTranscode()));
-        if (playbackRetries > 0 || (isLiveTv && !directStreamLiveTv)) internalOptions.setEnableDirectPlay(false);
-        if (playbackRetries > 1) internalOptions.setEnableDirectStream(false);
+        if ((!isLiveTv && playbackRetries > 0) || (isLiveTv && !directStreamLiveTv)) internalOptions.setEnableDirectPlay(false);
+        if (!isLiveTv && playbackRetries > 1) internalOptions.setEnableDirectStream(false);
         if (mCurrentOptions != null) {
             internalOptions.setSubtitleStreamIndex(mCurrentOptions.getSubtitleStreamIndex());
             internalOptions.setAudioStreamIndex(mCurrentOptions.getAudioStreamIndex());
@@ -651,6 +686,10 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     private void handlePlaybackInfoError(Exception exception) {
         Timber.e(exception, "Error getting playback stream info");
         if (mFragment == null) return;
+        if (isLiveTv) {
+            playerErrorEncountered();
+            return;
+        }
         if (exception instanceof PlaybackException) {
             PlaybackException ex = (PlaybackException) exception;
             switch (ex.getErrorCode()) {
@@ -744,6 +783,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         setDefaultAudioIndex(response);
         Timber.d("default audio index set to %s remote default %s", mDefaultAudioIndex, response.getMediaSource().getDefaultAudioStreamIndex());
         Timber.d("default sub index set to %s remote default %s", mCurrentOptions.getSubtitleStreamIndex(), response.getMediaSource().getDefaultSubtitleStreamIndex());
+        LiveTvTrackCache.update(item, response.getMediaSource(), getAudioStreamIndex(), getSubtitleStreamIndex());
 
         Long mbPos = position * 10000;
 
@@ -969,6 +1009,15 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     }
 
     public void stop() {
+        stop(true);
+    }
+
+    private void stopForLiveTvRetry() {
+        stop(false);
+    }
+
+    private void stop(boolean cancelLiveTvRetry) {
+        if (cancelLiveTvRetry) cancelLiveTvErrorRetry();
         refreshCurrentPosition();
         Timber.i("stop called at %s", mCurrentPosition);
         stopReportLoop();
@@ -1322,6 +1371,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
     @Override
     public void onPrepared() {
+        cancelLiveTvErrorRetry();
         if (mPlaybackState == PlaybackState.BUFFERING) {
             if (mFragment != null) {
                 mFragment.setFadingEnabled(true);
@@ -1371,7 +1421,6 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
         if (isLiveTv && directStreamLiveTv) {
             Utils.showToast(mFragment.getContext(), mFragment.getString(R.string.msg_error_live_stream));
-            directStreamLiveTv = false;
         } else {
             String msg = mFragment.getString(R.string.video_error_unknown_error);
             Timber.e("Playback error - %s", msg);
@@ -1382,6 +1431,11 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     @Override
     public void onCompletion() {
         Timber.i("On Completion fired");
+        if (isLiveTv) {
+            Timber.w("Live TV playback completed unexpectedly");
+            playerErrorEncountered();
+            return;
+        }
         itemComplete();
     }
 

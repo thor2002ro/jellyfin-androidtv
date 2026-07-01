@@ -50,6 +50,7 @@ import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
 import io.github.peerless2012.ass.media.type.AssRenderType
 import io.github.peerless2012.ass.media.widget.AssSubtitleView
 import org.jellyfin.playback.core.backend.BasePlayerBackend
+import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
@@ -121,6 +122,15 @@ class ExoPlayerBackend(
 			.fragment(null)
 			.build()
 			.toString()
+
+		private fun PlaybackException.canRecoverLiveTvWithIncreasedOffset(): Boolean = when (errorCode) {
+			PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+			PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
+			PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+			PlaybackException.ERROR_CODE_DECODING_FAILED -> true
+
+			else -> false
+		}
 	}
 
 	private var currentStream: PlayableMediaStream? = null
@@ -476,14 +486,22 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlayerError(error: PlaybackException) {
+			val isLiveTv = (exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry)
+				?.liveStreamTargetOffset != null
+			val playbackError = PlaybackError(
+				codeName = error.errorCodeName,
+				recoverWithIncreasedLiveTvOffset = isLiveTv && error.canRecoverLiveTvWithIncreasedOffset(),
+			)
 			Timber.e(
 				error,
-				"ExoPlayer error code=%s mediaId=%s uri=%s method=%s",
+				"ExoPlayer error code=%s mediaId=%s uri=%s method=%s recoverWithIncreasedLiveTvOffset=%s",
 				error.errorCodeName,
 				exoPlayer.currentMediaItem?.mediaId,
 				exoPlayer.currentMediaItem?.safeUriForLogging(),
 				currentStream?.conversionMethod,
+				playbackError.recoverWithIncreasedLiveTvOffset,
 			)
+			listener?.onPlaybackError(playbackError)
 			listener?.onPlayStateChange(PlayState.ERROR)
 		}
 
@@ -900,7 +918,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun PlayableMediaStream.initialTrackSelection(): PendingInitialTrackSelection? {
-		if (queueEntry.liveStreamTargetOffset == null || conversionMethod != MediaConversionMethod.None) return null
+		if (conversionMethod != MediaConversionMethod.None) return null
 		if (selectedAudioStreamIndex == null && selectedSubtitleStreamIndex == null) return null
 
 		return PendingInitialTrackSelection(
