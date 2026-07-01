@@ -13,7 +13,6 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.RadioButton
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
-import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.navigation.focus.focusKey
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
@@ -41,7 +40,6 @@ fun SettingsLiveTvGuideChannelOrderScreen() {
 				trailingContent = { RadioButton(checked = channelOrderEnum == entry) },
 				onClick = {
 					channelOrder = entry.stringValue
-					TvManager.forceReload()
 					router.back()
 				},
 				modifier = Modifier.focusKey("channel_order_${entry.name}")
