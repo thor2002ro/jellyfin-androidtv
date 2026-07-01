@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.ui.base.BaseScreen
@@ -33,6 +34,7 @@ import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -48,6 +50,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val navigationRepository by inject<NavigationRepository>()
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
+	private val dataRefreshService by inject<DataRefreshService>()
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
 	private var closingPlayer = false
 	private var hasSeenVideoQueueEntry = false
@@ -78,6 +81,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
 				if (mediaStream.queueEntry !== playbackManager.queue.entry.value) return
 				if (mediaStream.queueEntry.isLiveTv) return
+				notifyPlaybackChanged(mediaStream.queueEntry.baseItem)
 				if (showNextUpIfAvailable(mediaStream)) return
 
 				closeWhenVideoQueueEnds = true
@@ -148,11 +152,16 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		closingPlayer = true
 		remoteKeyEventHandler = null
 
+		notifyPlaybackChanged()
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
 		if (!navigationRepository.goBack()) {
 			navigationRepository.reset(Destinations.home)
 		}
+	}
+
+	private fun notifyPlaybackChanged(item: BaseItemDto? = playbackManager.queue.entry.value?.baseItem) {
+		dataRefreshService.notifyPlayback(item)
 	}
 
 	private fun closePlayerIfVideoQueueEnded() {
@@ -222,6 +231,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	override fun onStop() {
 		super.onStop()
 
+		notifyPlaybackChanged()
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
 	}
