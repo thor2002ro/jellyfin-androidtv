@@ -14,6 +14,7 @@ import org.jellyfin.androidtv.databinding.ViewCardChannelBinding
 import org.jellyfin.androidtv.ui.RecordingIndicatorView
 import org.jellyfin.androidtv.ui.copyWithSeriesTimerId
 import org.jellyfin.androidtv.ui.copyWithTimerId
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.ImageHelper
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -70,6 +71,7 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 
 		val isFavorite = !isProgramItem && item.userData?.isFavorite == true
 		binding.favImage.visibility = if (isFavorite) View.VISIBLE else View.GONE
+		updateTrackBadge(item, program)
 
 		if (program != null) {
 			updateDisplay(program)
@@ -87,6 +89,21 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 		BaseItemKind.TV_PROGRAM,
 		BaseItemKind.LIVE_TV_PROGRAM -> true
 		else -> false
+	}
+
+	private fun updateTrackBadge(item: BaseItemDto, program: BaseItemDto?) {
+		val tracks = LiveTvTrackCache.get(item) ?: program?.let(LiveTvTrackCache::get)
+		if (tracks != null) {
+			showTrackBadge(tracks)
+			return
+		}
+
+		binding.trackCounts.visibility = View.GONE
+	}
+
+	private fun showTrackBadge(tracks: LiveTvTrackCache.Tracks) {
+		binding.trackCounts.text = "A:${tracks.audio.size} S:${tracks.subtitles.size}"
+		binding.trackCounts.visibility = View.VISIBLE
 	}
 
 	private fun getChannelNumber(item: BaseItemDto) = if (isProgram(item)) {
@@ -174,6 +191,7 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 
 		setSize(binding.favImage, 14f, 14f, scale)
 		setSize(binding.recIndicator, 14f, 14f, scale)
+		setMargins(binding.favImage, 0f, 0f, 4f, 0f, scale)
 		setMargins(binding.recIndicator, 4f, 4f, 0f, 0f, scale)
 
 		setSize(binding.channelImage, 62f, 40f, scale)
@@ -185,6 +203,7 @@ class ChannelCardView(context: Context) : FrameLayout(context), RecordingIndicat
 		setTextSize(binding.channelName, 16f, scale)
 		setTextSize(binding.program, 13f, scale)
 		setTextSize(binding.time, 13f, scale)
+		setTextSize(binding.trackCounts, 10f, scale)
 
 		val progressParams = binding.progress.layoutParams
 		progressParams.height = scaledDp(5f, scale)

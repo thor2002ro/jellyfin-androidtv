@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.util
 
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
+import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.sdk.trackSelectionIds
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.MediaSourceInfo
@@ -55,6 +56,7 @@ object TrackSelectionResolver {
 	): Int? {
 		val itemIds = item.trackSelectionIds()
 		val streamIndex = TrackSelectionManager.getSelectedAudioTrack(itemIds) ?: return null
+		if (item.isLiveTv()) return streamIndex
 		if (mediaSource == null) return null
 		if (mediaSource.hasMediaStream(MediaStreamType.AUDIO, streamIndex)) return streamIndex
 
@@ -71,6 +73,7 @@ object TrackSelectionResolver {
 		val selection = TrackSelectionManager.getSelectedSubtitleTrackSelection(itemIds)
 		if (!selection.hasSelection) return selection
 		if (selection.trackIndex == -1) return selection
+		if (item.isLiveTv()) return selection
 		if (mediaSource == null) return TrackSelectionManager.TrackSelection(hasSelection = false, trackIndex = null)
 		if (selection.trackIndex != null && mediaSource.hasMediaStream(MediaStreamType.SUBTITLE, selection.trackIndex)) return selection
 
@@ -92,7 +95,7 @@ object TrackSelectionResolver {
 		streamIndex: Int?,
 	): MediaStream? {
 		val stream = mediaSource.findMediaStream(MediaStreamType.AUDIO, streamIndex)
-		if (streamIndex != null && stream == null) return null
+		if (streamIndex != null && stream == null && !item.isLiveTv()) return null
 
 		TrackSelectionManager.setSelectedAudioTracks(item.trackSelectionIds(), streamIndex)
 		videoQueueManager.setLastPlayedAudioLanguageIsoCode(stream?.language)
@@ -117,7 +120,13 @@ object TrackSelectionResolver {
 			return null
 		}
 
-		val stream = mediaSource.findMediaStream(MediaStreamType.SUBTITLE, selectedIndex) ?: return null
+		val stream = mediaSource.findMediaStream(MediaStreamType.SUBTITLE, selectedIndex)
+		if (stream == null) {
+			if (!item.isLiveTv()) return null
+
+			TrackSelectionManager.setSelectedSubtitleTracks(item.trackSelectionIds(), selectedIndex)
+			return null
+		}
 		TrackSelectionManager.setSelectedSubtitleTracks(item.trackSelectionIds(), selectedIndex)
 		videoQueueManager.setLastPlayedSubtitleLanguageIsoCode(stream.language)
 		videoQueueManager.setLastPlayedSubtitleForcedState(stream.isForced == true)
