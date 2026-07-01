@@ -215,6 +215,7 @@ fun VideoPlayerControls(
 
 		Row(
 			horizontalArrangement = Arrangement.spacedBy(12.dp),
+			verticalAlignment = Alignment.CenterVertically,
 			modifier = Modifier
 				.focusRestorer()
 				.focusGroup()
@@ -507,12 +508,9 @@ private fun PositionText(
 			timeFormatter.format(liveTvProgramTimeline.end),
 		)
 
-		Text(
-			text = "$activeFormatted / $durationFormatted  $endsText",
-			style = LocalTextStyle.current.copy(color = Color.White),
-			softWrap = false,
-			maxLines = 1,
-			overflow = TextOverflow.Clip,
+		PositionTimeText(
+			positionText = "$activeFormatted / $durationFormatted",
+			endsText = endsText,
 		)
 		return
 	}
@@ -533,13 +531,37 @@ private fun PositionText(
 		timeFormatter.format(finishTime),
 	)
 
-	Text(
-		text = "$activeFormatted / $durationFormatted  $endsText",
-		style = LocalTextStyle.current.copy(color = Color.White),
-		softWrap = false,
-		maxLines = 1,
-		overflow = TextOverflow.Clip,
+	PositionTimeText(
+		positionText = "$activeFormatted / $durationFormatted",
+		endsText = endsText,
 	)
+}
+
+@Composable
+private fun PositionTimeText(
+	positionText: String,
+	endsText: String,
+) {
+	Column(
+		horizontalAlignment = Alignment.End,
+	) {
+		Text(
+			text = positionText,
+			style = LocalTextStyle.current.copy(color = Color.White),
+			softWrap = false,
+			maxLines = 1,
+			overflow = TextOverflow.Clip,
+		)
+		Text(
+			text = endsText,
+			style = JellyfinTheme.typography.listCaption.copy(
+				color = Color.White.copy(alpha = 0.72f),
+			),
+			softWrap = false,
+			maxLines = 1,
+			overflow = TextOverflow.Clip,
+		)
+	}
 }
 
 private fun finishTimeFor(
