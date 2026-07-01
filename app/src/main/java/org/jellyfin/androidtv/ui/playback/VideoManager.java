@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.data.compat.StreamInfo;
 import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.constant.BufferLength;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
+import org.jellyfin.playback.media3.exoplayer.ExternalSubtitleMediaSourceFactory;
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetRenderersFactory;
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetState;
 import org.jellyfin.sdk.api.client.ApiClient;
@@ -266,7 +267,7 @@ public class VideoManager {
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, assExtractorsFactory);
             mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
             mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory);
-            exoPlayerBuilder.setMediaSourceFactory(mediaSourceFactory);
+            exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
             exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, rendererFactory));
         } else {
             DefaultSubtitleParserFactory defaultSubtitleParserFactory = new DefaultSubtitleParserFactory();
@@ -279,9 +280,10 @@ public class VideoManager {
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
 
             exoPlayerBuilder.setRenderersFactory(rendererFactory);
-            exoPlayerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
-                    .experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()))
-                    .setSubtitleParserFactory(defaultSubtitleParserFactory));
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory);
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
+            mediaSourceFactory.setSubtitleParserFactory(defaultSubtitleParserFactory);
+            exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
         }
 
         BufferLength bufferLength = userPreferences.get(UserPreferences.Companion.getBufferLength());
