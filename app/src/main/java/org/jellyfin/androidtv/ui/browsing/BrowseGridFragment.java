@@ -588,7 +588,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     public void onResume() {
         super.onResume();
 
-        if (!mPreferencesLoaded) return;
+        if (!mPreferencesLoaded) {
+            justLoaded = false;
+            return;
+        }
 
         PosterSize posterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
         ImageType imageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());

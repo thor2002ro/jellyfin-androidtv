@@ -4,8 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.databinding.LiveTvGuideBinding
+import org.jellyfin.androidtv.preference.LiveTvPreferences
+import org.jellyfin.androidtv.preference.SystemPreferences
 import org.jellyfin.androidtv.ui.navigation.ProvideRouter
 import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.composable.SettingsDialog
@@ -126,6 +132,11 @@ fun LiveTvGuideFragment.addSettingsOptions(binding: LiveTvGuideBinding): Mutable
 
 	binding.settingsOptions.setContent {
 		val isVisible by visible.collectAsState(false)
+		var initialOptions by remember { mutableStateOf<GuideOptionsSnapshot?>(null) }
+
+		LaunchedEffect(isVisible) {
+			if (isVisible) initialOptions = guideOptionsSnapshot()
+		}
 
 		ProvideRouter(
 			routes,
@@ -134,9 +145,10 @@ fun LiveTvGuideFragment.addSettingsOptions(binding: LiveTvGuideBinding): Mutable
 			SettingsDialog(
 				visible = isVisible,
 				onDismissRequest = {
+					val changed = initialOptions?.let { it != guideOptionsSnapshot() } == true
+					initialOptions = null
 					visible.value = false
-					TvManager.forceReload()
-					doLoad()
+					if (changed) reloadGuide()
 				}
 			) {
 				SettingsRouterContent()
@@ -152,6 +164,11 @@ fun LiveTvGuideFragment.addSettingsFilters(binding: LiveTvGuideBinding): Mutable
 
 	binding.settingsFilters.setContent {
 		val isVisible by visible.collectAsState(false)
+		var initialFilters by remember { mutableStateOf<GuideFiltersSnapshot?>(null) }
+
+		LaunchedEffect(isVisible) {
+			if (isVisible) initialFilters = guideFiltersSnapshot()
+		}
 
 		ProvideRouter(
 			routes,
@@ -160,9 +177,10 @@ fun LiveTvGuideFragment.addSettingsFilters(binding: LiveTvGuideBinding): Mutable
 			SettingsDialog(
 				visible = isVisible,
 				onDismissRequest = {
+					val changed = initialFilters?.let { it != guideFiltersSnapshot() } == true
+					initialFilters = null
 					visible.value = false
-					TvManager.forceReload()
-					doLoad()
+					if (changed) reloadGuide()
 				}
 			) {
 				SettingsRouterContent()
@@ -171,4 +189,52 @@ fun LiveTvGuideFragment.addSettingsFilters(binding: LiveTvGuideBinding): Mutable
 	}
 
 	return visible
+}
+
+private data class GuideOptionsSnapshot(
+	val channelOrder: String,
+	val favoritesAtTop: Boolean,
+	val colorCodeGuide: Boolean,
+	val showHDIndicator: Boolean,
+	val showLiveIndicator: Boolean,
+	val showNewIndicator: Boolean,
+	val showPremiereIndicator: Boolean,
+	val showRepeatIndicator: Boolean,
+)
+
+private fun LiveTvGuideFragment.guideOptionsSnapshot(): GuideOptionsSnapshot {
+	val liveTvPreferences by inject<LiveTvPreferences>()
+
+	return GuideOptionsSnapshot(
+		channelOrder = liveTvPreferences[LiveTvPreferences.channelOrder],
+		favoritesAtTop = liveTvPreferences[LiveTvPreferences.favsAtTop],
+		colorCodeGuide = liveTvPreferences[LiveTvPreferences.colorCodeGuide],
+		showHDIndicator = liveTvPreferences[LiveTvPreferences.showHDIndicator],
+		showLiveIndicator = liveTvPreferences[LiveTvPreferences.showLiveIndicator],
+		showNewIndicator = liveTvPreferences[LiveTvPreferences.showNewIndicator],
+		showPremiereIndicator = liveTvPreferences[LiveTvPreferences.showPremiereIndicator],
+		showRepeatIndicator = liveTvPreferences[LiveTvPreferences.showRepeatIndicator],
+	)
+}
+
+private data class GuideFiltersSnapshot(
+	val movies: Boolean,
+	val news: Boolean,
+	val series: Boolean,
+	val kids: Boolean,
+	val sports: Boolean,
+	val premiere: Boolean,
+)
+
+private fun LiveTvGuideFragment.guideFiltersSnapshot(): GuideFiltersSnapshot {
+	val systemPreferences by inject<SystemPreferences>()
+
+	return GuideFiltersSnapshot(
+		movies = systemPreferences[SystemPreferences.liveTvGuideFilterMovies],
+		news = systemPreferences[SystemPreferences.liveTvGuideFilterNews],
+		series = systemPreferences[SystemPreferences.liveTvGuideFilterSeries],
+		kids = systemPreferences[SystemPreferences.liveTvGuideFilterKids],
+		sports = systemPreferences[SystemPreferences.liveTvGuideFilterSports],
+		premiere = systemPreferences[SystemPreferences.liveTvGuideFilterPremiere],
+	)
 }
