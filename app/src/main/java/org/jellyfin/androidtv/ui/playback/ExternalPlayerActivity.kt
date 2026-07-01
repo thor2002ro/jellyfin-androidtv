@@ -26,7 +26,6 @@ import org.jellyfin.sdk.api.client.extensions.playStateApi
 import org.jellyfin.sdk.api.client.extensions.subtitleApi
 import org.jellyfin.sdk.api.client.extensions.videosApi
 import org.jellyfin.sdk.model.api.BaseItemDto
-import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -38,7 +37,6 @@ import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.File
-import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -240,13 +238,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 		}
 
 		// Update data refresh service
-		dataRefreshService.lastPlayedItem = item
-		dataRefreshService.lastPlayback = Instant.now()
-		when (item.type) {
-			BaseItemKind.MOVIE -> dataRefreshService.lastMoviePlayback = Instant.now()
-			BaseItemKind.EPISODE -> dataRefreshService.lastTvPlayback = Instant.now()
-			else -> Unit
-		}
+		dataRefreshService.notifyPlayback(item)
 
 		// Act on
 		if (shouldPlayNext) playNext()
