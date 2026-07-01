@@ -186,7 +186,7 @@ public class MusicFavoritesListFragment extends Fragment implements View.OnKeyLi
     private AudioEventListener mAudioEventListener = new AudioEventListener() {
         @Override
         public void onPlaybackStateChange(@NonNull PlaybackController.PlaybackState newState, @Nullable BaseItemDto currentItem) {
-            Timber.i("Got playback state change event %s for item %s", newState.toString(), currentItem != null ? currentItem.getName() : "<unknown>");
+            Timber.d("Got playback state change event %s for item %s", newState.toString(), currentItem != null ? currentItem.getName() : "<unknown>");
 
             if (newState != PlaybackController.PlaybackState.PLAYING || currentItem == null) {
                 if (mCurrentlyPlayingRow != null) mCurrentlyPlayingRow.updateCurrentTime(-1);
@@ -283,7 +283,7 @@ public class MusicFavoritesListFragment extends Fragment implements View.OnKeyLi
     };
 
     private void play(List<BaseItemDto> items, int ndx, boolean shuffle) {
-        Timber.i("play items: %d, ndx: %d, shuffle: %b", items.size(), ndx, shuffle);
+        Timber.i("Starting playback for %d items, index %d, shuffle: %b", items.size(), ndx, shuffle);
 
         playbackLauncher.getValue().launch(requireContext(), items, 0, false, ndx, shuffle);
     }

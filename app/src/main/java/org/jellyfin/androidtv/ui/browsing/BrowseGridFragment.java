@@ -327,7 +327,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 public void onItemSelected(Presenter.ViewHolder itemViewHolder, Object item,
                                            RowPresenter.ViewHolder rowViewHolder, Row row) {
                     int position = mGridView.getSelectedPosition();
-                    Timber.d("row selected position %s", position);
+                    Timber.v("row selected position %s", position);
                     if (position != mSelectedPosition) {
                         mSelectedPosition = position;
                     }
@@ -445,7 +445,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     private void setAutoCardGridValues() {
         if (mGridPresenter == null) {
-            Timber.e("Invalid presenter, cant calculate CardGridValues!");
+            Timber.e("Invalid presenter, cannot calculate CardGridValues");
             return;
         }
         double cardScaling = Math.max(mCardFocusScale - 1.0, 0.0);
@@ -529,7 +529,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mCardsScreenStride = numCols;
         }
 
-        Timber.d("numCardsScreen <%s>", numCardsScreen);
+        Timber.v("numCardsScreen <%s>", numCardsScreen);
 
         if (mCardHeight != cardHeightInt) {
             mDirty = true;
@@ -636,7 +636,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 mAdapter = new ItemRowAdapter(requireContext(), mRowDef.getTvChannelQuery(), 40, mCardPresenter, null);
                 break;
             case LiveTvProgram:
-                mAdapter = new ItemRowAdapter(requireContext(), mRowDef.getProgramQuery(), mCardPresenter, null);
+                mAdapter = new ItemRowAdapter(requireContext(), mRowDef.getProgramQuery(), mCardPresenter, null, mRowDef.getLiveTvProgramSelectAction());
                 break;
             case LiveTvRecording:
                 mAdapter = new ItemRowAdapter(requireContext(), mRowDef.getRecordingQuery(), chunkSize, mCardPresenter, null);
@@ -879,7 +879,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     private void refreshCurrentItem() {
         if (mCurrentItem == null) return;
-        Timber.i("Refresh item \"%s\"", mCurrentItem.getFullName(requireContext()));
+        Timber.d("Refresh item \"%s\"", mCurrentItem.getFullName(requireContext()));
         ItemRowAdapterHelperKt.refreshItem(mAdapter, api.getValue(), this, mCurrentItem, () -> {
             //Now - if filtered make sure we still pass
             if (mAdapter.getFilters() == null) return null;

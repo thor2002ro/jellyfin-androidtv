@@ -7,9 +7,10 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseItemDtoBaseRowItem
 import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.sdk.model.api.BaseItemDto
 
-class ChannelCardPresenter(
+class ChannelCardPresenter @JvmOverloads constructor(
 	private val cardWidthPx: Int = 0,
 	private val cardHeightPx: Int = 0,
+	private val onLongClick: ((item: Any?, cardView: ChannelCardView) -> Boolean)? = null,
 ) : Presenter() {
 	private companion object {
 		const val DEFAULT_CARD_WIDTH_DP = 215
@@ -19,13 +20,23 @@ class ChannelCardPresenter(
 	class ViewHolder(
 		private val cardView: ChannelCardView,
 	) : Presenter.ViewHolder(cardView) {
-		fun setItem(item: Any?) = cardView.setItem(
-			when (item) {
-				is BaseItemDto -> item
-				is BaseItemDtoBaseRowItem -> item.baseItem
-				else -> null
+		fun bind(item: Any?, onLongClick: ((item: Any?, cardView: ChannelCardView) -> Boolean)?) {
+			cardView.setItem(
+				when (item) {
+					is BaseItemDto -> item
+					is BaseItemDtoBaseRowItem -> item.baseItem
+					else -> null
+				}
+			)
+
+			if (onLongClick == null) {
+				cardView.setOnLongClickListener(null)
+			} else {
+				cardView.setOnLongClickListener { onLongClick(item, cardView) }
 			}
-		)
+		}
+
+		fun clearLongClickListener() = cardView.setOnLongClickListener(null)
 	}
 
 	override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
@@ -46,8 +57,10 @@ class ChannelCardPresenter(
 	override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
 		if (viewHolder !is ViewHolder) return
 
-		viewHolder.setItem(item)
+		viewHolder.bind(item, onLongClick)
 	}
 
-	override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder) = Unit
+	override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder) {
+		if (viewHolder is ViewHolder) viewHolder.clearLongClickListener()
+	}
 }

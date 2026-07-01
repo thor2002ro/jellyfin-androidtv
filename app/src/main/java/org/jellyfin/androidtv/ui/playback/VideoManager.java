@@ -150,7 +150,7 @@ public class VideoManager {
         mExoPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
-                Timber.e("***** Got error from player");
+                Timber.e(error, "Player error");
                 if (mPlaybackControllerNotifiable != null) mPlaybackControllerNotifiable.onError();
                 stopProgressLoop();
             }
@@ -190,7 +190,7 @@ public class VideoManager {
             public void onPositionDiscontinuity(@NonNull Player.PositionInfo oldPosition, @NonNull Player.PositionInfo newPosition, int reason) {
                 // discontinuity for reason internal usually indicates an error, and that the player will reset to its default timestamp
                 if (reason == Player.DISCONTINUITY_REASON_INTERNAL) {
-                    Timber.i("Caught player discontinuity (reason internal) - oldPos: %s newPos: %s", oldPosition.positionMs, newPosition.positionMs);
+                    Timber.w("Caught player discontinuity (reason internal) - oldPos: %s newPos: %s", oldPosition.positionMs, newPosition.positionMs);
                 }
             }
 
@@ -401,7 +401,7 @@ public class VideoManager {
         if (!isInitialized())
             return -1;
 
-        Timber.i("Exo length in seek is: %d", getDuration());
+        Timber.d("Exo length in seek is: %d", getDuration());
         mExoPlayer.seekTo(pos);
         return pos;
     }
@@ -419,7 +419,7 @@ public class VideoManager {
             Timber.w("Video path is null cannot continue");
             return;
         }
-        Timber.i("Video path set to: %s", path);
+        Timber.d("Video path set to: %s", path);
 
         try {
             // Add external subtitles
@@ -436,7 +436,7 @@ public class VideoManager {
                             .setLabel(mediaStream.getDisplayTitle())
                             .setSelectionFlags(getSubtitleSelectionFlags(mediaStream))
                             .build();
-                    Timber.i("Adding subtitle track %s of type %s", subtitleConfiguration.uri, subtitleConfiguration.mimeType);
+                    Timber.d("Adding subtitle track %s of type %s", subtitleConfiguration.uri, subtitleConfiguration.mimeType);
                     subtitleConfigurations.add(subtitleConfiguration);
                 }
             }
@@ -456,7 +456,7 @@ public class VideoManager {
             mExoPlayer.setMediaItem(mediaItem);
             mExoPlayer.prepare();
         } catch (IllegalStateException e) {
-            Timber.e(e, "Unable to set video path.  Probably backing out.");
+            Timber.e(e, "Unable to set video path");
         }
     }
 
@@ -567,7 +567,7 @@ public class VideoManager {
                 boolean isSelected = groupInfo.isTrackSelected(i);
                 Format trackFormat = group.getFormat(i);
 
-                Timber.i("track %s group %s/%s trackType %s label %s mime %s isSelected %s isSupported %s",
+                Timber.v("track %s group %s/%s trackType %s label %s mime %s isSelected %s isSupported %s",
                         trackFormat.id, i + 1, group.length, trackType, trackFormat.label, trackFormat.sampleMimeType, isSelected, isSupported);
 
                 if (trackType != chosenTrackType)
@@ -597,7 +597,7 @@ public class VideoManager {
                     return true;
                 }
 
-                Timber.i("matched exoplayer track %s to mediaStream track %s", trackFormat.id, index);
+                Timber.d("matched exoplayer track %s to mediaStream track %s", trackFormat.id, index);
                 matchedGroup = group;
             }
         }
@@ -610,7 +610,7 @@ public class VideoManager {
             mExoPlayerSelectionParams.setOverrideForType(new TrackSelectionOverride(matchedGroup, 0));
             mExoPlayer.setTrackSelectionParameters(mExoPlayerSelectionParams.build());
         } catch (Exception e) {
-            Timber.w("Error setting track selection");
+            Timber.w(e, "Error setting track selection");
             return false;
         }
         return true;

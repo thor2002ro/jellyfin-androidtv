@@ -20,6 +20,8 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.AuthenticationRepository
 import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.auth.repository.ServerUserRepository
+import org.jellyfin.androidtv.auth.repository.SessionRepository
+import org.jellyfin.androidtv.auth.store.AuthenticationPreferences
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.ProfilePicture
 import org.jellyfin.androidtv.ui.base.Text
@@ -44,6 +46,8 @@ fun SettingsAuthenticationServerScreen(serverId: UUID) {
 	val serverRepository = koinInject<ServerRepository>()
 	val serverUserRepository = koinInject<ServerUserRepository>()
 	val authenticationRepository = koinInject<AuthenticationRepository>()
+	val sessionRepository = koinInject<SessionRepository>()
+	val authenticationPreferences = koinInject<AuthenticationPreferences>()
 
 	LaunchedEffect(serverRepository) { serverRepository.loadStoredServers() }
 
@@ -111,7 +115,13 @@ fun SettingsAuthenticationServerScreen(serverId: UUID) {
 				captionContent = { Text(stringResource(R.string.lbl_remove_users)) },
 				onClick = {
 					lifecycleScope.launch {
-						serverRepository.deleteServer(server?.id ?: serverId)
+						val deletedServerId = server?.id ?: serverId
+						if (serverRepository.deleteServer(deletedServerId)) {
+							authenticationPreferences.clearServer(deletedServerId)
+							if (sessionRepository.currentSession.value?.serverId == deletedServerId) {
+								sessionRepository.destroyCurrentSession()
+							}
+						}
 						router.back()
 					}
 				}

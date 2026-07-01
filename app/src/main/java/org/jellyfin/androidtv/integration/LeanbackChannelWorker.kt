@@ -164,7 +164,7 @@ class LeanbackChannelWorker(
 				myMedia to myMediaChannel,
 			).forEach { (items, channel) ->
 				if (channel == null) {
-					Timber.e("Skipping channel because it was not available")
+					Timber.w("Skipping channel because it was not available")
 				} else {
 					items.map { item ->
 						createPreviewProgram(
@@ -189,7 +189,7 @@ class LeanbackChannelWorker(
 
 			Result.retry()
 		} catch (err: ApiClientException) {
-			Timber.e(err, "SDK error, trying again later")
+			Timber.w(err, "SDK error, trying again later")
 
 			Result.retry()
 		}
