@@ -5,7 +5,12 @@ import androidx.compose.runtime.remember
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.preference.LiveTvPreferences
+import org.jellyfin.androidtv.preference.constant.LiveTvChannelOrder
 import org.jellyfin.androidtv.ui.livetv.TvManager
+import org.jellyfin.androidtv.ui.livetv.sortedByLiveTvChannelOrder
+import org.jellyfin.androidtv.ui.livetv.toLiveTvItemSortBy
+import org.jellyfin.androidtv.ui.livetv.toLiveTvSortOrder
+import org.jellyfin.androidtv.ui.livetv.usesServerFavoriteSorting
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
@@ -16,8 +21,6 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ItemFields
-import org.jellyfin.sdk.model.api.ItemSortBy
-import org.jellyfin.sdk.model.api.SortOrder
 import org.koin.compose.koinInject
 import timber.log.Timber
 
@@ -110,21 +113,27 @@ class LiveTvChannelNavigator(
 
 	private suspend fun loadChannels(): List<BaseItemDto> {
 		TvManager.getAllChannels()
+			?.takeUnless { TvManager.shouldForceReload() }
 			?.takeIf { channels -> channels.isNotEmpty() }
 			?.let { channels -> return channels }
 
-		val sortDatePlayed =
-			liveTvPreferences[LiveTvPreferences.channelOrder] == ItemSortBy.DATE_PLAYED.serialName
+		val channelOrder = LiveTvChannelOrder.fromString(liveTvPreferences[LiveTvPreferences.channelOrder])
+		val favoritesAtTop = liveTvPreferences[LiveTvPreferences.favsAtTop]
 
-		return withContext(Dispatchers.IO) {
+		val channels = withContext(Dispatchers.IO) {
 			api.liveTvApi.getLiveTvChannels(
 				addCurrentProgram = true,
 				fields = setOf(ItemFields.OVERVIEW),
-				enableFavoriteSorting = liveTvPreferences[LiveTvPreferences.favsAtTop],
-				sortBy = if (sortDatePlayed) setOf(ItemSortBy.DATE_PLAYED) else setOf(ItemSortBy.SORT_NAME),
-				sortOrder = if (sortDatePlayed) SortOrder.DESCENDING else SortOrder.ASCENDING,
-			).content.items
+				enableFavoriteSorting = channelOrder.usesServerFavoriteSorting(favoritesAtTop),
+				sortBy = setOf(channelOrder.toLiveTvItemSortBy()),
+				sortOrder = channelOrder.toLiveTvSortOrder(),
+			).content.items.let { channels ->
+				channels.sortedByLiveTvChannelOrder(channelOrder, favoritesAtTop)
+			}
 		}
+		TvManager.setAllChannels(channels)
+
+		return channels
 	}
 }
 

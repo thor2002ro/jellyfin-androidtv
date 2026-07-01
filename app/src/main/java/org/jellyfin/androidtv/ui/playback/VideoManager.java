@@ -108,7 +108,15 @@ public class VideoManager {
         nightModeEnabled = userPreferences.get(UserPreferences.Companion.getAudioNightMode());
 
         boolean assDirectPlay = userPreferences.get(UserPreferences.Companion.getAssDirectPlay());
-        AssHandler assHandler = assDirectPlay ? new AssHandler(AssRenderType.OVERLAY_OPEN_GL, new AssHandlerConfig(10_000, 128, 0)) : null;
+        AssRenderType assRenderType = assDirectPlay ? userPreferences.get(UserPreferences.Companion.getLibassRenderType()).getAssRenderType() : null;
+        AssHandler assHandler = assDirectPlay ? new AssHandler(
+                assRenderType,
+                new AssHandlerConfig(
+                        userPreferences.get(UserPreferences.Companion.getLibassGlyphSize()).getGlyphs(),
+                        userPreferences.get(UserPreferences.Companion.getLibassCacheSize()).getMegabytes(),
+                        userPreferences.get(UserPreferences.Companion.getLibassMaxRenderPixels()).getPixels()
+                )
+        ) : null;
 
         mExoPlayer = configureExoplayerBuilder(activity, assHandler).build();
 
@@ -144,6 +152,9 @@ public class VideoManager {
 
         if (assHandler != null) {
             assHandler.init(mExoPlayer);
+        }
+
+        if (assHandler != null && isLibassOverlayRenderer(assRenderType)) {
             mExoPlayerView.getSubtitleView().addView(new AssSubtitleView(mActivity, assHandler));
         }
 
@@ -218,6 +229,10 @@ public class VideoManager {
         return DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON;
     }
 
+    private static boolean isLibassOverlayRenderer(@Nullable AssRenderType renderType) {
+        return renderType == AssRenderType.OVERLAY_OPEN_GL || renderType == AssRenderType.OVERLAY_CANVAS;
+    }
+
     /**
      * Configures Exoplayer for video playback. Initially we try with core decoders, but allow
      * ExoPlayer to silently fallback to software renderers.
@@ -249,7 +264,7 @@ public class VideoManager {
 
             ExtractorsFactory assExtractorsFactory = AssPlayerKt.withAssMkvSupport(extractorsFactory, assSubtitleParserFactory, assHandler);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, assExtractorsFactory);
-            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(true);
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
             mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory);
             exoPlayerBuilder.setMediaSourceFactory(mediaSourceFactory);
             exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, rendererFactory));
@@ -265,7 +280,7 @@ public class VideoManager {
 
             exoPlayerBuilder.setRenderersFactory(rendererFactory);
             exoPlayerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
-                    .experimentalParseSubtitlesDuringExtraction(true)
+                    .experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()))
                     .setSubtitleParserFactory(defaultSubtitleParserFactory));
         }
 
