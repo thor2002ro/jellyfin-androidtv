@@ -23,6 +23,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class LiveTvPlaybackRecoveryService(
 	private val liveTvPlaybackPolicy: LiveTvPlaybackPolicy,
+	private val networkAvailable: () -> Boolean = { true },
 ) : PlayerService() {
 	private var playbackErrorRecoveryJob: Job? = null
 	private var streamEndRecoveryJob: Job? = null
@@ -275,6 +276,10 @@ class LiveTvPlaybackRecoveryService(
 		successMessage: String,
 		failureMessage: String,
 	): Boolean {
+		val entry = manager.queue.entry.value ?: return false
+		if (!entry.isLiveTvEntry()) return false
+		if (!waitForNetworkAvailable(entry, startMessage)) return false
+
 		Timber.i(startMessage)
 		val reloaded = manager.reloadCurrentMediaStream(position = null, playWhenReady = true)
 		if (reloaded) {
@@ -284,6 +289,30 @@ class LiveTvPlaybackRecoveryService(
 		}
 		return reloaded
 	}
+
+	private suspend fun waitForNetworkAvailable(entry: QueueEntry, reason: String): Boolean {
+		var logged = false
+		while (!isNetworkAvailable()) {
+			val currentEntry = manager.queue.entry.value
+			if (currentEntry !== entry || !currentEntry.isLiveTvEntry() || state.playState.value == PlayState.STOPPED) {
+				return false
+			}
+
+			if (!logged) {
+				Timber.i("Network unavailable; waiting before $reason")
+				logged = true
+			}
+			delay(PLAYBACK_ERROR_RETRY_INTERVAL)
+		}
+
+		return true
+	}
+
+	private fun isNetworkAvailable(): Boolean =
+		runCatching(networkAvailable).getOrElse { error ->
+			Timber.w(error, "Unable to read network state; assuming network is available")
+			true
+		}
 
 	private fun cancelStalledBufferRecovery() {
 		stalledBufferRecoveryJob?.cancel()

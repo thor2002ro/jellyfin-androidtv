@@ -47,6 +47,26 @@ fun BaseItemDto.getDisplayName(context: Context): String {
 		.joinToString(nameSeparator)
 }
 
+fun BaseItemDto.getPlaybackDisplayName(context: Context): String = when (type) {
+	BaseItemKind.EPISODE -> getDisplayName(context)
+	else -> name.orEmpty()
+}
+
+fun BaseItemDto.getHighHeaderTitle(context: Context): String {
+	val displayName = getPlaybackDisplayName(context)
+	val seriesName = seriesName?.takeIf { it.isNotBlank() }
+
+	return if (type == BaseItemKind.EPISODE && seriesName != null) seriesName else displayName
+}
+
+fun BaseItemDto.getLowHeaderTitle(context: Context, overrideTitle: String? = null): String? {
+	val displayName = getPlaybackDisplayName(context)
+	val seriesName = seriesName?.takeIf { it.isNotBlank() }
+
+	return overrideTitle
+		?: if (type == BaseItemKind.EPISODE && seriesName != null) displayName else seriesName
+}
+
 
 fun BaseItemDto?.canPlay() = this != null
 	&& playAccess != PlayAccess.NONE
