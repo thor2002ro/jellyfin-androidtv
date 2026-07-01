@@ -9,5 +9,5 @@ interface LiveTvGuide {
 	fun getCurrentLocalStartDate(): LocalDateTime
 	fun showProgramOptions()
 	fun setSelectedProgram(programView: RelativeLayout)
-	fun refreshFavorite(channelId: UUID)
+	fun refreshFavorite(channelId: UUID, isFavorite: Boolean)
 }

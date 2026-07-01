@@ -415,7 +415,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                         break;
 
                     case LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID:
-                        navigationRepository.getValue().navigate(Destinations.INSTANCE.getLiveTvChannels());
+                        navigationRepository.getValue().navigate(Destinations.INSTANCE.liveTvChannels(getString(R.string.channels)));
                         break;
 
                     case SERIES:

@@ -267,13 +267,10 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
-			var assDirectPlay by rememberPreference(userPreferences, UserPreferences.assDirectPlay)
-
 			ListButton(
-				headingContent = { Text(stringResource(R.string.preference_enable_ass)) },
-				captionContent = { Text(stringResource(R.string.preference_enable_ass_description)) },
-				trailingContent = { Checkbox(checked = assDirectPlay) },
-				onClick = { assDirectPlay = !assDirectPlay }
+				headingContent = { Text(stringResource(R.string.preference_libass_options)) },
+				captionContent = { Text(stringResource(R.string.preference_libass_options_description)) },
+				onClick = { router.push(Routes.PLAYBACK_LIBASS) }
 			)
 		}
 
