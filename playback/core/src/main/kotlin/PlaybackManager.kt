@@ -50,6 +50,10 @@ class PlaybackManager internal constructor(
 		backendService.addListener(listener)
 	}
 
+	fun removeBackendEventListener(listener: PlayerBackendEventListener) {
+		backendService.removeListener(listener)
+	}
+
 	fun <T : PlayerService> getService(kclass: KClass<T>): T? {
 		for (service in services) {
 			@Suppress("UNCHECKED_CAST")
