@@ -16,7 +16,16 @@ class PlayerSurfaceView @JvmOverloads constructor(
 	defStyleAttr: Int = 0,
 	defStyleRes: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr, defStyleRes) {
-	lateinit var playbackManager: PlaybackManager
+	private var _playbackManager: PlaybackManager? = null
+	var playbackManager: PlaybackManager
+		get() = requireNotNull(_playbackManager) { "PlaybackManager must be set before using PlayerSurfaceView" }
+		set(value) {
+			if (_playbackManager == value) return
+			_playbackManager = value
+			if (isAttachedToWindow && !isInEditMode) {
+				value.backendService.attachSurfaceView(this)
+			}
+		}
 
 	val surface = SurfaceView(context, attrs).apply {
 		addView(this, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
@@ -26,8 +35,7 @@ class PlayerSurfaceView @JvmOverloads constructor(
 		super.onAttachedToWindow()
 
 		if (!isInEditMode) {
-			playbackManager.backendService.attachSurfaceView(this)
+			_playbackManager?.backendService?.attachSurfaceView(this)
 		}
 	}
 }
-

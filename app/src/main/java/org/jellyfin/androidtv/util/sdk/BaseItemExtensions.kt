@@ -55,7 +55,33 @@ fun BaseItemDto?.canPlay() = this != null
 	&& type != BaseItemKind.PERSON
 	&& (isFolder != true || childCount?.takeIf { it > 0 } != null)
 
-fun BaseItemDto.isLiveTv() = type == BaseItemKind.PROGRAM || type == BaseItemKind.LIVE_TV_CHANNEL
+fun BaseItemDto.isLiveTv() = when (type) {
+	BaseItemKind.PROGRAM,
+	BaseItemKind.TV_PROGRAM,
+	BaseItemKind.LIVE_TV_PROGRAM,
+	BaseItemKind.TV_CHANNEL,
+	BaseItemKind.LIVE_TV_CHANNEL -> true
+
+	else -> false
+}
+
+fun BaseItemDto.liveTvChannelId() = when (type) {
+	BaseItemKind.TV_CHANNEL,
+	BaseItemKind.LIVE_TV_CHANNEL -> id
+	BaseItemKind.PROGRAM,
+	BaseItemKind.TV_PROGRAM,
+	BaseItemKind.LIVE_TV_PROGRAM -> parentId ?: channelId
+
+	else -> null
+}
+
+fun BaseItemDto.trackSelectionIds() = listOfNotNull(
+	liveTvChannelId(),
+	currentProgram?.parentId,
+	currentProgram?.channelId,
+	id,
+).distinct()
+
 fun BaseItemDto.isNew() = isSeries == true && isNews != true && isRepeat != true
 
 fun BaseItemDto.getProgramSubText(context: Context) = buildString {
@@ -151,7 +177,7 @@ fun BaseItemDto.buildChapterItems(): List<ChapterItemInfo> {
 			itemId = id,
 			name = dto.name,
 			startPositionTicks = dto.startPositionTicks,
-			image = images[i].takeIf { it.tag.isNotEmpty() },
+			image = images.getOrNull(i)?.takeIf { it.tag.isNotEmpty() },
 		)
 	}.orEmpty()
 }

@@ -10,6 +10,7 @@ data class PlayerTrack(
 	val language: String?,
 	val codec: String?,
 	val isSelected: Boolean,
+	val streamIndex: Int? = null,
 	// Internal indices for backend use
 	val groupIndex: Int = 0,
 	val trackIndex: Int = 0,

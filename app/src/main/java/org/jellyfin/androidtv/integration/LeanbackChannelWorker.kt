@@ -51,6 +51,7 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import timber.log.Timber
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.time.Duration
@@ -326,6 +327,9 @@ class LeanbackChannelWorker(
 	): ContentValues {
 		val imageUri = item.getPosterArtImageUrl(preferParentThumb)
 		val seasonString = item.parentIndexNumber?.toString().orEmpty()
+		val releaseDate = item.premiereDate
+			?.let { DateTimeFormatter.ISO_DATE.format(it) }
+			?: DateTimeFormatter.ISO_DATE.format(LocalDate.now(ZoneId.systemDefault()))
 
 		val episodeString = when {
 			item.indexNumberEnd != null && item.indexNumber != null ->
@@ -349,10 +353,7 @@ class LeanbackChannelWorker(
 			.setTitle(item.seriesName ?: item.name)
 			.setEpisodeTitle(if (item.type == BaseItemKind.EPISODE) item.name else null)
 			.setDescription(item.overview?.stripHtml())
-			.setReleaseDate(
-				if (item.premiereDate != null) DateTimeFormatter.ISO_DATE.format(item.premiereDate)
-				else null
-			)
+			.setReleaseDate(releaseDate)
 			.setPosterArtUri(imageUri)
 			.setPosterArtAspectRatio(
 				when (item.type) {

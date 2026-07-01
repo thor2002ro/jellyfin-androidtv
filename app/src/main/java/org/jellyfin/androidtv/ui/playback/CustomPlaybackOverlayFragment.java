@@ -12,6 +12,7 @@ import android.os.Handler;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.animation.Animation;
@@ -61,6 +62,7 @@ import org.jellyfin.androidtv.ui.livetv.TvManager;
 import org.jellyfin.androidtv.ui.navigation.Destinations;
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
 import org.jellyfin.androidtv.ui.playback.overlay.LeanbackOverlayFragment;
+import org.jellyfin.androidtv.ui.playback.overlay.action.StreamStatusBuilder;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
 import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter;
 import org.jellyfin.androidtv.ui.presentation.CircularObjectAdapter;
@@ -78,9 +80,14 @@ import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse;
 import org.jellyfin.androidtv.util.apiclient.Response;
 import org.jellyfin.androidtv.util.sdk.BaseItemExtensionsKt;
+import org.jellyfin.sdk.model.api.MediaSourceInfo;
+import org.jellyfin.sdk.model.api.MediaStream;
+import org.jellyfin.sdk.model.api.MediaStreamType;
+import org.jellyfin.sdk.model.api.PlayMethod;
 import org.jellyfin.sdk.model.api.BaseItemDto;
 import org.jellyfin.sdk.model.api.BaseItemKind;
 import org.jellyfin.sdk.model.api.ChapterInfo;
+import org.jellyfin.sdk.model.api.TranscodingInfo;
 import org.jetbrains.annotations.NotNull;
 
 import java.text.DateFormat;
@@ -88,6 +95,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import kotlin.Lazy;
 import timber.log.Timber;
@@ -107,6 +116,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     private static final int OVERLAY_GUIDE_TEXT_DEBOUNCE_MS = 200;
     private static final long TICKS_PER_MS = 10_000;
+    private static final long TRANSCODING_STATUS_REFRESH_MS = 3_000;
 
     //Live guide items
     private static final int PAGE_SIZE = 75;
@@ -139,9 +149,19 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private boolean mFadeEnabled = false;
     private boolean mIsVisible = false;
     private boolean mPopupPanelVisible = false;
+    private boolean mStreamStatusOverlayVisible = false;
     private boolean navigating = false;
     private LocalDateTime mProgramEndTime = null;
     private boolean mPendingSeekConfirmation = false;
+    private boolean mCenterShortcutArmed = false;
+    private boolean mCenterLongPressHandled = false;
+    private Integer mSkipOverlayKeyCode = null;
+    private Integer mHeldSeekKeyCode = null;
+    private final ExecutorService mTranscodingStatusExecutor = Executors.newSingleThreadExecutor();
+    private volatile boolean mTranscodingStatusFetchInFlight = false;
+    private long mLastTranscodingStatusFetchMs = 0;
+    private String mTranscodingStatusKey = null;
+    private TranscodingInfo mTranscodingInfo = null;
 
     protected LeanbackOverlayFragment leanbackOverlayFragment;
 
@@ -155,6 +175,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private final Lazy<ImageHelper> imageHelper = inject(ImageHelper.class);
     private final Lazy<UserPreferences> userPreferences = inject(UserPreferences.class);
     private final Lazy<UserSettingPreferences> userSettingPreferences = inject(UserSettingPreferences.class);
+    private final Lazy<TranscodingStatusRepository> transcodingStatusRepository = inject(TranscodingStatusRepository.class);
 
     private final PlaybackOverlayFragmentHelper helper = new PlaybackOverlayFragmentHelper(this);
 
@@ -248,6 +269,11 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             Timber.d("Got touch event.");
             return false;
         });
+        binding.skipOverlay.setOnSkipClickListener(() -> {
+            consumeSkipOverlay();
+        });
+        binding.skipOverlay.setOnKeyListener((v, keyCode, event) -> handleSkipOverlayKey(keyCode, event));
+        updateSkipOverlayHitTarget();
 
         return binding.getRoot();
     }
@@ -278,6 +304,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             mProgramInfoUpdateTask = null;
         }
         binding = null;
+        mStreamStatusOverlayVisible = false;
         // To fix race condition in hide timer
         mIsVisible = false;
     }
@@ -348,7 +375,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         leanbackOverlayFragment.updatePlayState();
 
         // Set initial skip overlay state
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     @Override
@@ -442,7 +469,9 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private OnBackPressedCallback backPressedCallback = new OnBackPressedCallback(true) {
         @Override
         public void handleOnBackPressed() {
-            if (mPopupPanelVisible) {
+            if (mStreamStatusOverlayVisible) {
+                setStreamStatusOverlayVisible(false);
+            } else if (mPopupPanelVisible) {
                 // back should just hide the popup panel
                 hidePopupPanel();
                 leanbackOverlayFragment.hideOverlay();
@@ -459,26 +488,50 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     @Override
     public boolean onKey(View v, int keyCode, KeyEvent event) {
+        if (handleSkipOverlayKey(keyCode, event)) return true;
+        if (handleDpadSeekKey(keyCode, event)) return true;
+
         if (event.isLongPress()) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                if (mSelectedProgramView instanceof ProgramGridCell)
+            if (isCenterKey(keyCode)) {
+                if (mSelectedProgramView instanceof ProgramGridCell) {
                     showProgramOptions();
-                else if (mSelectedProgramView instanceof GuideChannelHeader)
+                    return true;
+                } else if (mSelectedProgramView instanceof GuideChannelHeader) {
                     CustomPlaybackOverlayFragmentHelperKt.toggleFavorite(this);
-                return true;
+                    return true;
+                }
+
+                return mCenterShortcutArmed;
             }
         } else if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                event.startTracking();
-                return true;
+            if (isCenterKey(keyCode)) {
+                if (shouldTrackGuideCenterKey()) {
+                    event.startTracking();
+                    return true;
+                }
+
+                if (canUsePlaybackCenterShortcut()) {
+                    mCenterShortcutArmed = true;
+                    mCenterLongPressHandled = false;
+                    mHandler.removeCallbacks(mCenterLongPressTask);
+                    mHandler.postDelayed(mCenterLongPressTask, ViewConfiguration.getLongPressTimeout());
+                    return true;
+                }
+
+                return false;
             }
             if (mGuideVisible && KeyEventExtensionsKt.isPageKey(keyCode)) {
                 return true;
             }
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
-            if (keyListener.onKey(v, keyCode, event)) return true;
+            if (isCenterKey(keyCode)) {
+                if (mCenterShortcutArmed) {
+                    mHandler.removeCallbacks(mCenterLongPressTask);
+                    if (!mCenterLongPressHandled) handleCenterPlaybackShortcut();
+                    clearCenterShortcut();
+                    return true;
+                }
 
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if ((event.getFlags() & KeyEvent.FLAG_CANCELED_LONG_PRESS) == 0) {
                     if (mGuideVisible && mSelectedProgramView instanceof ProgramGridCell && mSelectedProgram != null && mSelectedProgram.getChannelId() != null) {
                         if (mSelectedProgram.getStartDate().isBefore(LocalDateTime.now()))
@@ -493,6 +546,8 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 }
                 return false;
             }
+
+            if (keyListener.onKey(v, keyCode, event)) return true;
 
             if (handleGuideChannelPageKey(keyCode)) return true;
 
@@ -519,6 +574,217 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         }
 
         return false;
+    }
+
+    private boolean isCenterKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_A;
+    }
+
+    private boolean isDpadSeekKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
+    }
+
+    public void updateSkipOverlayAvailability() {
+        if (binding == null) return;
+
+        binding.skipOverlay.setSkipUiEnabled(!mGuideVisible && !mPopupPanelVisible);
+        binding.skipOverlay.setPlayerUiVisible(mIsVisible);
+        binding.skipOverlay.bringToFront();
+        updateSkipOverlayHitTarget();
+    }
+
+    private void updateSkipOverlayHitTarget() {
+        if (binding == null) return;
+
+        boolean visible = binding.skipOverlay.getVisible();
+        boolean autoSelected = isSkipOverlayAutoSelected();
+
+        binding.skipOverlay.setClickable(visible);
+        binding.skipOverlay.setFocusable(autoSelected);
+        binding.skipOverlay.setFocusableInTouchMode(autoSelected);
+
+        if (autoSelected && !binding.skipOverlay.hasFocus()) {
+            binding.skipOverlay.requestFocus();
+        }
+    }
+
+    public boolean isSkipOverlayAutoSelected() {
+        return binding != null &&
+                binding.skipOverlay.getVisible() &&
+                !mIsVisible &&
+                !mGuideVisible &&
+                !mPopupPanelVisible &&
+                !mQuickChannelChangerVisible &&
+                !mPendingSeekConfirmation;
+    }
+
+    private boolean handleSkipOverlayKey(int keyCode, KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_UP && mSkipOverlayKeyCode != null && mSkipOverlayKeyCode == keyCode) {
+            mSkipOverlayKeyCode = null;
+            return true;
+        }
+
+        if (binding == null || !binding.skipOverlay.getVisible()) return false;
+
+        boolean isDismissKey = keyCode == KeyEvent.KEYCODE_BACK ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_B ||
+                keyCode == KeyEvent.KEYCODE_ESCAPE;
+        boolean isConfirmKey = isCenterKey(keyCode);
+
+        if (!isDismissKey && !isConfirmKey) return false;
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+        mSkipOverlayKeyCode = keyCode;
+
+        if (isDismissKey) {
+            clearSkipOverlay();
+            return true;
+        }
+
+        consumeSkipOverlay();
+        return true;
+    }
+
+    private boolean handleDpadSeekKey(int keyCode, KeyEvent event) {
+        if (!isDpadSeekKey(keyCode)) return false;
+
+        if (event.getAction() == KeyEvent.ACTION_UP && mHeldSeekKeyCode != null && mHeldSeekKeyCode == keyCode) {
+            mHeldSeekKeyCode = null;
+            return true;
+        }
+
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+
+        PlaybackController playbackController = playbackControllerContainer.getValue().getPlaybackController();
+        if (playbackController == null || playbackController.isLiveTv()) return false;
+        if (mGuideVisible || mPopupPanelVisible || mPendingSeekConfirmation && !userPreferences.getValue().get(UserPreferences.Companion.getSeekConfirmationRequired())) {
+            return false;
+        }
+
+		boolean continuingHeldSeek = mHeldSeekKeyCode != null && mHeldSeekKeyCode == keyCode;
+		if (!continuingHeldSeek && mIsVisible && !isSeekBarFocused()) return false;
+
+		mHeldSeekKeyCode = keyCode;
+		boolean keepPlayerUiHidden = !mIsVisible;
+		if (keepPlayerUiHidden) {
+			leanbackOverlayFragment.setShouldShowOverlay(false);
+			leanbackOverlayFragment.hideOverlay();
+			hide();
+		}
+
+        boolean forward = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
+        boolean seekConfirmationRequired = userPreferences.getValue().get(UserPreferences.Companion.getSeekConfirmationRequired());
+        if (keepPlayerUiHidden) {
+            if (forward) {
+                playbackController.fastForward();
+            } else {
+                playbackController.rewind();
+            }
+        } else if (seekConfirmationRequired) {
+            if (!mPendingSeekConfirmation) {
+                enterSeekConfirmationMode();
+            }
+
+            long skipAmount = userSettingPreferences.getValue().get(
+                    forward
+                            ? UserSettingPreferences.Companion.getSkipForwardLength()
+                            : UserSettingPreferences.Companion.getSkipBackLength()
+            ).longValue();
+            leanbackOverlayFragment.getPlayerGlue().previewSeek(forward ? skipAmount : -skipAmount);
+        } else if (forward) {
+            leanbackOverlayFragment.getPlayerGlue().fastForward();
+        } else {
+            leanbackOverlayFragment.getPlayerGlue().rewind();
+        }
+
+		if (keepPlayerUiHidden) {
+			leanbackOverlayFragment.setShouldShowOverlay(false);
+			leanbackOverlayFragment.hideOverlay();
+			hide();
+		} else {
+			setFadingEnabled(true);
+		}
+		return true;
+	}
+
+    public boolean consumeSkipOverlay() {
+        if (binding == null || !binding.skipOverlay.getVisible()) return false;
+
+        Long targetPosition = binding.skipOverlay.getTargetPositionMs();
+        if (targetPosition == null) {
+            clearSkipOverlay();
+            return true;
+        }
+
+        PlaybackController playbackController = playbackControllerContainer.getValue().getPlaybackController();
+        if (playbackController == null) return true;
+
+        playbackController.seek(targetPosition, true);
+        if (leanbackOverlayFragment != null) leanbackOverlayFragment.setShouldShowOverlay(false);
+        clearSkipOverlay();
+        return true;
+    }
+
+    public boolean consumeAutoSelectedSkipOverlay() {
+        return isSkipOverlayAutoSelected() && consumeSkipOverlay();
+    }
+
+    private boolean canUsePlaybackCenterShortcut() {
+        if (binding == null) return false;
+        if (mGuideVisible || mPopupPanelVisible || mQuickChannelChangerVisible || mPendingSeekConfirmation) return false;
+        if (binding.skipOverlay.getVisible()) return false;
+        return !isPlayerUiVisible();
+    }
+
+    private boolean shouldTrackGuideCenterKey() {
+        return mGuideVisible ||
+                mSelectedProgramView instanceof ProgramGridCell ||
+                mSelectedProgramView instanceof GuideChannelHeader;
+    }
+
+    private boolean isPlayerUiVisible() {
+        return mIsVisible;
+    }
+
+    private boolean showStreamStatusOverlayShortcut() {
+        if (!canUsePlaybackCenterShortcut()) return false;
+        toggleStreamStatusOverlay();
+        return true;
+    }
+
+    private final Runnable mCenterLongPressTask = () -> {
+        if (!mCenterShortcutArmed || !canUsePlaybackCenterShortcut()) return;
+
+        mCenterLongPressHandled = true;
+        toggleStreamStatusOverlay();
+    };
+
+    private void clearCenterShortcut() {
+        mHandler.removeCallbacks(mCenterLongPressTask);
+        mCenterShortcutArmed = false;
+        mCenterLongPressHandled = false;
+    }
+
+    private boolean handleCenterPlaybackShortcut() {
+        if (!canUsePlaybackCenterShortcut()) return false;
+
+        PlaybackController playbackController = playbackControllerContainer.getValue().getPlaybackController();
+        if (playbackController == null) return false;
+
+        playbackController.playPause();
+        if (playbackController.isPaused()) {
+            show();
+            setFadingEnabled(false);
+        }
+        return true;
+    }
+
+    private boolean isPlaybackPaused() {
+        PlaybackController playbackController = playbackControllerContainer.getValue().getPlaybackController();
+        return playbackController != null && playbackController.isPaused();
     }
 
     private boolean handleGuideChannelPageKey(int keyCode) {
@@ -553,28 +819,15 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private View.OnKeyListener keyListener = new View.OnKeyListener() {
         @Override
         public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (handleSkipOverlayKey(keyCode, event)) return true;
+            if (handleDpadSeekKey(keyCode, event)) return true;
+
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (!mGuideVisible && !mPopupPanelVisible)
                     leanbackOverlayFragment.setShouldShowOverlay(true);
                 else {
                     leanbackOverlayFragment.setShouldShowOverlay(false);
                     leanbackOverlayFragment.hideOverlay();
-                }
-
-                if (binding.skipOverlay.getVisible()) {
-                    // Hide without doing anything
-                    if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_ESCAPE) {
-                        clearSkipOverlay();
-                        return true;
-                    }
-
-                    // Hide with seek
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                        playbackControllerContainer.getValue().getPlaybackController().seek(binding.skipOverlay.getTargetPositionMs(), true);
-                        leanbackOverlayFragment.setShouldShowOverlay(false);
-                        if (binding != null) clearSkipOverlay();
-                        return true;
-                    }
                 }
 
                 if (mPendingSeekConfirmation) {
@@ -597,7 +850,10 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 }
 
                 if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_BUTTON_B || keyCode == KeyEvent.KEYCODE_ESCAPE) {
-                    if (mPopupPanelVisible) {
+                    if (mStreamStatusOverlayVisible) {
+                        setStreamStatusOverlayVisible(false);
+                        return true;
+                    } else if (mPopupPanelVisible) {
                         // back should just hide the popup panel
                         hidePopupPanel();
                         leanbackOverlayFragment.hideOverlay();
@@ -635,7 +891,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                     }
                 }
 
-                if (playbackControllerContainer.getValue().getPlaybackController().isLiveTv() && keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_BUTTON_Y) {
+                if (playbackControllerContainer.getValue().getPlaybackController().isLiveTv() && (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_BUTTON_Y)) {
                     showGuide();
                     return true;
                 }
@@ -729,14 +985,14 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                     // Using the remote keypress that brings up the overlay fragment as a trigger. This check will go fetch the currently playing item
                     // and get its end time, then update the overlay fragment with the new end time.
                     BaseItemDto current = playbackControllerContainer.getValue().getPlaybackController().getCurrentlyPlayingItem();
-                    if (current.getCurrentProgram() != null) {
+                    if (current != null && current.getCurrentProgram() != null) {
                         mProgramEndTime = current.getCurrentProgram().getEndDate();
                         LocalDateTime nowTime = LocalDateTime.now();
 
                         if (nowTime.isAfter(mProgramEndTime)) {
                             UUID channelID = current.getCurrentProgram().getChannelId();
                             BaseItemDto myChannel = TvManager.getChannelByID(channelID);
-                            if (myChannel == null) return true;
+                            if (myChannel == null) return false;
 
                             final Lazy<PlaybackHelper> playbackHelper = inject(PlaybackHelper.class);
                             playbackHelper.getValue().getItemsToPlay(requireContext(), myChannel, false, false, new Response<List<BaseItemDto>>() {
@@ -750,7 +1006,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                         }
                     }
 
-                    return true;
+                    return false;
                 }
             }
 
@@ -814,8 +1070,14 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     }
 
     private void startFadeTimer() {
-        mFadeEnabled = true;
         mHandler.removeCallbacks(mHideTask);
+        if (isPlaybackPaused()) {
+            mFadeEnabled = false;
+            if (binding != null && !mGuideVisible && !mPopupPanelVisible) show();
+            return;
+        }
+
+        mFadeEnabled = true;
         mHandler.postDelayed(mHideTask, 6000);
         WindowCompat.setDecorFitsSystemWindows(requireActivity().getWindow(), false);
         WindowCompat.getInsetsController(requireActivity().getWindow(), requireActivity().getWindow().getDecorView()).hide(WindowInsetsCompat.Type.systemBars());
@@ -882,7 +1144,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
         binding.topPanel.startAnimation(slideDown);
         mIsVisible = true;
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     public void hide() {
@@ -891,7 +1153,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
         mIsVisible = false;
         binding.topPanel.startAnimation(fadeOut);
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
 
         if (leanbackOverlayFragment != null && leanbackOverlayFragment.getPlayerGlue() != null) {
             leanbackOverlayFragment.getPlayerGlue().hideThumbnailPreview();
@@ -902,7 +1164,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         setFadingEnabled(false);
         binding.popupArea.clearAnimation();
         binding.popupArea.startAnimation(showPopup);
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     private void hidePopupPanel() {
@@ -915,10 +1177,11 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         binding.popupArea.startAnimation(hidePopup);
         mPopupPanelVisible = false;
         mQuickChannelChangerVisible = false;
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     public void showGuide() {
+        setStreamStatusOverlayVisible(false);
         hide();
         leanbackOverlayFragment.setShouldShowOverlay(false);
         leanbackOverlayFragment.hideOverlay();
@@ -936,14 +1199,14 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         if (needLoad) {
             loadGuide();
         }
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     private void hideGuide() {
         tvGuideBinding.getRoot().setVisibility(View.GONE);
         playbackControllerContainer.getValue().getPlaybackController().mVideoManager.setVideoFullSize(true);
         mGuideVisible = false;
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     private void loadGuide() {
@@ -992,7 +1255,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 mDisplayProgramsTask.execute(mCurrentDisplayChannelStartNdx, mCurrentDisplayChannelEndNdx);
             }
         });
-        binding.skipOverlay.setSkipUiEnabled(!mIsVisible && !mGuideVisible && !mPopupPanelVisible);
+        updateSkipOverlayAvailability();
     }
 
     DisplayProgramsTask mDisplayProgramsTask;
@@ -1454,6 +1717,8 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     public void setCurrentTime(long time) {
         binding.skipOverlay.setCurrentPositionMs(time);
+        updateSkipOverlayHitTarget();
+        updatePlaybackDebugInfo();
         if (leanbackOverlayFragment != null)
             leanbackOverlayFragment.updateCurrentPosition();
     }
@@ -1467,6 +1732,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             startFadeTimer();
         } else {
             mHandler.removeCallbacks(mHideTask);
+            if (binding != null && isPlaybackPaused() && !mGuideVisible && !mPopupPanelVisible) show();
         }
     }
 
@@ -1515,6 +1781,8 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 binding.itemTitle.setVisibility(View.VISIBLE);
             }
 
+            updatePlaybackDebugInfo();
+
             if (playbackControllerContainer.getValue().getPlaybackController().isLiveTv()) {
                 prepareChannelAdapter();
             } else {
@@ -1523,8 +1791,210 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         }
     }
 
+    private void updatePlaybackDebugInfo() {
+        PlaybackController playbackController = playbackControllerContainer.getValue().getPlaybackController();
+        if (playbackController == null || playbackController.getCurrentStreamInfo() == null) {
+            binding.playbackDebugInfo.setVisibility(View.GONE);
+            updateStreamStatusOverlay(playbackController);
+            return;
+        }
+
+        String debugInfo = buildPlaybackDebugInfo(playbackController);
+        if (debugInfo == null || debugInfo.isEmpty()) {
+            binding.playbackDebugInfo.setVisibility(View.GONE);
+            updateStreamStatusOverlay(playbackController);
+            return;
+        }
+
+        binding.playbackDebugInfo.setText(debugInfo);
+        binding.playbackDebugInfo.setVisibility(View.VISIBLE);
+        updateStreamStatusOverlay(playbackController);
+    }
+
+    public void toggleStreamStatusOverlay() {
+        setStreamStatusOverlayVisible(!mStreamStatusOverlayVisible);
+    }
+
+    private void setStreamStatusOverlayVisible(boolean visible) {
+        mStreamStatusOverlayVisible = visible;
+        if (binding == null) return;
+
+        binding.streamStatusOverlay.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible) {
+            updateStreamStatusOverlay(playbackControllerContainer.getValue().getPlaybackController());
+            startFadeTimer();
+        }
+    }
+
+    private void updateStreamStatusOverlay(PlaybackController playbackController) {
+        if (binding == null || !mStreamStatusOverlayVisible) return;
+
+        if (playbackController == null || playbackController.getCurrentStreamInfo() == null) {
+            binding.streamStatusText.setText(R.string.playback_info);
+            return;
+        }
+
+        refreshTranscodingStatus(playbackController);
+        binding.streamStatusText.setText(StreamStatusBuilder.build(playbackController, mTranscodingInfo));
+    }
+
+    private void refreshTranscodingStatus(PlaybackController playbackController) {
+        if (playbackController == null || playbackController.getCurrentStreamInfo() == null) return;
+
+        if (playbackController.getCurrentStreamInfo().getPlayMethod() != PlayMethod.TRANSCODE) {
+            mTranscodingStatusKey = null;
+            mTranscodingInfo = null;
+            return;
+        }
+
+        String key = getTranscodingStatusKey(playbackController);
+        if (key == null) return;
+        if (!key.equals(mTranscodingStatusKey)) {
+            mTranscodingStatusKey = key;
+            mTranscodingInfo = null;
+            mLastTranscodingStatusFetchMs = 0;
+        }
+
+        long now = System.currentTimeMillis();
+        if (mTranscodingStatusFetchInFlight || now - mLastTranscodingStatusFetchMs < TRANSCODING_STATUS_REFRESH_MS) {
+            return;
+        }
+
+        mLastTranscodingStatusFetchMs = now;
+        mTranscodingStatusFetchInFlight = true;
+
+        String playSessionId = playbackController.getCurrentStreamInfo().getPlaySessionId();
+        BaseItemDto item = playbackController.getCurrentlyPlayingItem();
+        UUID itemId = item == null ? null : item.getId();
+        String mediaSourceId = playbackController.getCurrentStreamInfo().getMediaSourceId();
+
+        mTranscodingStatusExecutor.execute(() -> {
+            TranscodingInfo transcodingInfo = null;
+            try {
+                transcodingInfo = transcodingStatusRepository.getValue().getTranscodingInfoBlocking(
+                        playSessionId,
+                        itemId,
+                        mediaSourceId
+                );
+            } catch (Exception err) {
+                Timber.w(err, "Unable to fetch transcoding status");
+            }
+
+            TranscodingInfo finalTranscodingInfo = transcodingInfo;
+            if (!isAdded()) {
+                mTranscodingStatusFetchInFlight = false;
+                return;
+            }
+
+            requireActivity().runOnUiThread(() -> {
+                mTranscodingStatusFetchInFlight = false;
+                if (binding == null || !key.equals(mTranscodingStatusKey)) return;
+
+                mTranscodingInfo = finalTranscodingInfo;
+                updateStreamStatusOverlay(playbackControllerContainer.getValue().getPlaybackController());
+            });
+        });
+    }
+
+    private String getTranscodingStatusKey(PlaybackController playbackController) {
+        if (playbackController == null || playbackController.getCurrentStreamInfo() == null) return null;
+
+        BaseItemDto item = playbackController.getCurrentlyPlayingItem();
+        String playSessionId = playbackController.getCurrentStreamInfo().getPlaySessionId();
+        String mediaSourceId = playbackController.getCurrentStreamInfo().getMediaSourceId();
+        UUID itemId = item == null ? null : item.getId();
+
+        return String.valueOf(playSessionId) + "|" + String.valueOf(itemId) + "|" + String.valueOf(mediaSourceId);
+    }
+
+    private String buildPlaybackDebugInfo(PlaybackController playbackController) {
+        MediaSourceInfo mediaSource = playbackController.getCurrentMediaSource();
+        if (mediaSource == null && playbackController.getCurrentStreamInfo() != null) {
+            mediaSource = playbackController.getCurrentStreamInfo().getMediaSource();
+        }
+
+        MediaStream videoStream = getStream(mediaSource, MediaStreamType.VIDEO, -1);
+        MediaStream audioStream = getStream(mediaSource, MediaStreamType.AUDIO, playbackController.getAudioStreamIndex());
+        MediaStream subtitleStream = getStream(mediaSource, MediaStreamType.SUBTITLE, playbackController.getSubtitleStreamIndex());
+
+        StringBuilder info = new StringBuilder();
+        appendPart(info, playMethodLabel(playbackController.getCurrentStreamInfo().getPlayMethod()));
+        appendPart(info, videoSummary(videoStream));
+        appendPart(info, audioSummary(audioStream));
+        appendPart(info, subtitleSummary(subtitleStream, playbackController.isBurningSubtitlesForStatus()));
+
+        return info.toString();
+    }
+
+    private MediaStream getStream(MediaSourceInfo mediaSource, MediaStreamType type, int index) {
+        if (mediaSource == null || mediaSource.getMediaStreams() == null) return null;
+
+        for (MediaStream stream : mediaSource.getMediaStreams()) {
+            if (stream.getType() == type && stream.getIndex() == index) return stream;
+        }
+
+        for (MediaStream stream : mediaSource.getMediaStreams()) {
+            if (stream.getType() == type) return stream;
+        }
+
+        return null;
+    }
+
+    private void appendPart(StringBuilder builder, String value) {
+        if (value == null || value.isEmpty()) return;
+        if (builder.length() > 0) builder.append(" • ");
+        builder.append(value);
+    }
+
+    private String playMethodLabel(PlayMethod playMethod) {
+        if (playMethod == PlayMethod.DIRECT_PLAY) return "Direct play";
+        if (playMethod == PlayMethod.DIRECT_STREAM) return "Direct stream";
+        if (playMethod == PlayMethod.TRANSCODE) return "Transcoding";
+        return playMethod == null ? "Unknown" : playMethod.toString();
+    }
+
+    private String videoSummary(MediaStream stream) {
+        if (stream == null) return null;
+
+        StringBuilder summary = new StringBuilder();
+		if (stream.getWidth() != null && stream.getHeight() != null) {
+			summary.append(stream.getWidth()).append("x").append(stream.getHeight());
+		}
+		appendInline(summary, stream.getCodec() == null ? null : stream.getCodec().toUpperCase());
+		appendInline(summary, stream.getVideoRange() == null ? null : stream.getVideoRange().toString());
+		return summary.toString();
+	}
+
+    private String audioSummary(MediaStream stream) {
+        if (stream == null) return "Audio: unknown";
+
+        StringBuilder summary = new StringBuilder("Audio:");
+        appendInline(summary, stream.getCodec() == null ? null : stream.getCodec().toUpperCase());
+        if (stream.getChannels() != null) appendInline(summary, stream.getChannels() + "ch");
+        appendInline(summary, stream.getLanguage());
+        return summary.toString();
+    }
+
+    private String subtitleSummary(MediaStream stream, boolean burningSubtitles) {
+        if (burningSubtitles) return "Sub: burned";
+        if (stream == null) return "Sub: off";
+
+        StringBuilder summary = new StringBuilder("Sub:");
+        appendInline(summary, stream.getCodec() == null ? null : stream.getCodec().toUpperCase());
+        appendInline(summary, stream.getLanguage());
+        if (stream.isForced()) appendInline(summary, "forced");
+        return summary.toString();
+    }
+
+    private void appendInline(StringBuilder builder, String value) {
+        if (value == null || value.isEmpty()) return;
+        if (builder.length() > 0) builder.append(' ');
+        builder.append(value);
+    }
+
     public void clearSkipOverlay() {
         binding.skipOverlay.setTargetPositionMs(null);
+        updateSkipOverlayHitTarget();
     }
 
     private void prepareChapterAdapter() {
@@ -1631,6 +2101,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     @Override
     public void onDestroy() {
         super.onDestroy();
+        mTranscodingStatusExecutor.shutdownNow();
 
         // Show system bars
         WindowCompat.setDecorFitsSystemWindows(requireActivity().getWindow(), true);

@@ -1,6 +1,7 @@
 package org.jellyfin.playback.core.backend
 
 import org.jellyfin.playback.core.mediastream.MediaStream
+import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.support.PlaySupportReport
@@ -25,11 +26,13 @@ interface PlayerBackend {
 
 	fun setListener(eventListener: PlayerBackendEventListener?)
 	fun getPositionInfo(): PositionInfo
+	fun getFrameStats(): PlaybackFrameStats = PlaybackFrameStats.EMPTY
 
 	// Mutation
 
 	fun prepareItem(item: QueueEntry)
 	fun playItem(item: QueueEntry)
+	fun replaceItem(item: QueueEntry)
 
 	fun play()
 	fun pause()
@@ -44,4 +47,3 @@ interface PlayerBackend {
 
 	fun setTimedEvents(timedEvents: List<TimedEvent>)
 }
-

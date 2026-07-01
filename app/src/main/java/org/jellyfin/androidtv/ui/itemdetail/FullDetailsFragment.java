@@ -803,7 +803,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
             });
             mDetailsOverviewRow.addAction(playButton);
 
-            if (isSeries && !isStarted) {
+            if (isSeries) {
                 FullDetailsFragmentHelperKt.getNextUpEpisode(this, nextUpEpisode -> {
                     handleResumeButtonAndFocus(nextUpEpisode);
                     return null;
@@ -1091,7 +1091,9 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
             isStarted = nextUpEpisode.getUserData().getPlaybackPositionTicks() > 0;
         }
 
-        boolean resumeButtonVisible = (isSeries && isStarted && !isFinished) || (JavaCompat.getCanResume(mBaseItem));
+        boolean resumeButtonVisible = isSeries
+                ? nextUpEpisode != null && isStarted && !isFinished
+                : JavaCompat.getCanResume(mBaseItem);
         mResumeButton.setVisibility(resumeButtonVisible ? View.VISIBLE : View.GONE);
 
         if (resumeButtonVisible) {

@@ -191,16 +191,6 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
-			var disableHDR10 by rememberPreference(userPreferences, UserPreferences.disableHDR10)
-
-			ListButton(
-				headingContent = { Text(stringResource(R.string.preference_disable_hdr10_playback)) },
-				trailingContent = { Checkbox(checked = disableHDR10) },
-				onClick = { disableHDR10 = !disableHDR10 }
-			)
-		}
-
-		item {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.preference_hdr_overrides)) },
 				captionContent = { Text(stringResource(R.string.preference_hdr_overrides_summary)) },
@@ -385,6 +375,14 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_troubleshooting)) }) }
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_debug_capabilities_title)) },
+				captionContent = { Text(stringResource(R.string.pref_debug_capabilities_summary)) },
+				onClick = { router.push(Routes.PLAYBACK_DEBUG_CAPABILITIES) },
+			)
+		}
 
 		item {
 			val api = koinInject<ApiClient>()

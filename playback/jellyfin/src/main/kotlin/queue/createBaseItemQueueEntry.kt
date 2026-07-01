@@ -4,10 +4,13 @@ import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueEntryMetadata
+import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.core.queue.metadata
+import org.jellyfin.playback.jellyfin.livetv.LiveTvPlaybackPolicy
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.imageApi
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.extensions.ticks
 import java.util.UUID
@@ -49,15 +52,30 @@ fun createBaseItemQueueEntry(api: ApiClient, baseItem: BaseItemDto): QueueEntry 
 	)
 	entry.baseItem = baseItem
 	entry.normalizationGain = baseItem.normalizationGain
-	entry.mediaType = when (baseItem.mediaType) {
-		SdkMediaType.VIDEO -> PlayerMediaType.Video
-		SdkMediaType.AUDIO -> PlayerMediaType.Audio
-		SdkMediaType.PHOTO,
-		SdkMediaType.BOOK,
-		SdkMediaType.UNKNOWN -> PlayerMediaType.Unknown
+	entry.mediaType = when {
+		baseItem.isLiveTv -> PlayerMediaType.Video
+		baseItem.mediaType == SdkMediaType.VIDEO -> PlayerMediaType.Video
+		baseItem.mediaType == SdkMediaType.AUDIO -> PlayerMediaType.Audio
+		else -> PlayerMediaType.Unknown
 	}
+
+	if (baseItem.isLiveTv) {
+		entry.liveStreamTargetOffset = LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
+	}
+
 	return entry
 }
+
+private val BaseItemDto.isLiveTv
+	get() = when (type) {
+		BaseItemKind.PROGRAM,
+		BaseItemKind.TV_PROGRAM,
+		BaseItemKind.LIVE_TV_PROGRAM,
+		BaseItemKind.TV_CHANNEL,
+		BaseItemKind.LIVE_TV_CHANNEL -> true
+
+		else -> false
+	}
 
 private fun ApiClient.getImageUri(itemId: UUID?, tag: String?): String? = when {
 	// Invalid item id / tag
