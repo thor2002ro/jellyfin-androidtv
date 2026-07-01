@@ -11,12 +11,15 @@ import org.koin.compose.koinInject
 fun PlayerSurface(
 	modifier: Modifier = Modifier,
 	playbackManager: PlaybackManager = koinInject(),
+	zOrderOnTop: Boolean = false,
 ) {
 	AndroidView(
 		factory = { context ->
 			PlayerSurfaceView(context).apply {
 				isFocusable = false
 				isFocusableInTouchMode = false
+				surface.setZOrderOnTop(false)
+				surface.setZOrderMediaOverlay(zOrderOnTop)
 			}
 		},
 		modifier = modifier,

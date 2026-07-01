@@ -9,6 +9,7 @@ import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.core.timedevent.TimedEvent
 import org.jellyfin.playback.core.timedevent.addTimedEvent
@@ -62,6 +63,7 @@ internal class MediaStreamService(
 
 	private fun QueueEntry.ensurePreloadTimedEvent() {
 		if (preloadDuration <= Duration.ZERO) return
+		if (isLiveTv) return
 
 		val hasEvent = timedEvents?.any { it.key == TIMED_EVENT_PRELOAD } == true
 		if (hasEvent) return
@@ -123,6 +125,8 @@ internal class MediaStreamService(
 	}
 
 	private fun preloadNextEntry() = coroutineScope.launch(Dispatchers.Main) {
+		if (manager.queue.entry.value?.isLiveTv == true) return@launch
+
 		// Peek into the next item to preload
 		val nextItem = manager.queue.peekNext() ?: return@launch
 
