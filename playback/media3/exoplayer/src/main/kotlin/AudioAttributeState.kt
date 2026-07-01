@@ -5,6 +5,8 @@ import timber.log.Timber
 
 class AudioAttributeState {
 	private var _audioAttributes: AudioAttributes? = null
+	val audioAttributes: AudioAttributes?
+		get() = _audioAttributes
 
 	fun updateAudioAttributes(
 		builder: AudioAttributes.Builder.() -> Unit,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
@@ -79,13 +81,13 @@ fun PlaybackInfoOverlay(
 	val forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE)
 	val forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)
 	var refreshTick by remember { mutableStateOf(0) }
-	var positionInfo by remember(playbackManager) { mutableStateOf(playbackManager.state.positionInfo) }
-	var frameStats by remember(playbackManager) { mutableStateOf(playbackManager.backend.getFrameStats()) }
+	var positionInfo by remember(playbackManager, stream.identifier) { mutableStateOf(playbackManager.state.positionInfo) }
+	var frameStats by remember(playbackManager, stream.identifier) { mutableStateOf(playbackManager.backend.getFrameStats()) }
 	var transcodingInfo by remember(stream.identifier, itemId, mediaSourceId) {
 		mutableStateOf<TranscodingInfo?>(null)
 	}
 
-	LaunchedEffect(playbackManager) {
+	LaunchedEffect(playbackManager, stream.identifier) {
 		while (true) {
 			positionInfo = playbackManager.state.positionInfo
 			frameStats = playbackManager.backend.getFrameStats()
@@ -151,9 +153,27 @@ fun PlaybackInfoOverlay(
 		)
 	}
 
+	Row(
+		modifier = modifier,
+		horizontalArrangement = Arrangement.spacedBy(4.dp),
+		verticalAlignment = Alignment.Top,
+	) {
+		PlaybackPerformanceOverlay(
+			stream = stream,
+			frameStats = frameStats,
+		)
+
+		PlaybackInfoTextPanel(sections = sections)
+	}
+}
+
+@Composable
+private fun PlaybackInfoTextPanel(
+	sections: List<PlaybackInfoSection>,
+) {
 	Column(
-		modifier = modifier
-			.width(150.dp)
+		modifier = Modifier
+			.width(190.dp)
 			.background(Color.Black.copy(alpha = 0.88f))
 			.padding(horizontal = 5.dp, vertical = 4.dp),
 		verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -171,30 +191,34 @@ fun PlaybackInfoOverlay(
 
 		sections.forEachIndexed { index, section ->
 			if (index > 0) Spacer(modifier = Modifier.size(1.dp))
+			PlaybackInfoSectionContent(section)
+		}
+	}
+}
 
-			if (section.title.isNotBlank()) {
-				Text(
-					text = section.title,
-					style = TextStyle(
-						color = Color.White,
-						fontSize = 6.5.sp,
-						lineHeight = 7.5.sp,
-						fontFamily = FontFamily.Monospace,
-						fontWeight = FontWeight.W700,
-					),
-				)
-			}
+@Composable
+private fun PlaybackInfoSectionContent(section: PlaybackInfoSection) {
+	if (section.title.isNotBlank()) {
+		Text(
+			text = section.title,
+			style = TextStyle(
+				color = Color.White,
+				fontSize = 6.5.sp,
+				lineHeight = 7.5.sp,
+				fontFamily = FontFamily.Monospace,
+				fontWeight = FontWeight.W700,
+			),
+		)
+	}
 
-			Column(
-				modifier = Modifier
-					.fillMaxWidth()
-					.padding(start = 4.dp),
-				verticalArrangement = Arrangement.spacedBy(0.dp),
-			) {
-				section.rows.forEach { row ->
-					PlaybackInfoRow(row)
-				}
-			}
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(start = 4.dp),
+		verticalArrangement = Arrangement.spacedBy(0.dp),
+	) {
+		section.rows.forEach { row ->
+			PlaybackInfoRow(row)
 		}
 	}
 }
@@ -248,6 +272,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
+					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
 					row("Audio language", audioLanguage(selectedAudio))
 					row("Bitrate", streamBitrate(videoTrack, audioTrack, transcodingInfo))
@@ -273,6 +298,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Container", stream.container.format)
 					row("Video codec", videoTrack?.codec.formatCodec())
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
+					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate())
 					row("Video range", videoTrack?.videoRange)
 					row("Audio codec", audioTrack?.codec.formatCodec())
 					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
@@ -437,6 +463,14 @@ private object NewPlayerStreamStatusBuilder {
 		6 -> "5.1"
 		8 -> "7.1"
 		else -> toString()
+	}
+
+	private fun Float.formatFrameRate() = "%.3f fps".format(this)
+
+	private fun Boolean?.formatPassthroughSupport() = when (this) {
+		true -> "Yes"
+		false -> "No"
+		null -> null
 	}
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
