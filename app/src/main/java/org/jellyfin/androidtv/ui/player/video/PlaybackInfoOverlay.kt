@@ -330,6 +330,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate())
 					row("Video range", videoTrack?.videoRange)
+					if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
 					row("Audio codec", audioTrack?.codec.formatCodec())
 					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())

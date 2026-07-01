@@ -83,6 +83,7 @@ data class MediaStreamVideoTrack(
 	val height: Int,
 	val videoRange: String?,
 	val realFrameRate: Float?,
+	val isInterlaced: Boolean,
 ) : MediaStreamTrack
 
 data class MediaStreamSubtitleTrack(
