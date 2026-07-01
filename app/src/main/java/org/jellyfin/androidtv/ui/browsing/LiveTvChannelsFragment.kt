@@ -34,6 +34,8 @@ import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter
 import org.jellyfin.androidtv.util.InfoLayoutHelper
 import org.jellyfin.androidtv.util.KeyProcessor
 import org.jellyfin.androidtv.util.PlaybackHelper
+import org.jellyfin.androidtv.util.isPageForward
+import org.jellyfin.androidtv.util.isPageKey
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.android.inject
@@ -62,6 +64,12 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 	private var gridView: BaseGridView? = null
 	private var currentItem: BaseRowItem? = null
 	private var selectedPosition = -1
+	private var pendingSelectedPosition: Int? = null
+	private var pageJumpSize = MIN_CHANNEL_PAGE_CHUNK_SIZE
+	private var holdJumpSize = MIN_CHANNEL_HOLD_JUMP_SIZE
+	private var lastHeldScrollAt = 0L
+	private var dpadHoldConsumed = false
+	private var playbackReturnPosition = -1
 	private var justLoaded = true
 
 	override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,7 +115,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 		handler.postDelayed({
 			if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@postDelayed
-			adapter?.ReRetrieveIfNeeded()
+			restorePlaybackSelection()
 		}, CHANNEL_REFRESH_DELAY_MS)
 	}
 
@@ -128,7 +136,10 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 	}
 
 	override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean {
-		if (event?.action != KeyEvent.ACTION_UP) return false
+		if (event == null) return false
+		if (handleChannelNavigationKey(event)) return true
+
+		if (event.action != KeyEvent.ACTION_UP) return false
 		return keyProcessor.handleKey(keyCode, currentItem, requireActivity())
 	}
 
@@ -146,6 +157,8 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 		val viewHolder = presenter.onCreateViewHolder(viewBinding.rowsFragment)
 		val horizontalGridView = viewHolder.gridView
+		pageJumpSize = metrics.pageJumpSize
+		holdJumpSize = metrics.holdJumpSize
 		viewBinding.rowsFragment.clipChildren = false
 		viewBinding.rowsFragment.clipToPadding = false
 		horizontalGridView.setGravity(Gravity.CENTER_VERTICAL)
@@ -161,6 +174,10 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		horizontalGridView.setHorizontalSpacing(metrics.horizontalSpacingPx)
 		horizontalGridView.setVerticalSpacing(metrics.verticalSpacingPx)
 		horizontalGridView.isFocusable = true
+		horizontalGridView.setInitialPrefetchItemCount(metrics.pageJumpSize)
+		horizontalGridView.setSmoothScrollMaxPendingMoves(CHANNEL_MAX_PENDING_DPAD_MOVES)
+		horizontalGridView.setSmoothScrollSpeedFactor(CHANNEL_SCROLL_SPEED_FACTOR)
+		horizontalGridView.setOnKeyInterceptListener { event -> handleChannelNavigationKey(event) }
 
 		viewBinding.rowsFragment.removeAllViews()
 		viewBinding.rowsFragment.addView(viewHolder.view)
@@ -215,12 +232,25 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		}
 
 		grid.isFocusable = true
+		keepGridFocused()
+		pendingSelectedPosition?.let { pendingPosition ->
+			val position = pendingPosition.coerceAtMost(rowAdapter.itemsLoaded - 1)
+			if (position >= 0) {
+				selectedPosition = position
+				grid.selectedPosition = position
+			}
+			if (position == pendingPosition || rowAdapter.itemsLoaded >= rowAdapter.totalItems) {
+				pendingSelectedPosition = null
+			}
+		}
 		if (!grid.hasFocus()) grid.requestFocus()
 	}
 
 	private val onItemClicked = OnItemViewClickedListener { _, item, _, _ ->
 		val rowItem = item as? BaseRowItem ?: return@OnItemViewClickedListener
-		itemLauncher.launch(rowItem, requireNotNull(adapter), requireContext())
+		val rowAdapter = requireNotNull(adapter)
+		playbackReturnPosition = rowAdapter.indexOf(rowItem).takeIf { it >= 0 } ?: selectedPosition
+		itemLauncher.launch(rowItem, rowAdapter, requireContext())
 	}
 
 	private val onItemSelected = OnItemViewSelectedListener { _, item, _, _ ->
@@ -230,8 +260,13 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 		val rowAdapter = adapter
 		if (rowAdapter != null) {
-			selectedPosition = rowItem?.let(rowAdapter::indexOf) ?: -1
-			rowItem?.let { rowAdapter.loadMoreItemsIfNeeded(rowAdapter.indexOf(it)) }
+			selectedPosition = if (rowItem == null) {
+				-1
+			} else {
+				gridView?.selectedPosition?.takeIf { it >= 0 } ?: rowAdapter.indexOf(rowItem)
+			}
+			if (selectedPosition >= 0) rowAdapter.loadMoreItemsIfNeeded(selectedPosition)
+			if (selectedPosition == pendingSelectedPosition) pendingSelectedPosition = null
 		}
 
 		updateCounter()
@@ -265,6 +300,133 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 	private fun refreshChannels() {
 		adapter?.Retrieve()
+	}
+
+	private fun restorePlaybackSelection() {
+		val rowAdapter = adapter ?: return
+		val restorePosition = playbackReturnPosition.takeIf { it >= 0 } ?: selectedPosition.takeIf { it >= 0 }
+		if (restorePosition != null) {
+			selectedPosition = restorePosition
+			pendingSelectedPosition = restorePosition
+		}
+
+		val refreshed = rowAdapter.ReRetrieveIfNeeded()
+		if (!refreshed && restorePosition != null) {
+			pendingSelectedPosition = null
+			if (rowAdapter.itemsLoaded > 0) {
+				gridView?.selectedPosition = restorePosition.coerceAtMost(rowAdapter.itemsLoaded - 1)
+				keepGridFocused()
+			}
+		}
+		playbackReturnPosition = -1
+	}
+
+	private fun handleChannelNavigationKey(event: KeyEvent): Boolean {
+		val keyCode = event.keyCode
+		if (isChannelPageKey(keyCode)) {
+			return when (event.action) {
+				KeyEvent.ACTION_DOWN -> true
+				KeyEvent.ACTION_UP -> moveChannels(isChannelPageForward(keyCode), pageJumpSize)
+				else -> false
+			}
+		}
+
+		if (!isHorizontalScrollKey(keyCode)) return false
+
+		return when (event.action) {
+			KeyEvent.ACTION_DOWN -> {
+				dpadHoldConsumed = true
+				if (event.repeatCount == 0 || event.eventTime - lastHeldScrollAt >= HELD_DPAD_SCROLL_INTERVAL_MS) {
+					lastHeldScrollAt = event.eventTime
+					moveChannels(isHorizontalScrollForward(keyCode), holdJumpSize)
+				} else {
+					keepGridFocused()
+				}
+				true
+			}
+			KeyEvent.ACTION_UP -> {
+				lastHeldScrollAt = 0L
+				dpadHoldConsumed.also {
+					dpadHoldConsumed = false
+					if (it) keepGridFocused()
+				}
+			}
+			else -> false
+		}
+	}
+
+	private fun moveChannels(forward: Boolean, distance: Int): Boolean {
+		val rowAdapter = adapter ?: return true
+		val grid = gridView ?: return true
+		val total = rowAdapter.totalItems.takeIf { it > 0 } ?: rowAdapter.itemsLoaded
+		if (total <= 0) return true
+
+		val currentPosition = selectedPosition
+			.takeIf { it >= 0 }
+			?: grid.selectedPosition.takeIf { it >= 0 }
+			?: 0
+		val nextPosition = (currentPosition + if (forward) distance else -distance)
+			.coerceIn(0, total - 1)
+
+		selectedPosition = nextPosition
+		updateCounter()
+
+		if (nextPosition < rowAdapter.itemsLoaded) {
+			pendingSelectedPosition = null
+			grid.selectedPosition = nextPosition
+			rowAdapter.loadMoreItemsIfNeeded(nextPosition)
+		} else {
+			pendingSelectedPosition = nextPosition
+			grid.selectedPosition = (rowAdapter.itemsLoaded - 1).coerceAtLeast(0)
+			rowAdapter.loadMoreItemsIfNeeded(rowAdapter.itemsLoaded - 1)
+		}
+		keepGridFocused()
+
+		return true
+	}
+
+	private fun keepGridFocused() {
+		val grid = gridView ?: return
+		if ((adapter?.itemsLoaded ?: 0) <= 0) return
+		grid.post {
+			if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@post
+			val focused = activity?.currentFocus
+			if (isFocusInsideGrid(focused, grid)) return@post
+			grid.requestFocus()
+		}
+	}
+
+	private fun isFocusInsideGrid(focused: View?, grid: View): Boolean {
+		var view = focused
+		while (view != null) {
+			if (view == grid) return true
+			view = view.parent as? View
+		}
+		return false
+	}
+
+	private fun isChannelPageKey(keyCode: Int) = isPageKey(keyCode) ||
+		keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
+		keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN ||
+		keyCode == KeyEvent.KEYCODE_PAGE_UP ||
+		keyCode == KeyEvent.KEYCODE_PAGE_DOWN ||
+		keyCode == KeyEvent.KEYCODE_BUTTON_L1 ||
+		keyCode == KeyEvent.KEYCODE_BUTTON_L2 ||
+		keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
+		keyCode == KeyEvent.KEYCODE_BUTTON_R2
+
+	private fun isChannelPageForward(keyCode: Int) = isPageForward(keyCode) ||
+		keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
+		keyCode == KeyEvent.KEYCODE_PAGE_DOWN ||
+		keyCode == KeyEvent.KEYCODE_BUTTON_R1 ||
+		keyCode == KeyEvent.KEYCODE_BUTTON_R2
+
+	private fun isHorizontalScrollKey(keyCode: Int) =
+		keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+
+	private fun isHorizontalScrollForward(keyCode: Int): Boolean {
+		val isRtl = gridView?.layoutDirection == View.LAYOUT_DIRECTION_RTL
+		return if (isRtl) keyCode == KeyEvent.KEYCODE_DPAD_LEFT else keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
 	}
 
 	private fun calculateGridMetrics(): GridMetrics {
@@ -303,7 +465,9 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			verticalPaddingPx = verticalPadding,
 			horizontalSpacingPx = horizontalSpacing,
 			verticalSpacingPx = verticalSpacing,
-			chunkSize = (estimatedVisibleCards + rows).coerceIn(MIN_CHANNEL_PAGE_CHUNK_SIZE, MAX_CHANNEL_PAGE_CHUNK_SIZE),
+			pageJumpSize = estimatedVisibleCards.coerceAtLeast(rows),
+			holdJumpSize = rows.coerceAtLeast(MIN_CHANNEL_HOLD_JUMP_SIZE),
+			chunkSize = (estimatedVisibleCards * 2).coerceIn(MIN_CHANNEL_PAGE_CHUNK_SIZE, MAX_CHANNEL_PAGE_CHUNK_SIZE),
 		)
 	}
 
@@ -325,6 +489,8 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		val verticalPaddingPx: Int,
 		val horizontalSpacingPx: Int,
 		val verticalSpacingPx: Int,
+		val pageJumpSize: Int,
+		val holdJumpSize: Int,
 		val chunkSize: Int,
 	)
 
@@ -340,7 +506,11 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		const val CARD_SPACING_PCT = 0.5
 		const val LIVE_TV_CARD_ASPECT_RATIO = 16.0 / 9.0
 		const val MIN_CHANNEL_PAGE_CHUNK_SIZE = 18
-		const val MAX_CHANNEL_PAGE_CHUNK_SIZE = 80
+		const val MIN_CHANNEL_HOLD_JUMP_SIZE = 3
+		const val MAX_CHANNEL_PAGE_CHUNK_SIZE = 120
+		const val HELD_DPAD_SCROLL_INTERVAL_MS = 90L
+		const val CHANNEL_MAX_PENDING_DPAD_MOVES = 2
+		const val CHANNEL_SCROLL_SPEED_FACTOR = 0.65f
 		val DELAYED_ITEM_TOKEN = Any()
 	}
 }
