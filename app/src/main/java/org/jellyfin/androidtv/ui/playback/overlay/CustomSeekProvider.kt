@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.PlaybackSeekDataProvider
 import coil3.ImageLoader
-import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.Disposable
 import coil3.request.ImageRequest
@@ -15,11 +14,10 @@ import coil3.size.Dimension
 import coil3.size.Size
 import coil3.toBitmap
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.util.apiclient.getTrickplayImage
 import org.jellyfin.androidtv.util.coil.SubsetTransformation
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.trickplayApi
-import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
-import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+import java.util.concurrent.atomic.AtomicInteger
 
 class CustomSeekProvider(
 	private val videoPlayerAdapter: VideoPlayerAdapter,
@@ -29,7 +27,8 @@ class CustomSeekProvider(
 	private val trickPlayEnabled: Boolean,
 	private val interval: Long
 ) : PlaybackSeekDataProvider() {
-	private val imageRequests = mutableMapOf<Int, Disposable>()
+	private var imageRequest: Disposable? = null
+	private val imageRequestId = AtomicInteger(0)
 	private var currentSeekPositions = LongArray(0)
 
 	private var cachedPlaceholderThumbnail: Bitmap? = null
@@ -67,80 +66,39 @@ class CustomSeekProvider(
 		return currentSeekPositions
 	}
 
-	private fun getTileSheetData(timeMs: Long): Pair<String, NetworkHeaders>? {
-		val item = videoPlayerAdapter.currentlyPlayingItem
-		val mediaSource = videoPlayerAdapter.currentMediaSource
-		val mediaSourceId = mediaSource?.id?.toUUIDOrNull()
-		if (item == null || mediaSource == null || mediaSourceId == null) return null
-
-		val trickPlayResolutions = item.trickplay?.get(mediaSource.id)
-		val trickPlayInfo = trickPlayResolutions?.values?.firstOrNull() ?: return null
-
-		val tileNumber = timeMs.floorDiv(trickPlayInfo.interval).toInt()
-		val tilesPerSheet = trickPlayInfo.tileWidth * trickPlayInfo.tileHeight
-		val sheetIndex = tileNumber / tilesPerSheet
-
-		val url = api.trickplayApi.getTrickplayTileImageUrl(
-			itemId = item.id,
-			width = trickPlayInfo.width,
-			index = sheetIndex,
-			mediaSourceId = mediaSourceId,
-		)
-
-		val headers = NetworkHeaders.Builder().apply {
-			set(
-				key = "Authorization",
-				value = AuthorizationHeaderBuilder.buildHeader(
-					api.clientInfo.name,
-					api.clientInfo.version,
-					api.deviceInfo.id,
-					api.deviceInfo.name,
-					api.accessToken
-				)
-			)
-		}.build()
-
-		return url to headers
-	}
-
 	override fun getThumbnail(index: Int, callback: ResultCallback) {
-		if (index >= currentSeekPositions.size) return
-
-		val currentRequest = imageRequests[index]
-		if (currentRequest?.isDisposed == false) currentRequest.dispose()
+		if (index !in currentSeekPositions.indices) return
 
 		val currentTimeMs = currentSeekPositions[index]
-		val (url, headers) = getTileSheetData(currentTimeMs) ?: return
-		val mediaSource = videoPlayerAdapter.currentMediaSource ?: return
-		val trickPlayResolutions = videoPlayerAdapter.currentlyPlayingItem?.trickplay?.get(mediaSource.id)
-		val trickPlayInfo = trickPlayResolutions?.values?.firstOrNull() ?: return
+		val item = videoPlayerAdapter.currentlyPlayingItem ?: return
+		val trickplayImage = item.getTrickplayImage(api, videoPlayerAdapter.currentMediaSource?.id, currentTimeMs) ?: return
+		val placeholderThumbnail = getPlaceholderThumbnail(trickplayImage.width, trickplayImage.height)
+		val requestId = imageRequestId.incrementAndGet()
 
-		val currentTile = currentTimeMs.floorDiv(trickPlayInfo.interval).toInt()
+		if (imageRequest?.isDisposed == false) imageRequest?.dispose()
+		callback.onThumbnailLoaded(placeholderThumbnail, index)
 
-		val tileSize = trickPlayInfo.tileWidth * trickPlayInfo.tileHeight
-		val tileOffset = currentTile % tileSize
-
-		val tileOffsetX = tileOffset % trickPlayInfo.tileWidth
-		val tileOffsetY = tileOffset / trickPlayInfo.tileWidth
-		val offsetX = tileOffsetX * trickPlayInfo.width
-		val offsetY = tileOffsetY * trickPlayInfo.height
-
-		val placeholderThumbnail = getPlaceholderThumbnail(trickPlayInfo.width, trickPlayInfo.height)
-
-		imageRequests[index] = imageLoader.enqueue(ImageRequest.Builder(context).apply {
-			data(url)
+		imageRequest = imageLoader.enqueue(ImageRequest.Builder(context).apply {
+			data(trickplayImage.url)
 			size(Size.ORIGINAL)
 			maxBitmapSize(Size(Dimension.Undefined, Dimension.Undefined))
-			httpHeaders(headers)
+			httpHeaders(trickplayImage.headers)
 
-			transformations(SubsetTransformation(offsetX, offsetY, trickPlayInfo.width, trickPlayInfo.height))
+			transformations(
+				SubsetTransformation(
+					trickplayImage.offsetX,
+					trickplayImage.offsetY,
+					trickplayImage.width,
+					trickplayImage.height,
+				)
+			)
 
 			target(
-				onStart = { _ -> callback.onThumbnailLoaded(placeholderThumbnail, index) },
-				onError = { _ -> callback.onThumbnailLoaded(placeholderThumbnail, index) },
+				onError = { _ ->
+					if (requestId == imageRequestId.get()) callback.onThumbnailLoaded(placeholderThumbnail, index)
+				},
 				onSuccess = { image ->
-					val bitmap = image.toBitmap()
-					callback.onThumbnailLoaded(bitmap, index)
+					if (requestId == imageRequestId.get()) callback.onThumbnailLoaded(image.toBitmap(), index)
 				}
 			)
 		}.build())
@@ -149,19 +107,19 @@ class CustomSeekProvider(
 	fun prefetchTileSheet(timeMs: Long) {
 		if (!trickPlayEnabled) return
 
-		val (url, headers) = getTileSheetData(timeMs) ?: return
+		val item = videoPlayerAdapter.currentlyPlayingItem ?: return
+		val trickplayImage = item.getTrickplayImage(api, videoPlayerAdapter.currentMediaSource?.id, timeMs) ?: return
 
 		imageLoader.enqueue(ImageRequest.Builder(context).apply {
-			data(url)
-			httpHeaders(headers)
+			data(trickplayImage.url)
+			httpHeaders(trickplayImage.headers)
 		}.build())
 	}
 
 	override fun reset() {
-		for (request in imageRequests.values) {
-			if (!request.isDisposed) request.dispose()
-		}
-		imageRequests.clear()
+		imageRequestId.incrementAndGet()
+		if (imageRequest?.isDisposed == false) imageRequest?.dispose()
+		imageRequest = null
 
 		currentSeekPositions = LongArray(0)
 	}

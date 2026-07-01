@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.player.video
 
 import android.view.KeyEvent
 import android.widget.ImageView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -47,17 +49,19 @@ import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.util.TimeUtils
+import org.jellyfin.androidtv.util.apiclient.getTrickplayImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 private val ChapterListVerticalOffset = 8.dp
-private val ChapterThumbnailWidth = 132.dp
-private val ChapterThumbnailHeight = 74.dp
+internal val ChapterThumbnailWidth = 132.dp
+internal val ChapterThumbnailHeight = 74.dp
 private val ChapterListHeight = 90.dp
 private val ChapterThumbnailShape = RoundedCornerShape(4.dp)
 private const val ChapterThumbnailAspectRatio = 16f / 9f
@@ -67,6 +71,9 @@ internal fun ChapterListPopover(
 	expanded: Boolean,
 	onDismissRequest: () -> Unit,
 	chapters: List<ChapterItemInfo>,
+	item: BaseItemDto?,
+	mediaSourceId: String?,
+	trickPlayEnabled: Boolean,
 	width: Dp,
 	playbackManager: PlaybackManager,
 ) {
@@ -116,6 +123,9 @@ internal fun ChapterListPopover(
 			) { index, chapter ->
 				ChapterListItem(
 					chapter = chapter,
+					item = item,
+					mediaSourceId = mediaSourceId,
+					trickPlayEnabled = trickPlayEnabled,
 					index = index,
 					isSelected = index == currentChapterIndex,
 					onClick = {
@@ -153,6 +163,9 @@ internal fun getCurrentChapterIndex(
 @Composable
 private fun ChapterListItem(
 	chapter: ChapterItemInfo,
+	item: BaseItemDto?,
+	mediaSourceId: String?,
+	trickPlayEnabled: Boolean,
 	index: Int,
 	isSelected: Boolean,
 	onClick: () -> Unit,
@@ -170,6 +183,9 @@ private fun ChapterListItem(
 		) {
 			ChapterThumbnail(
 				chapter = chapter,
+				item = item,
+				mediaSourceId = mediaSourceId,
+				trickPlayEnabled = trickPlayEnabled,
 				modifier = Modifier.matchParentSize(),
 			)
 
@@ -239,6 +255,9 @@ private fun ChapterListItem(
 @Composable
 private fun ChapterThumbnail(
 	chapter: ChapterItemInfo,
+	item: BaseItemDto?,
+	mediaSourceId: String?,
+	trickPlayEnabled: Boolean,
 	modifier: Modifier = Modifier,
 	api: ApiClient = koinInject(),
 ) {
@@ -249,17 +268,44 @@ private fun ChapterThumbnail(
 		val image = chapter.image
 		if (image != null) {
 			val density = LocalDensity.current
-			AsyncImage(
-				url = image.getUrl(
+			val fillWidth = with(density) { ChapterThumbnailWidth.roundToPx() }
+			val fillHeight = with(density) { ChapterThumbnailHeight.roundToPx() }
+			val url = remember(image, api.accessToken, fillWidth, fillHeight) {
+				image.getUrl(
 					api = api,
-					fillWidth = with(density) { ChapterThumbnailWidth.roundToPx() },
-					fillHeight = with(density) { ChapterThumbnailHeight.roundToPx() },
-				),
-				blurHash = image.blurHash,
-				aspectRatio = ChapterThumbnailAspectRatio,
-				scaleType = ImageView.ScaleType.CENTER_CROP,
-				modifier = Modifier.fillMaxSize(),
-			)
+					fillWidth = fillWidth,
+					fillHeight = fillHeight,
+				)
+			}
+			val cachedImage = ChapterThumbnailMemoryCache.get(url)
+			if (cachedImage != null) {
+				Image(
+					bitmap = cachedImage,
+					contentDescription = null,
+					contentScale = ContentScale.Crop,
+					modifier = Modifier.fillMaxSize(),
+				)
+			} else {
+				AsyncImage(
+					url = url,
+					blurHash = image.blurHash,
+					aspectRatio = ChapterThumbnailAspectRatio,
+					scaleType = ImageView.ScaleType.CENTER_CROP,
+					modifier = Modifier.fillMaxSize(),
+				)
+			}
+		} else if (trickPlayEnabled && item != null) {
+			val timeMs = chapter.startPositionTicks.ticks.inWholeMilliseconds
+			val trickplayImage = remember(item.id, item.trickplay, mediaSourceId, timeMs, api.accessToken) {
+				item.getTrickplayImage(api, mediaSourceId, timeMs)
+			}
+			if (trickplayImage != null) {
+				VideoPlayerTrickplayImage(
+					request = rememberVideoPlayerTrickplayImageRequest(trickplayImage),
+					lastSuccessKey = item.id to mediaSourceId,
+					modifier = Modifier.fillMaxSize(),
+				)
+			}
 		}
 	}
 }

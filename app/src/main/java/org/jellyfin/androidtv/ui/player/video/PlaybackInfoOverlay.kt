@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -35,6 +36,8 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
+import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
@@ -58,9 +61,11 @@ import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.jellyfin.queue.baseItem
+import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
 import org.jellyfin.playback.jellyfin.queue.forceTranscodingSourceBitrate
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
+import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.TranscodingInfo
 import org.jellyfin.sdk.model.api.VideoRangeType
 import org.koin.compose.koinInject
@@ -74,10 +79,13 @@ fun PlaybackInfoOverlay(
 	val context = LocalContext.current
 	val transcodingStatusRepository = koinInject<TranscodingStatusRepository>()
 	val userPreferences = koinInject<UserPreferences>()
+	val api = koinInject<ApiClient>()
+	val density = LocalDensity.current
 	val entry by rememberQueueEntry(playbackManager)
 	val mediaStream by entry?.mediaStreamFlow?.collectAsState(null) ?: return
 	val stream = mediaStream ?: return
-	val itemId = entry?.baseItem?.id
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val itemId = item?.id ?: entry?.baseItem?.id
 	val mediaSourceId = entry?.mediaSourceId
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
 	val forceTranscodingSourceBitrate = entry?.forceTranscodingSourceBitrate
@@ -172,17 +180,66 @@ fun PlaybackInfoOverlay(
 		)
 	}
 
+	val chapterThumbnailWidth = with(density) { ChapterThumbnailWidth.roundToPx() }
+	val chapterThumbnailHeight = with(density) { ChapterThumbnailHeight.roundToPx() }
+	val trickplayCacheUrls = remember(item?.id, item?.trickplay, mediaSourceId, api.accessToken) {
+		item?.getTrickplayTileSheets(api, mediaSourceId).orEmpty().map { sheet -> sheet.url }
+	}
+	val chapterCacheUrls = remember(item?.id, item?.chapters, api.accessToken, chapterThumbnailWidth, chapterThumbnailHeight) {
+		item?.getChapterThumbnailUrls(api, chapterThumbnailWidth, chapterThumbnailHeight).orEmpty()
+	}
+	val thumbnailCacheRows = remember(trickplayCacheUrls, chapterCacheUrls, refreshTick) {
+		buildThumbnailCacheRows(
+			trickplayUrls = trickplayCacheUrls,
+			chapterUrls = chapterCacheUrls,
+		)
+	}
+
 	Row(
 		modifier = modifier,
 		horizontalArrangement = Arrangement.spacedBy(4.dp),
 		verticalAlignment = Alignment.Top,
 	) {
-		PlaybackPerformanceOverlay(
-			stream = stream,
-			frameStats = frameStats,
-		)
+		Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+			PlaybackPerformanceOverlay(
+				stream = stream,
+				frameStats = frameStats,
+			)
+			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
+		}
 
 		PlaybackInfoTextPanel(sections = sections)
+	}
+}
+
+@Composable
+private fun PlaybackThumbnailCachePanel(
+	rows: List<PlaybackInfoRowModel>,
+) {
+	Column(
+		modifier = Modifier
+			.width(146.dp)
+			.background(Color.Black.copy(alpha = 0.82f))
+			.padding(horizontal = 5.dp, vertical = 4.dp),
+		verticalArrangement = Arrangement.spacedBy(3.dp),
+	) {
+		Text(
+			text = "Thumbnail Cache",
+			style = TextStyle(
+				color = Color.White,
+				fontSize = 7.sp,
+				lineHeight = 8.sp,
+				fontFamily = FontFamily.Monospace,
+				fontWeight = FontWeight.W700,
+			),
+		)
+		Column(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(start = 4.dp),
+		) {
+			rows.forEach { row -> PlaybackInfoRow(row) }
+		}
 	}
 }
 
@@ -787,3 +844,22 @@ private fun PositionInfo.formatBuffer(): String {
 	val ahead = (buffer - active).coerceAtLeast(Duration.ZERO)
 	return "${buffer.formatDuration()} +${ahead.formatDuration()}"
 }
+
+private fun buildThumbnailCacheRows(
+	trickplayUrls: List<String>,
+	chapterUrls: List<String>,
+) = listOf(
+	PlaybackInfoRowModel(
+		label = "Trickplay",
+		value = TrickplayTileSheetMemoryCache.stats(trickplayUrls).formatCacheStats(trickplayUrls.size),
+	),
+	PlaybackInfoRowModel(
+		label = "Chapters",
+		value = ChapterThumbnailMemoryCache.stats(chapterUrls).formatCacheStats(chapterUrls.size),
+	),
+)
+
+private fun TrickplayTileSheetMemoryStats.formatCacheStats(total: Int) =
+	"$count/$total ${bytes.formatCacheBytes()}"
+
+private fun Long.formatCacheBytes() = "%.1f MiB".format(this / 1024.0 / 1024.0)

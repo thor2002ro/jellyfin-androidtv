@@ -72,6 +72,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import kotlin.Lazy;
+import kotlin.Unit;
 import kotlinx.coroutines.flow.MutableStateFlow;
 import kotlinx.serialization.json.Json;
 import timber.log.Timber;
@@ -128,6 +129,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final int VIEW_SELECT_UPDATE_DELAY = 250; // delay in ms until we update the top-row info for a selected item
 
     private boolean mDirty = true; // CardHeight, RowDef or GridSize changed
+    private boolean mPreferencesLoaded = false;
+    private boolean mViewInitialized = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -145,16 +148,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mFolder = Json.Default.decodeFromString(BaseItemDto.Companion.serializer(), getArguments().getString(Extras.Folder));
         mParentId = mFolder.getId();
         mainTitle = mFolder.getName();
-        libraryPreferences = preferencesRepository.getValue().getLibraryPreferences(Objects.requireNonNull(mFolder.getDisplayPreferencesId()));
-        mPosterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
-        mImageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
-        mGridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
         mCardFocusScale = getResources().getFraction(R.fraction.card_scale_focus, 1, 1);
-
-        if (mGridDirection.equals(GridDirection.VERTICAL))
-            setGridPresenter(new VerticalGridPresenter(FocusHighlight.ZOOM_FACTOR_LARGE, false));
-        else
-            setGridPresenter(new HorizontalGridPresenter());
 
         sortOptions = new HashMap<>();
         {
@@ -176,10 +170,30 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             }
         }
 
+        BrowseGridFragmentHelperKt.loadLibraryPreferences(this, preferencesRepository.getValue(), Objects.requireNonNull(mFolder.getDisplayPreferencesId()), preferences -> {
+            initializeLibraryPreferences(preferences);
+            return Unit.INSTANCE;
+        });
+    }
+
+    private void initializeLibraryPreferences(LibraryPreferences preferences) {
+        libraryPreferences = preferences;
+        mPosterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
+        mImageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
+        mGridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
+
+        if (mGridDirection.equals(GridDirection.VERTICAL))
+            setGridPresenter(new VerticalGridPresenter(FocusHighlight.ZOOM_FACTOR_LARGE, false));
+        else
+            setGridPresenter(new HorizontalGridPresenter());
+
         setDefaultGridRowCols(mPosterSizeSetting, mImageType);
         setAutoCardGridValues();
         setupQueries();
         setupEventListeners();
+
+        mPreferencesLoaded = true;
+        initializeView();
     }
 
     @Override
@@ -193,9 +207,18 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        if (mainTitle != null) binding.title.setText(mainTitle);
+        initializeView();
+    }
+
+    private void initializeView() {
+        if (!mPreferencesLoaded || binding == null || mViewInitialized) return;
+
         createGrid();
         loadGrid();
         addTools();
+
+        mViewInitialized = true;
     }
 
     @Override
@@ -210,6 +233,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
         binding = null;
         mGridView = null;
+        mViewInitialized = false;
     }
 
     private void createGrid() {
@@ -564,6 +588,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     public void onResume() {
         super.onResume();
 
+        if (!mPreferencesLoaded) return;
+
         PosterSize posterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
         ImageType imageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
         GridDirection gridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
@@ -617,8 +643,6 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             chunkSize = Math.min(mCardsScreenEst + mCardsScreenStride, 150); // cap at 150
             Timber.d("buildAdapter adjusting chunkSize to <%s> screenEst <%s>", chunkSize, mCardsScreenEst);
         }
-        chunkSize=100;
-
         switch (mRowDef.getQueryType()) {
             case NextUp:
                 mAdapter = new ItemRowAdapter(requireContext(), mRowDef.getNextUpQuery(), true, mCardPresenter, null);

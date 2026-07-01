@@ -508,6 +508,10 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	}
 
 	override fun displayChannels(start: Int, max: Int) {
+		displayChannels(start, max, getCurrentFocusChannelId().takeIf { max > PAGE_SIZE })
+	}
+
+	private fun displayChannels(start: Int, max: Int, focusChannelId: UUID?) {
 		var end = start + max
 		if (end > mAllChannels.size) {
 			end = mAllChannels.size
@@ -520,6 +524,11 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			mCurrentDisplayChannelStartNdx = start
 			mCurrentDisplayChannelEndNdx = end - 1
 		}
+
+		if (focusChannelId != null) {
+			mFirstFocusChannelId = focusChannelId
+		}
+
 		Timber.v("Display channels pre-execute")
 		mSpinner.visibility = View.VISIBLE
 
@@ -571,7 +580,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					mAllChannels[pageUpStart].number,
 					mAllChannels[mCurrentDisplayChannelStartNdx - 1].number,
 				)
-				addPagingRow(pageUpStart, label)
+				addPagingRow(pageUpStart, mCurrentDisplayChannelEndNdx - pageUpStart + 1, label)
 			}
 		}
 
@@ -629,7 +638,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					mAllChannels[mCurrentDisplayChannelEndNdx + 1].number,
 					mAllChannels[pageDnEnd].number,
 				)
-				addPagingRow(mCurrentDisplayChannelEndNdx + 1, label)
+				addPagingRow(mCurrentDisplayChannelStartNdx, pageDnEnd - mCurrentDisplayChannelStartNdx + 1, label)
 			}
 
 			mChannelStatus.text = "$displayedChannels of ${mAllChannels.size} channels"
@@ -651,12 +660,69 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private fun getChannelHeader(channel: BaseItemDto) =
 		GuideChannelHeader(requireContext(), this, channel, STANDALONE_GUIDE_ROW_HEIGHT_DP, true)
 
-	private fun addPagingRow(start: Int, label: String) {
+	private fun addPagingRow(start: Int, max: Int, label: String) {
 		mChannels.addView(TextView(requireContext()), guideRowLayoutParams())
 		mProgramRows.addView(
-			GuidePagingButton(requireContext(), this, start, label, true),
+			GuidePagingButton(requireContext(), this, start, max, label, true),
 			guideRowLayoutParams(),
 		)
+	}
+
+	private fun maybeAutoLoadAdjacentChannels(programView: RelativeLayout) {
+		if (mFilters.any() || mSpinner.visibility == View.VISIBLE || mAllChannels.isEmpty()) return
+
+		val channelIndex = getDisplayedChannelIndex(programView) ?: return
+		val focusChannelId = getFocusChannelId(programView) ?: return
+
+		when {
+			channelIndex >= mCurrentDisplayChannelEndNdx - AUTO_LOAD_CHANNEL_THRESHOLD &&
+				mCurrentDisplayChannelEndNdx < mAllChannels.size - 1 -> {
+				val newEnd = minOf(mAllChannels.size - 1, mCurrentDisplayChannelEndNdx + PAGE_SIZE)
+				displayChannels(
+					mCurrentDisplayChannelStartNdx,
+					newEnd - mCurrentDisplayChannelStartNdx + 1,
+					focusChannelId,
+				)
+			}
+			channelIndex <= mCurrentDisplayChannelStartNdx + AUTO_LOAD_CHANNEL_THRESHOLD &&
+				mCurrentDisplayChannelStartNdx > 0 -> {
+				val newStart = maxOf(0, mCurrentDisplayChannelStartNdx - PAGE_SIZE)
+				displayChannels(
+					newStart,
+					mCurrentDisplayChannelEndNdx - newStart + 1,
+					focusChannelId,
+				)
+			}
+		}
+	}
+
+	private fun getDisplayedChannelIndex(programView: RelativeLayout): Int? {
+		val rowIndex = when (programView) {
+			is GuideChannelHeader -> (0 until mChannels.childCount)
+				.firstOrNull { index -> mChannels.getChildAt(index) == programView }
+			is ProgramGridCell -> {
+				val parent = programView.parent as? View ?: return null
+				(0 until mProgramRows.childCount)
+					.firstOrNull { index -> mProgramRows.getChildAt(index) == parent }
+			}
+			else -> null
+		} ?: return null
+
+		val topPagingRows = if (mCurrentDisplayChannelStartNdx > 0 && !mFilters.any()) 1 else 0
+		val displayedOffset = rowIndex - topPagingRows
+		val displayedChannelCount = mCurrentDisplayChannelEndNdx - mCurrentDisplayChannelStartNdx + 1
+		if (displayedOffset !in 0 until displayedChannelCount) return null
+
+		return mCurrentDisplayChannelStartNdx + displayedOffset
+	}
+
+	private fun getCurrentFocusChannelId(): UUID? =
+		mSelectedProgramView?.let(::getFocusChannelId) ?: mSelectedProgram?.channelId
+
+	private fun getFocusChannelId(programView: RelativeLayout): UUID? = when (programView) {
+		is GuideChannelHeader -> programView.channel.id
+		is ProgramGridCell -> programView.getProgram().channelId
+		else -> mSelectedProgram?.channelId
 	}
 
 	private fun guideRowLayoutParams() = LinearLayout.LayoutParams(
@@ -839,6 +905,8 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	override fun setSelectedProgram(programView: RelativeLayout) {
 		mSelectedProgramView = programView
+		programView.post { maybeAutoLoadAdjacentChannels(programView) }
+
 		when (programView) {
 			is ProgramGridCell -> {
 				mSelectedProgram = programView.getProgram()
@@ -873,6 +941,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	companion object {
 		private const val STANDALONE_GUIDE_ROW_HEIGHT_DP = 64
+		private const val AUTO_LOAD_CHANNEL_THRESHOLD = 8
 		const val GUIDE_ROW_HEIGHT_DP = 55
 		const val GUIDE_ROW_WIDTH_PER_MIN_DP = 7
 		const val PAGE_SIZE = 75
