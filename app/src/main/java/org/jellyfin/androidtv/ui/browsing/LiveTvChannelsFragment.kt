@@ -14,6 +14,8 @@ import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ChangeTriggerType
@@ -67,7 +69,10 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 		val liveTvFolder = Json.decodeFromString<BaseItemDto>(requireArguments().getString(Extras.Folder).orEmpty())
 		folder = liveTvFolder
-		libraryPreferences = preferencesRepository.getLibraryPreferences(requireNotNull(liveTvFolder.displayPreferencesId))
+		lifecycleScope.launch {
+			libraryPreferences = preferencesRepository.getLibraryPreferencesAsync(requireNotNull(liveTvFolder.displayPreferencesId))
+			binding?.rowsFragment?.post { createGrid() }
+		}
 	}
 
 	override fun onCreateView(
@@ -88,7 +93,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			statusText.text = ""
 			toolBar.visibility = View.GONE
 			settings.visibility = View.GONE
-			rowsFragment.post { createGrid() }
+			if (libraryPreferences != null) rowsFragment.post { createGrid() }
 		}
 	}
 
@@ -129,6 +134,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 	private fun createGrid() {
 		val viewBinding = binding ?: return
+		if (gridView != null) return
 		val metrics = calculateGridMetrics()
 		val presenter = HorizontalGridPresenter().apply {
 			setNumberOfRows(metrics.rows)
@@ -297,7 +303,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			verticalPaddingPx = verticalPadding,
 			horizontalSpacingPx = horizontalSpacing,
 			verticalSpacingPx = verticalSpacing,
-			chunkSize = (estimatedVisibleCards + rows).coerceIn(MIN_CHANNEL_CHUNK_SIZE, MAX_CHANNEL_CHUNK_SIZE),
+			chunkSize = (estimatedVisibleCards + rows).coerceIn(MIN_CHANNEL_PAGE_CHUNK_SIZE, MAX_CHANNEL_PAGE_CHUNK_SIZE),
 		)
 	}
 
@@ -333,8 +339,8 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		const val MIN_COLUMN_SPACING_DP = 8
 		const val CARD_SPACING_PCT = 0.5
 		const val LIVE_TV_CARD_ASPECT_RATIO = 16.0 / 9.0
-		const val MIN_CHANNEL_CHUNK_SIZE = 40
-		const val MAX_CHANNEL_CHUNK_SIZE = 150
+		const val MIN_CHANNEL_PAGE_CHUNK_SIZE = 18
+		const val MAX_CHANNEL_PAGE_CHUNK_SIZE = 80
 		val DELAYED_ITEM_TOKEN = Any()
 	}
 }

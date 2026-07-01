@@ -5,7 +5,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.jellyfin.androidtv.ui.itemhandling.AudioQueueBaseRowItem
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
@@ -35,9 +34,8 @@ class AudioQueueBaseRowAdapter(
 			playing = true
 		}
 
-		// It's safe to run this blocking as all items are prefetched via the [BaseItemQueueSupplier]
-		val upcomingItems = runBlocking { playbackManager.queue.peekNext(100) }
-			.mapIndexedNotNull { index, item -> item.takeIf { it.baseItem != null }?.let(::AudioQueueBaseRowItem) }
+		val upcomingItems = playbackManager.queue.peekNextCached(100)
+			.mapNotNull { item -> item.takeIf { it.baseItem != null }?.let(::AudioQueueBaseRowItem) }
 
 		val items = listOfNotNull(currentItem) + upcomingItems
 
