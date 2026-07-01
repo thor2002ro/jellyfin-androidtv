@@ -1,10 +1,11 @@
 package org.jellyfin.androidtv.ui.livetv
 
 import android.app.AlertDialog
-import android.graphics.Color
+import android.graphics.Typeface
 import android.os.AsyncTask
 import android.os.Bundle
 import android.os.Handler
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
@@ -31,6 +32,7 @@ import org.jellyfin.androidtv.ui.LiveProgramDetailPopup
 import org.jellyfin.androidtv.ui.ObservableHorizontalScrollView
 import org.jellyfin.androidtv.ui.ObservableScrollView
 import org.jellyfin.androidtv.ui.ProgramGridCell
+import org.jellyfin.androidtv.ui.RecordingIndicatorView
 import org.jellyfin.androidtv.ui.ScrollViewListener
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.androidtv.util.ImageHelper
@@ -45,6 +47,7 @@ import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.androidtv.util.isPageForward
 import org.jellyfin.androidtv.util.readCustomMessagesOnLifecycle
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.MediaType
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -94,6 +97,12 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private var dateDialog: AlertDialog? = null
 	private var mDetailPopup: LiveProgramDetailPopup? = null
 	private var mDisplayProgramsTask: DisplayProgramsTask? = null
+	private var handledCenterLongPress = false
+	private var popupTuneChannelId: UUID? = null
+	private val noOpRecordingIndicator = object : RecordingIndicatorView {
+		override fun setRecTimer(id: String?) = Unit
+		override fun setRecSeriesTimer(id: String?) = Unit
+	}
 	private var currentCellId = 0
 
 	override fun onCreateView(
@@ -101,7 +110,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		container: ViewGroup?,
 		savedInstanceState: Bundle?,
 	): View {
-		guideRowHeightPx = Utils.convertDpToPixel(requireContext(), GUIDE_ROW_HEIGHT_DP)
+		guideRowHeightPx = Utils.convertDpToPixel(requireContext(), STANDALONE_GUIDE_ROW_HEIGHT_DP)
 		guideRowWidthPerMinPx = Utils.convertDpToPixel(requireContext(), GUIDE_ROW_WIDTH_PER_MIN_DP)
 
 		val binding = LiveTvGuideBinding.inflate(layoutInflater, container, false)
@@ -111,8 +120,8 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		mSummary = binding.summary
 		mChannelStatus = binding.channelsStatus
 		mFilterStatus = binding.filterStatus
-		mChannelStatus.setTextColor(Color.GRAY)
-		mFilterStatus.setTextColor(Color.GRAY)
+		mChannelStatus.setTextColor(ContextCompat.getColor(requireContext(), R.color.guide_text_secondary))
+		mFilterStatus.setTextColor(ContextCompat.getColor(requireContext(), R.color.guide_text_secondary))
 		mInfoRow = binding.infoRow
 		mImage = binding.programImage
 		mChannels = binding.channels
@@ -199,11 +208,14 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		}
 	}
 
-	override fun refreshFavorite(channelId: UUID) {
+	override fun refreshFavorite(channelId: UUID, isFavorite: Boolean) {
 		for (i in 0 until mChannels.childCount) {
 			val header = mChannels.getChildAt(i) as? GuideChannelHeader ?: continue
 			if (header.channel.id == channelId) {
-				header.refreshFavorite()
+				TvManager.getChannelByID(channelId)?.let { channel ->
+					header.channel = channel
+				}
+				header.setFavorite(isFavorite)
 			}
 		}
 	}
@@ -265,9 +277,10 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private fun onKeyLongPress(keyCode: Int): Boolean = when (keyCode) {
 		KeyEvent.KEYCODE_ENTER,
 		KeyEvent.KEYCODE_DPAD_CENTER -> {
+			handledCenterLongPress = true
 			when (mSelectedProgramView) {
 				is ProgramGridCell -> showProgramOptions()
-				is GuideChannelHeader -> toggleFavorite()
+				is GuideChannelHeader -> showChannelOptions()
 			}
 			true
 		}
@@ -283,10 +296,15 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			KeyEvent.KEYCODE_MEDIA_PREVIOUS -> return handleChannelPageKey(keyCode)
 			KeyEvent.KEYCODE_ENTER,
 			KeyEvent.KEYCODE_DPAD_CENTER -> {
+				if (handledCenterLongPress) {
+					handledCenterLongPress = false
+					return true
+				}
 				if (event.flags and KeyEvent.FLAG_CANCELED_LONG_PRESS == 0) {
 					val selectedView = mSelectedProgramView
 					val selectedProgram = mSelectedProgram
 					if (selectedView is ProgramGridCell && selectedProgram != null) {
+						if (selectedProgram.isNoProgramDataPlaceholder()) return true
 						val channelId = selectedProgram.channelId
 						if (selectedProgram.startDate?.isBefore(LocalDateTime.now()) == true && channelId != null) {
 							playbackHelper.retrieveAndPlay(channelId, false, requireContext())
@@ -423,6 +441,31 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	override fun showProgramOptions() {
 		val selectedProgram = mSelectedProgram ?: return
 		val selectedView = mSelectedProgramView as? ProgramGridCell ?: return
+		if (selectedProgram.isNoProgramDataPlaceholder()) return
+		showProgramOptions(selectedProgram, selectedView, null, mImage)
+	}
+
+	private fun showChannelOptions() {
+		val selectedHeader = mSelectedProgramView as? GuideChannelHeader ?: return
+		val selectedProgramCell = findProgramCellForChannelHeader(selectedHeader)
+		val selectedProgram = selectedProgramCell
+			?.getProgram()
+			?.takeUnless { program -> program.isNoProgramDataPlaceholder() }
+
+		showProgramOptions(
+			program = selectedProgram ?: selectedHeader.channel,
+			selectedView = selectedProgramCell ?: noOpRecordingIndicator,
+			favoriteChannel = selectedHeader.channel,
+			anchor = selectedHeader,
+		)
+	}
+
+	private fun showProgramOptions(
+		program: BaseItemDto,
+		selectedView: RecordingIndicatorView,
+		favoriteChannel: BaseItemDto?,
+		anchor: View,
+	) {
 		if (mDetailPopup == null) {
 			mDetailPopup = LiveProgramDetailPopup(
 				requireActivity(),
@@ -432,7 +475,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				object : EmptyResponse(lifecycle) {
 					override fun onResponse() {
 						if (!isActive) return
-						mSelectedProgram?.channelId?.let { channelId ->
+						(popupTuneChannelId ?: mSelectedProgram?.channelId)?.let { channelId ->
 							playbackHelper.retrieveAndPlay(channelId, false, requireContext())
 						}
 					}
@@ -440,8 +483,28 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			)
 		}
 
-		mDetailPopup?.setContent(selectedProgram, selectedView)
-		mDetailPopup?.show(mImage, mTitle.left, mTitle.top - 10)
+		popupTuneChannelId = favoriteChannel?.id ?: program.channelId
+		mDetailPopup?.setContent(program, selectedView, favoriteChannel)
+		mDetailPopup?.show(anchor, mTitle.left, mTitle.top - 10)
+	}
+
+	private fun findProgramCellForChannelHeader(header: GuideChannelHeader): ProgramGridCell? {
+		val channelRowIndex = (0 until mChannels.childCount)
+			.firstOrNull { index -> mChannels.getChildAt(index) == header }
+			?: return null
+		val programRow = mProgramRows.getChildAt(channelRowIndex) as? LinearLayout ?: return null
+		val selectedProgramId = mSelectedProgram?.id
+		val now = LocalDateTime.now()
+
+		return (0 until programRow.childCount)
+			.mapNotNull { index -> programRow.getChildAt(index) as? ProgramGridCell }
+			.firstOrNull { cell -> selectedProgramId != null && cell.getProgram().id == selectedProgramId }
+			?: (0 until programRow.childCount)
+				.mapNotNull { index -> programRow.getChildAt(index) as? ProgramGridCell }
+				.firstOrNull { cell ->
+					val program = cell.getProgram()
+					program.startDate?.isBefore(now) == true && program.endDate?.isAfter(now) == true
+				}
 	}
 
 	override fun displayChannels(start: Int, max: Int) {
@@ -501,9 +564,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					pageUpStart = 0
 				}
 
-				mChannels.addView(TextView(requireContext()).apply {
-					height = guideRowHeightPx
-				})
 				displayedChannels = 0
 
 				val label = getLoadChannelsLabel(
@@ -511,7 +571,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					mAllChannels[pageUpStart].number,
 					mAllChannels[mCurrentDisplayChannelStartNdx - 1].number,
 				)
-				mProgramRows.addView(GuidePagingButton(requireContext(), this@LiveTvGuideFragment, pageUpStart, label))
+				addPagingRow(pageUpStart, label)
 			}
 		}
 
@@ -564,21 +624,22 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				var pageDnEnd = mCurrentDisplayChannelEndNdx + PAGE_SIZE
 				if (pageDnEnd >= mAllChannels.size) pageDnEnd = mAllChannels.size - 1
 
-				mChannels.addView(TextView(requireContext()).apply {
-					height = guideRowHeightPx
-				})
-
 				val label = getLoadChannelsLabel(
 					requireContext(),
 					mAllChannels[mCurrentDisplayChannelEndNdx + 1].number,
 					mAllChannels[pageDnEnd].number,
 				)
-				mProgramRows.addView(GuidePagingButton(requireContext(), this@LiveTvGuideFragment, mCurrentDisplayChannelEndNdx + 1, label))
+				addPagingRow(mCurrentDisplayChannelEndNdx + 1, label)
 			}
 
 			mChannelStatus.text = "$displayedChannels of ${mAllChannels.size} channels"
 			mFilterStatus.text = "${mFilters} for ${getGuideHours()} hours"
-			mFilterStatus.setTextColor(if (mFilters.any()) Color.WHITE else Color.GRAY)
+			mFilterStatus.setTextColor(
+				ContextCompat.getColor(
+					requireContext(),
+					if (mFilters.any()) R.color.white else R.color.guide_text_secondary,
+				)
+			)
 
 			mResetButton.visibility = if (mCurrentGuideStart.isAfter(LocalDateTime.now())) View.VISIBLE else View.GONE
 
@@ -587,7 +648,21 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		}
 	}
 
-	private fun getChannelHeader(channel: BaseItemDto) = GuideChannelHeader(requireContext(), this, channel)
+	private fun getChannelHeader(channel: BaseItemDto) =
+		GuideChannelHeader(requireContext(), this, channel, STANDALONE_GUIDE_ROW_HEIGHT_DP, true)
+
+	private fun addPagingRow(start: Int, label: String) {
+		mChannels.addView(TextView(requireContext()), guideRowLayoutParams())
+		mProgramRows.addView(
+			GuidePagingButton(requireContext(), this, start, label, true),
+			guideRowLayoutParams(),
+		)
+	}
+
+	private fun guideRowLayoutParams() = LinearLayout.LayoutParams(
+		LinearLayout.LayoutParams.MATCH_PARENT,
+		guideRowHeightPx,
+	)
 
 	private fun getProgramRow(programs: List<BaseItemDto>, channelId: UUID): LinearLayout? {
 		val programRow = LinearLayout(requireContext())
@@ -605,7 +680,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					mCurrentGuideEnd.plusMinutes(30L * (slot + 1)),
 				)
 
-				val cell = ProgramGridCell(requireContext(), this, empty, false)
+				val cell = ProgramGridCell(requireContext(), this, empty, false, true)
 				cell.id = currentCellId++
 				cell.layoutParams = ViewGroup.LayoutParams(30 * guideRowWidthPerMinPx, guideRowHeightPx)
 				if (slot == 0) cell.setFirst()
@@ -633,7 +708,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					start,
 				)
 
-				val cell = ProgramGridCell(requireContext(), this, empty, false)
+				val cell = ProgramGridCell(requireContext(), this, empty, false, true)
 				cell.id = currentCellId++
 				cell.layoutParams = ViewGroup.LayoutParams(
 					((start.toInstant(ZoneOffset.UTC).toEpochMilli() - prevEnd.toInstant(ZoneOffset.UTC).toEpochMilli()) / 60000).toInt() * guideRowWidthPerMinPx,
@@ -650,7 +725,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			prevEnd = end
 			val duration = (end.toInstant(ZoneOffset.UTC).toEpochMilli() - start.toInstant(ZoneOffset.UTC).toEpochMilli()) / 60000
 			if (duration > 0) {
-				val programCell = ProgramGridCell(requireContext(), this, item, false)
+				val programCell = ProgramGridCell(requireContext(), this, item, false, true)
 				programCell.id = currentCellId++
 				programCell.layoutParams = ViewGroup.LayoutParams(duration.toInt() * guideRowWidthPerMinPx, guideRowHeightPx)
 				if (start == mCurrentGuideStart) {
@@ -672,7 +747,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				mCurrentGuideEnd,
 			)
 
-			val cell = ProgramGridCell(requireContext(), this, empty, false)
+			val cell = ProgramGridCell(requireContext(), this, empty, false, true)
 			cell.id = currentCellId++
 			cell.layoutParams = ViewGroup.LayoutParams(
 				((mCurrentGuideEnd.toInstant(ZoneOffset.UTC).toEpochMilli() - prevEnd.toInstant(ZoneOffset.UTC).toEpochMilli()) / 60000).toInt() * guideRowWidthPerMinPx,
@@ -700,6 +775,16 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		while (current.isBefore(mCurrentGuideEnd)) {
 			mTimeline.addView(TextView(requireContext()).apply {
 				text = requireContext().getTimeFormatter().format(current)
+				gravity = Gravity.CENTER_VERTICAL
+				setPadding(
+					Utils.convertDpToPixel(requireContext(), 10),
+					0,
+					Utils.convertDpToPixel(requireContext(), 10),
+					0,
+				)
+				setTextColor(ContextCompat.getColor(requireContext(), R.color.guide_text_secondary))
+				textSize = 13f
+				typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
 				width = if (interval != 60) {
 					if (interval < 15) 15 * guideRowWidthPerMinPx else interval * guideRowWidthPerMinPx
 				} else {
@@ -723,6 +808,15 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	internal fun detailUpdateInternal() {
 		val selectedProgram = mSelectedProgram ?: return
 
+		mInfoRow.removeAllViews()
+		if (selectedProgram.isNoProgramDataPlaceholder()) {
+			mTitle.text = getString(R.string.no_program_data)
+			mSummary.text = ""
+			mImage.visibility = View.INVISIBLE
+			mDisplayDate.text = TimeUtils.getFriendlyDate(requireContext(), selectedProgram.startDate ?: mCurrentGuideStart)
+			return
+		}
+
 		mTitle.text = selectedProgram.name
 		mSummary.text = selectedProgram.overview
 
@@ -730,7 +824,12 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 		mDisplayDate.text = TimeUtils.getFriendlyDate(requireContext(), selectedProgram.startDate)
 		val url = imageHelper.getPrimaryImageUrl(selectedProgram, height = ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
-		mImage.load(url, null, ContextCompat.getDrawable(requireContext(), R.drawable.blank10x10), 0.0, 0)
+		if (url == null) {
+			mImage.visibility = View.INVISIBLE
+		} else {
+			mImage.visibility = View.VISIBLE
+			mImage.load(url, null, ContextCompat.getDrawable(requireContext(), R.drawable.blank10x10), 0.0, 0)
+		}
 
 		val selectedView = mSelectedProgramView as? ProgramGridCell
 		if (mDetailPopup?.isShowing() == true && selectedView != null) {
@@ -769,7 +868,11 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		}
 	}
 
+	private fun BaseItemDto.isNoProgramDataPlaceholder() =
+		mediaType == MediaType.UNKNOWN && name == getString(R.string.no_program_data)
+
 	companion object {
+		private const val STANDALONE_GUIDE_ROW_HEIGHT_DP = 64
 		const val GUIDE_ROW_HEIGHT_DP = 55
 		const val GUIDE_ROW_WIDTH_PER_MIN_DP = 7
 		const val PAGE_SIZE = 75
