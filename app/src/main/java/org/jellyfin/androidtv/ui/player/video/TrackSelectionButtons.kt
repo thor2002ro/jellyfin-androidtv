@@ -44,6 +44,9 @@ import org.jellyfin.androidtv.ui.playback.overlay.action.formatSubtitleOffsetSec
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
+import org.jellyfin.androidtv.util.toIso2LanguageCodeOrNull
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
+import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -545,15 +548,18 @@ private fun handleSubtitleOffsetKeyEvent(
 
 private val PlayerTrack.displayLabel: String
 	get() {
-		val languageName = language?.let { code ->
+		val languageCode = language.toIso2LanguageCodeOrNull()
+		val displayLanguage = languageCode ?: language.toIso2LanguageDisplayOrSelf()
+		val languageName = languageCode?.let { code ->
 			Locale.forLanguageTag(code).displayLanguage.takeIf { it.isNotBlank() && it != code }
 		}
+		val displayLabel = label.withoutUndeterminedLanguagePrefix()
 
 		return buildString {
 			when {
-				!label.isNullOrBlank() -> append(label)
+				displayLabel != null -> append(displayLabel)
 				languageName != null -> append(languageName)
-				!language.isNullOrBlank() -> append(language)
+				!displayLanguage.isNullOrBlank() -> append(displayLanguage)
 				else -> append("Track ${index + 1}")
 			}
 		}
