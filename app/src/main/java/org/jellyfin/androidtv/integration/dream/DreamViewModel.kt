@@ -125,7 +125,7 @@ class DreamViewModel(
 					response.items
 				}
 			} catch (err: ApiClientException) {
-				Timber.e(err)
+				Timber.w(err, "Unable to load dream items")
 				null
 			}
 

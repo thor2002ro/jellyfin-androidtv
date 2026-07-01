@@ -63,7 +63,7 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 			)
 		}
 
-		if (!launchedFromLogin) item {
+		item {
 			ListButton(
 				leadingContent = { Icon(painterResource(R.drawable.ic_flask), contentDescription = null) },
 				headingContent = { Text(stringResource(R.string.pref_developer_link)) },

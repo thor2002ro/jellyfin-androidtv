@@ -43,6 +43,7 @@ import org.jellyfin.androidtv.ui.base.LocalTextStyle
 import org.jellyfin.androidtv.ui.base.Seekbar
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.IconButton
+import org.jellyfin.androidtv.ui.base.button.IconButtonDefaults
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.player.base.PlayerSeekbar
 import org.jellyfin.androidtv.util.getTimeFormatter
@@ -50,6 +51,7 @@ import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.extensions.ticks
@@ -61,8 +63,8 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
-private val ChapterHintVerticalOffset = (-34).dp
-private val ChapterHintIconSize = 16.dp
+private val UpHintVerticalOffset = (-34).dp
+private val UpHintIconSize = 16.dp
 private const val DefaultPlaybackSpeed = 1.0
 
 @Composable
@@ -77,6 +79,7 @@ fun VideoPlayerControls(
 	liveTvProgramPosition: Duration = Duration.ZERO,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
+	val currentQueueEntry by playbackManager.queue.entry.collectAsState()
 	val entryIndex by playbackManager.queue.entryIndex.collectAsState()
 	val chapters = remember(item) { item?.buildChapterItems().orEmpty() }
 	val chapterMarkers = remember(chapters) { chapters.map { chapter -> chapter.startPositionTicks.ticks } }
@@ -85,6 +88,7 @@ fun VideoPlayerControls(
 	var changingLiveTvChannel by remember(item?.id) { mutableStateOf(false) }
 	val topControlsFocusRequester = remember { FocusRequester() }
 	val isLiveTv = item?.isLiveTv() == true
+	val playPauseEnabled = currentQueueEntry?.isLiveTv != true
 	val coroutineScope = rememberCoroutineScope()
 	val liveTvChannelNavigator = rememberLiveTvChannelNavigator()
 	val showPreviousEntry = isLiveTv || entryIndex > 0
@@ -135,11 +139,12 @@ fun VideoPlayerControls(
 		BoxWithConstraints(
 			modifier = Modifier.fillMaxWidth(),
 		) {
-			if (chapters.isNotEmpty() && !chaptersExpanded) {
-				ChapterHint(
+			if (isLiveTv || (chapters.isNotEmpty() && !chaptersExpanded)) {
+				UpHint(
+					text = stringResource(if (isLiveTv) R.string.lbl_live_tv_guide else R.string.chapters),
 					modifier = Modifier
 						.align(Alignment.TopCenter)
-						.offset(y = ChapterHintVerticalOffset)
+						.offset(y = UpHintVerticalOffset)
 				)
 			}
 
@@ -168,6 +173,7 @@ fun VideoPlayerControls(
 					playbackManager = playbackManager,
 					playState = playState,
 					focusRequester = topControlsFocusRequester,
+					enabled = playPauseEnabled,
 				)
 				StopButton(onClick = onStopClick)
 				RewindButton(playbackManager)
@@ -251,7 +257,8 @@ fun VideoPlayerControls(
 }
 
 @Composable
-private fun ChapterHint(
+private fun UpHint(
+	text: String,
 	modifier: Modifier = Modifier,
 ) {
 	val color = Color.White.copy(alpha = 0.72f)
@@ -264,10 +271,10 @@ private fun ChapterHint(
 			imageVector = ImageVector.vectorResource(R.drawable.ic_arrow_up),
 			contentDescription = null,
 			tint = color,
-			modifier = Modifier.size(ChapterHintIconSize),
+			modifier = Modifier.size(UpHintIconSize),
 		)
 		Text(
-			text = stringResource(R.string.chapters),
+			text = text,
 			style = JellyfinTheme.typography.listCaption.copy(
 				color = color,
 			),
@@ -313,10 +320,13 @@ private fun PlayPauseButton(
 	playbackManager: PlaybackManager,
 	playState: PlayState,
 	focusRequester: FocusRequester,
+	enabled: Boolean = true,
 ) {
 	val tooltip = stringResource(
 		when (playState) {
-			PlayState.PLAYING -> R.string.lbl_pause
+			PlayState.PLAYING,
+			PlayState.BUFFERING -> R.string.lbl_pause
+
 			PlayState.STOPPED,
 			PlayState.PAUSED,
 			PlayState.ERROR -> R.string.lbl_play
@@ -329,19 +339,33 @@ private fun PlayPauseButton(
 				PlayState.ERROR -> playbackManager.state.play()
 
 				PlayState.PLAYING -> playbackManager.state.pause()
+				PlayState.BUFFERING -> playbackManager.state.pause()
 				PlayState.PAUSED -> playbackManager.state.unpause()
 			}
 		},
 		modifier = Modifier
-			.focusRequester(focusRequester)
-			.onVisibilityChanged {
-				focusRequester.requestFocus()
-			},
+			.then(
+				if (enabled) {
+					Modifier
+						.focusRequester(focusRequester)
+						.onVisibilityChanged {
+							focusRequester.requestFocus()
+						}
+				} else {
+					Modifier
+				}
+			),
+		enabled = enabled,
+		colors = IconButtonDefaults.colors(
+			disabledContainerColor = Color.White.copy(alpha = 0.16f),
+			disabledContentColor = Color.White.copy(alpha = 0.38f),
+		),
 		tooltip = tooltip,
 	) {
 		AnimatedContent(playState) { playState ->
 			when (playState) {
-				PlayState.PLAYING -> {
+				PlayState.PLAYING,
+				PlayState.BUFFERING -> {
 					Icon(
 						imageVector = ImageVector.vectorResource(R.drawable.ic_pause),
 						contentDescription = tooltip,
