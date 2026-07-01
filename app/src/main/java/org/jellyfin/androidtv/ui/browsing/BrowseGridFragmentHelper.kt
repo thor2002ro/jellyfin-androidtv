@@ -3,7 +3,11 @@ package org.jellyfin.androidtv.ui.browsing
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import org.jellyfin.androidtv.preference.LibraryPreferences
+import org.jellyfin.androidtv.preference.PreferencesRepository
 import org.jellyfin.androidtv.ui.navigation.ProvideRouter
 import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.composable.SettingsDialog
@@ -12,6 +16,16 @@ import org.jellyfin.androidtv.ui.settings.routes
 import java.util.UUID
 
 fun BrowseGridFragment.createSettingsVisibility() = MutableStateFlow(false)
+
+fun BrowseGridFragment.loadLibraryPreferences(
+	preferencesRepository: PreferencesRepository,
+	preferencesId: String,
+	callback: (LibraryPreferences) -> Unit,
+) {
+	lifecycleScope.launch {
+		callback(preferencesRepository.getLibraryPreferencesAsync(preferencesId))
+	}
+}
 
 fun BrowseGridFragment.addSettings(
 	view: ComposeView,

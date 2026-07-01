@@ -73,6 +73,8 @@ private const val DefaultPlaybackSpeed = 1.0
 fun VideoPlayerControls(
 	playbackManager: PlaybackManager = koinInject(),
 	item: BaseItemDto? = null,
+	mediaSourceId: String? = null,
+	trickPlayEnabled: Boolean = false,
 	zoomMode: ZoomMode,
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onPlaybackInfoClick: () -> Unit = {},
@@ -198,6 +200,9 @@ fun VideoPlayerControls(
 				expanded = chaptersExpanded,
 				onDismissRequest = ::dismissChaptersAndRestoreControls,
 				chapters = chapters,
+				item = item,
+				mediaSourceId = mediaSourceId,
+				trickPlayEnabled = trickPlayEnabled,
 				width = maxWidth,
 				playbackManager = playbackManager,
 			)
@@ -289,13 +294,24 @@ private fun UpHint(
 @Composable
 fun VideoPlayerSeekControls(
 	playbackManager: PlaybackManager = koinInject(),
+	item: BaseItemDto? = null,
+	mediaSourceId: String? = null,
 	position: Duration? = null,
+	trickPlayEnabled: Boolean = false,
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
 ) {
 	Column(
+		horizontalAlignment = Alignment.CenterHorizontally,
 		verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
 	) {
+		VideoPlayerTrickplayThumbnail(
+			item = item,
+			mediaSourceId = mediaSourceId,
+			position = position.takeIf { liveTvProgramTimeline == null },
+			enabled = trickPlayEnabled,
+		)
+
 		TimelineSeekbar(
 			playbackManager = playbackManager,
 			position = position,

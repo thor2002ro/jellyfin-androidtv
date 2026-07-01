@@ -120,6 +120,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     //Live guide items
     private static final int PAGE_SIZE = 75;
+    private static final int AUTO_LOAD_CHANNEL_THRESHOLD = 8;
     private static final int GUIDE_HOURS = 9;
 
     BaseItemDto mSelectedProgram;
@@ -131,6 +132,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     private int mCurrentDisplayChannelEndNdx = 0;
     private List<BaseItemDto> mAllChannels;
     private UUID mFirstFocusChannelId;
+    private boolean mPreserveGuideFocusOnNextLoad = false;
     private int guideRowHeightPx;
     private int guideVisibleRows;
 
@@ -1242,11 +1244,20 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     }
 
     public void displayChannels(int start, int max) {
+        UUID focusChannelId = max > PAGE_SIZE ? getCurrentGuideFocusChannelId() : null;
+        displayChannels(start, max, focusChannelId);
+    }
+
+    private void displayChannels(int start, int max, @Nullable UUID focusChannelId) {
         int end = start + max;
         if (end > mAllChannels.size()) end = mAllChannels.size();
 
         mCurrentDisplayChannelStartNdx = start;
         mCurrentDisplayChannelEndNdx = end - 1;
+        if (focusChannelId != null) {
+            mFirstFocusChannelId = focusChannelId;
+            mPreserveGuideFocusOnNextLoad = true;
+        }
         Timber.v("Display channels pre-execute");
         tvGuideBinding.spinner.setVisibility(View.VISIBLE);
 
@@ -1285,7 +1296,9 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             Timber.v("Display programs pre-execute");
             tvGuideBinding.channels.removeAllViews();
             tvGuideBinding.programRows.removeAllViews();
-            mFirstFocusChannelId = playbackControllerContainer.getValue().getPlaybackController().getCurrentlyPlayingItem().getId();
+            if (!mPreserveGuideFocusOnNextLoad) {
+                mFirstFocusChannelId = playbackControllerContainer.getValue().getPlaybackController().getCurrentlyPlayingItem().getId();
+            }
 
             if (mCurrentDisplayChannelStartNdx > 0) {
                 // Show a paging row for channels above
@@ -1298,7 +1311,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 displayedChannels = 0;
 
                 String label = TextUtilsKt.getLoadChannelsLabel(requireContext(), mAllChannels.get(pageUpStart).getNumber(), mAllChannels.get(mCurrentDisplayChannelStartNdx - 1).getNumber());
-                tvGuideBinding.programRows.addView(new GuidePagingButton(requireContext(), guide, pageUpStart, label));
+                tvGuideBinding.programRows.addView(new GuidePagingButton(requireContext(), guide, pageUpStart, mCurrentDisplayChannelEndNdx - pageUpStart + 1, label));
             }
         }
 
@@ -1325,6 +1338,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 if (channel.getId().equals(mFirstFocusChannelId)) {
                     firstRow = row;
                     mFirstFocusChannelId = null; // only do this first time in not while paging around
+                    mPreserveGuideFocusOnNextLoad = false;
                 }
 
                 // set focus parameters if we are not on first row
@@ -1360,13 +1374,14 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
                 tvGuideBinding.channels.addView(placeHolder);
 
                 String label = TextUtilsKt.getLoadChannelsLabel(requireContext(), mAllChannels.get(mCurrentDisplayChannelEndNdx + 1).getNumber(), mAllChannels.get(pageDnEnd).getNumber());
-                tvGuideBinding.programRows.addView(new GuidePagingButton(requireContext(), guide, mCurrentDisplayChannelEndNdx + 1, label));
+                tvGuideBinding.programRows.addView(new GuidePagingButton(requireContext(), guide, mCurrentDisplayChannelStartNdx, pageDnEnd - mCurrentDisplayChannelStartNdx + 1, label));
             }
 
             tvGuideBinding.channelsStatus.setText(getResources().getString(R.string.lbl_tv_channel_status, displayedChannels, mAllChannels.size()));
             tvGuideBinding.filterStatus.setText(getResources().getString(R.string.lbl_tv_filter_status, GUIDE_HOURS));
 
             tvGuideBinding.spinner.setVisibility(View.GONE);
+            mPreserveGuideFocusOnNextLoad = false;
 
             if (firstRow != null) firstRow.requestFocus();
         }
@@ -1498,8 +1513,81 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         }
     }
 
+    private void maybeAutoLoadAdjacentChannels(RelativeLayout programView) {
+        if (!mGuideVisible || tvGuideBinding == null || tvGuideBinding.spinner.getVisibility() == View.VISIBLE || mAllChannels == null || mAllChannels.isEmpty()) {
+            return;
+        }
+
+        Integer channelIndex = getDisplayedChannelIndex(programView);
+        UUID focusChannelId = getGuideFocusChannelId(programView);
+        if (channelIndex == null || focusChannelId == null) return;
+
+        if (channelIndex >= mCurrentDisplayChannelEndNdx - AUTO_LOAD_CHANNEL_THRESHOLD && mCurrentDisplayChannelEndNdx < mAllChannels.size() - 1) {
+            int newEnd = Math.min(mAllChannels.size() - 1, mCurrentDisplayChannelEndNdx + PAGE_SIZE);
+            displayChannels(mCurrentDisplayChannelStartNdx, newEnd - mCurrentDisplayChannelStartNdx + 1, focusChannelId);
+        } else if (channelIndex <= mCurrentDisplayChannelStartNdx + AUTO_LOAD_CHANNEL_THRESHOLD && mCurrentDisplayChannelStartNdx > 0) {
+            int newStart = Math.max(0, mCurrentDisplayChannelStartNdx - PAGE_SIZE);
+            displayChannels(newStart, mCurrentDisplayChannelEndNdx - newStart + 1, focusChannelId);
+        }
+    }
+
+    @Nullable
+    private Integer getDisplayedChannelIndex(RelativeLayout programView) {
+        int rowIndex = -1;
+        if (programView instanceof GuideChannelHeader) {
+            for (int i = 0; i < tvGuideBinding.channels.getChildCount(); i++) {
+                if (programView == tvGuideBinding.channels.getChildAt(i)) {
+                    rowIndex = i;
+                    break;
+                }
+            }
+        } else if (programView instanceof ProgramGridCell) {
+            View parent = (View) programView.getParent();
+            for (int i = 0; i < tvGuideBinding.programRows.getChildCount(); i++) {
+                if (parent == tvGuideBinding.programRows.getChildAt(i)) {
+                    rowIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (rowIndex < 0) return null;
+
+        int topPagingRows = mCurrentDisplayChannelStartNdx > 0 ? 1 : 0;
+        int displayedOffset = rowIndex - topPagingRows;
+        int displayedChannelCount = mCurrentDisplayChannelEndNdx - mCurrentDisplayChannelStartNdx + 1;
+        if (displayedOffset < 0 || displayedOffset >= displayedChannelCount) return null;
+
+        return mCurrentDisplayChannelStartNdx + displayedOffset;
+    }
+
+    @Nullable
+    private UUID getCurrentGuideFocusChannelId() {
+        if (mSelectedProgramView != null) {
+            return getGuideFocusChannelId(mSelectedProgramView);
+        } else if (mSelectedProgram != null) {
+            return mSelectedProgram.getChannelId();
+        }
+
+        return null;
+    }
+
+    @Nullable
+    private UUID getGuideFocusChannelId(RelativeLayout programView) {
+        if (programView instanceof GuideChannelHeader) {
+            return ((GuideChannelHeader) programView).getChannel().getId();
+        } else if (programView instanceof ProgramGridCell) {
+            return ((ProgramGridCell) programView).getProgram().getChannelId();
+        } else if (mSelectedProgram != null) {
+            return mSelectedProgram.getChannelId();
+        }
+
+        return null;
+    }
+
     public void setSelectedProgram(RelativeLayout programView) {
         mSelectedProgramView = programView;
+        programView.post(() -> maybeAutoLoadAdjacentChannels(programView));
         if (mSelectedProgramView instanceof ProgramGridCell) {
             mSelectedProgram = ((ProgramGridCell) mSelectedProgramView).getProgram();
             mHandler.removeCallbacks(detailUpdateTask);
