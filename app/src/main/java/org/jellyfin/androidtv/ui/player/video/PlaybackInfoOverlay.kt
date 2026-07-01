@@ -1,11 +1,13 @@
 package org.jellyfin.androidtv.ui.player.video
 
+import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,15 +18,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -35,7 +36,12 @@ import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
+import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
@@ -49,6 +55,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
 import org.jellyfin.playback.jellyfin.queue.forceTranscodingSourceBitrate
@@ -63,6 +70,7 @@ fun PlaybackInfoOverlay(
 	playbackManager: PlaybackManager,
 	modifier: Modifier = Modifier,
 ) {
+	val context = LocalContext.current
 	val transcodingStatusRepository = koinInject<TranscodingStatusRepository>()
 	val userPreferences = koinInject<UserPreferences>()
 	val entry by rememberQueueEntry(playbackManager)
@@ -73,19 +81,21 @@ fun PlaybackInfoOverlay(
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
 	val forceTranscodingSourceBitrate = entry?.forceTranscodingSourceBitrate
 	val speed by playbackManager.state.speed.collectAsState()
+	val playerVideoSize by playbackManager.state.videoSize.collectAsState()
 	val subtitleOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
 	val softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled]
 	val mediaTest = remember(softwareCodecsEnabled) { MediaCodecCapabilitiesTest(softwareCodecsEnabled) }
 	val forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE)
 	val forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)
+	val displayHdrModes = remember(context, mediaTest) { getDisplayHdrModes(context, mediaTest) }
 	var refreshTick by remember { mutableStateOf(0) }
-	var positionInfo by remember(playbackManager) { mutableStateOf(playbackManager.state.positionInfo) }
-	var frameStats by remember(playbackManager) { mutableStateOf(playbackManager.backend.getFrameStats()) }
+	var positionInfo by remember(playbackManager, stream.identifier) { mutableStateOf(playbackManager.state.positionInfo) }
+	var frameStats by remember(playbackManager, stream.identifier) { mutableStateOf(playbackManager.backend.getFrameStats()) }
 	var transcodingInfo by remember(stream.identifier, itemId, mediaSourceId) {
 		mutableStateOf<TranscodingInfo?>(null)
 	}
 
-	LaunchedEffect(playbackManager) {
+	LaunchedEffect(playbackManager, stream.identifier) {
 		while (true) {
 			positionInfo = playbackManager.state.positionInfo
 			frameStats = playbackManager.backend.getFrameStats()
@@ -131,29 +141,51 @@ fun PlaybackInfoOverlay(
 	val sections = remember(
 		stream,
 		speed,
+		playerVideoSize,
 		subtitleOffset,
 		transcodingInfo,
 		clientWorkaroundInfo,
 		positionInfo,
 		frameStats,
 		refreshTick,
+		displayHdrModes,
 	) {
 		NewPlayerStreamStatusBuilder.build(
 			playbackManager = playbackManager,
 			stream = stream,
 			speed = speed,
+			playerVideoSize = playerVideoSize,
 			subtitleOffset = subtitleOffset,
 			positionInfo = positionInfo,
 			frameStats = frameStats,
 			transcodingInfo = transcodingInfo,
 			isQualityForcedTranscode = isQualityForcedTranscode,
 			clientWorkaroundInfo = clientWorkaroundInfo,
+			displayHdrModes = displayHdrModes,
 		)
 	}
 
+	Row(
+		modifier = modifier,
+		horizontalArrangement = Arrangement.spacedBy(4.dp),
+		verticalAlignment = Alignment.Top,
+	) {
+		PlaybackPerformanceOverlay(
+			stream = stream,
+			frameStats = frameStats,
+		)
+
+		PlaybackInfoTextPanel(sections = sections)
+	}
+}
+
+@Composable
+private fun PlaybackInfoTextPanel(
+	sections: List<PlaybackInfoSection>,
+) {
 	Column(
-		modifier = modifier
-			.width(150.dp)
+		modifier = Modifier
+			.width(190.dp)
 			.background(Color.Black.copy(alpha = 0.88f))
 			.padding(horizontal = 5.dp, vertical = 4.dp),
 		verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -171,30 +203,34 @@ fun PlaybackInfoOverlay(
 
 		sections.forEachIndexed { index, section ->
 			if (index > 0) Spacer(modifier = Modifier.size(1.dp))
+			PlaybackInfoSectionContent(section)
+		}
+	}
+}
 
-			if (section.title.isNotBlank()) {
-				Text(
-					text = section.title,
-					style = TextStyle(
-						color = Color.White,
-						fontSize = 6.5.sp,
-						lineHeight = 7.5.sp,
-						fontFamily = FontFamily.Monospace,
-						fontWeight = FontWeight.W700,
-					),
-				)
-			}
+@Composable
+private fun PlaybackInfoSectionContent(section: PlaybackInfoSection) {
+	if (section.title.isNotBlank()) {
+		Text(
+			text = section.title,
+			style = TextStyle(
+				color = Color.White,
+				fontSize = 6.5.sp,
+				lineHeight = 7.5.sp,
+				fontFamily = FontFamily.Monospace,
+				fontWeight = FontWeight.W700,
+			),
+		)
+	}
 
-			Column(
-				modifier = Modifier
-					.fillMaxWidth()
-					.padding(start = 4.dp),
-				verticalArrangement = Arrangement.spacedBy(0.dp),
-			) {
-				section.rows.forEach { row ->
-					PlaybackInfoRow(row)
-				}
-			}
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(start = 4.dp),
+		verticalArrangement = Arrangement.spacedBy(0.dp),
+	) {
+		section.rows.forEach { row ->
+			PlaybackInfoRow(row)
 		}
 	}
 }
@@ -204,19 +240,23 @@ private object NewPlayerStreamStatusBuilder {
 		playbackManager: PlaybackManager,
 		stream: MediaStream,
 		speed: Float,
+		playerVideoSize: VideoSize,
 		subtitleOffset: Duration,
 		positionInfo: PositionInfo,
 		frameStats: PlaybackFrameStats,
 		transcodingInfo: TranscodingInfo?,
 		isQualityForcedTranscode: Boolean,
 		clientWorkaroundInfo: String?,
+		displayHdrModes: String,
 	): List<PlaybackInfoSection> {
 		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
-		val audioTrack = stream.tracks.filterIsInstance<MediaStreamAudioTrack>().firstOrNull()
 		val trackSelection = playbackManager.trackSelection
 		val selectedAudio = trackSelection
 			?.getAvailableTracks(TrackType.AUDIO)
 			?.firstOrNull(PlayerTrack::isSelected)
+		val audioTrack = stream.tracks
+			.filterIsInstance<MediaStreamAudioTrack>()
+			.selectedTrack(selectedAudio)
 		val subtitleTracks = trackSelection
 			?.getAvailableTracks(TrackType.SUBTITLE)
 			.orEmpty()
@@ -235,6 +275,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Play method", stream.conversionMethod.displayName())
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
+					row("Display HDR", displayHdrModes)
 					row("Position", "${positionInfo.active.formatDuration()}/${positionInfo.duration.formatDuration()}")
 					row("Buffer", positionInfo.formatBuffer())
 					if (speed != 1f) row("Speed", "${"%.2f".format(speed)}x")
@@ -243,11 +284,13 @@ private object NewPlayerStreamStatusBuilder {
 			PlaybackInfoSection(
 				title = "Streaming Info",
 				rows = rows {
-					row("Video resolution", resolution(videoTrack?.width, videoTrack?.height))
+					row("Player resolution", playerVideoSize.resolution())
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
+					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
+					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
 					row("Audio language", audioLanguage(selectedAudio))
 					row("Bitrate", streamBitrate(videoTrack, audioTrack, transcodingInfo))
@@ -271,9 +314,12 @@ private object NewPlayerStreamStatusBuilder {
 				title = "Original Media Info",
 				rows = rows {
 					row("Container", stream.container.format)
+					row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
 					row("Video codec", videoTrack?.codec.formatCodec())
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
+					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate())
 					row("Video range", videoTrack?.videoRange)
+					if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
 					row("Audio codec", audioTrack?.codec.formatCodec())
 					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
@@ -308,13 +354,23 @@ private object NewPlayerStreamStatusBuilder {
 		}
 	}
 
+	private fun streamingHdrMode(
+		hdrMode: String?,
+		track: MediaStreamVideoTrack?,
+		transcodingInfo: TranscodingInfo?,
+	): String? = hdrMode ?: track
+		?.videoRange
+		?.toVideoRangeType()
+		?.takeIf { transcodingInfo?.isVideoDirect != false }
+		?.workaroundLabel()
+
 	private fun streamingAudioCodec(
 		track: MediaStreamAudioTrack?,
 		selectedTrack: PlayerTrack?,
 		transcodingInfo: TranscodingInfo?,
 		decoderName: String?,
 	): String? {
-		val source = (track?.codec ?: selectedTrack?.codec).formatCodec()
+		val source = (selectedTrack?.codec ?: track?.codec).formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
@@ -426,6 +482,8 @@ private object NewPlayerStreamStatusBuilder {
 		else -> null
 	}
 
+	private fun VideoSize.resolution() = resolution(width, height)
+
 	private fun Int.formatBitrate() = when {
 		this >= 1_000_000 -> "%.2f Mbps".format(this / 1_000_000.0)
 		else -> "%.0f Kbps".format(coerceAtLeast(0) / 1_000.0)
@@ -437,6 +495,14 @@ private object NewPlayerStreamStatusBuilder {
 		6 -> "5.1"
 		8 -> "7.1"
 		else -> toString()
+	}
+
+	private fun Float.formatFrameRate() = "%.3f fps".format(this)
+
+	private fun Boolean?.formatPassthroughSupport() = when (this) {
+		true -> "Yes"
+		false -> "No"
+		null -> null
 	}
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
@@ -458,6 +524,9 @@ private object NewPlayerStreamStatusBuilder {
 		append(value)
 	}
 }
+
+internal fun List<MediaStreamAudioTrack>.selectedTrack(selectedTrack: PlayerTrack?): MediaStreamAudioTrack? =
+	firstOrNull { track -> track.index == selectedTrack?.streamIndex } ?: firstOrNull()
 
 private fun buildClientWorkaroundInfo(
 	stream: MediaStream,
@@ -483,6 +552,65 @@ private fun buildClientWorkaroundInfo(
 		)?.let(::add)
 	}.joinToString("; ").takeIf { it.isNotBlank() }
 }
+
+private fun getDisplayHdrModes(
+	context: Context,
+	mediaTest: MediaCodecCapabilitiesTest,
+): String =
+	formatDisplayHdrModes(
+		supportedHdrTypes = getSupportedDisplayHdrTypes(context),
+		dolbyVisionModes = getDolbyVisionModes(mediaTest),
+	)
+
+internal fun formatDisplayHdrModes(
+	supportedHdrTypes: Set<Int>,
+	dolbyVisionModes: String = "None",
+): String =
+	supportedHdrTypes
+		.map { type ->
+			when (type) {
+				DISPLAY_HDR_TYPE_DOLBY_VISION -> formatDolbyVisionDisplayMode(dolbyVisionModes)
+				DISPLAY_HDR_TYPE_HDR10 -> "HDR10"
+				DISPLAY_HDR_TYPE_HDR10_PLUS -> "HDR10+"
+				DISPLAY_HDR_TYPE_HLG -> "HLG"
+				else -> "Unknown $type"
+			}
+		}
+		.takeIf { it.isNotEmpty() }
+		?.joinToString("; ")
+		?: "None"
+
+private fun formatDolbyVisionDisplayMode(dolbyVisionModes: String): String =
+	when (dolbyVisionModes) {
+		"None" -> "DV"
+		else -> "DV $dolbyVisionModes"
+	}
+
+private fun getDolbyVisionModes(mediaTest: MediaCodecCapabilitiesTest): String =
+	formatDolbyVisionModes(
+		hevcProfile5 = mediaTest.supportsHevcDolbyVisionProfile5(),
+		hevcProfile7 = mediaTest.supportsHevcDolbyVisionProfile7(),
+		hevcProfile8 = mediaTest.supportsHevcDolbyVisionProfile8(),
+		hevcEnhancementLayer = mediaTest.supportsHevcDolbyVisionEL(),
+		av1Profile10 = mediaTest.supportsAV1DolbyVision(),
+	)
+
+internal fun formatDolbyVisionModes(
+	hevcProfile5: Boolean,
+	hevcProfile7: Boolean,
+	hevcProfile8: Boolean,
+	hevcEnhancementLayer: Boolean,
+	av1Profile10: Boolean,
+): String = buildList {
+	val hevcProfiles = buildList {
+		if (hevcProfile5) add("P5")
+		if (hevcProfile7) add("P7")
+		if (hevcProfile8) add("P8")
+		if (hevcEnhancementLayer) add("EL")
+	}
+	if (hevcProfiles.isNotEmpty()) add("HEVC ${hevcProfiles.joinToString("/")}")
+	if (av1Profile10) add("AV1 P10")
+}.joinToString(", ").ifBlank { "None" }
 
 private fun liveTvQualityWorkaroundInfo(
 	isQualityForcedTranscode: Boolean,
@@ -555,25 +683,26 @@ private fun PlaybackInfoStaticRow(
 	label: String,
 	value: String,
 ) {
-	Text(
-		text = buildAnnotatedString {
-			withStyle(SpanStyle(fontWeight = FontWeight.W700)) {
-				append(label)
-				append(": ")
-			}
-			append(value)
-		},
-		modifier = Modifier.fillMaxWidth(),
-		softWrap = false,
-		maxLines = 1,
-		overflow = TextOverflow.Clip,
-		style = TextStyle(
-			color = Color.White,
-			fontSize = 6.sp,
-			lineHeight = 7.sp,
-			fontFamily = FontFamily.Monospace,
-		),
+	val style = TextStyle(
+		color = Color.White,
+		fontSize = 6.sp,
+		lineHeight = 7.sp,
+		fontFamily = FontFamily.Monospace,
 	)
+
+	Row(
+		modifier = Modifier.fillMaxWidth(),
+	) {
+		Text(
+			text = "$label: ",
+			style = style.copy(fontWeight = FontWeight.W700),
+		)
+		Text(
+			text = value,
+			modifier = Modifier.weight(1f),
+			style = style,
+		)
+	}
 }
 
 private data class PlaybackInfoSection(
