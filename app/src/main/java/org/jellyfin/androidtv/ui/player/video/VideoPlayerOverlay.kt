@@ -51,6 +51,7 @@ import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -80,12 +81,14 @@ fun VideoPlayerOverlay(
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onRemoteKeyEventHandlerChanged: (((keyCode: Int, event: KeyEvent?) -> Boolean)?) -> Unit = {},
 	onClosePlayer: () -> Unit = {},
+	openLiveTvGuideOnStart: Boolean = false,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
 	val videoQueueManager = koinInject<VideoQueueManager>()
 	val userPreferences = koinInject<UserPreferences>()
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
 	var showPlaybackInfo by remember { mutableStateOf(false) }
+	var openLiveTvGuideOnStartConsumed by remember { mutableStateOf(false) }
 	var skipPromptTarget by remember { mutableStateOf<Duration?>(null) }
 	var endingSkipPromptVisible by remember { mutableStateOf(false) }
 	var overlayWakeKeyCode by remember { mutableStateOf<Int?>(null) }
@@ -120,7 +123,9 @@ fun VideoPlayerOverlay(
 		.getOrNull(entryIndex + 1)
 		.takeIf { entryIndex >= 0 && entryIndex < videoQueue.lastIndex }
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
+	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
 	val playPauseEnabled = entry?.isLiveTv != true
+	val seekEnabled = entry?.isDirectPlayLiveTv != true
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
@@ -167,7 +172,12 @@ fun VideoPlayerOverlay(
 
 	fun dismissLiveTvGuide() {
 		showLiveTvGuide = false
+		liveTvGuideItem = null
 		visibilityState.show()
+	}
+
+	fun closeLiveTvGuide() {
+		dismissLiveTvGuide()
 	}
 
 	fun shouldHandleNextUpPrompt() = nextUpPromptVisible || nextUpStartInProgress
@@ -199,7 +209,7 @@ fun VideoPlayerOverlay(
 
 	BackHandler(enabled = windowInfo.isWindowFocused) {
 		if (showLiveTvGuide) {
-			dismissLiveTvGuide()
+			closeLiveTvGuide()
 		} else {
 			requestStopConfirmation()
 		}
@@ -218,6 +228,22 @@ fun VideoPlayerOverlay(
 
 	LaunchedEffect(entryIndex) {
 		nextUpStartInProgress = false
+	}
+
+	LaunchedEffect(currentLiveTvItem?.id) {
+		if (currentLiveTvItem != null) liveTvGuideItem = currentLiveTvItem
+	}
+
+	LaunchedEffect(openLiveTvGuideOnStart, currentLiveTvItem?.id) {
+		val liveTvItem = currentLiveTvItem ?: return@LaunchedEffect
+		if (!openLiveTvGuideOnStart || openLiveTvGuideOnStartConsumed) return@LaunchedEffect
+
+		openLiveTvGuideOnStartConsumed = true
+		liveTvGuideItem = liveTvItem
+		showLiveTvGuide = true
+		showPlaybackInfo = false
+		seekOverlayVisible = false
+		visibilityState.hide()
 	}
 
 	LaunchedEffect(item?.id, nextItem?.id, nextUpPromptVisible) {
@@ -327,7 +353,7 @@ fun VideoPlayerOverlay(
 			if (showLiveTvGuide) {
 				if (keyEvent.isBackKey()) {
 					if (keyEvent.action == KeyEvent.ACTION_DOWN && keyEvent.repeatCount == 0) {
-						dismissLiveTvGuide()
+						closeLiveTvGuide()
 					}
 					return@handler true
 				}
@@ -418,6 +444,7 @@ fun VideoPlayerOverlay(
 			if (!showLiveTvGuide && keyEvent.isDpadUpKey() && currentLiveTvItem != null && visibilityState.visible) {
 				if (keyEvent.action == KeyEvent.ACTION_DOWN && keyEvent.repeatCount == 0) {
 					clearCenterLongPress()
+					liveTvGuideItem = currentLiveTvItem
 					showLiveTvGuide = true
 					showPlaybackInfo = false
 					seekOverlayVisible = false
@@ -449,7 +476,7 @@ fun VideoPlayerOverlay(
 				}
 			}
 
-			if (keyEvent.isSeekKey() && !visibilityState.visible) {
+			if (seekEnabled && keyEvent.isSeekKey() && !visibilityState.visible) {
 				if (keyEvent.action == KeyEvent.ACTION_DOWN) {
 					clearCenterLongPress()
 					overlayWakeKeyCode = keyCode
@@ -552,7 +579,7 @@ fun VideoPlayerOverlay(
 		)
 
 		AnimatedVisibility(
-			visible = seekOverlayVisible && !visibilityState.visible,
+			visible = seekEnabled && seekOverlayVisible && !visibilityState.visible,
 			modifier = Modifier.align(Alignment.BottomCenter),
 			enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
 			exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
@@ -591,6 +618,7 @@ fun VideoPlayerOverlay(
 					position = previewPosition,
 					liveTvProgramTimeline = liveTvProgramTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
+					enabled = seekEnabled,
 				)
 				VideoPlayerTrickplayThumbnail(
 					item = item,
@@ -651,11 +679,14 @@ fun VideoPlayerOverlay(
 				)
 		)
 
-		if (showLiveTvGuide && currentLiveTvItem != null) {
+		val guideItem = liveTvGuideItem
+		if (showLiveTvGuide && guideItem != null) {
 			LiveTvGuideOverlay(
 				playbackManager = playbackManager,
-				currentItem = currentLiveTvItem,
-				onDismiss = ::dismissLiveTvGuide,
+				currentItem = guideItem,
+				onDismiss = ::closeLiveTvGuide,
+				showPreview = !openLiveTvGuideOnStart,
+				onCurrentChannelSelected = { dismissLiveTvGuide() },
 				onRemoteKeyEventHandlerChanged = { handler ->
 					liveTvGuideKeyEventHandler.handler = handler
 				},
