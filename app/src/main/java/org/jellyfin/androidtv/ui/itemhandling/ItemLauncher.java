@@ -255,6 +255,10 @@ public class ItemLauncher {
 
             case GridButton:
                 switch (((GridButtonBaseRowItem) rowItem).getGridButton().getId()) {
+                    case LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID:
+                        navigationRepository.getValue().navigate(Destinations.INSTANCE.getLiveTvChannels());
+                        break;
+
                     case LiveTvOption.LIVE_TV_GUIDE_OPTION_ID:
                         navigationRepository.getValue().navigate(Destinations.INSTANCE.getLiveTvGuide());
                         break;

@@ -265,6 +265,8 @@ fun FullDetailsFragment.resumePlayback(v: View) {
 	lifecycleScope.launch {
 		val nextUpEpisode = getNextUpEpisode()
 		if (nextUpEpisode == null) {
+			mResumeButton?.isVisible = false
+			playButton?.requestFocus()
 			Toast.makeText(
 				requireContext(),
 				getString(R.string.msg_video_playback_error),

@@ -77,6 +77,10 @@ import timber.log.Timber;
 
 @OptIn(markerClass = UnstableApi.class)
 public class VideoManager {
+    private static final int LIVE_TV_DEFAULT_BUFFER_MS = 3_000;
+    private static final int LIVE_TV_LARGE_BUFFER_MS = 5_000;
+    private static final int LIVE_TV_EXTRA_LARGE_BUFFER_MS = 10_000;
+
     private ZoomMode mZoomMode;
     private Activity mActivity;
     private Equalizer mEqualizer;
@@ -104,7 +108,7 @@ public class VideoManager {
         nightModeEnabled = userPreferences.get(UserPreferences.Companion.getAudioNightMode());
 
         boolean assDirectPlay = userPreferences.get(UserPreferences.Companion.getAssDirectPlay());
-        AssHandler assHandler = assDirectPlay ? new AssHandler(AssRenderType.OVERLAY_OPEN_GL, new AssHandlerConfig()) : null;
+        AssHandler assHandler = assDirectPlay ? new AssHandler(AssRenderType.OVERLAY_OPEN_GL, new AssHandlerConfig(10_000, 128, 0)) : null;
 
         mExoPlayer = configureExoplayerBuilder(activity, assHandler).build();
 
@@ -245,7 +249,7 @@ public class VideoManager {
 
             ExtractorsFactory assExtractorsFactory = AssPlayerKt.withAssMkvSupport(extractorsFactory, assSubtitleParserFactory, assHandler);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, assExtractorsFactory);
-            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(false);
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(true);
             mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory);
             exoPlayerBuilder.setMediaSourceFactory(mediaSourceFactory);
             exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, rendererFactory));
@@ -261,7 +265,7 @@ public class VideoManager {
 
             exoPlayerBuilder.setRenderersFactory(rendererFactory);
             exoPlayerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
-                    .experimentalParseSubtitlesDuringExtraction(false)
+                    .experimentalParseSubtitlesDuringExtraction(true)
                     .setSubtitleParserFactory(defaultSubtitleParserFactory));
         }
 
@@ -345,6 +349,13 @@ public class VideoManager {
         return mExoPlayer.isPlaying();
     }
 
+    public long getLiveTvBufferMs() {
+        BufferLength bufferLength = userPreferences.get(UserPreferences.Companion.getBufferLength());
+        if (bufferLength == BufferLength.EXTRA_LARGE) return LIVE_TV_EXTRA_LARGE_BUFFER_MS;
+        if (bufferLength == BufferLength.LARGE) return LIVE_TV_LARGE_BUFFER_MS;
+        return LIVE_TV_DEFAULT_BUFFER_MS;
+    }
+
     public void start() {
         if (mExoPlayer == null) {
             Timber.e("mExoPlayer should not be null!!");
@@ -402,7 +413,7 @@ public class VideoManager {
         return flags;
     }
 
-    public void setMediaStreamInfo(ApiClient api, StreamInfo streamInfo) {
+    public void setMediaStreamInfo(ApiClient api, StreamInfo streamInfo, boolean isLiveTv) {
         String path = streamInfo.getMediaUrl();
         if (path == null) {
             Timber.w("Video path is null cannot continue");
@@ -430,10 +441,17 @@ public class VideoManager {
                 }
             }
 
-            MediaItem mediaItem = new MediaItem.Builder()
+            MediaItem.Builder mediaItemBuilder = new MediaItem.Builder()
                     .setUri(Uri.parse(path))
-                    .setSubtitleConfigurations(subtitleConfigurations)
-                    .build();
+                    .setSubtitleConfigurations(subtitleConfigurations);
+
+            if (isLiveTv) {
+                mediaItemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                        .setTargetOffsetMs(getLiveTvBufferMs())
+                        .build());
+            }
+
+            MediaItem mediaItem = mediaItemBuilder.build();
 
             mExoPlayer.setMediaItem(mediaItem);
             mExoPlayer.prepare();

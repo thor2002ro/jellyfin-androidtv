@@ -34,10 +34,6 @@ interface MediaSegmentRepository {
 		 */
 		val AskToSkipMinDuration = 3.seconds
 
-		/**
-		 * The duration to wait before automatically hiding the "ask to skip" UI.
-		 */
-		val AskToSkipAutoHideDuration = 8.seconds
 	}
 
 	fun getDefaultSegmentTypeAction(type: MediaSegmentType): MediaSegmentAction

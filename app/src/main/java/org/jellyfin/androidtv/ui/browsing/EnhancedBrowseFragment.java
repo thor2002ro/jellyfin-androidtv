@@ -47,6 +47,7 @@ import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapterHelperKt;
 import org.jellyfin.androidtv.ui.navigation.Destinations;
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
+import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter;
 import org.jellyfin.androidtv.ui.presentation.GridButtonPresenter;
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter;
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter;
@@ -222,9 +223,9 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
 
     public void loadRows(List<BrowseRowDef> rows) {
         mRowsAdapter = new MutableObjectAdapter<Row>(new PositionableListRowPresenter());
-        mCardPresenter = new CardPresenter(false, 140);
+        mCardPresenter = new CardPresenter(false, getDefaultCardImageType(), getDefaultCardHeight());
         ClassPresenterSelector ps = new ClassPresenterSelector();
-        ps.addClassPresenter(GridButtonBaseRowItem.class, new GridButtonPresenter(155, 140));
+        ps.addClassPresenter(GridButtonBaseRowItem.class, new GridButtonPresenter(getDefaultGridButtonWidth(), getDefaultGridButtonHeight()));
         ps.addClassPresenter(BaseRowItem.class, mCardPresenter);
 
         for (BrowseRowDef def : rows) {
@@ -247,7 +248,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getSimilarQuery(), QueryType.SimilarMovies, mCardPresenter, mRowsAdapter);
                     break;
                 case LiveTvChannel:
-                    rowAdapter = new ItemRowAdapter(requireContext(), def.getTvChannelQuery(), 40, mCardPresenter, mRowsAdapter);
+                    rowAdapter = new ItemRowAdapter(requireContext(), def.getTvChannelQuery(), 40, new ChannelCardPresenter(), mRowsAdapter);
                     break;
                 case LiveTvProgram:
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getProgramQuery(), mCardPresenter, mRowsAdapter);
@@ -286,7 +287,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         if (!showViews || itemType == null) return;
 
         HeaderItem gridHeader = new HeaderItem(rowAdapter.size(), getString(R.string.lbl_views));
-        GridButtonPresenter mGridPresenter = new GridButtonPresenter();
+        GridButtonPresenter mGridPresenter = new GridButtonPresenter(getDefaultGridButtonWidth(), getDefaultGridButtonHeight());
         ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
 
         switch (itemType) {
@@ -408,6 +409,10 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                         navigationRepository.getValue().navigate(Destinations.INSTANCE.musicFavorites(mFolder.getId()));
                         break;
 
+                    case LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID:
+                        navigationRepository.getValue().navigate(Destinations.INSTANCE.getLiveTvChannels());
+                        break;
+
                     case SERIES:
                     case LiveTvOption.LIVE_TV_SERIES_OPTION_ID:
                         navigationRepository.getValue().navigate(Destinations.INSTANCE.getLiveTvSeriesRecordings());
@@ -432,6 +437,22 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                 }
             }
         }
+    }
+
+    protected ImageType getDefaultCardImageType() {
+        return ImageType.POSTER;
+    }
+
+    protected int getDefaultCardHeight() {
+        return 140;
+    }
+
+    protected int getDefaultGridButtonWidth() {
+        return 155;
+    }
+
+    protected int getDefaultGridButtonHeight() {
+        return 140;
     }
 
     private final class ItemViewClickedListener implements OnItemViewClickedListener {

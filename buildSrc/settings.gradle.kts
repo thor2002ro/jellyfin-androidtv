@@ -1,3 +1,5 @@
+rootProject.name = "jellyfin-androidtv-buildSrc"
+
 dependencyResolutionManagement {
 	versionCatalogs {
 		create("libs") {

@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
+import org.jellyfin.androidtv.util.coerceInOrStart
 
 class PopoverMenuPositionProvider(
 	val alignment: Alignment = Alignment.Companion.BottomCenter,
@@ -49,8 +50,8 @@ class PopoverMenuPositionProvider(
 
 		// Return position clamped to fit in window with overscan
 		return IntOffset(
-			x = x.coerceIn(OVERSCAN_X, windowSize.width - popupContentSize.width - OVERSCAN_X),
-			y = y.coerceIn(OVERSCAN_Y, windowSize.height - popupContentSize.height - OVERSCAN_Y),
+			x = x.coerceInOrStart(OVERSCAN_X, windowSize.width - popupContentSize.width - OVERSCAN_X),
+			y = y.coerceInOrStart(OVERSCAN_Y, windowSize.height - popupContentSize.height - OVERSCAN_Y),
 		)
 	}
 
