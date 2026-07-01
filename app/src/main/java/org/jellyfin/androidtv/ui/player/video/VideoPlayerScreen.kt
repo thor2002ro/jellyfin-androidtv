@@ -46,6 +46,7 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
@@ -145,7 +146,7 @@ private fun LiveTvTrackCacheUpdater(playbackManager: PlaybackManager) {
 		?.map { track ->
 			LiveTvTrackCache.Track(
 				index = track.index,
-				language = track.language,
+				language = track.language.toIso2LanguageDisplayOrSelf(),
 				title = track.title,
 				codec = track.codec,
 			)
@@ -156,7 +157,7 @@ private fun LiveTvTrackCacheUpdater(playbackManager: PlaybackManager) {
 		?.map { track ->
 			LiveTvTrackCache.Track(
 				index = track.index,
-				language = track.language,
+				language = track.language.toIso2LanguageDisplayOrSelf(),
 				title = track.title,
 				codec = track.codec,
 			)

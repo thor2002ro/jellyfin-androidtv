@@ -256,6 +256,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var subtitlesOffsetPosition = floatPreference("subtitles_offset_position", 0.08f)
 
 		/**
+		 * Ordered preferred subtitle languages.
+		 */
+		var subtitleLanguagePreferences = stringPreference("subtitle_language_preferences", "")
+
+		/**
 		 * Show screensaver in app
 		 */
 		var screensaverInAppEnabled = booleanPreference("screensaver_inapp_enabled", true)
