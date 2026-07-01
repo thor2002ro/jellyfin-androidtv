@@ -73,7 +73,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	private var mAllChannels: List<BaseItemDto> = emptyList()
 	private var mFirstFocusChannelId: UUID? = null
-	private var focusAtEnd = false
 	private val mFilters = GuideFilters()
 
 	private var mCurrentGuideStart: LocalDateTime = LocalDateTime.now()
@@ -99,8 +98,12 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private var programLoadRequestId = 0
 	private var programLoadInFlight = false
 	private var pendingGuideScrollY: Int? = null
+	private var lastHeldGuideScrollAt = 0L
+	private var guideDpadHoldConsumed = false
+	private var guideHorizontalConsumed = false
 	private var handledCenterLongPress = false
 	private var popupTuneChannelId: UUID? = null
+	private var playbackReturnChannelId: UUID? = null
 	private var ignoreNextFocusAutoLoad = false
 	private val noOpRecordingIndicator = object : RecordingIndicatorView {
 		override fun setRecTimer(id: String?) = Unit
@@ -162,6 +165,8 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			mChannelScroller.scrollTo(x, y)
 			maybeAutoLoadScrolledChannels(y)
 		})
+		programVScroller.isFocusable = false
+		programVScroller.isFocusableInTouchMode = false
 		mChannelScroller.setScrollViewListener(ScrollViewListener { _, x, y, _, _ ->
 			programVScroller.scrollTo(x, y)
 		})
@@ -203,7 +208,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 			mAllChannels = TvManager.getAllChannels().orEmpty()
 			if (mAllChannels.isNotEmpty()) {
-				displayChannelList()
 				displayChannels(0, pageSize)
 			} else {
 				mSpinner.visibility = View.GONE
@@ -228,7 +232,10 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		super.onResume()
 
 		mFilters.load()
+		playbackReturnChannelId = playbackReturnChannelId?.let { TvManager.getLastLiveTvChannel() ?: it }
+		playbackReturnChannelId?.let { mFirstFocusChannelId = it }
 		doLoad()
+		restorePlaybackFocus()
 	}
 
 	internal fun doLoad() {
@@ -238,7 +245,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			mChannels.childCount == 0 ||
 			mProgramRows.childCount == 0
 		) {
-			mFirstFocusChannelId = null
+			if (playbackReturnChannelId == null) mFirstFocusChannelId = null
 			load()
 		}
 	}
@@ -269,12 +276,17 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		}
 	}
 
-	override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean = when {
-		event == null -> false
-		event.action == KeyEvent.ACTION_UP -> onKeyUp(keyCode, event)
-		event.action == KeyEvent.ACTION_DOWN && event.isLongPress -> onKeyLongPress(keyCode)
-		event.action == KeyEvent.ACTION_DOWN -> onKeyDown(keyCode, event)
-		else -> false
+	override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean {
+		if (event == null) return false
+		if (handleGuideHorizontalNavigationKey(event)) return true
+		if (handleGuideVerticalNavigationKey(event)) return true
+
+		return when {
+			event.action == KeyEvent.ACTION_UP -> onKeyUp(keyCode, event)
+			event.action == KeyEvent.ACTION_DOWN && event.isLongPress -> onKeyLongPress(keyCode)
+			event.action == KeyEvent.ACTION_DOWN -> onKeyDown(keyCode, event)
+			else -> false
+		}
 	}
 
 	private fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = when (keyCode) {
@@ -323,24 +335,13 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 						if (selectedProgram.isNoProgramDataPlaceholder()) return true
 						val channelId = selectedProgram.channelId
 						if (selectedProgram.startDate?.isBefore(LocalDateTime.now()) == true && channelId != null) {
-							playbackHelper.retrieveAndPlay(channelId, false, requireContext())
+							retrieveAndPlayChannel(channelId)
 						} else {
 							showProgramOptions()
 						}
 						return true
 					} else if (selectedView is GuideChannelHeader) {
-						playbackHelper.getItemsToPlay(
-							requireContext(),
-							selectedView.channel,
-							false,
-							false,
-							object : Response<List<BaseItemDto>>(lifecycle) {
-								override fun onResponse(response: List<BaseItemDto>) {
-									if (!isActive) return
-									playbackLauncher.launch(requireContext(), response)
-								}
-							},
-						)
+						playChannel(selectedView.channel)
 					}
 				}
 				return false
@@ -353,7 +354,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					mDetailPopup?.isShowing() != true &&
 					channelId != null
 				) {
-					playbackHelper.retrieveAndPlay(channelId, false, requireContext())
+					retrieveAndPlayChannel(channelId)
 					return true
 				}
 			}
@@ -365,19 +366,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					selectedView.isLast()
 				) {
 					requestGuidePage(mCurrentGuideEnd)
-				}
-			}
-			KeyEvent.KEYCODE_DPAD_LEFT -> {
-				val selectedView = mSelectedProgramView
-				val selectedProgram = mSelectedProgram
-				if (
-					requireActivity().currentFocus is ProgramGridCell &&
-					selectedView is ProgramGridCell &&
-					selectedView.isFirst() &&
-					selectedProgram?.startDate?.isAfter(LocalDateTime.now()) == true
-				) {
-					focusAtEnd = true
-					requestGuidePage(mCurrentGuideStart.minusHours(getGuideHours().toLong()))
 				}
 			}
 		}
@@ -398,6 +386,144 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			isPageForward(keyCode),
 		)
 		return true
+	}
+
+	private fun handleGuideHorizontalNavigationKey(event: KeyEvent): Boolean {
+		if (mDetailPopup?.isShowing() == true) return false
+
+		return when (event.keyCode) {
+			KeyEvent.KEYCODE_DPAD_RIGHT -> when (event.action) {
+				KeyEvent.ACTION_DOWN -> moveFocusToProgramFromChannel().also { guideHorizontalConsumed = it }
+				KeyEvent.ACTION_UP -> guideHorizontalConsumed.also { guideHorizontalConsumed = false }
+				else -> false
+			}
+			KeyEvent.KEYCODE_DPAD_LEFT -> when (event.action) {
+				KeyEvent.ACTION_DOWN -> moveFocusToChannelFromProgram().also { guideHorizontalConsumed = it }
+				KeyEvent.ACTION_UP -> guideHorizontalConsumed.also { guideHorizontalConsumed = false }
+				else -> false
+			}
+			else -> false
+		}
+	}
+
+	private fun handleGuideVerticalNavigationKey(event: KeyEvent): Boolean {
+		if (!isGuideVerticalScrollKey(event.keyCode)) return false
+		if (mDetailPopup?.isShowing() == true) return false
+
+		return when (event.action) {
+			KeyEvent.ACTION_DOWN -> {
+				guideDpadHoldConsumed = true
+				if (event.repeatCount == 0 || event.eventTime - lastHeldGuideScrollAt >= HELD_GUIDE_SCROLL_INTERVAL_MS) {
+					lastHeldGuideScrollAt = event.eventTime
+					moveGuideVertically(event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+				} else {
+					keepGuideFocused()
+				}
+				true
+			}
+			KeyEvent.ACTION_UP -> {
+				lastHeldGuideScrollAt = 0L
+				guideDpadHoldConsumed.also {
+					guideDpadHoldConsumed = false
+					if (it) keepGuideFocused()
+				}
+			}
+			else -> false
+		}
+	}
+
+	private fun moveGuideVertically(forward: Boolean): Boolean {
+		if (programLoadInFlight || mAllChannels.isEmpty()) {
+			keepGuideFocused()
+			return true
+		}
+
+		if (mChannels.childCount == 0) {
+			keepGuideFocused()
+			return true
+		}
+
+		val currentIndex = currentChannelHeaderIndex()
+		val targetIndex = (currentIndex + if (forward) 1 else -1).coerceIn(0, mChannels.childCount - 1)
+		val target = mChannels.getChildAt(targetIndex) as? GuideChannelHeader
+		if (target?.requestFocus() == true) {
+			maybeAutoLoadAdjacentChannels(target)
+		} else {
+			keepGuideFocused()
+		}
+		return true
+	}
+
+	private fun moveFocusToProgramFromChannel(): Boolean {
+		val header = activity?.currentFocus as? GuideChannelHeader ?: mSelectedProgramView as? GuideChannelHeader ?: return false
+		val target = findProgramCellForChannelHeader(header) ?: findProgramRowForChannel(header.channel.id)?.preferredFocusChild()
+		return target?.requestFocus() == true
+	}
+
+	private fun moveFocusToChannelFromProgram(): Boolean {
+		if (activity?.currentFocus is GuideChannelHeader) return true
+		val cell = activity?.currentFocus as? ProgramGridCell ?: mSelectedProgramView as? ProgramGridCell ?: return false
+		return findChannelHeaderByChannelId(cell.getProgram().channelId)?.requestFocus() == true
+	}
+
+	private fun retrieveAndPlayChannel(channelId: UUID) {
+		rememberPlaybackReturnChannel(channelId)
+		val channel = mAllChannels.firstOrNull { it.id == channelId }
+		if (channel == null) {
+			playbackHelper.retrieveAndPlay(channelId, false, requireContext())
+			return
+		}
+
+		playChannel(channel)
+	}
+
+	private fun playChannel(channel: BaseItemDto) {
+		rememberPlaybackReturnChannel(channel.id)
+		playbackHelper.getItemsToPlay(
+			requireContext(),
+			channel,
+			false,
+			false,
+			object : Response<List<BaseItemDto>>(lifecycle) {
+				override fun onResponse(response: List<BaseItemDto>) {
+					if (!isActive) return
+					playbackLauncher.launch(requireContext(), response, replace = false)
+				}
+			},
+		)
+	}
+
+	private fun rememberPlaybackReturnChannel(channelId: UUID?) {
+		if (channelId == null) return
+		playbackReturnChannelId = channelId
+		mFirstFocusChannelId = channelId
+	}
+
+	private fun restorePlaybackFocus() {
+		val channelId = playbackReturnChannelId ?: return
+		if (programLoadInFlight || mAllChannels.isEmpty() || mChannels.childCount == 0) return
+
+		val header = findChannelHeaderByChannelId(channelId)
+		if (header != null) {
+			header.post {
+				if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@post
+				if (header.requestFocus()) {
+					playbackReturnChannelId = null
+					mFirstFocusChannelId = null
+				}
+			}
+			return
+		}
+
+		val channelIndex = getChannelIndex(channelId)
+		if (channelIndex == null) {
+			playbackReturnChannelId = null
+			mFirstFocusChannelId = null
+			return
+		}
+
+		mFirstFocusChannelId = channelId
+		loadChannelWindow(channelIndex, channelId)
 	}
 
 	private val datePickedListener = View.OnClickListener { view ->
@@ -489,7 +615,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					override fun onResponse() {
 						if (!isActive) return
 						(popupTuneChannelId ?: mSelectedProgram?.channelId)?.let { channelId ->
-							playbackHelper.retrieveAndPlay(channelId, false, requireContext())
+							retrieveAndPlayChannel(channelId)
 						}
 					}
 				},
@@ -564,7 +690,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		if (showSpinner) {
 			mSpinner.visibility = View.VISIBLE
 			mProgramRows.removeAllViews()
-			if (mFilters.any()) mChannels.removeAllViews()
+			mChannels.removeAllViews()
 			mChannelStatus.text = ""
 			mFilterStatus.text = ""
 		}
@@ -598,14 +724,13 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private inner class DisplayProgramsTask(
 		private val clearBeforeBuild: Boolean,
 	) : AsyncTask<Int, Int, List<GuideRow>>() {
-		private var firstFocusView: View? = null
 		private var focusChannelFound = false
 
 		override fun onPreExecute() {
 			Timber.v("Display programs pre-execute")
 			if (clearBeforeBuild) {
 				mProgramRows.removeAllViews()
-				if (mFilters.any()) mChannels.removeAllViews()
+				mChannels.removeAllViews()
 			}
 		}
 
@@ -613,7 +738,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			val start = params.getOrNull(0) ?: return emptyList()
 			val end = params.getOrNull(1) ?: return emptyList()
 			val rows = mutableListOf<GuideRow>()
-			var first = true
 			var prevRow: LinearLayout? = null
 
 			Timber.v("About to iterate programs")
@@ -623,11 +747,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				val programs = TvManager.getProgramsForChannel(channel.id, mFilters)
 				val row = getProgramRow(programs, channel.id) ?: continue
 
-				if (first) {
-					first = false
-					firstFocusView = row.preferredFocusChild()
-				}
-
 				prevRow?.let { previous ->
 					TvManager.setFocusParams(row, previous, true)
 					TvManager.setFocusParams(previous, row, false)
@@ -635,7 +754,6 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 				prevRow = row
 
 				if (channel.id == mFirstFocusChannelId) {
-					firstFocusView = row.preferredFocusChild(focusAtEnd)
 					focusChannelFound = true
 				}
 				rows.add(GuideRow(channel, row, i))
@@ -647,32 +765,46 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			Timber.v("Display programs post execute")
 			val currentFocus = requireActivity().currentFocus
 			val guideHadFocus = isGuideFocus(currentFocus)
-			val keepChannelFocus = !mFilters.any() && currentFocus is GuideChannelHeader
+			val focusProgramId = (currentFocus as? ProgramGridCell)?.getProgram()?.id
+			val currentFocusChannelId = (currentFocus as? RelativeLayout)?.let(::getFocusChannelId)
 			val restoreScrollY = if (clearBeforeBuild) null else pendingGuideScrollY ?: mChannelScroller.scrollY
+			val existingHeaders = if (clearBeforeBuild) emptyMap() else currentGuideHeadersByChannelId()
+			val existingRows = if (clearBeforeBuild) emptyMap() else currentProgramRowsByChannelId()
+			val displayRows = result.map { guideRow ->
+				guideRow.copy(row = existingRows[guideRow.channel.id] ?: guideRow.row)
+			}
+			val requestedFocusChannelId = mFirstFocusChannelId
 			val restoreFocusIndex = restoreScrollY?.let { (it / guideRowHeightPx).coerceIn(0, mAllChannels.lastIndex) }
-			val restoreFocusView = restoreFocusIndex?.let { index ->
-				result.firstOrNull { it.index == index }?.row?.preferredFocusChild()
+			val restoreFocusChannelId = restoreFocusIndex?.let { index ->
+				displayRows.firstOrNull { it.index == index }?.channel?.id
+			}
+			val firstDisplayChannelId = displayRows.firstOrNull()?.channel?.id
+			val focusChannelId = when {
+				clearBeforeBuild -> requestedFocusChannelId ?: firstDisplayChannelId
+				focusChannelFound -> requestedFocusChannelId
+				guideHadFocus -> currentFocusChannelId ?: restoreFocusChannelId
+				else -> null
 			}
 			pendingGuideScrollY = null
 			mProgramRows.removeAllViews()
-			if (mFilters.any()) mChannels.removeAllViews()
+			mChannels.removeAllViews()
 			updateGuideScrollPadding()
+			linkGuideRows(displayRows.map { it.row })
 
-			result.forEach { guideRow ->
-				if (mFilters.any()) {
-					val header = getChannelHeader(guideRow.channel)
-					mChannels.addView(header)
+			displayRows.forEach { guideRow ->
+				val header = existingHeaders[guideRow.channel.id]?.apply {
+					channel = guideRow.channel
+					setFavorite(guideRow.channel.userData?.isFavorite == true)
+				} ?: getChannelHeader(guideRow.channel).also { header ->
 					header.loadImage()
 				}
+				mChannels.addView(header)
 				mProgramRows.addView(guideRow.row)
 			}
 
-			if (focusChannelFound) {
-				focusAtEnd = false
-			}
 			mFirstFocusChannelId = null
 
-			mChannelStatus.text = "${result.size} of ${mAllChannels.size} channels"
+			updateChannelStatus(focusChannelId?.let(::getChannelIndex))
 			mFilterStatus.text = "${mFilters} for ${getGuideHours()} hours"
 			mFilterStatus.setTextColor(
 				ContextCompat.getColor(
@@ -686,20 +818,24 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			programLoadInFlight = false
 			mSpinner.visibility = View.GONE
 			val focusView = when {
-				clearBeforeBuild || focusChannelFound -> firstFocusView
-				guideHadFocus && !keepChannelFocus -> restoreFocusView
-				else -> null
+				guideHadFocus && focusProgramId != null -> findProgramCellByChannelId(focusChannelId, focusProgramId)
+					?: focusChannelId?.let(::findChannelHeaderByChannelId)
+				else -> focusChannelId?.let(::findChannelHeaderByChannelId)
 			}
 			if (focusView != null) {
 				ignoreNextFocusAutoLoad = true
 				if (focusView.requestFocus()) {
+					if (focusChannelId == playbackReturnChannelId) playbackReturnChannelId = null
 					focusView.post { ignoreNextFocusAutoLoad = false }
 				} else {
 					ignoreNextFocusAutoLoad = false
 					if (clearBeforeBuild) scrollToDisplayWindowStart()
+					if (guideHadFocus) keepGuideFocused()
 				}
 			} else if (clearBeforeBuild) {
 				scrollToDisplayWindowStart()
+			} else if (guideHadFocus) {
+				keepGuideFocused()
 			}
 			if (!clearBeforeBuild) {
 				mChannelScroller.post {
@@ -707,6 +843,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 					maybeAutoLoadScrolledChannels(mChannelScroller.scrollY)
 				}
 			}
+			restorePlaybackFocus()
 		}
 	}
 
@@ -718,21 +855,83 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 	private fun getChannelHeader(channel: BaseItemDto) =
 		GuideChannelHeader(requireContext(), this, channel, STANDALONE_GUIDE_ROW_HEIGHT_DP, true)
 
-	private fun displayChannelList() {
-		if (mFilters.any()) return
-		if (
-			mChannels.childCount == mAllChannels.size &&
-			mAllChannels.indices.all { index -> (mChannels.getChildAt(index) as? GuideChannelHeader)?.channel?.id == mAllChannels[index].id }
-		) {
-			return
+	private fun currentGuideHeadersByChannelId() = buildMap {
+		for (index in 0 until mChannels.childCount) {
+			val header = mChannels.getChildAt(index) as? GuideChannelHeader ?: continue
+			put(header.channel.id, header)
 		}
+	}
 
-		mChannels.removeAllViews()
-		mChannels.setVerticalPadding(0, 0)
-		mAllChannels.forEach { channel ->
-			val header = getChannelHeader(channel)
-			mChannels.addView(header)
-			header.loadImage()
+	private fun currentProgramRowsByChannelId() = buildMap {
+		for (index in 0 until mProgramRows.childCount) {
+			val row = mProgramRows.getChildAt(index) as? LinearLayout ?: continue
+			val channelId = row.channelId() ?: continue
+			put(channelId, row)
+		}
+	}
+
+	private fun currentChannelHeaderIndex(): Int {
+		val focusedHeader = activity?.currentFocus as? GuideChannelHeader
+		val selectedHeader = mSelectedProgramView as? GuideChannelHeader
+		val selectedProgramHeader = (mSelectedProgramView as? ProgramGridCell)
+			?.getProgram()
+			?.channelId
+			?.let(::findChannelHeaderByChannelId)
+
+		return listOfNotNull(focusedHeader, selectedHeader, selectedProgramHeader)
+			.map { header -> mChannels.indexOfChild(header) }
+			.firstOrNull { index -> index >= 0 }
+			?: 0
+	}
+
+	private fun findChannelHeaderByChannelId(channelId: UUID?): GuideChannelHeader? {
+		if (channelId == null) return null
+		for (index in 0 until mChannels.childCount) {
+			val header = mChannels.getChildAt(index) as? GuideChannelHeader ?: continue
+			if (header.channel.id == channelId) return header
+		}
+		return null
+	}
+
+	private fun findProgramCellByChannelId(channelId: UUID?, programId: UUID?): ProgramGridCell? {
+		val row = channelId?.let(::findProgramRowForChannel) ?: return null
+		if (programId != null) {
+			for (index in 0 until row.childCount) {
+				val cell = row.getChildAt(index) as? ProgramGridCell ?: continue
+				if (cell.getProgram().id == programId) return cell
+			}
+		}
+		return row.preferredFocusChild() as? ProgramGridCell
+	}
+
+	private fun getChannelIndex(channelId: UUID): Int? =
+		mAllChannels.indexOfFirst { channel -> channel.id == channelId }.takeIf { it >= 0 }
+
+	private fun updateChannelStatus(channelIndex: Int?) {
+		val total = mAllChannels.size
+		val selected = channelIndex?.takeIf { it >= 0 }?.plus(1)
+		mChannelStatus.text = if (selected == null) "$total channels" else "$selected of $total channels"
+	}
+
+	private fun LinearLayout.channelId(): UUID? {
+		for (index in 0 until childCount) {
+			val cell = getChildAt(index) as? ProgramGridCell ?: continue
+			return cell.getProgram().channelId
+		}
+		return null
+	}
+
+	private fun linkGuideRows(rows: List<LinearLayout>) {
+		rows.forEach { row ->
+			for (index in 0 until row.childCount) {
+				val cell = row.getChildAt(index) as? ProgramGridCell ?: continue
+				cell.nextFocusUpId = View.NO_ID
+				cell.nextFocusDownId = View.NO_ID
+			}
+		}
+		rows.zipWithNext { previous, row ->
+			TvManager.setFocusParams(row, previous, true)
+			TvManager.setFocusParams(previous, row, false)
 		}
 	}
 
@@ -740,7 +939,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		if (mFilters.any() || programLoadInFlight || mAllChannels.isEmpty()) return
 
 		val channelIndex = getDisplayedChannelIndex(programView) ?: return
-		val focusChannelId = getFocusChannelId(programView).takeUnless { programView is GuideChannelHeader }
+		val focusChannelId = getFocusChannelId(programView)
 		if (
 			channelIndex <= mCurrentDisplayChannelStartNdx + CHANNEL_BUFFER_ROWS ||
 			channelIndex >= mCurrentDisplayChannelEndNdx - CHANNEL_BUFFER_ROWS
@@ -756,8 +955,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 			return
 		}
 
-		val focusChannelId = getCurrentFocusChannelId().takeUnless { requireActivity().currentFocus is GuideChannelHeader }
-		loadVisibleChannelWindow(focusChannelId, scrollY)
+		loadVisibleChannelWindow(getCurrentFocusChannelId(), scrollY)
 	}
 
 	private fun loadVisibleChannelWindow(
@@ -825,7 +1023,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		} else {
 			mAllChannels.lastIndex - mCurrentDisplayChannelEndNdx
 		}
-		mChannels.setVerticalPadding(0, 0)
+		mChannels.setVerticalPadding(topRows, bottomRows)
 		mProgramRows.setVerticalPadding(topRows, bottomRows)
 	}
 
@@ -843,6 +1041,30 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		}
 		return false
 	}
+
+	private fun keepGuideFocused() {
+		if (isGuideFocus(activity?.currentFocus)) return
+		val target = (mSelectedProgramView as? GuideChannelHeader)?.takeIf { it.isAttachedToWindow }
+			?: (mSelectedProgramView as? ProgramGridCell)?.getProgram()?.channelId?.let(::findChannelHeaderByChannelId)
+			?: firstAvailableGuideFocus()
+			?: return
+		target.post {
+			if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@post
+			if (!isGuideFocus(activity?.currentFocus)) target.requestFocus()
+		}
+	}
+
+	private fun firstAvailableGuideFocus(): View? {
+		mChannels.getChildAt(0)?.let { return it }
+		for (rowIndex in 0 until mProgramRows.childCount) {
+			val row = mProgramRows.getChildAt(rowIndex) as? LinearLayout ?: continue
+			if (row.childCount > 0) return row.preferredFocusChild()
+		}
+		return null
+	}
+
+	private fun isGuideVerticalScrollKey(keyCode: Int) =
+		keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 
 	private fun View.setVerticalPadding(topRows: Int, bottomRows: Int) {
 		setPadding(
@@ -1047,6 +1269,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 
 	override fun setSelectedProgram(programView: RelativeLayout) {
 		mSelectedProgramView = programView
+		updateChannelStatus(getDisplayedChannelIndex(programView))
 		if (ignoreNextFocusAutoLoad) {
 			ignoreNextFocusAutoLoad = false
 		} else {
@@ -1087,6 +1310,7 @@ class LiveTvGuideFragment : Fragment(), LiveTvGuide, View.OnKeyListener {
 		private const val CHANNEL_BUFFER_ROWS = 1
 		private const val DEFAULT_VISIBLE_ROWS = 8
 		private const val IDLE_GUIDE_PREFETCH_DELAY_MS = 700L
+		private const val HELD_GUIDE_SCROLL_INTERVAL_MS = 90L
 		const val GUIDE_ROW_HEIGHT_DP = 55
 		const val GUIDE_ROW_WIDTH_PER_MIN_DP = 7
 		const val PAGE_SIZE = DEFAULT_VISIBLE_ROWS + (CHANNEL_BUFFER_ROWS * 2)

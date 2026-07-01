@@ -277,7 +277,11 @@ private fun List<MediaStream>.badgeText(
 		streams.forEach(::add)
 	}
 
-	return badges.take(MAX_STREAM_BADGE_LANGUAGES).joinToString(" ").takeIf { it.isNotBlank() }
+	val visibleBadges = badges.take(MAX_STREAM_BADGE_LANGUAGES)
+	val hiddenCount = badges.size - visibleBadges.size
+	return (visibleBadges + listOfNotNull(hiddenCount.takeIf { it > 0 }?.let { "+$it" }))
+		.joinToString(" ")
+		.takeIf { it.isNotBlank() }
 }
 
 private fun MediaStream.badgeText(): String? =
