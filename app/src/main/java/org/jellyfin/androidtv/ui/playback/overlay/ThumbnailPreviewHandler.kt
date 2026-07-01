@@ -14,6 +14,7 @@ class ThumbnailPreviewHandler(
 	private val thumbnailComposeView: ComposeView?,
 ) {
 	private var currentBitmap by mutableStateOf<Bitmap?>(null)
+	private var currentThumbnailIndex = -1
 	private val requestNumber = AtomicInteger(0)
 	private val lastShownRequestNumber = AtomicInteger(0)
 
@@ -24,6 +25,11 @@ class ThumbnailPreviewHandler(
 	}
 
 	fun updateThumbnailPreview(previewSeekPosition: Long) {
+		val provider = seekProvider ?: return
+		val thumbnailIndex = findClosestIndex(provider.seekPositions, previewSeekPosition)
+		if (thumbnailIndex == currentThumbnailIndex) return
+		currentThumbnailIndex = thumbnailIndex
+
 		val currentRequestNumber = requestNumber.incrementAndGet()
 
 		val thumbnailCallback = object : PlaybackSeekDataProvider.ResultCallback() {
@@ -37,8 +43,7 @@ class ThumbnailPreviewHandler(
 			}
 		}
 
-		val thumbnailIndex = findClosestIndex(seekProvider?.seekPositions ?: LongArray(0), previewSeekPosition)
-		seekProvider?.getThumbnail(thumbnailIndex, thumbnailCallback)
+		provider.getThumbnail(thumbnailIndex, thumbnailCallback)
 	}
 
 	private fun findClosestIndex(positions: LongArray, targetPosition: Long): Int {
@@ -55,6 +60,7 @@ class ThumbnailPreviewHandler(
 
 	fun hideThumbnailPreview() {
 		currentBitmap = null
+		currentThumbnailIndex = -1
 	}
 
 	fun isAvailable(): Boolean = seekProvider != null && thumbnailComposeView != null
