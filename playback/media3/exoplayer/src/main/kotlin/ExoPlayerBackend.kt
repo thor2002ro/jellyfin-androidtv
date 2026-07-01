@@ -132,6 +132,30 @@ class ExoPlayerBackend(
 	private var reportedPlayState: PlayState? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 
+	private fun currentMediaItemMatchesCurrentStream(): Boolean {
+		val mediaId = currentStream?.hashCode()?.toString() ?: return false
+		return exoPlayer.currentMediaItem?.mediaId == mediaId
+	}
+
+	private fun getSafePositionInfo(): PositionInfo {
+		val activePositionMs = exoPlayer.currentPosition
+		val bufferedPositionMs = exoPlayer.bufferedPosition
+		val mediaItemMatchesCurrentStream = currentMediaItemMatchesCurrentStream()
+		val duration = if (mediaItemMatchesCurrentStream) lastKnownDuration ?: Duration.ZERO else Duration.ZERO
+		val safeBufferedPositionMs = when {
+			!mediaItemMatchesCurrentStream -> activePositionMs
+			bufferedPositionMs < activePositionMs -> activePositionMs
+			duration > Duration.ZERO && bufferedPositionMs > duration.inWholeMilliseconds -> duration.inWholeMilliseconds
+			else -> bufferedPositionMs
+		}
+
+		return PositionInfo(
+			active = activePositionMs.milliseconds,
+			buffer = safeBufferedPositionMs.milliseconds,
+			duration = duration,
+		)
+	}
+
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
 		val liveStreamOffset = liveStreamTargetOffset ?: return null
 		val configuredOffset = exoPlayerOptions.liveTvBufferDuration ?: return liveStreamOffset
@@ -176,14 +200,21 @@ class ExoPlayerBackend(
 
 	private val assHandler by lazy {
 		AssHandler(
-			AssRenderType.OVERLAY_OPEN_GL,
+			exoPlayerOptions.libassRenderType,
 			AssHandlerConfig(
-				glyphSize = 10_000,
-				cacheSize = 128,
-				maxRenderPixels = 0,
+				glyphSize = exoPlayerOptions.libassGlyphSize,
+				cacheSize = exoPlayerOptions.libassCacheSize,
+				maxRenderPixels = exoPlayerOptions.libassMaxRenderPixels,
 			),
 		)
 	}
+
+	private val shouldUseLibassOverlayView: Boolean
+		get() = exoPlayerOptions.enableLibass && when (exoPlayerOptions.libassRenderType) {
+			AssRenderType.OVERLAY_CANVAS,
+			AssRenderType.OVERLAY_OPEN_GL -> true
+			else -> false
+		}
 
 	private val exoPlayer by lazy {
 		val dataSourceFactory = DefaultDataSource.Factory(
@@ -200,7 +231,7 @@ class ExoPlayerBackend(
 
 		fun DefaultMediaSourceFactory.configureSubtitles(subtitleParserFactory: SubtitleParser.Factory) = apply {
 			@Suppress("DEPRECATION")
-			experimentalParseSubtitlesDuringExtraction(true)
+			experimentalParseSubtitlesDuringExtraction(exoPlayerOptions.parseSubtitlesDuringExtraction)
 			setSubtitleParserFactory(subtitleParserFactory)
 		}
 
@@ -354,13 +385,14 @@ class ExoPlayerBackend(
 				else -> PlayState.PAUSED
 			}
 			if (state != reportedPlayState) {
+				val positionInfo = getSafePositionInfo()
 				Timber.i(
 					"ExoPlayer play state changed mappedState=%s playbackState=%s playWhenReady=%s positionMs=%s bufferedMs=%s mediaId=%s",
 					state,
 					exoPlayer.playbackStateName(),
 					exoPlayer.playWhenReady,
-					exoPlayer.currentPosition,
-					exoPlayer.bufferedPosition,
+					positionInfo.active.inWholeMilliseconds,
+					positionInfo.buffer.inWholeMilliseconds,
 					exoPlayer.currentMediaItem?.mediaId,
 				)
 				reportedPlayState = state
@@ -446,7 +478,7 @@ class ExoPlayerBackend(
 		if (surfaceView != null) {
 			if (subtitleView == null) {
 				subtitleView = SubtitleView(surfaceView.context).apply {
-					if (exoPlayerOptions.enableLibass) {
+					if (shouldUseLibassOverlayView) {
 						addView(AssSubtitleView(surfaceView.context, assHandler))
 					}
 				}
@@ -623,11 +655,7 @@ class ExoPlayerBackend(
 		exoPlayer.setPlaybackSpeed(speed)
 	}
 
-	override fun getPositionInfo(): PositionInfo = PositionInfo(
-		active = exoPlayer.currentPosition.milliseconds,
-		buffer = exoPlayer.bufferedPosition.milliseconds,
-		duration = lastKnownDuration ?: Duration.ZERO,
-	)
+	override fun getPositionInfo(): PositionInfo = getSafePositionInfo()
 
 	override fun getFrameStats(): PlaybackFrameStats {
 		val counters = exoPlayer.videoDecoderCounters
