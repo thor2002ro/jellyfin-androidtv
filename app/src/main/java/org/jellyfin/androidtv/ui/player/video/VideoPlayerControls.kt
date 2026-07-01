@@ -34,6 +34,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.constant.ZoomMode
@@ -332,6 +334,7 @@ private fun PlayPauseButton(
 			PlayState.ERROR -> R.string.lbl_play
 		}
 	)
+	val lifecycleOwner = LocalLifecycleOwner.current
 	IconButton(
 		onClick = {
 			when (playState) {
@@ -349,7 +352,9 @@ private fun PlayPauseButton(
 					Modifier
 						.focusRequester(focusRequester)
 						.onVisibilityChanged {
-							focusRequester.requestFocus()
+							if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+								focusRequester.requestFocus()
+							}
 						}
 				} else {
 					Modifier
