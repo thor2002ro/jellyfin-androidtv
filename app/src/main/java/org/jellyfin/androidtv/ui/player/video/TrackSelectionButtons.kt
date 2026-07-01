@@ -47,7 +47,7 @@ import org.jellyfin.playback.core.backend.TrackType
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -241,7 +241,7 @@ private fun reloadCurrentMediaStreamAfterTrackSelection(
 ) {
 	val isLiveTv = playbackManager.queue.entry.value?.baseItem?.isLiveTv() == true
 	val position = playbackManager.state.positionInfo.active.takeUnless { isLiveTv }
-	val playWhenReady = playbackManager.state.playState.value == PlayState.PLAYING
+	val playWhenReady = playbackManager.state.playState.value.isActivePlayback
 
 	coroutineScope.launch {
 		try {
