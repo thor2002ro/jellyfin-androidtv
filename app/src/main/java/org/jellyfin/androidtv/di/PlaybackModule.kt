@@ -3,8 +3,12 @@ package org.jellyfin.androidtv.di
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.getSystemService
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -116,6 +120,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 		},
 		lifecycle = ProcessLifecycleOwner.get().lifecycle,
 		liveTvDirectPlayEnabled = { userPreferences[UserPreferences.liveTvDirectPlayEnabled] },
+		networkAvailable = { androidContext().isNetworkAvailable() },
 	))
 
 	// Options
@@ -139,4 +144,24 @@ private fun createJellyfinMediaStreamOptions(
 		subtitleStreamIndex = TrackSelectionResolver.resolvePlaybackSubtitleStreamIndex(item, mediaSource, videoQueueManager),
 		alwaysBurnInSubtitleWhenTranscoding = userPreferences[UserPreferences.subtitlesBurnDuringTranscode],
 	)
+}
+
+@Suppress("DEPRECATION")
+private fun Context.isNetworkAvailable(): Boolean {
+	val connectivityManager = getSystemService<ConnectivityManager>() ?: return true
+	fun fallbackConnected() = connectivityManager.activeNetworkInfo?.isConnectedOrConnecting == true
+
+	if (AndroidVersion.sdkInt < 23) {
+		return fallbackConnected()
+	}
+
+	val network = connectivityManager.activeNetwork ?: return fallbackConnected()
+	val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return fallbackConnected()
+	return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+		capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+		capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+		capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+		capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+		capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) ||
+		fallbackConnected()
 }
