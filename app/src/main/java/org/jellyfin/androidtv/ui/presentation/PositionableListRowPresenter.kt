@@ -30,13 +30,14 @@ class PositionableListRowPresenter : CustomListRowPresenter {
 		viewHolder = holder
 		val grid = holder.gridView
 		if (trapFocus) {
-			val adapterSize = (item as? ListRow)?.adapter?.size() ?: 0
+			val adapter = (item as? ListRow)?.adapter
 			// Prevent focus from escaping the grid at either boundary so the user
 			// stays inside the popup (channel changer / chapter selector).
 			// Uses the adapter size to detect boundaries rather than hard-coding
 			// position 0, so this works regardless of the adapter's centering strategy.
 			grid.setOnKeyInterceptListener { event ->
 				val pos = grid.selectedPosition
+				val adapterSize = adapter?.size() ?: 0
 				when (event.keyCode) {
 					KeyEvent.KEYCODE_DPAD_LEFT -> pos <= 0
 					KeyEvent.KEYCODE_DPAD_RIGHT -> adapterSize > 0 && pos >= adapterSize - 1
