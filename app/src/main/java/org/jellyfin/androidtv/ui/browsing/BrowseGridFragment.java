@@ -11,6 +11,7 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
 import android.widget.PopupWindow;
@@ -28,6 +29,9 @@ import androidx.leanback.widget.Row;
 import androidx.leanback.widget.RowPresenter;
 import androidx.leanback.widget.VerticalGridPresenter;
 import androidx.lifecycle.Lifecycle;
+
+import coil3.ImageLoader;
+import coil3.request.ImageRequest;
 
 import org.jellyfin.androidtv.R;
 import org.jellyfin.androidtv.constant.ChangeTriggerType;
@@ -58,6 +62,8 @@ import org.jellyfin.androidtv.util.InfoLayoutHelper;
 import org.jellyfin.androidtv.util.KeyProcessor;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse;
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage;
+import org.jellyfin.androidtv.util.apiclient.JellyfinImageKt;
 import org.jellyfin.sdk.api.client.ApiClient;
 import org.jellyfin.sdk.model.api.BaseItemDto;
 import org.jellyfin.sdk.model.api.BaseItemKind;
@@ -67,8 +73,10 @@ import org.jellyfin.sdk.model.api.SortOrder;
 
 import java.text.MessageFormat;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import kotlin.Lazy;
@@ -78,7 +86,7 @@ import kotlinx.serialization.json.Json;
 import timber.log.Timber;
 
 public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
-    private final static int CHUNK_SIZE_MINIMUM = 25;
+    private final static int CHUNK_SIZE_MINIMUM = 80;
 
     private String mainTitle;
     private FragmentActivity mActivity;
@@ -119,6 +127,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final Lazy<ItemLauncher> itemLauncher = inject(ItemLauncher.class);
     private final Lazy<KeyProcessor> keyProcessor = inject(KeyProcessor.class);
     private final Lazy<ApiClient> api = inject(ApiClient.class);
+    private final Lazy<ImageLoader> imageLoader = inject(ImageLoader.class);
 
     private int mCardsScreenEst = 0;
     private int mCardsScreenStride = 0;
@@ -127,10 +136,20 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final double CARD_SPACING_PCT = 1.0; // 100% expressed as relative to the padding_left/top, which depends on the mCardFocusScale and AspectRatio
     private final double CARD_SPACING_HORIZONTAL_BANNER_PCT = 0.5; // 50% allow horizontal card overlapping for banners, otherwise spacing is too large
     private final int VIEW_SELECT_UPDATE_DELAY = 250; // delay in ms until we update the top-row info for a selected item
+    private final int GRID_MAX_PENDING_DPAD_MOVES = 2;
+    private final float GRID_SCROLL_SPEED_FACTOR = 0.65f;
+    private final int GRID_HELD_DPAD_SCROLL_INTERVAL_MS = 90;
+    private final int IMAGE_PREFETCH_MAX_ITEMS = 150;
 
     private boolean mDirty = true; // CardHeight, RowDef or GridSize changed
     private boolean mPreferencesLoaded = false;
     private boolean mViewInitialized = false;
+    private int mLastImagePrefetchPosition = -1;
+    private int mLastImagePrefetchItemsLoaded = -1;
+    private int mPendingSelectedPosition = -1;
+    private long mLastHeldScrollAt = 0L;
+    private boolean mDpadHoldConsumed = false;
+    private final Set<String> mPrefetchedImageUrls = new HashSet<>();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -252,10 +271,142 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mGridView.setHorizontalSpacing(mGridItemSpacingHorizontal);
         mGridView.setVerticalSpacing(mGridItemSpacingVertical);
         mGridView.setFocusable(true);
+        if (mCardsScreenEst > 0) mGridView.setInitialPrefetchItemCount(mCardsScreenEst);
+        mGridView.setSmoothScrollMaxPendingMoves(GRID_MAX_PENDING_DPAD_MOVES);
+        mGridView.setSmoothScrollSpeedFactor(GRID_SCROLL_SPEED_FACTOR);
+        mGridView.setOnKeyInterceptListener(this::handleHorizontalGridNavigationKey);
         binding.rowsFragment.removeAllViews();
         binding.rowsFragment.addView(mGridViewHolder.view);
 
         updateAdapter();
+    }
+
+    private boolean handleHorizontalGridNavigationKey(KeyEvent event) {
+        if (!(mGridPresenter instanceof HorizontalGridPresenter)) return false;
+        int keyCode = event.getKeyCode();
+        if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+
+        switch (event.getAction()) {
+            case KeyEvent.ACTION_DOWN:
+                mDpadHoldConsumed = true;
+                if (event.getRepeatCount() == 0 || event.getEventTime() - mLastHeldScrollAt >= GRID_HELD_DPAD_SCROLL_INTERVAL_MS) {
+                    mLastHeldScrollAt = event.getEventTime();
+                    return moveHorizontalGridSelection(isHorizontalScrollForward(keyCode), getHorizontalGridHoldJump());
+                }
+                keepGridFocused();
+                return true;
+            case KeyEvent.ACTION_UP:
+                mLastHeldScrollAt = 0L;
+                boolean consumed = mDpadHoldConsumed;
+                mDpadHoldConsumed = false;
+                if (consumed) keepGridFocused();
+                return consumed;
+            default:
+                return false;
+        }
+    }
+
+    private int getHorizontalGridHoldJump() {
+        if (!(mGridPresenter instanceof HorizontalGridPresenter)) return 1;
+        int rows = ((HorizontalGridPresenter) mGridPresenter).getNumberOfRows();
+        return Math.max(1, rows);
+    }
+
+    private boolean isHorizontalScrollForward(int keyCode) {
+        return mGridView != null && mGridView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
+                ? keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
+    }
+
+    private boolean moveHorizontalGridSelection(boolean forward, int distance) {
+        if (mAdapter == null || mGridView == null) return true;
+
+        int itemsLoaded = mAdapter.getItemsLoaded();
+        int total = mAdapter.getTotalItems() > 0 ? mAdapter.getTotalItems() : itemsLoaded;
+        if (total <= 0 || itemsLoaded <= 0) return true;
+
+        int currentPosition = mSelectedPosition >= 0 ? mSelectedPosition : Math.max(mGridView.getSelectedPosition(), 0);
+        int nextPosition = Math.max(0, Math.min(total - 1, currentPosition + (forward ? distance : -distance)));
+        mSelectedPosition = nextPosition;
+        updateCounter(nextPosition + 1);
+
+        if (nextPosition < itemsLoaded) {
+            mPendingSelectedPosition = -1;
+            mGridView.setSelectedPosition(nextPosition);
+            mAdapter.loadMoreItemsIfNeeded(nextPosition);
+            prefetchCardImages(nextPosition);
+        } else {
+            int loadedPosition = Math.max(0, itemsLoaded - 1);
+            mPendingSelectedPosition = nextPosition;
+            mGridView.setSelectedPosition(loadedPosition);
+            mAdapter.loadMoreItemsIfNeeded(loadedPosition);
+            prefetchCardImages(loadedPosition);
+        }
+        keepGridFocused();
+
+        return true;
+    }
+
+    private void keepGridFocused() {
+        BaseGridView grid = mGridView;
+        if (grid == null || mAdapter == null || mAdapter.getItemsLoaded() <= 0) return;
+
+        grid.post(() -> {
+            if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
+            View focused = mActivity != null ? mActivity.getCurrentFocus() : null;
+            if (isFocusInsideGrid(focused, grid)) return;
+            grid.requestFocus();
+        });
+    }
+
+    private boolean isFocusInsideGrid(View focused, View grid) {
+        View view = focused;
+        while (view != null) {
+            if (view == grid) return true;
+            ViewParent parent = view.getParent();
+            view = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    private void applyPendingSelectedPosition() {
+        if (mPendingSelectedPosition < 0 || mAdapter == null || mGridView == null || mAdapter.getItemsLoaded() <= 0) return;
+
+        int position = Math.min(mPendingSelectedPosition, mAdapter.getItemsLoaded() - 1);
+        if (position >= 0) {
+            mSelectedPosition = position;
+            mGridView.setSelectedPosition(position);
+        }
+        if (position == mPendingSelectedPosition || mAdapter.getItemsLoaded() >= mAdapter.getTotalItems()) {
+            mPendingSelectedPosition = -1;
+        }
+    }
+
+    private void prefetchCardImages(int position) {
+        if (mAdapter == null || position < 0 || mAdapter.getItemsLoaded() <= 0) return;
+
+        int itemsLoaded = mAdapter.getItemsLoaded();
+        int stride = Math.max(1, mCardsScreenEst);
+        if (mLastImagePrefetchPosition >= 0
+                && mLastImagePrefetchItemsLoaded == itemsLoaded
+                && Math.abs(position - mLastImagePrefetchPosition) < stride) return;
+        mLastImagePrefetchPosition = position;
+        mLastImagePrefetchItemsLoaded = itemsLoaded;
+
+        int maxHeight = Utils.convertDpToPixel(requireContext(), mCardHeight);
+        int maxWidth = Utils.convertDpToPixel(requireContext(), (int) getCardWidthBy(mCardHeight, mImageType, mFolder));
+        int end = Math.min(itemsLoaded, position + 1 + IMAGE_PREFETCH_MAX_ITEMS);
+        for (int i = position + 1; i < end; i++) {
+            if (!(mAdapter.get(i) instanceof BaseRowItem)) continue;
+
+            JellyfinImage image = ((BaseRowItem) mAdapter.get(i)).getImage(mImageType);
+            if (image == null) continue;
+
+            String url = JellyfinImageKt.getUrl(image, api.getValue(), maxWidth, maxHeight, null, null);
+            if (!mPrefetchedImageUrls.add(url)) continue;
+
+            imageLoader.getValue().enqueue(new ImageRequest.Builder(requireContext()).data(url).build());
+        }
     }
 
     private void updateAdapter() {
@@ -637,6 +788,12 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     private void buildAdapter() {
         mCardPresenter = new CardPresenter(false, mImageType, mCardHeight, true);
+        mLastImagePrefetchPosition = -1;
+        mLastImagePrefetchItemsLoaded = -1;
+        mPendingSelectedPosition = -1;
+        mLastHeldScrollAt = 0L;
+        mDpadHoldConsumed = false;
+        mPrefetchedImageUrls.clear();
 
         Timber.d("buildAdapter cardHeight <%s> getCardWidthBy <%s> chunks <%s> type <%s>", mCardHeight, (int) getCardWidthBy(mCardHeight, mImageType, mFolder), mRowDef.getChunkSize(), mRowDef.getQueryType().toString());
 
@@ -704,7 +861,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                     }, 500);
                 } else if (mGridView != null) {
                     mGridView.setFocusable(true);
-                    mGridView.requestFocus();
+                    applyPendingSelectedPosition();
+                    keepGridFocused();
                 }
             }
         });
@@ -957,8 +1115,12 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 binding.infoRow.removeAllViews();
                 mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
 
+                int position = mAdapter.indexOf(mCurrentItem);
                 if (!determiningPosterSize)
-                    mAdapter.loadMoreItemsIfNeeded(mAdapter.indexOf(mCurrentItem));
+                    mAdapter.loadMoreItemsIfNeeded(position);
+                if (position == mPendingSelectedPosition)
+                    mPendingSelectedPosition = -1;
+                prefetchCardImages(position);
             }
         }
     }
