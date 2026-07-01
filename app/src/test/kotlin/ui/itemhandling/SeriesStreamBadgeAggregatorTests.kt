@@ -32,7 +32,7 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 		items[2].mediaSources shouldBe null
 	}
 
-	test("grouped series badges use two episode samples") {
+	test("grouped series badges aggregate episode samples") {
 		val seriesId = UUID.randomUUID()
 
 		val item = BaseItemDto(id = seriesId, type = BaseItemKind.SERIES)
@@ -59,6 +59,44 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 			?.filter { it.type == MediaStreamType.SUBTITLE }
 			?.map { it.language }
 			.shouldContainExactlyInAnyOrder("fre", "eng")
+	}
+
+	test("grouped series badges keep subtitles from later season samples") {
+		val seriesId = UUID.randomUUID()
+
+		val item = BaseItemDto(id = seriesId, type = BaseItemKind.SERIES)
+			.withSeriesStreamBadgeSource(listOf(
+				episode(seriesId, source(stream(MediaStreamType.AUDIO, 0, "eng", isDefault = true))),
+				episode(seriesId, source(stream(MediaStreamType.AUDIO, 0, "eng", isDefault = true))),
+				episode(seriesId, source(
+					stream(MediaStreamType.AUDIO, 0, "jpn", isDefault = true),
+					stream(MediaStreamType.SUBTITLE, 1, "eng"),
+				)),
+			))
+
+		item.mediaSources?.single()?.mediaStreams
+			?.filter { it.type == MediaStreamType.SUBTITLE }
+			?.map { it.language } shouldBe listOf("eng")
+	}
+
+	test("series badges aggregate season badge items") {
+		val seriesId = UUID.randomUUID()
+		val firstSeason = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.SEASON)
+			.withSeriesStreamBadgeSource(listOf(
+				episode(seriesId, source(stream(MediaStreamType.AUDIO, 0, "eng", isDefault = true))),
+			))
+		val secondSeason = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.SEASON)
+			.withSeriesStreamBadgeSource(listOf(
+				episode(seriesId, source(stream(MediaStreamType.SUBTITLE, 1, "spa"))),
+			))
+
+		val item = BaseItemDto(id = seriesId, type = BaseItemKind.SERIES)
+			.withSeriesStreamBadgeSource(listOf(firstSeason, secondSeason))
+
+		item.defaultAudioLanguage() shouldBe "eng"
+		item.mediaSources?.single()?.mediaStreams
+			?.filter { it.type == MediaStreamType.SUBTITLE }
+			?.map { it.language } shouldBe listOf("spa")
 	}
 
 	test("direct latest videos copy stream badge sources") {
@@ -98,6 +136,39 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 		item.mediaSources?.single()?.mediaStreams
 			?.filter { it.type == MediaStreamType.SUBTITLE }
 			?.map { it.language } shouldBe listOf("eng")
+	}
+
+	test("video-only samples do not clear existing badges") {
+		val seasonId = UUID.randomUUID()
+		val item = BaseItemDto(
+			id = seasonId,
+			type = BaseItemKind.SEASON,
+			mediaSources = listOf(source(stream(MediaStreamType.AUDIO, 0, "eng", isDefault = true))),
+		).withSeriesStreamBadgeSource(listOf(
+			episode(UUID.randomUUID(), source(stream(MediaStreamType.VIDEO, 0, "und"))),
+		))
+
+		item.defaultAudioLanguage() shouldBe "eng"
+	}
+
+	test("season badge cache removes by related ids") {
+		val seriesId = UUID.randomUUID()
+		val seasonId = UUID.randomUUID()
+		val sample = episode(seriesId, source(stream(MediaStreamType.AUDIO, 0, "eng", isDefault = true)))
+
+		SeriesStreamBadgeCache.clear()
+		SeriesStreamBadgeCache.save(seriesId, seasonId, listOf(sample))
+		SeriesStreamBadgeCache.get(seasonId)?.single()?.defaultAudioLanguage() shouldBe "eng"
+
+		SeriesStreamBadgeCache.remove(setOf(UUID.randomUUID()))
+		SeriesStreamBadgeCache.get(seasonId)?.single()?.defaultAudioLanguage() shouldBe "eng"
+
+		SeriesStreamBadgeCache.remove(setOf(sample.id))
+		SeriesStreamBadgeCache.get(seasonId) shouldBe null
+
+		SeriesStreamBadgeCache.save(seriesId, seasonId, listOf(sample))
+		SeriesStreamBadgeCache.remove(setOf(seriesId))
+		SeriesStreamBadgeCache.get(seasonId) shouldBe null
 	}
 })
 
