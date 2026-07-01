@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.FrameLayout
@@ -18,6 +19,7 @@ class TextUnderButton @JvmOverloads constructor(
 	defStyleRes: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr, defStyleRes) {
 	val binding = TextUnderButtonBinding.inflate(LayoutInflater.from(context), this, true)
+	private val defaultIconTint: ColorStateList? = binding.imageButton.imageTintList
 
 	init {
 		isFocusable = true
@@ -35,6 +37,14 @@ class TextUnderButton @JvmOverloads constructor(
 	fun setIcon(@DrawableRes resource: Int, maxHeight: Int? = null) {
 		binding.imageButton.setImageResource(resource)
 		binding.imageButton.maxHeight = maxHeight ?: Int.MAX_VALUE
+	}
+
+	fun clearIconTint() {
+		binding.imageButton.imageTintList = null
+	}
+
+	fun resetIconTint() {
+		binding.imageButton.imageTintList = defaultIconTint
 	}
 
 	fun setPadding(padding: Int?) {

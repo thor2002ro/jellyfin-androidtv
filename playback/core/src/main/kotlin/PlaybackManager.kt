@@ -5,6 +5,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.jellyfin.playback.core.backend.BackendService
 import org.jellyfin.playback.core.backend.PlayerBackend
+import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.mediastream.MediaStreamService
 import org.jellyfin.playback.core.plugin.PlayerService
@@ -43,6 +44,10 @@ class PlaybackManager internal constructor(
 		Timber.i("Adding service $service")
 		service.initialize(this, state, Job(job))
 		services.add(service)
+	}
+
+	fun addBackendEventListener(listener: PlayerBackendEventListener) {
+		backendService.addListener(listener)
 	}
 
 	fun <T : PlayerService> getService(kclass: KClass<T>): T? {

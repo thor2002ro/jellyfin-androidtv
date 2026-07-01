@@ -115,7 +115,6 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
 
     TextUnderButton mResumeButton;
     private TextUnderButton mVersionsButton;
-    TextUnderButton mPrevButton;
     private TextUnderButton mRecordButton;
     private TextUnderButton mRecSeriesButton;
     private TextUnderButton mSeriesSettingsButton;
@@ -129,7 +128,6 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     protected UUID mChannelId;
     protected BaseRowItem mCurrentItem;
     private Instant mLastUpdated;
-    public UUID mPrevItemId;
 
     private RowsSupportFragment mRowsFragment;
     private MutableObjectAdapter<Row> mRowsAdapter;
@@ -628,6 +626,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 if (mBaseItem.getSeasonId() != null && mBaseItem.getIndexNumber() != null) {
                     // query index is zero-based but episode no is not
                     ItemRowAdapter nextAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createNextEpisodesRequest(mBaseItem.getSeasonId(), mBaseItem.getIndexNumber()), 0, false, true, new CardPresenter(true, 120), adapter);
+                    nextAdapter.setInitialSelectedPosition(mBaseItem.getIndexNumber());
                     addItemRow(adapter, nextAdapter, 5, getString(R.string.lbl_next_episode));
                 }
 
@@ -974,13 +973,13 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
             }
 
             //Favorite
-            favButton = TextUnderButton.create(requireContext(), R.drawable.ic_heart, buttonSize, 2, getString(R.string.lbl_favorite), new View.OnClickListener() {
+            favButton = TextUnderButton.create(requireContext(), favoriteIcon(userData.isFavorite()), buttonSize, 2, getString(R.string.lbl_favorite), new View.OnClickListener() {
                 @Override
                 public void onClick(final View v) {
                     FullDetailsFragmentHelperKt.toggleFavorite(FullDetailsFragment.this);
                 }
             });
-            favButton.setActivated(userData.isFavorite());
+            updateFavoriteButton(userData.isFavorite());
             mDetailsOverviewRow.addAction(favButton);
 
             // Add track selection buttons if available
@@ -988,22 +987,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         }
 
         if (mBaseItem.getType() == BaseItemKind.EPISODE && mBaseItem.getSeriesId() != null) {
-            //add the prev button first so it will be there in proper position - we'll show it later if needed
-            mPrevButton = TextUnderButton.create(requireContext(), R.drawable.ic_previous_episode, buttonSize, 3, getString(R.string.lbl_previous_episode), new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    if (mPrevItemId != null) {
-                        navigationRepository.getValue().navigate(Destinations.INSTANCE.itemDetails(mPrevItemId));
-                    }
-                }
-            });
-
-            mDetailsOverviewRow.addAction(mPrevButton);
-
-            //now go get our prev episode id
-            FullDetailsFragmentHelperKt.populatePreviousButton(FullDetailsFragment.this);
-
-            goToSeriesButton = TextUnderButton.create(requireContext(), R.drawable.ic_tv, buttonSize, 0, getString(R.string.lbl_goto_series), new View.OnClickListener() {
+            goToSeriesButton = TextUnderButton.create(requireContext(), R.drawable.ic_grid, buttonSize, 0, getString(R.string.lbl_goto_series), new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     gotoSeries();
@@ -1072,14 +1056,27 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         moreButton = TextUnderButton.create(requireContext(), R.drawable.ic_more, buttonSize, 0, getString(R.string.lbl_other_options), new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                FullDetailsFragmentHelperKt.showDetailsMenu(FullDetailsFragment.this, v, mBaseItem);
+                FullDetailsFragmentHelperKt.showDetailsMenu(FullDetailsFragment.this, v);
             }
         });
 
         moreButton.setVisibility(View.GONE);
         mDetailsOverviewRow.addAction(moreButton);
-        if (mBaseItem.getType() != BaseItemKind.EPISODE)
-            showMoreButtonIfNeeded();  //Episodes check for previous and then call this above
+        showMoreButtonIfNeeded();
+    }
+
+    private int favoriteIcon(boolean isFavorite) {
+        return isFavorite ? R.drawable.ic_star : R.drawable.ic_star_outline;
+    }
+
+    void updateFavoriteButton(boolean isFavorite) {
+        if (favButton == null) return;
+        favButton.setIcon(favoriteIcon(isFavorite), BUTTON_SIZE);
+        if (isFavorite) {
+            favButton.clearIconTint();
+        } else {
+            favButton.resetIconTint();
+        }
     }
 
     private void handleResumeButtonAndFocus(BaseItemDto nextUpEpisode) {
@@ -1136,12 +1133,9 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         int visibleOptions = mDetailsOverviewRow.getVisibleActions();
 
         List<TextUnderButton> actionsList = new ArrayList<>();
-        // added in order of priority (should match res/menu/menu_details_more.xml)
+        // Only actions in the details menu should be hidden into the overflow button.
         if (queueButton != null) actionsList.add(queueButton);
-        if (trailerButton != null) actionsList.add(trailerButton);
         if (shuffleButton != null) actionsList.add(shuffleButton);
-        if (favButton != null) actionsList.add(favButton);
-        if (goToSeriesButton != null) actionsList.add(goToSeriesButton);
 
         // reverse the list so the less important actions are hidden first
         Collections.reverse(actionsList);
