@@ -150,6 +150,7 @@ fun SubtitleTrackButton(
 	val hasOffsetCapableSubtitle = remember(availableTracks) {
 		availableTracks.any(PlayerTrack::supportsSubtitleTimingOffset)
 	}
+	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
 
 	if (availableTracks.isEmpty()) return
 
@@ -180,7 +181,12 @@ fun SubtitleTrackButton(
 					SubtitleOffsetTrackItem(
 						playbackManager = playbackManager,
 						expanded = offsetControlsExpanded,
-						onClick = { offsetControlsExpanded = !offsetControlsExpanded },
+						enabled = subtitleTimingOffsetSupported,
+						onClick = {
+							if (subtitleTimingOffsetSupported) {
+								offsetControlsExpanded = !offsetControlsExpanded
+							}
+						},
 					)
 				}
 			},
@@ -210,14 +216,14 @@ fun SubtitleOffsetButton(
 	playbackManager: PlaybackManager,
 ) {
 	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
-	if (!subtitleTimingOffsetSupported) return
 
 	var expanded by remember { mutableStateOf(false) }
 
 	Box {
 		val tooltip = stringResource(R.string.lbl_subtitle_offset)
 		IconButton(
-			onClick = { expanded = true },
+			onClick = { if (subtitleTimingOffsetSupported) expanded = true },
+			enabled = subtitleTimingOffsetSupported,
 			tooltip = tooltip,
 		) {
 			Icon(
@@ -406,6 +412,7 @@ private fun TrackItem(
 private fun SubtitleOffsetTrackItem(
 	playbackManager: PlaybackManager,
 	expanded: Boolean,
+	enabled: Boolean,
 	onClick: () -> Unit,
 ) {
 	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
@@ -420,6 +427,7 @@ private fun SubtitleOffsetTrackItem(
 
 	Button(
 		onClick = onClick,
+		enabled = enabled,
 		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
 	) {
 		Row(
