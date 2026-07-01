@@ -192,8 +192,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		super.onResume()
 
 		//React to deletion
-		if (currentRow != null && currentItem != null && currentItem?.baseItem != null && currentItem!!.baseItem!!.id == dataRefreshService.lastDeletedItemId) {
-			(currentRow!!.adapter as ItemRowAdapter).remove(currentItem)
+		val deletedItem = currentItem
+		if (currentRow != null && deletedItem != null && deletedItem.baseItem?.id == dataRefreshService.lastDeletedItemId) {
+			(currentRow!!.adapter as ItemRowAdapter).remove(deletedItem)
 			currentItem = null
 			dataRefreshService.lastDeletedItemId = null
 		}
@@ -208,14 +209,14 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 
 		// Update audio queue
-		Timber.i("Updating audio queue in HomeFragment (onResume)")
+		Timber.d("Updating audio queue in HomeFragment (onResume)")
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
 	}
 
 	override fun onQueueStatusChanged(hasQueue: Boolean) {
 		if (activity == null || requireActivity().isFinishing) return
 
-		Timber.i("Updating audio queue in HomeFragment (onQueueStatusChanged)")
+		Timber.d("Updating audio queue in HomeFragment (onQueueStatusChanged)")
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
 	}
 
@@ -256,7 +257,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		val adapter = currentRow?.adapter as? ItemRowAdapter ?: return
 		val item = currentItem ?: return
 
-		Timber.i("Refresh item ${item.getFullName(requireContext())}")
+		Timber.d("Refresh item ${item.getFullName(requireContext())}")
 		adapter.refreshItem(api, this, item)
 	}
 

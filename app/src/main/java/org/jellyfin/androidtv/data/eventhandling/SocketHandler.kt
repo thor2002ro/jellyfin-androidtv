@@ -191,7 +191,7 @@ class SocketHandler(
 		// Audio playback uses (Rewrite)MediaManager, (legacy) video playback uses playbackController
 		when {
 			mediaManager.hasAudioQueueItems() -> {
-				Timber.i("Ignoring PlayStateMessage: should be handled by PlaySessionSocketService")
+				Timber.d("Ignoring PlayStateMessage: should be handled by PlaySessionSocketService")
 				return@withContext
 			}
 

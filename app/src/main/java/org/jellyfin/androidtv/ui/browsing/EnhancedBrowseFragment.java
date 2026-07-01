@@ -228,7 +228,8 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         ps.addClassPresenter(GridButtonBaseRowItem.class, new GridButtonPresenter(getDefaultGridButtonWidth(), getDefaultGridButtonHeight()));
         ps.addClassPresenter(BaseRowItem.class, mCardPresenter);
 
-        for (BrowseRowDef def : rows) {
+        for (int rowOrder = 0; rowOrder < rows.size(); rowOrder++) {
+            BrowseRowDef def = rows.get(rowOrder);
             HeaderItem header = new HeaderItem(def.getHeaderText());
             ItemRowAdapter rowAdapter;
             switch (def.getQueryType()) {
@@ -248,10 +249,10 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getSimilarQuery(), QueryType.SimilarMovies, mCardPresenter, mRowsAdapter);
                     break;
                 case LiveTvChannel:
-                    rowAdapter = new ItemRowAdapter(requireContext(), def.getTvChannelQuery(), 40, new ChannelCardPresenter(), mRowsAdapter);
+                    rowAdapter = new ItemRowAdapter(requireContext(), def.getTvChannelQuery(), 40, getChannelCardPresenter(), mRowsAdapter);
                     break;
                 case LiveTvProgram:
-                    rowAdapter = new ItemRowAdapter(requireContext(), def.getProgramQuery(), mCardPresenter, mRowsAdapter);
+                    rowAdapter = new ItemRowAdapter(requireContext(), def.getProgramQuery(), def.getUseChannelCards() ? getChannelCardPresenter() : mCardPresenter, mRowsAdapter, def.getLiveTvProgramSelectAction());
                     break;
                 case LiveTvRecording:
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getRecordingQuery(), def.getChunkSize(), mCardPresenter, mRowsAdapter);
@@ -274,13 +275,17 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
 
             ListRow row = new ListRow(header, rowAdapter);
             mRowsAdapter.add(row);
-            rowAdapter.setRow(row);
+            rowAdapter.setRow(row, rowOrder);
+            onRowAdapterCreated(def, rowAdapter);
             rowAdapter.Retrieve();
         }
 
         addAdditionalRows(mRowsAdapter);
 
         if (mRowsFragment != null) mRowsFragment.setAdapter(mRowsAdapter);
+    }
+
+    protected void onRowAdapterCreated(BrowseRowDef rowDef, ItemRowAdapter rowAdapter) {
     }
 
     protected void addAdditionalRows(MutableObjectAdapter<Row> rowAdapter) {
@@ -441,6 +446,10 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
 
     protected ImageType getDefaultCardImageType() {
         return ImageType.POSTER;
+    }
+
+    protected Presenter getChannelCardPresenter() {
+        return new ChannelCardPresenter();
     }
 
     protected int getDefaultCardHeight() {

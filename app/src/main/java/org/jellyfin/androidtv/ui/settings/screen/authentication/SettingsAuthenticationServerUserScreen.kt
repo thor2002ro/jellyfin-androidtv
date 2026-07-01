@@ -15,6 +15,8 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.AuthenticationRepository
 import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.auth.repository.ServerUserRepository
+import org.jellyfin.androidtv.auth.repository.SessionRepository
+import org.jellyfin.androidtv.auth.store.AuthenticationPreferences
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.list.ListButton
@@ -31,6 +33,8 @@ fun SettingsAuthenticationServerUserScreen(serverId: UUID, userId: UUID) {
 	val serverRepository = koinInject<ServerRepository>()
 	val serverUserRepository = koinInject<ServerUserRepository>()
 	val authenticationRepository = koinInject<AuthenticationRepository>()
+	val sessionRepository = koinInject<SessionRepository>()
+	val authenticationPreferences = koinInject<AuthenticationPreferences>()
 
 	LaunchedEffect(serverRepository) { serverRepository.loadStoredServers() }
 
@@ -55,7 +59,9 @@ fun SettingsAuthenticationServerUserScreen(serverId: UUID, userId: UUID) {
 				captionContent = { Text(stringResource(R.string.lbl_sign_out_content)) },
 				onClick = {
 					lifecycleScope.launch {
-						if (user != null) authenticationRepository.logout(user)
+						if (user == null || authenticationRepository.logout(user)) {
+							authenticationPreferences.clearUser(serverId, userId)
+						}
 						router.back()
 					}
 				}
@@ -69,7 +75,14 @@ fun SettingsAuthenticationServerUserScreen(serverId: UUID, userId: UUID) {
 				captionContent = { Text(stringResource(R.string.lbl_remove_user_content)) },
 				onClick = {
 					lifecycleScope.launch {
-						if (user != null) serverUserRepository.deleteStoredUser(user)
+						if (user != null) {
+							if (serverUserRepository.deleteStoredUser(user)) {
+								authenticationPreferences.clearUser(user.serverId, user.id)
+								if (sessionRepository.currentSession.value?.let { it.serverId == user.serverId && it.userId == user.id } == true) {
+									sessionRepository.destroyCurrentSession()
+								}
+							}
+						}
 						router.back()
 					}
 				}

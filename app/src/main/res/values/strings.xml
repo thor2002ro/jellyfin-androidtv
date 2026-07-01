@@ -45,6 +45,7 @@
     <string name="lbl_pause">Pause</string>
     <string name="lbl_stop">Stop</string>
     <string name="player_back_to_stop">Press Back again to stop playback</string>
+    <string name="app_back_to_exit">Press Back again to exit</string>
     <string name="lbl_exit">Exit</string>
     <string name="lbl_cancel">Cancel</string>
     <string name="lbl_cancel_recording">Cancel recording</string>
@@ -132,8 +133,8 @@
     <string name="lbl_audio_output">Audio output</string>
     <string name="lbl_goto_series">Go to series</string>
     <string name="lbl_enable_debug">Debug options</string>
-    <string name="lbl_verbose_logging">Verbose app logging</string>
-    <string name="desc_verbose_logging">Enable app logging. Leave off for smoother UI performance.</string>
+    <string name="lbl_verbose_logging">Verbose debug logging</string>
+    <string name="desc_verbose_logging">Include very detailed debug messages in logcat. Normal app logs stay enabled.</string>
     <string name="desc_debug">Provide extra information for debugging</string>
     <string name="lbl_showing">Showing</string>
     <string name="lbl_all_items">All items</string>
@@ -338,6 +339,7 @@
     <string name="pref_clock_display_playback">During playback</string>
     <string name="server_connecting">Connecting to %1$s</string>
     <string name="server_connection_failed">Unable to connect to server</string>
+    <string name="server_connection_failed_with_reason">Unable to connect to server: %1$s</string>
     <string name="server_connection_failed_candidates">Unable to connect to server, tried the following addresses: %1$s</string>
     <string name="server_field_empty">The address cannot be empty</string>
     <string name="login_authenticating">Authenticating…</string>
@@ -483,6 +485,15 @@
     <string name="server_issue_outdated_version">Server uses unsupported version %1$s. Please update to %2$s or newer</string>
     <string name="server_issue_timeout">Connection timed out</string>
     <string name="server_issue_ssl_handshake">SSL handshake failed</string>
+    <string name="server_issue_tls_certificate_untrusted">Server certificate is not trusted by this device. Check the certificate chain or root CA.</string>
+    <string name="server_issue_tls_certificate_date_invalid">Server certificate is expired or not valid yet. Check the certificate dates and device clock.</string>
+    <string name="server_issue_tls_hostname_mismatch">Server certificate does not match this address. Check the hostname and certificate SAN.</string>
+    <string name="server_issue_tls_connection_failed">Secure connection failed. Check the server TLS certificate.</string>
+    <string name="server_issue_dns_failed">Could not find this server address. Check DNS or the hostname.</string>
+    <string name="server_issue_connection_refused">Connection refused. Check that Jellyfin is running and the port is open.</string>
+    <string name="server_issue_network_unreachable">Network is unreachable. Check the device network connection.</string>
+    <string name="server_issue_http_status">Server returned HTTP %1$d</string>
+    <string name="server_issue_invalid_response">Invalid server response</string>
     <string name="pref_customization">Customization</string>
     <string name="sort_accounts_by">Sort accounts by</string>
     <string name="pref_accounts">Accounts</string>
