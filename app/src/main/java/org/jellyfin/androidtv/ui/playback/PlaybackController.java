@@ -27,6 +27,7 @@ import org.jellyfin.androidtv.ui.InteractionTrackerViewModel;
 import org.jellyfin.androidtv.ui.livetv.TvManager;
 import org.jellyfin.androidtv.util.TimeUtils;
 import org.jellyfin.androidtv.util.TrackSelectionManager;
+import org.jellyfin.androidtv.util.TrackSelectionResolver;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.ReportingHelper;
 import org.jellyfin.androidtv.util.apiclient.Response;
@@ -552,17 +553,18 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             internalOptions.setAudioStreamIndex(mCurrentOptions.getAudioStreamIndex());
         }
 
-        // Check for stored track selections from detail screen
-        Integer storedAudioIndex = TrackSelectionManager.INSTANCE.getSelectedAudioTrack(item.getId());
-        Integer storedSubtitleIndex = TrackSelectionManager.INSTANCE.getSelectedSubtitleTrack(item.getId());
+        MediaSourceInfo currentMediaSource = getCurrentMediaSource();
 
-        if (TrackSelectionManager.INSTANCE.hasSelectedSubtitleTrack(item.getId())) {
-            internalOptions.setSubtitleStreamIndex(storedSubtitleIndex);
+        // Check for stored track selections from detail screen
+        Integer storedAudioIndex = TrackSelectionResolver.getExplicitAudioStreamIndex(item, currentMediaSource);
+        TrackSelectionManager.TrackSelection storedSubtitleSelection = TrackSelectionResolver.getExplicitSubtitleSelection(item, currentMediaSource);
+
+        if (storedSubtitleSelection.getHasSelection()) {
+            internalOptions.setSubtitleStreamIndex(storedSubtitleSelection.getTrackIndex());
         }
         if (forcedSubtitleIndex != null) {
             internalOptions.setSubtitleStreamIndex(forcedSubtitleIndex);
         }
-        MediaSourceInfo currentMediaSource = getCurrentMediaSource();
         if (forcedAudioLanguage != null){
             Integer matchingIndex = null;
             if (forcedAudioCodec != null) {
@@ -692,7 +694,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             return;
         }
 
-        if (!TrackSelectionManager.INSTANCE.hasSelectedSubtitleTrack(item.getId())) {
+        if (!TrackSelectionResolver.hasExplicitSubtitleSelection(item, response.getMediaSource())) {
             // get subtitle info - prefer saved language preference over server default
             String lastSubtitleLanguage = videoQueueManager.getValue().getLastPlayedSubtitleLanguageIsoCode();
             Boolean lastSubtitleForcedState = videoQueueManager.getValue().getLastPlayedSubtitleForcedState();
@@ -884,20 +886,15 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             return;
 
         MediaSourceInfo currentMediaSource = getCurrentMediaSource();
+        BaseItemDto currentItem = getCurrentlyPlayingItem();
         if (currentMediaSource == null
+                || currentItem == null
                 || currentMediaSource.getMediaStreams() == null
                 || index >= currentMediaSource.getMediaStreams().size()) {
             return;
         }
 
-        String currentAudioIsoCode = currentMediaSource.getMediaStreams().get(index).getLanguage();
-        if (currentAudioIsoCode != null) {
-            videoQueueManager.getValue().setLastPlayedAudioLanguageIsoCode(currentAudioIsoCode);
-            String currentAudioCodec = currentMediaSource.getMediaStreams().get(index).getCodec();
-            if (currentAudioCodec != null) {
-                videoQueueManager.getValue().setLastPlayedAudioCodec(currentAudioCodec);
-            }
-        }
+        TrackSelectionResolver.storeSelectedAudioTrack(currentItem, currentMediaSource, videoQueueManager.getValue(), index);
 
         int currAudioIndex = getAudioStreamIndex();
         Timber.i("trying to switch audio stream from %s to %s", currAudioIndex, index);
