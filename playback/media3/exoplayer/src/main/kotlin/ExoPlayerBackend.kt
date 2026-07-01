@@ -159,6 +159,7 @@ class ExoPlayerBackend(
 	private var audioCapabilitiesReceiverRegistered = false
 	private var audioCapabilitiesReceiverFailed = false
 	private var reportedPlayState: PlayState? = null
+	private var reportedEndedStream: PlayableMediaStream? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 	private val audioCapabilitiesReceiver by lazy {
 		AudioCapabilitiesReceiver(
@@ -197,6 +198,27 @@ class ExoPlayerBackend(
 			buffer = safeBufferedPositionMs.milliseconds,
 			duration = duration,
 		)
+	}
+
+	private fun reportCurrentMediaStreamEnd(reason: String) {
+		val stream = currentStream ?: return
+		if (reportedEndedStream == stream) return
+
+		reportedEndedStream = stream
+		val positionInfo = getSafePositionInfo()
+		Timber.i(
+			"ExoPlayer media stream ended reason=%s mediaId=%s playbackState=%s positionMs=%s durationMs=%s",
+			reason,
+			stream.hashCode().toString(),
+			exoPlayer.playbackStateName(),
+			positionInfo.active.inWholeMilliseconds,
+			positionInfo.duration.inWholeMilliseconds,
+		)
+		listener?.onMediaStreamEnd(stream)
+	}
+
+	private fun clearSubtitleCues() {
+		subtitleView?.setCues(emptyList())
 	}
 
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
@@ -531,6 +553,9 @@ class ExoPlayerBackend(
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
 			onIsPlayingChanged(exoPlayer.isPlaying)
+			if (playbackState == Player.STATE_ENDED) {
+				reportCurrentMediaStreamEnd("playback-state-ended")
+			}
 		}
 
 		override fun onTracksChanged(tracks: Tracks) {
@@ -547,7 +572,7 @@ class ExoPlayerBackend(
 
 		override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
 			if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
-				listener?.onMediaStreamEnd(requireNotNull(currentStream))
+				reportCurrentMediaStreamEnd("play-when-ready-end-of-media-item")
 			}
 			onIsPlayingChanged(exoPlayer.isPlaying)
 		}
@@ -654,7 +679,9 @@ class ExoPlayerBackend(
 		val stream = requireNotNull(item.mediaStream)
 		if (currentStream == stream) return
 
+		clearSubtitleCues()
 		currentStream = stream
+		reportedEndedStream = null
 		resetPlaybackStats()
 		pendingInitialTrackSelection = stream.initialTrackSelection()
 
@@ -675,7 +702,6 @@ class ExoPlayerBackend(
 			exoPlayer.currentMediaItemIndex -> Unit
 			else -> exoPlayer.seekTo(preparedItemIndex, 0)
 		}
-		applyPendingInitialTrackSelection()
 
 		// Update audio attributes
 		val contentType = when (item.mediaType) {
@@ -761,7 +787,10 @@ class ExoPlayerBackend(
 	override fun play() {
 		startHandler.removeCallbacksAndMessages(null)
 		// If the item has ended, revert first so the item will start over again
-		if (exoPlayer.playbackState == Player.STATE_ENDED) exoPlayer.seekTo(0)
+		if (exoPlayer.playbackState == Player.STATE_ENDED) {
+			reportedEndedStream = null
+			exoPlayer.seekTo(0)
+		}
 		exoPlayer.play()
 	}
 
@@ -773,7 +802,9 @@ class ExoPlayerBackend(
 	override fun stop() {
 		startHandler.removeCallbacksAndMessages(null)
 		exoPlayer.stop()
+		clearSubtitleCues()
 		currentStream = null
+		reportedEndedStream = null
 		pendingInitialTrackSelection = null
 		unregisterAudioCapabilitiesReceiver()
 		resetPlaybackStats()
@@ -1057,6 +1088,7 @@ class ExoPlayerBackend(
 			pendingInitialTrackSelection = null
 			return
 		}
+		if (!currentMediaItemMatchesCurrentStream()) return
 
 		pending.audioStreamIndex?.let { streamIndex ->
 			if (applyInitialTrackSelection(TrackType.AUDIO, streamIndex)) {
