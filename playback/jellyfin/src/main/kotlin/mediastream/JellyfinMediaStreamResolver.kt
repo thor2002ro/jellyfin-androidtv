@@ -57,7 +57,6 @@ class JellyfinMediaStreamResolver(
 
 		val preferDirectPlay = isLiveTv && queueEntry.forceTranscoding == false
 		if (preferDirectPlay) {
-			liveTvPlaybackPolicy.reset(baseItem, reason = "quality reload")
 			queueEntry.liveStreamTargetOffset = LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
 			queueEntry.forceTranscoding = null
 		}
