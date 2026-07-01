@@ -1,7 +1,9 @@
 package org.jellyfin.androidtv.ui.playback.overlay;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.leanback.media.PlayerAdapter;
+import androidx.media3.common.util.UnstableApi;
 
 import org.jellyfin.androidtv.auth.repository.UserRepository;
 import org.jellyfin.androidtv.ui.playback.CustomPlaybackOverlayFragment;
@@ -109,6 +111,7 @@ public class VideoPlayerAdapter extends PlayerAdapter {
         return StreamHelper.getSubtitleStreams(playbackController.getCurrentMediaSource()).size() > 0;
     }
 
+    @OptIn(markerClass = UnstableApi.class)
     public boolean hasTimingAdjustableSubtitle() {
         MediaSourceInfo mediaSource = playbackController.getCurrentMediaSource();
         if (mediaSource == null || mediaSource.getMediaStreams() == null) return false;
@@ -165,6 +168,14 @@ public class VideoPlayerAdapter extends PlayerAdapter {
     public CustomPlaybackOverlayFragment getMasterOverlayFragment() {
         return customPlaybackOverlayFragment;
     }
+
+	public boolean consumeSkipOverlay() {
+		return customPlaybackOverlayFragment != null && customPlaybackOverlayFragment.consumeSkipOverlay();
+	}
+
+	public boolean consumeAutoSelectedSkipOverlay() {
+		return customPlaybackOverlayFragment != null && customPlaybackOverlayFragment.consumeAutoSelectedSkipOverlay();
+	}
 
     @NonNull
     public LeanbackOverlayFragment getLeanbackOverlayFragment() {
