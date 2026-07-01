@@ -35,11 +35,13 @@ import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButton
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.overlay.action.formatSubtitleOffsetSeconds
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.sdk.isLiveTv
+import org.jellyfin.androidtv.util.sdk.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -199,6 +201,7 @@ private fun PlaybackManager.saveSelectedAudioTrack(
 	val item = entry?.baseItem ?: return
 	val mediaSource = item.findMediaSource(entry.mediaSourceId)
 	TrackSelectionResolver.storeSelectedAudioTrack(item, mediaSource, videoQueueManager, streamIndex)
+	LiveTvTrackCache.updateSelectedAudioTrack(item.liveTvChannelId(), streamIndex)
 }
 
 private fun PlaybackManager.saveSelectedSubtitleTrack(
@@ -209,6 +212,7 @@ private fun PlaybackManager.saveSelectedSubtitleTrack(
 	val item = entry?.baseItem ?: return
 	val mediaSource = item.findMediaSource(entry.mediaSourceId)
 	TrackSelectionResolver.storeSelectedSubtitleTrack(item, mediaSource, videoQueueManager, streamIndex)
+	LiveTvTrackCache.updateSelectedSubtitleTrack(item.liveTvChannelId(), streamIndex)
 }
 
 private fun BaseItemDto.findMediaSource(mediaSourceId: String?) = mediaSources
