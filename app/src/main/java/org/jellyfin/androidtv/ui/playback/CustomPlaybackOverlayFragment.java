@@ -808,11 +808,21 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
         return true;
     }
 
-    public void refreshFavorite(UUID channelId) {
+    @Override
+    public void refreshFavorite(UUID channelId, boolean isFavorite) {
         for (int i = 0; i < tvGuideBinding.channels.getChildCount(); i++) {
-            GuideChannelHeader gch = (GuideChannelHeader) tvGuideBinding.channels.getChildAt(i);
-            if (gch.getChannel().getId().equals(channelId))
-                gch.refreshFavorite();
+            View child = tvGuideBinding.channels.getChildAt(i);
+            if (!(child instanceof GuideChannelHeader)) continue;
+
+            GuideChannelHeader gch = (GuideChannelHeader) child;
+            if (gch.getChannel().getId().equals(channelId)) {
+                BaseItemDto channel = TvManager.getChannelByID(channelId);
+                if (channel != null) {
+                    gch.setChannel(channel);
+                }
+                gch.setFavorite(isFavorite);
+                break;
+            }
         }
     }
 

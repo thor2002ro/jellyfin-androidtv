@@ -11,6 +11,7 @@ import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.SeriesTimerInfoDto
 import org.jellyfin.sdk.model.api.TimerInfoDto
+import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.koin.android.ext.android.inject
 import java.util.UUID
 
@@ -145,7 +146,7 @@ fun LiveProgramDetailPopup.getSeriesTimer(
 fun LiveProgramDetailPopup.setFavorite(
 	itemId: UUID,
 	favorite: Boolean,
-	callback: () -> Unit,
+	callback: (userData: UserItemDataDto) -> Unit,
 ) {
 	val itemMutationRepository by mContext.getActivity()!!.inject<ItemMutationRepository>()
 
@@ -155,8 +156,8 @@ fun LiveProgramDetailPopup.setFavorite(
 				item = itemId,
 				favorite = favorite,
 			)
-		}.onSuccess {
-			callback()
+		}.onSuccess { userData ->
+			callback(userData)
 		}
 	}
 }

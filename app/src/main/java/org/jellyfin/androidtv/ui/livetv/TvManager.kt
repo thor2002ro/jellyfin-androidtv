@@ -22,6 +22,7 @@ import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.koin.java.KoinJavaComponent
 import timber.log.Timber
 import java.time.Instant
@@ -63,6 +64,13 @@ object TvManager {
 	fun getAllChannels(): List<BaseItemDto>? = allChannels
 
 	@JvmStatic
+	fun setAllChannels(channels: Collection<BaseItemDto>): Int {
+		allChannels = ArrayList(channels)
+		forceReload = false
+		return fillChannelIds()
+	}
+
+	@JvmStatic
 	fun forceReload() {
 		forceReload = true
 	}
@@ -94,11 +102,19 @@ object TvManager {
 	}
 
 	@JvmStatic
+	fun updateChannelUserData(channelId: UUID, userData: UserItemDataDto) {
+		val channels = allChannels ?: return
+		val index = getAllChannelsIndex(channelId)
+		if (index >= 0) {
+			channels[index] = channels[index].copy(userData = userData)
+		}
+	}
+
+	@JvmStatic
 	fun loadAllChannels(fragment: Fragment, outerResponse: Function<Int, Void?>) {
 		loadLiveTvChannels(fragment) { channels ->
 			if (channels != null) {
-				allChannels = ArrayList(channels)
-				outerResponse.apply(fillChannelIds())
+				outerResponse.apply(setAllChannels(channels))
 			} else {
 				outerResponse.apply(0)
 			}

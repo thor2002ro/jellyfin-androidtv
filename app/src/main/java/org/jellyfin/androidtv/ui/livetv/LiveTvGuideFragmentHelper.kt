@@ -6,17 +6,13 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
-import org.jellyfin.androidtv.data.model.DataRefreshService
-import org.jellyfin.androidtv.data.repository.ItemMutationRepository
 import org.jellyfin.androidtv.databinding.LiveTvGuideBinding
-import org.jellyfin.androidtv.ui.GuideChannelHeader
 import org.jellyfin.androidtv.ui.navigation.ProvideRouter
 import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.composable.SettingsDialog
@@ -29,7 +25,6 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaType
 import org.koin.android.ext.android.inject
 import timber.log.Timber
-import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -107,27 +102,6 @@ fun createNoProgramDataBaseItem(
 	startDate = startDate,
 	endDate = endDate,
 )
-
-fun LiveTvGuideFragment.toggleFavorite() {
-	val header = mSelectedProgramView as? GuideChannelHeader
-	val channel = header?.channel ?: return
-
-	val itemMutationRepository by inject<ItemMutationRepository>()
-	val dataRefreshService by inject<DataRefreshService>()
-
-	lifecycleScope.launch {
-		runCatching {
-			val userData = itemMutationRepository.setFavorite(
-				item = header.channel.id,
-				favorite = !(channel.userData?.isFavorite ?: false)
-			)
-
-			header.channel = header.channel.copy(userData = userData)
-			header.findViewById<View>(R.id.favImage).isVisible = userData.isFavorite
-			dataRefreshService.lastFavoriteUpdate = Instant.now()
-		}
-	}
-}
 
 fun LiveTvGuideFragment.refreshSelectedProgram() {
 	val api by inject<ApiClient>()

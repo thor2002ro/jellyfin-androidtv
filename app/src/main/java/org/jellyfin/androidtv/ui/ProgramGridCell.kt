@@ -11,6 +11,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.LiveTvPreferences
 import org.jellyfin.androidtv.ui.livetv.LiveTvGuide
@@ -20,23 +21,28 @@ import org.jellyfin.androidtv.util.sdk.isNew
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.java.KoinJavaComponent
 
-class ProgramGridCell(
+class ProgramGridCell @JvmOverloads constructor(
 	context: Context,
 	private val tvGuide: LiveTvGuide,
 	program: BaseItemDto,
 	keyListen: Boolean,
+	private val modernStyle: Boolean = false,
 ) : RelativeLayout(context), RecordingIndicatorView {
 	private val programName: TextView
 	private val infoRow: LinearLayout
 	private val recIndicator: ImageView
-	private var backgroundColor = 0
+	private var backgroundColor = ContextCompat.getColor(context, R.color.guide_program_cell_bg)
 	private var last = false
 	private var first = false
 	private var program = program
 
 	init {
 		val activity = context as Activity
-		val view = LayoutInflater.from(activity).inflate(R.layout.program_grid_cell, this, false)
+		val view = LayoutInflater.from(activity).inflate(
+			if (modernStyle) R.layout.program_grid_cell_guide else R.layout.program_grid_cell,
+			this,
+			false,
+		)
 		addView(view)
 
 		isFocusable = true
@@ -121,15 +127,20 @@ class ProgramGridCell(
 	fun setCellBackground() {
 		val liveTvPreferences = KoinJavaComponent.get<LiveTvPreferences>(LiveTvPreferences::class.java)
 
+		backgroundColor = if (modernStyle) ContextCompat.getColor(context, R.color.guide_program_cell_bg) else 0
 		if (liveTvPreferences[LiveTvPreferences.colorCodeGuide]) {
 			backgroundColor = when {
-				Utils.isTrue(program.isMovie) -> resources.getColor(R.color.guide_movie_bg)
-				Utils.isTrue(program.isNews) -> resources.getColor(R.color.guide_news_bg)
-				Utils.isTrue(program.isSports) -> resources.getColor(R.color.guide_sports_bg)
-				Utils.isTrue(program.isKids) -> resources.getColor(R.color.guide_kids_bg)
+				Utils.isTrue(program.isMovie) -> ContextCompat.getColor(context, R.color.guide_movie_bg)
+				Utils.isTrue(program.isNews) -> ContextCompat.getColor(context, R.color.guide_news_bg)
+				Utils.isTrue(program.isSports) -> ContextCompat.getColor(context, R.color.guide_sports_bg)
+				Utils.isTrue(program.isKids) -> ContextCompat.getColor(context, R.color.guide_kids_bg)
 				else -> backgroundColor
 			}
+		}
 
+		if (modernStyle) {
+			GuideCellBackgrounds.applyCellBackground(this, backgroundColor, hasFocus())
+		} else if (liveTvPreferences[LiveTvPreferences.colorCodeGuide]) {
 			setBackgroundColor(backgroundColor)
 		}
 	}
@@ -138,10 +149,17 @@ class ProgramGridCell(
 		super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
 
 		if (gainFocus) {
-			setBackgroundColor(Utils.getThemeColor(context, android.R.attr.colorAccent))
 			tvGuide.setSelectedProgram(this)
+		}
+
+		if (modernStyle) {
+			GuideCellBackgrounds.applyCellBackground(
+				this,
+				if (gainFocus) Utils.getThemeColor(context, android.R.attr.colorAccent) else backgroundColor,
+				gainFocus,
+			)
 		} else {
-			setBackgroundColor(backgroundColor)
+			setBackgroundColor(if (gainFocus) Utils.getThemeColor(context, android.R.attr.colorAccent) else backgroundColor)
 		}
 	}
 
