@@ -15,6 +15,8 @@ data class BasicMediaStream(
 	override val container: MediaStreamContainer,
 	override val tracks: Collection<MediaStreamTrack>,
 	val externalSubtitles: List<ExternalSubtitle> = emptyList(),
+	val selectedAudioStreamIndex: Int? = null,
+	val selectedSubtitleStreamIndex: Int? = null,
 ) : MediaStream {
 	fun toPlayableMediaStream(
 		queueEntry: QueueEntry,
@@ -27,6 +29,8 @@ data class BasicMediaStream(
 		queueEntry = queueEntry,
 		url = url,
 		externalSubtitles = externalSubtitles,
+		selectedAudioStreamIndex = selectedAudioStreamIndex,
+		selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
 	)
 }
 
@@ -38,6 +42,8 @@ data class PlayableMediaStream(
 	val queueEntry: QueueEntry,
 	val url: String,
 	val externalSubtitles: List<ExternalSubtitle> = emptyList(),
+	val selectedAudioStreamIndex: Int? = null,
+	val selectedSubtitleStreamIndex: Int? = null,
 ) : MediaStream
 
 data class ExternalSubtitle(
@@ -46,6 +52,8 @@ data class ExternalSubtitle(
 	val language: String?,
 	val title: String?,
 	val index: Int,
+	val isDefault: Boolean = false,
+	val isForced: Boolean = false,
 )
 
 data class MediaStreamContainer(
@@ -53,17 +61,22 @@ data class MediaStreamContainer(
 )
 
 sealed interface MediaStreamTrack {
+	val index: Int?
 	val codec: String
 }
 
 data class MediaStreamAudioTrack(
+	override val index: Int?,
 	override val codec: String,
 	val bitrate: Int,
 	val channels: Int,
 	val sampleRate: Int,
+	val language: String?,
+	val title: String?,
 ) : MediaStreamTrack
 
 data class MediaStreamVideoTrack(
+	override val index: Int?,
 	override val codec: String,
 	val bitrate: Int,
 	val width: Int,
@@ -71,4 +84,10 @@ data class MediaStreamVideoTrack(
 	val videoRange: String?,
 ) : MediaStreamTrack
 
-// TODO: Add subtitle track
+data class MediaStreamSubtitleTrack(
+	override val index: Int?,
+	override val codec: String,
+	val language: String?,
+	val title: String?,
+	val isExternal: Boolean,
+) : MediaStreamTrack

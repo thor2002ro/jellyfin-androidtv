@@ -13,9 +13,16 @@ fun PlayerSurface(
 	playbackManager: PlaybackManager = koinInject(),
 ) {
 	AndroidView(
-		factory = { context -> PlayerSurfaceView(context) },
+		factory = { context ->
+			PlayerSurfaceView(context).apply {
+				isFocusable = false
+				isFocusableInTouchMode = false
+			}
+		},
 		modifier = modifier,
 		update = { view ->
+			view.isFocusable = false
+			view.isFocusableInTouchMode = false
 			view.playbackManager = playbackManager
 		}
 	)

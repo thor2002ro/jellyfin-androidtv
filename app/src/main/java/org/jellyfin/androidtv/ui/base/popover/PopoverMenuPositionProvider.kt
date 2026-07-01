@@ -49,10 +49,13 @@ class PopoverMenuPositionProvider(
 
 		// Return position clamped to fit in window with overscan
 		return IntOffset(
-			x = x.coerceIn(OVERSCAN_X, windowSize.width - popupContentSize.width - OVERSCAN_X),
-			y = y.coerceIn(OVERSCAN_Y, windowSize.height - popupContentSize.height - OVERSCAN_Y),
+			x = x.coerceInOrStart(OVERSCAN_X, windowSize.width - popupContentSize.width - OVERSCAN_X),
+			y = y.coerceInOrStart(OVERSCAN_Y, windowSize.height - popupContentSize.height - OVERSCAN_Y),
 		)
 	}
+
+	private fun Int.coerceInOrStart(minimumValue: Int, maximumValue: Int) =
+		if (minimumValue <= maximumValue) coerceIn(minimumValue, maximumValue) else minimumValue
 
 	private val Float.dir
 		get() = when {

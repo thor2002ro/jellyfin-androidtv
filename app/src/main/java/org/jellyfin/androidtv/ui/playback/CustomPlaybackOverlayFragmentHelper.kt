@@ -190,4 +190,5 @@ fun CustomPlaybackOverlayFragment.recordProgram(program: BaseItemDto, isSeries: 
 
 fun CustomPlaybackOverlayFragment.askToSkip(position: Duration) {
 	binding.skipOverlay.targetPosition = position
+	updateSkipOverlayAvailability()
 }

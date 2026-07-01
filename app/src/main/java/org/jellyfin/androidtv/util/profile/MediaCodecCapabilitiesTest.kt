@@ -29,6 +29,8 @@ class MediaCodecCapabilitiesTest(
 
 	fun supportsAC4(): Boolean = codecQuery.hasCodecForMime(MimeTypes.AUDIO_AC4)
 
+	fun supportsOpus(): Boolean = codecQuery.hasCodecForMime(MimeTypes.AUDIO_OPUS)
+
 	fun supportsAVC(): Boolean = avc.supportsAvc()
 
 	fun supportsAVCHigh10(): Boolean = avc.supportsAvcHigh10()
@@ -42,6 +44,12 @@ class MediaCodecCapabilitiesTest(
 	fun supportsHevcMain10(): Boolean = hevc.supportsHevcMain10()
 
 	fun supportsHevcDolbyVision(): Boolean = hevc.supportsHevcDolbyVision()
+
+	fun supportsHevcDolbyVisionProfile5(): Boolean = hevc.supportsHevcDolbyVisionProfile5()
+
+	fun supportsHevcDolbyVisionProfile7(): Boolean = hevc.supportsHevcDolbyVisionProfile7()
+
+	fun supportsHevcDolbyVisionProfile8(): Boolean = hevc.supportsHevcDolbyVisionProfile8()
 
 	fun supportsHevcDolbyVisionEL(): Boolean = hevc.supportsHevcDolbyVisionEL()
 

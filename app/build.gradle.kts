@@ -5,6 +5,9 @@ plugins {
 	alias(libs.plugins.kotlin.serialization)
 }
 
+val thorApplicationId = "org.jellyfin.androidtv.thor"
+val appVersionName = project.getVersionName()
+
 android {
 	namespace = "org.jellyfin.androidtv"
 	compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -14,9 +17,9 @@ android {
 		targetSdk = libs.versions.android.targetSdk.get().toInt()
 
 		// Release version
-		applicationId = namespace
-		versionName = project.getVersionName()
-		versionCode = getVersionCode(versionName!!)
+		applicationId = thorApplicationId
+		versionName = appVersionName
+		versionCode = getVersionCode(appVersionName)
 	}
 
 	buildFeatures {
@@ -58,9 +61,9 @@ android {
 			proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
 			// Set package names used in various XML files
-			resValue("string", "app_id", namespace!!)
-			resValue("string", "app_search_suggest_authority", "${namespace}.content")
-			resValue("string", "app_search_suggest_intent_data", "content://${namespace}.content/intent")
+			resValue("string", "app_id", thorApplicationId)
+			resValue("string", "app_search_suggest_authority", "$thorApplicationId.content")
+			resValue("string", "app_search_suggest_intent_data", "content://$thorApplicationId.content/intent")
 
 			// Set flavored application name
 			resValue("string", "app_name", "@string/app_name_release")
@@ -75,9 +78,9 @@ android {
 			applicationIdSuffix = ".debug"
 
 			// Set package names used in various XML files
-			resValue("string", "app_id", namespace + applicationIdSuffix)
-			resValue("string", "app_search_suggest_authority", "${namespace + applicationIdSuffix}.content")
-			resValue("string", "app_search_suggest_intent_data", "content://${namespace + applicationIdSuffix}.content/intent")
+			resValue("string", "app_id", thorApplicationId + applicationIdSuffix)
+			resValue("string", "app_search_suggest_authority", "${thorApplicationId + applicationIdSuffix}.content")
+			resValue("string", "app_search_suggest_intent_data", "content://${thorApplicationId + applicationIdSuffix}.content/intent")
 
 			// Set flavored application name
 			resValue("string", "app_name", "@string/app_name_debug")
@@ -98,13 +101,13 @@ android {
 	}
 }
 
-base.archivesName.set("jellyfin-androidtv-v${project.getVersionName()}")
+base.archivesName.set("jellyfin-androidtv-thor-$appVersionName")
 
 tasks.register("versionTxt") {
 	val path = layout.buildDirectory.asFile.get().resolve("version.txt")
 
 	doLast {
-		val versionString = "v${android.defaultConfig.versionName}=${android.defaultConfig.versionCode}"
+		val versionString = "${android.defaultConfig.versionName}=${android.defaultConfig.versionCode}"
 		logger.info("Writing [$versionString] to $path")
 		path.writeText("$versionString\n")
 	}
@@ -162,7 +165,7 @@ dependencies {
 	implementation(libs.androidx.media3.datasource.okhttp)
 	implementation(libs.androidx.media3.exoplayer.hls)
 	implementation(libs.androidx.media3.ui)
-	implementation(libs.jellyfin.androidx.media3.ffmpeg.decoder)
+	implementation(files(rootProject.extra["thorMedia3FfmpegDecoderAarFile"] as File))
 	implementation(libs.libass.media3)
 
 	// Markdown
