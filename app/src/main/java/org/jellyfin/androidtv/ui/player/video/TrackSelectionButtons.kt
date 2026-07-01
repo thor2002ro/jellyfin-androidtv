@@ -38,9 +38,8 @@ import org.jellyfin.androidtv.ui.base.button.IconButton
 import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.overlay.action.formatSubtitleOffsetSeconds
-import org.jellyfin.androidtv.util.TrackSelectionManager
+import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.sdk.isLiveTv
-import org.jellyfin.androidtv.util.sdk.trackSelectionIds
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -53,7 +52,6 @@ import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.sdk.model.api.BaseItemDto
-import org.jellyfin.sdk.model.api.MediaStreamType
 import org.koin.compose.koinInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -199,11 +197,8 @@ private fun PlaybackManager.saveSelectedAudioTrack(
 ) {
 	val entry = queue.entry.value
 	val item = entry?.baseItem ?: return
-	TrackSelectionManager.setSelectedAudioTracks(item.trackSelectionIds(), streamIndex)
-
-	val selectedStream = item.findMediaStream(entry.mediaSourceId, MediaStreamType.AUDIO, streamIndex)
-	selectedStream?.language?.let(videoQueueManager::setLastPlayedAudioLanguageIsoCode)
-	selectedStream?.codec?.let(videoQueueManager::setLastPlayedAudioCodec)
+	val mediaSource = item.findMediaSource(entry.mediaSourceId)
+	TrackSelectionResolver.storeSelectedAudioTrack(item, mediaSource, videoQueueManager, streamIndex)
 }
 
 private fun PlaybackManager.saveSelectedSubtitleTrack(
@@ -212,27 +207,14 @@ private fun PlaybackManager.saveSelectedSubtitleTrack(
 ) {
 	val entry = queue.entry.value
 	val item = entry?.baseItem ?: return
-	TrackSelectionManager.setSelectedSubtitleTracks(item.trackSelectionIds(), streamIndex)
-
-	val selectedStream = item.findMediaStream(entry.mediaSourceId, MediaStreamType.SUBTITLE, streamIndex)
-	videoQueueManager.setLastPlayedSubtitleLanguageIsoCode(selectedStream?.language)
-	videoQueueManager.setLastPlayedSubtitleForcedState(selectedStream?.isForced == true)
-	videoQueueManager.setLastPlayedSubtitleCodec(selectedStream?.codec)
-	videoQueueManager.setLastPlayedSubtitleTitle(selectedStream?.displayTitle ?: selectedStream?.title)
+	val mediaSource = item.findMediaSource(entry.mediaSourceId)
+	TrackSelectionResolver.storeSelectedSubtitleTrack(item, mediaSource, videoQueueManager, streamIndex)
 }
 
-private fun BaseItemDto.findMediaStream(
-	mediaSourceId: String?,
-	type: MediaStreamType,
-	streamIndex: Int,
-) = mediaSources
+private fun BaseItemDto.findMediaSource(mediaSourceId: String?) = mediaSources
 	?.firstOrNull { mediaSource -> mediaSourceId == null || mediaSource.id == mediaSourceId }
-	?.mediaStreams
-	?.firstOrNull { stream -> stream.type == type && stream.index == streamIndex }
 	?: mediaSources
 		?.firstOrNull()
-		?.mediaStreams
-		?.firstOrNull { stream -> stream.type == type && stream.index == streamIndex }
 
 private fun reloadCurrentMediaStreamAfterTrackSelection(
 	playbackManager: PlaybackManager,

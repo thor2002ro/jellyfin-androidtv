@@ -75,10 +75,9 @@ import org.jellyfin.androidtv.util.MarkdownRenderer;
 import org.jellyfin.androidtv.util.PlaybackHelper;
 import org.jellyfin.androidtv.util.TimeUtils;
 import org.jellyfin.androidtv.util.TrackSelectionHelper;
-import org.jellyfin.androidtv.util.TrackSelectionManager;
+import org.jellyfin.androidtv.util.TrackSelectionResolver;
 import java.util.stream.Collectors;
 import org.jellyfin.sdk.model.api.MediaStreamType;
-import org.jellyfin.sdk.model.api.MediaStream;
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.BaseItemUtils;
@@ -1269,7 +1268,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
 
         if (audioStreams.size() > 1) {
             // Get current audio track name
-            Integer selectedAudioIndex = TrackSelectionManager.INSTANCE.getSelectedAudioTrack(mBaseItem.getId());
+            Integer selectedAudioIndex = TrackSelectionResolver.resolveDisplayAudioStreamIndex(mBaseItem, mediaSource, videoQueueManager.getValue());
             String audioTrackName = TrackSelectionHelper.INSTANCE.getCurrentAudioTrackName(mediaSource, selectedAudioIndex);
             if (audioTrackName == null) {
                 audioTrackName = "Default";
@@ -1279,25 +1278,14 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
             audioButtonRef[0] = TextUnderButton.create(requireContext(), R.drawable.ic_select_audio, buttonSize, 2, audioTrackName, new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    Integer currentSelection = TrackSelectionManager.INSTANCE.getSelectedAudioTrack(mBaseItem.getId());
+                    Integer currentSelection = TrackSelectionResolver.resolveDisplayAudioStreamIndex(mBaseItem, mediaSource, videoQueueManager.getValue());
                     TrackSelectionHelper.INSTANCE.showAudioTrackSelection(
                             requireContext(),
                             mediaSource,
                             currentSelection,
                             (selectedIndex) -> {
-                                // Store the selection
-                                TrackSelectionManager.INSTANCE.setSelectedAudioTrack(mBaseItem.getId(), selectedIndex);
-
-                                // Update VideoQueueManager with the selected language for future plays
-                                if (selectedIndex != null && mediaSource != null) {
-                                    MediaStream selectedStream = mediaSource.getMediaStreams().stream()
-                                            .filter(stream -> stream.getIndex() == selectedIndex && stream.getType() == MediaStreamType.AUDIO)
-                                            .findFirst()
-                                            .orElse(null);
-                                    if (selectedStream != null && selectedStream.getLanguage() != null) {
-                                        videoQueueManager.getValue().setLastPlayedAudioLanguageIsoCode(selectedStream.getLanguage());
-                                    }
-                                }
+                                MediaStream selectedStream = TrackSelectionResolver.storeSelectedAudioTrack(mBaseItem, mediaSource, videoQueueManager.getValue(), selectedIndex);
+                                FullDetailsFragmentHelperKt.saveAudioTrackSelectionToServer(FullDetailsFragment.this, selectedStream);
 
                                 // Update button text
                                 String newTrackName = TrackSelectionHelper.INSTANCE.getCurrentAudioTrackName(mediaSource, selectedIndex);
@@ -1320,21 +1308,21 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
 
         if (!subtitleStreams.isEmpty()) {
             // Get current subtitle track name
-            Integer selectedSubtitleIndex = TrackSelectionManager.INSTANCE.getSelectedSubtitleTrack(mBaseItem.getId());
+            Integer selectedSubtitleIndex = TrackSelectionResolver.resolveDisplaySubtitleStreamIndex(mBaseItem, mediaSource, videoQueueManager.getValue());
             String subtitleTrackName = TrackSelectionHelper.INSTANCE.getCurrentSubtitleTrackName(mediaSource, selectedSubtitleIndex);
 
             final TextUnderButton[] subtitleButtonRef = new TextUnderButton[1];
             subtitleButtonRef[0] = TextUnderButton.create(requireContext(), R.drawable.ic_select_subtitle, buttonSize, 2, subtitleTrackName, new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    Integer currentSelection = TrackSelectionManager.INSTANCE.getSelectedSubtitleTrack(mBaseItem.getId());
+                    Integer currentSelection = TrackSelectionResolver.resolveDisplaySubtitleStreamIndex(mBaseItem, mediaSource, videoQueueManager.getValue());
                     TrackSelectionHelper.INSTANCE.showSubtitleTrackSelection(
                             requireContext(),
                             mediaSource,
                             currentSelection,
                             (selectedIndex) -> {
-                                // Store the selection
-                                TrackSelectionManager.INSTANCE.setSelectedSubtitleTrack(mBaseItem.getId(), selectedIndex);
+                                MediaStream selectedStream = TrackSelectionResolver.storeSelectedSubtitleTrack(mBaseItem, mediaSource, videoQueueManager.getValue(), selectedIndex);
+                                FullDetailsFragmentHelperKt.saveSubtitleTrackSelectionToServer(FullDetailsFragment.this, selectedStream);
                                 // Update button text
                                 String newTrackName = TrackSelectionHelper.INSTANCE.getCurrentSubtitleTrackName(mediaSource, selectedIndex);
                                 subtitleButtonRef[0].setLabel(newTrackName);
