@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,6 +80,7 @@ internal fun ChapterListPopover(
 ) {
 	if (!expanded || chapters.isEmpty()) return
 
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
 	val positionInfo by rememberPlayerPositionInfo(playbackManager, precision = 1.seconds)
 	val currentChapterIndex = remember(chapters, positionInfo.active) {
 		getCurrentChapterIndex(chapters, positionInfo.active)
@@ -107,7 +109,7 @@ internal fun ChapterListPopover(
 			}
 		},
 		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -ChapterListVerticalOffset),
+		offset = DpOffset(0.dp, -popupOffsetY),
 	) {
 		LazyRow(
 			state = listState,

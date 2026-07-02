@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,6 +39,8 @@ import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButton
+import org.jellyfin.androidtv.ui.base.form.RadioButton
+import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
@@ -67,9 +71,6 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import kotlin.time.Duration.Companion.milliseconds
 
-private val POPOVER_VERTICAL_OFFSET = 5.dp
-private val SUBTITLE_OFFSET_POPOVER_MIN_WIDTH = 250.dp
-private val SUBTITLE_OFFSET_POPOVER_MAX_WIDTH = 430.dp
 private val SUBTITLE_OFFSET_STEP_SMALL = 100.milliseconds
 private val SUBTITLE_OFFSET_STEP_LARGE = 500.milliseconds
 
@@ -93,6 +94,7 @@ fun AudioTrackButton(
 
 	Box {
 		val tooltip = stringResource(R.string.lbl_audio_track)
+		val icon = ImageVector.vectorResource(R.drawable.ic_select_audio)
 		IconButton(
 			onClick = {
 				refreshTick++
@@ -101,7 +103,7 @@ fun AudioTrackButton(
 			tooltip = tooltip,
 		) {
 			Icon(
-				imageVector = ImageVector.vectorResource(R.drawable.ic_select_audio),
+				imageVector = icon,
 				contentDescription = tooltip,
 			)
 		}
@@ -111,6 +113,7 @@ fun AudioTrackButton(
 			onDismissRequest = { expanded = false },
 			tracks = availableTracks,
 			title = stringResource(R.string.lbl_audio_track),
+			icon = icon,
 			onTrackSelected = { track ->
 				track?.let {
 					val streamIndex = it.streamIndex ?: it.index
@@ -157,6 +160,7 @@ fun SubtitleTrackButton(
 
 	Box {
 		val tooltip = stringResource(R.string.lbl_subtitle_track)
+		val icon = ImageVector.vectorResource(R.drawable.ic_select_subtitle)
 		IconButton(
 			onClick = {
 				refreshTick++
@@ -166,7 +170,7 @@ fun SubtitleTrackButton(
 			tooltip = tooltip,
 		) {
 			Icon(
-				imageVector = ImageVector.vectorResource(R.drawable.ic_select_subtitle),
+				imageVector = icon,
 				contentDescription = tooltip,
 			)
 		}
@@ -176,6 +180,7 @@ fun SubtitleTrackButton(
 			onDismissRequest = { expanded = false },
 			tracks = availableTracks,
 			title = stringResource(R.string.lbl_subtitle_track),
+			icon = icon,
 			showNoneOption = true,
 			beforeTracks = {
 				if (hasOffsetCapableSubtitle) {
@@ -217,6 +222,9 @@ fun SubtitleOffsetButton(
 	playbackManager: PlaybackManager,
 ) {
 	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_wide_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_wide_max_width)
 
 	var expanded by remember { mutableStateOf(false) }
 
@@ -237,15 +245,12 @@ fun SubtitleOffsetButton(
 			expanded = expanded,
 			onDismissRequest = { expanded = false },
 			alignment = Alignment.TopCenter,
-			offset = DpOffset(0.dp, -POPOVER_VERTICAL_OFFSET),
+			offset = DpOffset(0.dp, -popupOffsetY),
 		) {
 			SubtitleOffsetControls(
 				playbackManager = playbackManager,
 				modifier = Modifier
-					.widthIn(
-						min = SUBTITLE_OFFSET_POPOVER_MIN_WIDTH,
-						max = SUBTITLE_OFFSET_POPOVER_MAX_WIDTH,
-					)
+					.widthIn(min = popupMinWidth, max = popupMaxWidth)
 					.onPreviewKeyEvent { event ->
 						handleSubtitleOffsetKeyEvent(
 							keyEvent = event.nativeKeyEvent,
@@ -325,30 +330,35 @@ private fun TrackSelectionPopover(
 	onDismissRequest: () -> Unit,
 	tracks: List<PlayerTrack>,
 	title: String,
+	icon: ImageVector,
 	showNoneOption: Boolean = false,
 	beforeTracks: @Composable () -> Unit = {},
 	onTrackSelected: (PlayerTrack?) -> Unit,
 ) {
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_standard_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_standard_max_width)
+	val popupMaxHeight = dimensionResource(R.dimen.player_popup_menu_max_height)
+	val popupPaddingHorizontal = dimensionResource(R.dimen.player_popup_menu_padding_horizontal)
+	val popupPaddingVertical = dimensionResource(R.dimen.player_popup_menu_padding_vertical)
+
 	Popover(
 		expanded = expanded,
 		onDismissRequest = onDismissRequest,
 		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -POPOVER_VERTICAL_OFFSET),
+		offset = DpOffset(0.dp, -popupOffsetY),
 	) {
 		Column(
+			verticalArrangement = Arrangement.spacedBy(4.dp),
 			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 6.dp)
-				.widthIn(min = 160.dp, max = 360.dp)
-				.heightIn(max = 300.dp)
+				.padding(horizontal = popupPaddingHorizontal, vertical = popupPaddingVertical)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
+				.heightIn(max = popupMaxHeight)
 				.verticalScroll(rememberScrollState())
 		) {
-			Text(
-				text = title,
-				style = JellyfinTheme.typography.listHeader.copy(
-					color = JellyfinTheme.colorScheme.listHeader
-				),
-				fontSize = 13.sp,
-				modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+			TrackSelectionHeader(
+				icon = icon,
+				title = title,
 			)
 
 			beforeTracks()
@@ -373,40 +383,61 @@ private fun TrackSelectionPopover(
 }
 
 @Composable
+private fun TrackSelectionHeader(
+	icon: ImageVector,
+	title: String,
+) {
+	ProvideTextStyle(
+		JellyfinTheme.typography.listHeader.copy(
+			color = JellyfinTheme.colorScheme.listHeader,
+			fontSize = 13.sp,
+		)
+	) {
+		Row(
+			horizontalArrangement = Arrangement.spacedBy(10.dp),
+			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(horizontal = 12.dp, vertical = 6.dp),
+		) {
+			Icon(
+				imageVector = icon,
+				contentDescription = null,
+				modifier = Modifier.size(20.dp),
+			)
+			Text(
+				text = title,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+			)
+		}
+	}
+}
+
+@Composable
 private fun TrackItem(
 	label: String,
 	isSelected: Boolean,
 	onClick: () -> Unit,
 ) {
-	Button(
+	val itemMinHeight = dimensionResource(R.dimen.player_popup_menu_item_min_height)
+
+	ListButton(
 		onClick = onClick,
-		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-	) {
-		Row(
-			horizontalArrangement = Arrangement.spacedBy(8.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-		) {
-			// Use Box to reserve space for checkmark even when not selected
-			Box(modifier = Modifier.size(18.dp)) {
-				if (isSelected) {
-					Icon(
-						imageVector = ImageVector.vectorResource(R.drawable.ic_check),
-						contentDescription = null,
-						modifier = Modifier.size(18.dp),
-						// Inherits color from Button's content color (dark on light bg, light on dark bg)
-					)
-				}
-			}
-			ProvideTextStyle(JellyfinTheme.typography.listHeadline.copy(fontSize = 13.sp)) {
-				Text(
-					text = label,
-					maxLines = 1,
-					overflow = TextOverflow.Ellipsis,
-				)
-			}
-		}
-	}
+		headingContent = {
+			Text(
+				text = label,
+				maxLines = 2,
+				overflow = TextOverflow.Ellipsis,
+			)
+		},
+		leadingContent = {
+			RadioButton(checked = isSelected)
+		},
+		modifier = Modifier
+			.fillMaxWidth()
+			.heightIn(min = itemMinHeight),
+	)
 }
 
 @Composable
@@ -417,6 +448,9 @@ private fun SubtitleOffsetTrackItem(
 	onClick: () -> Unit,
 ) {
 	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
+	val itemMinHeight = dimensionResource(R.dimen.player_popup_menu_item_min_height)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_wide_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_wide_max_width)
 	val label = if (subtitleTimingOffset == kotlin.time.Duration.ZERO) {
 		stringResource(R.string.lbl_subtitle_offset)
 	} else {
@@ -426,39 +460,33 @@ private fun SubtitleOffsetTrackItem(
 		)
 	}
 
-	Button(
+	ListButton(
 		onClick = onClick,
 		enabled = enabled,
-		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-	) {
-		Row(
-			horizontalArrangement = Arrangement.spacedBy(8.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-		) {
+		headingContent = {
+			Text(
+				text = label,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+			)
+		},
+		leadingContent = {
 			Icon(
 				imageVector = ImageVector.vectorResource(R.drawable.ic_time),
 				contentDescription = null,
-				modifier = Modifier.size(18.dp),
+				modifier = Modifier.size(20.dp),
 			)
-			ProvideTextStyle(JellyfinTheme.typography.listHeadline.copy(fontSize = 13.sp)) {
-				Text(
-					text = label,
-					maxLines = 1,
-					overflow = TextOverflow.Ellipsis,
-				)
-			}
-		}
-	}
+		},
+		modifier = Modifier
+			.fillMaxWidth()
+			.heightIn(min = itemMinHeight),
+	)
 
 	if (expanded) {
 		SubtitleOffsetControls(
 			playbackManager = playbackManager,
 			modifier = Modifier
-				.widthIn(
-					min = SUBTITLE_OFFSET_POPOVER_MIN_WIDTH,
-					max = SUBTITLE_OFFSET_POPOVER_MAX_WIDTH,
-				)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
 				.onPreviewKeyEvent { event ->
 					handleSubtitleOffsetKeyEvent(
 						keyEvent = event.nativeKeyEvent,
@@ -513,12 +541,13 @@ private fun SubtitleOffsetControls(
 			) {
 				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(SUBTITLE_OFFSET_STEP_LARGE)), fontSize = 12.sp)
 			}
-			Button(
-				onClick = { playbackManager.state.resetSubtitleTimingOffset() },
-				contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-			) {
-				Text(stringResource(R.string.lbl_reset), fontSize = 12.sp)
-			}
+		}
+		Button(
+			onClick = { playbackManager.state.resetSubtitleTimingOffset() },
+			contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+			modifier = Modifier.fillMaxWidth(),
+		) {
+			Text(stringResource(R.string.lbl_reset), fontSize = 12.sp)
 		}
 	}
 }

@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,7 +47,6 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import java.util.Locale
 import kotlin.math.abs
 
-private val PlaybackSpeedPopoverVerticalOffset = 5.dp
 private val PlaybackSpeedButtonContentHeight = 20.dp
 private val PlaybackSpeedButtonContentMinWidth = 28.dp
 private val PlaybackSpeedButtonTextVerticalOffset = 2.dp
@@ -117,17 +117,24 @@ private fun PlaybackSpeedPopover(
 	currentSpeed: Float,
 	onSpeedSelected: (Float) -> Unit,
 ) {
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupPaddingHorizontal = dimensionResource(R.dimen.player_popup_menu_padding_horizontal)
+	val popupPaddingVertical = dimensionResource(R.dimen.player_popup_menu_padding_vertical)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_compact_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_compact_max_width)
+	val popupMaxHeight = dimensionResource(R.dimen.player_popup_menu_max_height)
+
 	Popover(
 		expanded = expanded,
 		onDismissRequest = onDismissRequest,
 		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -PlaybackSpeedPopoverVerticalOffset),
+		offset = DpOffset(0.dp, -popupOffsetY),
 	) {
 		Column(
 			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 6.dp)
-				.widthIn(min = 120.dp, max = 180.dp)
-				.heightIn(max = 300.dp)
+				.padding(horizontal = popupPaddingHorizontal, vertical = popupPaddingVertical)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
+				.heightIn(max = popupMaxHeight)
 				.verticalScroll(rememberScrollState())
 		) {
 			Text(
