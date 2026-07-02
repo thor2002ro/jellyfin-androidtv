@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.ui.ObservableHorizontalScrollView;
 import org.jellyfin.androidtv.ui.ObservableScrollView;
 import org.jellyfin.androidtv.ui.ProgramGridCell;
 import org.jellyfin.androidtv.ui.ScrollViewListener;
+import org.jellyfin.androidtv.data.model.ChapterItemInfo;
 import org.jellyfin.androidtv.ui.itemhandling.ChapterItemInfoBaseRowItem;
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter;
 import org.jellyfin.androidtv.ui.livetv.LiveTvGuide;
@@ -87,7 +88,6 @@ import org.jellyfin.sdk.model.api.MediaStreamType;
 import org.jellyfin.sdk.model.api.PlayMethod;
 import org.jellyfin.sdk.model.api.BaseItemDto;
 import org.jellyfin.sdk.model.api.BaseItemKind;
-import org.jellyfin.sdk.model.api.ChapterInfo;
 import org.jellyfin.sdk.model.api.TranscodingInfo;
 import org.jetbrains.annotations.NotNull;
 
@@ -1784,11 +1784,9 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     private int getCurrentChapterIndex(BaseItemDto item, long pos) {
         int ndx = 0;
-        if (item.getChapters() != null) {
-            for (ChapterInfo chapter : item.getChapters()) {
-                if (chapter.getStartPositionTicks() > pos) return ndx - 1;
-                ndx++;
-            }
+        for (ChapterItemInfo chapter : BaseItemExtensionsKt.buildChapterItems(item)) {
+            if (chapter.getStartPositionTicks() > pos) return ndx - 1;
+            ndx++;
         }
         return ndx - 1;
     }
@@ -2122,11 +2120,11 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
 
     private void prepareChapterAdapter() {
         BaseItemDto item = playbackControllerContainer.getValue().getPlaybackController().getCurrentlyPlayingItem();
-        List<ChapterInfo> chapters = item.getChapters();
+        List<ChapterItemInfo> chapters = BaseItemExtensionsKt.buildChapterItems(item);
 
-        if (chapters != null && !chapters.isEmpty()) {
+        if (!chapters.isEmpty()) {
             // create chapter row with circular scrolling
-            ItemRowAdapter chapterAdapter = new ItemRowAdapter(requireContext(), BaseItemExtensionsKt.buildChapterItems(item), new CardPresenter(true, 110), new MutableObjectAdapter<Row>());
+            ItemRowAdapter chapterAdapter = new ItemRowAdapter(requireContext(), chapters, new CardPresenter(true, 110), new MutableObjectAdapter<Row>());
             chapterAdapter.Retrieve();
             mCircularChapterAdapter = new CircularObjectAdapter(chapterAdapter);
             if (mChapterRow != null) mPopupRowAdapter.remove(mChapterRow);
