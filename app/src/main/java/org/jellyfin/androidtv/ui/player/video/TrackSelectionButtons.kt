@@ -48,7 +48,6 @@ import org.jellyfin.androidtv.ui.playback.overlay.action.formatSubtitleOffsetSec
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
-import org.jellyfin.androidtv.util.toIso2LanguageCodeOrNull
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.playback.core.PlaybackManager
@@ -70,7 +69,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 private val SUBTITLE_OFFSET_STEP_SMALL = 100.milliseconds
@@ -577,17 +575,12 @@ private fun handleSubtitleOffsetKeyEvent(
 
 private val PlayerTrack.displayLabel: String
 	get() {
-		val languageCode = language.toIso2LanguageCodeOrNull()
-		val displayLanguage = languageCode ?: language.toIso2LanguageDisplayOrSelf()
-		val languageName = languageCode?.let { code ->
-			Locale.forLanguageTag(code).displayLanguage.takeIf { it.isNotBlank() && it != code }
-		}
+		val displayLanguage = language.toIso2LanguageDisplayOrSelf()
 		val displayLabel = label.withoutUndeterminedLanguagePrefix()
 
 		return buildString {
 			when {
 				displayLabel != null -> append(displayLabel)
-				languageName != null -> append(languageName)
 				!displayLanguage.isNullOrBlank() -> append(displayLanguage)
 				else -> append("Track ${index + 1}")
 			}
