@@ -88,7 +88,7 @@ fun String?.toIso2LanguageBadgeOrNull(): String? =
 	toIso2LanguageCodeOrNull()?.let { code -> LANGUAGE_BADGE_ALIASES[code] ?: code.uppercase(Locale.ROOT) }
 
 fun String?.toIso2LanguageDisplayOrSelf(): String? =
-	toIso2LanguageCodeOrNull() ?: withoutUndeterminedLanguagePrefix()
+	toIso2LanguageBadgeOrNull() ?: withoutUndeterminedLanguagePrefix()
 
 fun String?.withoutUndeterminedLanguagePrefix(): String? =
 	this

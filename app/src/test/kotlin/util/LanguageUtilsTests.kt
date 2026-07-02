@@ -38,8 +38,9 @@ class LanguageUtilsTests : FunSpec({
 	}
 
 	test("toIso2LanguageDisplayOrSelf converts known codes and preserves labels") {
-		"eng".toIso2LanguageDisplayOrSelf() shouldBe "en"
-		"fre".toIso2LanguageDisplayOrSelf() shouldBe "fr"
+		"eng".toIso2LanguageDisplayOrSelf() shouldBe "EN"
+		"fre".toIso2LanguageDisplayOrSelf() shouldBe "FR"
+		"jpn".toIso2LanguageDisplayOrSelf() shouldBe "JP"
 		"English".toIso2LanguageDisplayOrSelf() shouldBe "English"
 		"und".toIso2LanguageDisplayOrSelf() shouldBe null
 		"UND".toIso2LanguageDisplayOrSelf() shouldBe null
