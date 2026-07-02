@@ -166,14 +166,14 @@ internal fun BaseItemDto?.isNextUpPromptVisible(
 	nextItem: BaseItemDto?,
 	nextUpBehavior: NextUpBehavior,
 	positionInfo: PositionInfo,
+	endingSkipPromptVisible: Boolean = false,
 ): Boolean {
 	val currentItem = this ?: return false
-	val threshold = positionInfo.duration.nextUpThreshold() ?: return false
 
 	return nextItem != null &&
 		nextUpBehavior != NextUpBehavior.DISABLED &&
 		!currentItem.isLiveTv() &&
-		positionInfo.active >= threshold
+		(endingSkipPromptVisible || positionInfo.active >= (positionInfo.duration.nextUpThreshold() ?: return false))
 }
 
 private fun Duration.nextUpThreshold(): Duration? {
