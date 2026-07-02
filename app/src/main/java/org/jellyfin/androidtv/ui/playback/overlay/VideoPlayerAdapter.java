@@ -10,7 +10,7 @@ import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetForma
 import org.jellyfin.androidtv.ui.playback.VideoManagerHelperKt;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.StreamHelper;
-import org.jellyfin.sdk.model.api.ChapterInfo;
+import org.jellyfin.androidtv.util.sdk.BaseItemExtensionsKt;
 import org.jellyfin.sdk.model.api.MediaStream;
 import org.jellyfin.sdk.model.api.MediaStreamType;
 import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod;
@@ -215,7 +215,6 @@ public class VideoPlayerAdapter extends PlayerAdapter {
 
     boolean hasChapters() {
         org.jellyfin.sdk.model.api.BaseItemDto item = getCurrentlyPlayingItem();
-        List<ChapterInfo> chapters = item.getChapters();
-        return chapters != null && chapters.size() > 0;
+        return item != null && !BaseItemExtensionsKt.buildChapterItems(item).isEmpty();
     }
 }
