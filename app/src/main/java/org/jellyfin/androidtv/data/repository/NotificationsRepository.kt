@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.data.repository
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.model.Server
@@ -11,13 +12,18 @@ import org.jellyfin.androidtv.data.model.AppNotification
 import org.jellyfin.androidtv.preference.SystemPreferences
 import org.jellyfin.androidtv.util.isTvDevice
 import org.jellyfin.sdk.model.ServerVersion
+import org.jellyfin.updater.AppUpdate
 
 interface NotificationsRepository {
 	val notifications: StateFlow<List<AppNotification>>
+	val appUpdate: StateFlow<AppUpdate?>
+	val appUpdatePrompt: StateFlow<AppUpdate?>
 
 	fun dismissNotification(item: AppNotification)
 	fun addDefaultNotifications()
 	fun updateServerNotifications(server: Server?)
+	fun updateAppUpdateNotification(update: AppUpdate?, prompt: Boolean = true)
+	fun dismissAppUpdatePrompt()
 }
 
 class NotificationsRepositoryImpl(
@@ -25,6 +31,10 @@ class NotificationsRepositoryImpl(
 	private val systemPreferences: SystemPreferences,
 ) : NotificationsRepository {
 	override val notifications = MutableStateFlow(emptyList<AppNotification>())
+	private val _appUpdate = MutableStateFlow<AppUpdate?>(null)
+	override val appUpdate = _appUpdate.asStateFlow()
+	private val _appUpdatePrompt = MutableStateFlow<AppUpdate?>(null)
+	override val appUpdatePrompt = _appUpdatePrompt.asStateFlow()
 
 	init {
 		addDefaultNotifications()
@@ -95,5 +105,19 @@ class NotificationsRepositoryImpl(
 					),
 				)
 		}
+	}
+
+	private var _appUpdateNotification: AppNotification? = null
+	override fun updateAppUpdateNotification(update: AppUpdate?, prompt: Boolean) {
+		_appUpdateNotification?.let(::removeNotification)
+		_appUpdate.value = update
+		_appUpdatePrompt.value = if (prompt) update else null
+		_appUpdateNotification = update?.let {
+			addNotification("Jellyfin Thor ${it.versionName} is available. Open Settings > App updates to install it.")
+		}
+	}
+
+	override fun dismissAppUpdatePrompt() {
+		_appUpdatePrompt.value = null
 	}
 }
