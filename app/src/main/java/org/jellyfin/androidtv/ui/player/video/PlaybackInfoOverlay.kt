@@ -53,6 +53,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
 import org.jellyfin.playback.jellyfin.queue.forceTranscodingSourceBitrate
@@ -77,6 +78,7 @@ fun PlaybackInfoOverlay(
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
 	val forceTranscodingSourceBitrate = entry?.forceTranscodingSourceBitrate
 	val speed by playbackManager.state.speed.collectAsState()
+	val playerVideoSize by playbackManager.state.videoSize.collectAsState()
 	val subtitleOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
 	val subtitleOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
 	val softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled]
@@ -137,6 +139,7 @@ fun PlaybackInfoOverlay(
 	val sections = remember(
 		stream,
 		speed,
+		playerVideoSize,
 		subtitleOffset,
 		subtitleOffsetSupported,
 		parseSubtitlesDuringExtraction,
@@ -150,6 +153,7 @@ fun PlaybackInfoOverlay(
 			playbackManager = playbackManager,
 			stream = stream,
 			speed = speed,
+			playerVideoSize = playerVideoSize,
 			subtitleOffset = subtitleOffset,
 			subtitleOffsetSupported = subtitleOffsetSupported,
 			parseSubtitlesDuringExtraction = parseSubtitlesDuringExtraction,
@@ -236,6 +240,7 @@ private object NewPlayerStreamStatusBuilder {
 		playbackManager: PlaybackManager,
 		stream: MediaStream,
 		speed: Float,
+		playerVideoSize: VideoSize,
 		subtitleOffset: Duration,
 		subtitleOffsetSupported: Boolean,
 		parseSubtitlesDuringExtraction: Boolean,
@@ -284,7 +289,7 @@ private object NewPlayerStreamStatusBuilder {
 			PlaybackInfoSection(
 				title = "Streaming Info",
 				rows = rows {
-					row("Video resolution", resolution(videoTrack?.width, videoTrack?.height))
+					row("Player resolution", playerVideoSize.resolution())
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
@@ -326,6 +331,7 @@ private object NewPlayerStreamStatusBuilder {
 				title = "Original Media Info",
 				rows = rows {
 					row("Container", stream.container.format)
+					row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
 					row("Video codec", videoTrack?.codec.formatCodec())
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate())
@@ -512,6 +518,8 @@ private object NewPlayerStreamStatusBuilder {
 		width != null && height != null && width > 0 && height > 0 -> "${width}x$height"
 		else -> null
 	}
+
+	private fun VideoSize.resolution() = resolution(width, height)
 
 	private fun Int.formatBitrate() = when {
 		this >= 1_000_000 -> "%.2f Mbps".format(this / 1_000_000.0)
