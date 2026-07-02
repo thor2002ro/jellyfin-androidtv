@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,13 +73,6 @@ import timber.log.Timber
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
-private val POPOVER_VERTICAL_OFFSET = 5.dp
-private val TRACK_SELECTION_POPOVER_MIN_WIDTH = 240.dp
-private val TRACK_SELECTION_POPOVER_MAX_WIDTH = 340.dp
-private val TRACK_SELECTION_POPOVER_MAX_HEIGHT = 340.dp
-private val TRACK_SELECTION_ITEM_MIN_HEIGHT = 48.dp
-private val SUBTITLE_OFFSET_POPOVER_MIN_WIDTH = 250.dp
-private val SUBTITLE_OFFSET_POPOVER_MAX_WIDTH = 430.dp
 private val SUBTITLE_OFFSET_STEP_SMALL = 100.milliseconds
 private val SUBTITLE_OFFSET_STEP_LARGE = 500.milliseconds
 
@@ -230,6 +224,9 @@ fun SubtitleOffsetButton(
 	playbackManager: PlaybackManager,
 ) {
 	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_wide_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_wide_max_width)
 
 	var expanded by remember { mutableStateOf(false) }
 
@@ -250,15 +247,12 @@ fun SubtitleOffsetButton(
 			expanded = expanded,
 			onDismissRequest = { expanded = false },
 			alignment = Alignment.TopCenter,
-			offset = DpOffset(0.dp, -POPOVER_VERTICAL_OFFSET),
+			offset = DpOffset(0.dp, -popupOffsetY),
 		) {
 			SubtitleOffsetControls(
 				playbackManager = playbackManager,
 				modifier = Modifier
-					.widthIn(
-						min = SUBTITLE_OFFSET_POPOVER_MIN_WIDTH,
-						max = SUBTITLE_OFFSET_POPOVER_MAX_WIDTH,
-					)
+					.widthIn(min = popupMinWidth, max = popupMaxWidth)
 					.onPreviewKeyEvent { event ->
 						handleSubtitleOffsetKeyEvent(
 							keyEvent = event.nativeKeyEvent,
@@ -343,18 +337,25 @@ private fun TrackSelectionPopover(
 	beforeTracks: @Composable () -> Unit = {},
 	onTrackSelected: (PlayerTrack?) -> Unit,
 ) {
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_standard_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_standard_max_width)
+	val popupMaxHeight = dimensionResource(R.dimen.player_popup_menu_max_height)
+	val popupPaddingHorizontal = dimensionResource(R.dimen.player_popup_menu_padding_horizontal)
+	val popupPaddingVertical = dimensionResource(R.dimen.player_popup_menu_padding_vertical)
+
 	Popover(
 		expanded = expanded,
 		onDismissRequest = onDismissRequest,
 		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -POPOVER_VERTICAL_OFFSET),
+		offset = DpOffset(0.dp, -popupOffsetY),
 	) {
 		Column(
 			verticalArrangement = Arrangement.spacedBy(4.dp),
 			modifier = Modifier
-				.padding(8.dp)
-				.widthIn(min = TRACK_SELECTION_POPOVER_MIN_WIDTH, max = TRACK_SELECTION_POPOVER_MAX_WIDTH)
-				.heightIn(max = TRACK_SELECTION_POPOVER_MAX_HEIGHT)
+				.padding(horizontal = popupPaddingHorizontal, vertical = popupPaddingVertical)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
+				.heightIn(max = popupMaxHeight)
 				.verticalScroll(rememberScrollState())
 		) {
 			TrackSelectionHeader(
@@ -421,6 +422,8 @@ private fun TrackItem(
 	isSelected: Boolean,
 	onClick: () -> Unit,
 ) {
+	val itemMinHeight = dimensionResource(R.dimen.player_popup_menu_item_min_height)
+
 	ListButton(
 		onClick = onClick,
 		headingContent = {
@@ -435,7 +438,7 @@ private fun TrackItem(
 		},
 		modifier = Modifier
 			.fillMaxWidth()
-			.heightIn(min = TRACK_SELECTION_ITEM_MIN_HEIGHT),
+			.heightIn(min = itemMinHeight),
 	)
 }
 
@@ -447,6 +450,9 @@ private fun SubtitleOffsetTrackItem(
 	onClick: () -> Unit,
 ) {
 	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
+	val itemMinHeight = dimensionResource(R.dimen.player_popup_menu_item_min_height)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_wide_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_wide_max_width)
 	val label = if (subtitleTimingOffset == kotlin.time.Duration.ZERO) {
 		stringResource(R.string.lbl_subtitle_offset)
 	} else {
@@ -475,17 +481,14 @@ private fun SubtitleOffsetTrackItem(
 		},
 		modifier = Modifier
 			.fillMaxWidth()
-			.heightIn(min = TRACK_SELECTION_ITEM_MIN_HEIGHT),
+			.heightIn(min = itemMinHeight),
 	)
 
 	if (expanded) {
 		SubtitleOffsetControls(
 			playbackManager = playbackManager,
 			modifier = Modifier
-				.widthIn(
-					min = SUBTITLE_OFFSET_POPOVER_MIN_WIDTH,
-					max = SUBTITLE_OFFSET_POPOVER_MAX_WIDTH,
-				)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
 				.onPreviewKeyEvent { event ->
 					handleSubtitleOffsetKeyEvent(
 						keyEvent = event.nativeKeyEvent,

@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,8 +35,6 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButton
 import org.jellyfin.androidtv.ui.base.popover.Popover
-
-private val ZoomModePopoverVerticalOffset = 5.dp
 
 @Composable
 fun ZoomModeButton(
@@ -75,17 +74,24 @@ private fun ZoomModePopover(
 	currentZoomMode: ZoomMode,
 	onZoomModeSelected: (ZoomMode) -> Unit,
 ) {
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupPaddingHorizontal = dimensionResource(R.dimen.player_popup_menu_padding_horizontal)
+	val popupPaddingVertical = dimensionResource(R.dimen.player_popup_menu_padding_vertical)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_compact_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_compact_max_width)
+	val popupMaxHeight = dimensionResource(R.dimen.player_popup_menu_max_height)
+
 	Popover(
 		expanded = expanded,
 		onDismissRequest = onDismissRequest,
 		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -ZoomModePopoverVerticalOffset),
+		offset = DpOffset(0.dp, -popupOffsetY),
 	) {
 		Column(
 			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 6.dp)
-				.widthIn(min = 160.dp, max = 240.dp)
-				.heightIn(max = 300.dp)
+				.padding(horizontal = popupPaddingHorizontal, vertical = popupPaddingVertical)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
+				.heightIn(max = popupMaxHeight)
 				.verticalScroll(rememberScrollState())
 		) {
 			Text(
