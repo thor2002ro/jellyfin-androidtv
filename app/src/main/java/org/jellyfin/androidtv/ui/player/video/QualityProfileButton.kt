@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,8 +58,6 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.compose.koinInject
 import timber.log.Timber
 import kotlin.math.roundToLong
-
-private val QualityProfilePopoverVerticalOffset = 5.dp
 
 @Composable
 fun QualityProfileButton(
@@ -231,17 +230,24 @@ private fun QualityProfilePopover(
 	onQualitySelected: (String) -> Unit,
 	onResolutionSelected: (PlaybackResolution) -> Unit,
 ) {
+	val popupOffsetY = dimensionResource(R.dimen.player_popup_menu_offset_y)
+	val popupPaddingHorizontal = dimensionResource(R.dimen.player_popup_menu_padding_horizontal)
+	val popupPaddingVertical = dimensionResource(R.dimen.player_popup_menu_padding_vertical)
+	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_wide_min_width)
+	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_wide_max_width)
+	val popupMaxHeight = dimensionResource(R.dimen.player_popup_menu_max_height)
+
 	Popover(
 		expanded = expanded,
 		onDismissRequest = onDismissRequest,
 		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -QualityProfilePopoverVerticalOffset),
+		offset = DpOffset(0.dp, -popupOffsetY),
 	) {
 		Column(
 			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 6.dp)
-				.widthIn(min = 300.dp, max = 420.dp)
-				.heightIn(max = 300.dp)
+				.padding(horizontal = popupPaddingHorizontal, vertical = popupPaddingVertical)
+				.widthIn(min = popupMinWidth, max = popupMaxWidth)
+				.heightIn(max = popupMaxHeight)
 				.verticalScroll(rememberScrollState())
 		) {
 			Text(
