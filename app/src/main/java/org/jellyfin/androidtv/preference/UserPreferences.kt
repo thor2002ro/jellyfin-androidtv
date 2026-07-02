@@ -204,7 +204,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Show additional debug information
 		 */
-		var debuggingEnabled = booleanPreference("pref_enable_debug", false)
+		var debuggingEnabled = booleanPreference("pref_enable_debug", true)
 
 		/**
 		 * Enable verbose app logging.
