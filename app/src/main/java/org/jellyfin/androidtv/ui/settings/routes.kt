@@ -63,6 +63,7 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.nextup.SettingsPlaybac
 import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverAgeRatingScreen
 import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverScreen
 import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverTimeoutScreen
+import org.jellyfin.androidtv.updater.AppUpdateSettingsScreen
 import org.jellyfin.sdk.model.api.MediaSegmentType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 
@@ -126,6 +127,7 @@ object Routes {
 	const val PLAYBACK_DEBUG_CAPABILITIES = "/playback/advanced/debug-capabilities"
 	const val TELEMETRY = "/telemetry"
 	const val DEVELOPER = "/developer"
+	const val APP_UPDATES = "/updates"
 	const val ABOUT = "/about"
 	const val LICENSES = "/licenses"
 	const val LICENSE = "/license/{artifactId}"
@@ -323,6 +325,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.DEVELOPER to {
 		SettingsDeveloperScreen()
+	},
+	Routes.APP_UPDATES to {
+		AppUpdateSettingsScreen()
 	},
 	Routes.ABOUT to { context ->
 		SettingsAboutScreen(context.parameters["fromLogin"] == "true")

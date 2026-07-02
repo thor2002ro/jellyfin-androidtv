@@ -71,6 +71,8 @@ import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.okhttp.OkHttpFactory
 import org.jellyfin.sdk.createJellyfin
 import org.jellyfin.sdk.model.ClientInfo
+import org.jellyfin.updater.AppUpdateConfig
+import org.jellyfin.updater.AppUpdater
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
@@ -159,6 +161,18 @@ val appModule = module {
 	single { PlaybackControllerContainer() }
 	single { TranscodingStatusRepository(get()) }
 	single { InteractionTrackerViewModel(get(), get(), get()) }
+	single {
+		AppUpdater(
+			context = androidContext(),
+			config = AppUpdateConfig(
+				owner = "thor2002ro",
+				repo = "jellyfin-androidtv",
+				artifactPrefix = "jellyfin-androidtv-thor-",
+				currentVersionName = BuildConfig.VERSION_NAME,
+				buildType = BuildConfig.BUILD_TYPE,
+			)
+		)
+	}
 
 	single<UserRepository> { UserRepositoryImpl() }
 	single<UserViewsRepository> { UserViewsRepositoryImpl(get(), androidContext(), get()) }
