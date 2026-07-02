@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.util.profile
 
 import android.content.Context
 import android.media.AudioFormat
+import android.util.Size
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -13,6 +14,7 @@ import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
+import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.CodecType
 import org.jellyfin.sdk.model.api.DlnaProfileType
@@ -95,6 +97,7 @@ fun createDeviceProfile(
 ) = createDeviceProfile(
 	mediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled]),
 	maxBitrate = userPreferences.getMaxBitrate(),
+	maxResolution = userPreferences[UserPreferences.maxResolution],
 	isAC3PrefEnabled = userPreferences[UserPreferences.ac3Enabled],
 	isEAC3PrefEnabled = userPreferences[UserPreferences.eac3Enabled],
 	isDTSPrefEnabled = userPreferences[UserPreferences.dtsEnabled],
@@ -111,6 +114,7 @@ fun createDeviceProfile(
 fun createDeviceProfile(
 	mediaTest: MediaCodecCapabilitiesTest,
 	maxBitrate: Int,
+	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
 	isAC3PrefEnabled: Boolean,
 	isEAC3PrefEnabled: Boolean,
 	isDTSPrefEnabled: Boolean,
@@ -149,10 +153,10 @@ fun createDeviceProfile(
 	val supportsAV1 = mediaTest.supportsAV1()
 	val supportsAV1Main10 = mediaTest.supportsAV1Main10()
 	val supportsVC1 = mediaTest.supportsVc1()
-	val maxResolutionAVC = mediaTest.getMaxResolution(MimeTypes.VIDEO_H264)
-	val maxResolutionHevc = mediaTest.getMaxResolution(MimeTypes.VIDEO_H265)
-	val maxResolutionAV1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_AV1)
-	val maxResolutionVC1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VC1)
+	val maxResolutionAVC = mediaTest.getMaxResolution(MimeTypes.VIDEO_H264).capTo(maxResolution)
+	val maxResolutionHevc = mediaTest.getMaxResolution(MimeTypes.VIDEO_H265).capTo(maxResolution)
+	val maxResolutionAV1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_AV1).capTo(maxResolution)
+	val maxResolutionVC1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VC1).capTo(maxResolution)
 
 	/// HDR capabilities
 
@@ -555,6 +559,11 @@ private fun DeviceProfileBuilder.subtitleProfile(
 	if (hls) subtitleProfile(format, SubtitleDeliveryMethod.HLS)
 	if (encode) subtitleProfile(format, SubtitleDeliveryMethod.ENCODE)
 }
+
+private fun Size.capTo(resolution: PlaybackResolution) = Size(
+	resolution.capWidth(width),
+	resolution.capHeight(height),
+)
 
 @OptIn(UnstableApi::class)
 fun isPassthroughAudioAvailable(context: Context, mimetype: String): Boolean {
