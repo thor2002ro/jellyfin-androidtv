@@ -85,6 +85,7 @@ fun VideoPlayerOverlay(
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
 	var showPlaybackInfo by remember { mutableStateOf(false) }
 	var skipPromptTarget by remember { mutableStateOf<Duration?>(null) }
+	var endingSkipPromptVisible by remember { mutableStateOf(false) }
 	var overlayWakeKeyCode by remember { mutableStateOf<Int?>(null) }
 	var nextUpPromptKeyCode by remember { mutableStateOf<Int?>(null) }
 	var skipPromptKeyCode by remember { mutableStateOf<Int?>(null) }
@@ -133,6 +134,7 @@ fun VideoPlayerOverlay(
 		nextItem = nextItem,
 		nextUpBehavior = nextUpBehavior,
 		positionInfo = nextUpPositionInfo,
+		endingSkipPromptVisible = endingSkipPromptVisible,
 	)
 
 	fun hideOverlay() {
@@ -327,7 +329,7 @@ fun VideoPlayerOverlay(
 
 			if (keyEvent.isCenterKey()) {
 				val promptTarget = skipPromptTarget
-				if (promptTarget != null) {
+				if (promptTarget != null && !(endingSkipPromptVisible && shouldHandleNextUpPrompt())) {
 					if (keyEvent.action == KeyEvent.ACTION_DOWN) {
 						clearCenterLongPress()
 						centerShortcutKeyCode = null
@@ -492,6 +494,11 @@ fun VideoPlayerOverlay(
 				)
 			},
 			onCenterClick = {
+				if (endingSkipPromptVisible && shouldHandleNextUpPrompt()) {
+					startNextItemNow()
+					return@PlayerOverlayLayout true
+				}
+
 				val promptTarget = skipPromptTarget
 				if (promptTarget != null) {
 					playbackManager.state.seek(promptTarget)
@@ -568,6 +575,7 @@ fun VideoPlayerOverlay(
 			playbackManager = playbackManager,
 			item = item,
 			onPromptTargetChanged = { skipPromptTarget = it },
+			onEndingSkipPromptChanged = { endingSkipPromptVisible = it },
 			modifier = Modifier
 				.align(Alignment.BottomEnd)
 				.padding(
