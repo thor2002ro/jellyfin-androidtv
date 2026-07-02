@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -37,6 +38,8 @@ import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButton
+import org.jellyfin.androidtv.ui.base.form.RadioButton
+import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
@@ -70,6 +73,10 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 private val POPOVER_VERTICAL_OFFSET = 5.dp
+private val TRACK_SELECTION_POPOVER_MIN_WIDTH = 240.dp
+private val TRACK_SELECTION_POPOVER_MAX_WIDTH = 340.dp
+private val TRACK_SELECTION_POPOVER_MAX_HEIGHT = 340.dp
+private val TRACK_SELECTION_ITEM_MIN_HEIGHT = 48.dp
 private val SUBTITLE_OFFSET_POPOVER_MIN_WIDTH = 250.dp
 private val SUBTITLE_OFFSET_POPOVER_MAX_WIDTH = 430.dp
 private val SUBTITLE_OFFSET_STEP_SMALL = 100.milliseconds
@@ -95,6 +102,7 @@ fun AudioTrackButton(
 
 	Box {
 		val tooltip = stringResource(R.string.lbl_audio_track)
+		val icon = ImageVector.vectorResource(R.drawable.ic_select_audio)
 		IconButton(
 			onClick = {
 				refreshTick++
@@ -103,7 +111,7 @@ fun AudioTrackButton(
 			tooltip = tooltip,
 		) {
 			Icon(
-				imageVector = ImageVector.vectorResource(R.drawable.ic_select_audio),
+				imageVector = icon,
 				contentDescription = tooltip,
 			)
 		}
@@ -113,6 +121,7 @@ fun AudioTrackButton(
 			onDismissRequest = { expanded = false },
 			tracks = availableTracks,
 			title = stringResource(R.string.lbl_audio_track),
+			icon = icon,
 			onTrackSelected = { track ->
 				track?.let {
 					val streamIndex = it.streamIndex ?: it.index
@@ -159,6 +168,7 @@ fun SubtitleTrackButton(
 
 	Box {
 		val tooltip = stringResource(R.string.lbl_subtitle_track)
+		val icon = ImageVector.vectorResource(R.drawable.ic_select_subtitle)
 		IconButton(
 			onClick = {
 				refreshTick++
@@ -168,7 +178,7 @@ fun SubtitleTrackButton(
 			tooltip = tooltip,
 		) {
 			Icon(
-				imageVector = ImageVector.vectorResource(R.drawable.ic_select_subtitle),
+				imageVector = icon,
 				contentDescription = tooltip,
 			)
 		}
@@ -178,6 +188,7 @@ fun SubtitleTrackButton(
 			onDismissRequest = { expanded = false },
 			tracks = availableTracks,
 			title = stringResource(R.string.lbl_subtitle_track),
+			icon = icon,
 			showNoneOption = true,
 			beforeTracks = {
 				if (hasOffsetCapableSubtitle) {
@@ -327,6 +338,7 @@ private fun TrackSelectionPopover(
 	onDismissRequest: () -> Unit,
 	tracks: List<PlayerTrack>,
 	title: String,
+	icon: ImageVector,
 	showNoneOption: Boolean = false,
 	beforeTracks: @Composable () -> Unit = {},
 	onTrackSelected: (PlayerTrack?) -> Unit,
@@ -338,19 +350,16 @@ private fun TrackSelectionPopover(
 		offset = DpOffset(0.dp, -POPOVER_VERTICAL_OFFSET),
 	) {
 		Column(
+			verticalArrangement = Arrangement.spacedBy(4.dp),
 			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 6.dp)
-				.widthIn(min = 160.dp, max = 360.dp)
-				.heightIn(max = 300.dp)
+				.padding(8.dp)
+				.widthIn(min = TRACK_SELECTION_POPOVER_MIN_WIDTH, max = TRACK_SELECTION_POPOVER_MAX_WIDTH)
+				.heightIn(max = TRACK_SELECTION_POPOVER_MAX_HEIGHT)
 				.verticalScroll(rememberScrollState())
 		) {
-			Text(
-				text = title,
-				style = JellyfinTheme.typography.listHeader.copy(
-					color = JellyfinTheme.colorScheme.listHeader
-				),
-				fontSize = 13.sp,
-				modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+			TrackSelectionHeader(
+				icon = icon,
+				title = title,
 			)
 
 			beforeTracks()
@@ -375,40 +384,59 @@ private fun TrackSelectionPopover(
 }
 
 @Composable
+private fun TrackSelectionHeader(
+	icon: ImageVector,
+	title: String,
+) {
+	ProvideTextStyle(
+		JellyfinTheme.typography.listHeader.copy(
+			color = JellyfinTheme.colorScheme.listHeader,
+			fontSize = 13.sp,
+		)
+	) {
+		Row(
+			horizontalArrangement = Arrangement.spacedBy(10.dp),
+			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(horizontal = 12.dp, vertical = 6.dp),
+		) {
+			Icon(
+				imageVector = icon,
+				contentDescription = null,
+				modifier = Modifier.size(20.dp),
+			)
+			Text(
+				text = title,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+			)
+		}
+	}
+}
+
+@Composable
 private fun TrackItem(
 	label: String,
 	isSelected: Boolean,
 	onClick: () -> Unit,
 ) {
-	Button(
+	ListButton(
 		onClick = onClick,
-		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-	) {
-		Row(
-			horizontalArrangement = Arrangement.spacedBy(8.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-		) {
-			// Use Box to reserve space for checkmark even when not selected
-			Box(modifier = Modifier.size(18.dp)) {
-				if (isSelected) {
-					Icon(
-						imageVector = ImageVector.vectorResource(R.drawable.ic_check),
-						contentDescription = null,
-						modifier = Modifier.size(18.dp),
-						// Inherits color from Button's content color (dark on light bg, light on dark bg)
-					)
-				}
-			}
-			ProvideTextStyle(JellyfinTheme.typography.listHeadline.copy(fontSize = 13.sp)) {
-				Text(
-					text = label,
-					maxLines = 1,
-					overflow = TextOverflow.Ellipsis,
-				)
-			}
-		}
-	}
+		headingContent = {
+			Text(
+				text = label,
+				maxLines = 2,
+				overflow = TextOverflow.Ellipsis,
+			)
+		},
+		leadingContent = {
+			RadioButton(checked = isSelected)
+		},
+		modifier = Modifier
+			.fillMaxWidth()
+			.heightIn(min = TRACK_SELECTION_ITEM_MIN_HEIGHT),
+	)
 }
 
 @Composable
@@ -428,30 +456,27 @@ private fun SubtitleOffsetTrackItem(
 		)
 	}
 
-	Button(
+	ListButton(
 		onClick = onClick,
 		enabled = enabled,
-		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-	) {
-		Row(
-			horizontalArrangement = Arrangement.spacedBy(8.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-		) {
+		headingContent = {
+			Text(
+				text = label,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+			)
+		},
+		leadingContent = {
 			Icon(
 				imageVector = ImageVector.vectorResource(R.drawable.ic_time),
 				contentDescription = null,
-				modifier = Modifier.size(18.dp),
+				modifier = Modifier.size(20.dp),
 			)
-			ProvideTextStyle(JellyfinTheme.typography.listHeadline.copy(fontSize = 13.sp)) {
-				Text(
-					text = label,
-					maxLines = 1,
-					overflow = TextOverflow.Ellipsis,
-				)
-			}
-		}
-	}
+		},
+		modifier = Modifier
+			.fillMaxWidth()
+			.heightIn(min = TRACK_SELECTION_ITEM_MIN_HEIGHT),
+	)
 
 	if (expanded) {
 		SubtitleOffsetControls(
@@ -515,12 +540,13 @@ private fun SubtitleOffsetControls(
 			) {
 				Text(stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(SUBTITLE_OFFSET_STEP_LARGE)), fontSize = 12.sp)
 			}
-			Button(
-				onClick = { playbackManager.state.resetSubtitleTimingOffset() },
-				contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-			) {
-				Text(stringResource(R.string.lbl_reset), fontSize = 12.sp)
-			}
+		}
+		Button(
+			onClick = { playbackManager.state.resetSubtitleTimingOffset() },
+			contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+			modifier = Modifier.fillMaxWidth(),
+		) {
+			Text(stringResource(R.string.lbl_reset), fontSize = 12.sp)
 		}
 	}
 }
