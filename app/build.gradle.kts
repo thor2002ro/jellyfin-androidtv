@@ -121,6 +121,7 @@ dependencies {
 	implementation(projects.playback.media3.exoplayer)
 	implementation(projects.playback.media3.session)
 	implementation(projects.preference)
+	implementation(projects.updater)
 	implementation(libs.jellyfin.sdk) {
 		// Change version if desired
 		val sdkVersion = findProperty("sdk.version")?.toString()
