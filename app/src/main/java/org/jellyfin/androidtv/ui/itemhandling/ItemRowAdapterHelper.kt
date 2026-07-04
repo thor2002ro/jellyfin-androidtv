@@ -96,6 +96,7 @@ fun <T : Any> ItemRowAdapter.setItems(
 
 	replaceAll(allItems)
 	itemsLoaded = allItems.size
+	addRowToParentIfResultsReceived()
 }
 
 private fun BaseRowItem.resumeSignature() = listOf(
@@ -104,6 +105,35 @@ private fun BaseRowItem.resumeSignature() = listOf(
 	baseItem?.userData?.playedPercentage,
 	baseItem?.userData?.playbackPositionTicks,
 )
+
+private fun BaseRowItem.itemSignature() = listOf(
+	itemId,
+	baseItem?.name,
+	baseItem?.episodeTitle,
+	baseItem?.userData?.played,
+	baseItem?.userData?.playedPercentage,
+	baseItem?.userData?.playbackPositionTicks,
+)
+
+private fun BaseRowItem.liveTvProgramSignature() = listOf(
+	itemId,
+	baseItem?.name,
+	baseItem?.episodeTitle,
+	baseItem?.channelId,
+	baseItem?.channelName,
+	baseItem?.channelNumber,
+	baseItem?.channelPrimaryImageTag,
+	baseItem?.startDate,
+	baseItem?.endDate,
+)
+
+private fun ItemRowAdapter.replaceIfChanged(items: List<BaseRowItem>, signature: (BaseRowItem) -> List<Any?>) {
+	val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
+	if (oldItems.map { it?.let(signature) } != items.map(signature)) replaceAll(items)
+	itemsLoaded = items.size
+	totalItems = items.size
+	addRowToParentIfResultsReceived()
+}
 
 fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
@@ -120,12 +150,8 @@ fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequ
 				)
 			}
 
-			val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
-			if (oldItems.map { it?.resumeSignature() } != items.map { it.resumeSignature() }) {
-				replaceAll(items)
-			}
-			itemsLoaded = items.size
-			totalItems = items.size
+			replaceIfChanged(items, BaseRowItem::resumeSignature)
+			if (items.isEmpty()) removeRow()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -161,31 +187,27 @@ fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) 
 				}
 				displayedItems = items
 
-				setItems(
-					items = items,
-					transform = { item, _ ->
-						BaseItemDtoBaseRowItem(
-							item,
-							preferParentThumb,
-							false
-						)
-					}
-				)
+				val rowItems = items.map { item ->
+					BaseItemDtoBaseRowItem(
+						item,
+						preferParentThumb,
+						false
+					)
+				}
+				replaceIfChanged(rowItems, BaseRowItem::itemSignature)
 
 				if (items.isEmpty()) removeRow()
 			} else {
 				displayedItems = response.items
 
-				setItems(
-					items = response.items,
-					transform = { item, _ ->
-						BaseItemDtoBaseRowItem(
-							item,
-							preferParentThumb,
-							isStaticHeight
-						)
-					}
-				)
+				val rowItems = response.items.map { item ->
+					BaseItemDtoBaseRowItem(
+						item,
+						preferParentThumb,
+						isStaticHeight
+					)
+				}
+				replaceIfChanged(rowItems, BaseRowItem::itemSignature)
 
 				if (response.items.isEmpty()) removeRow()
 			}
@@ -248,6 +270,7 @@ private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto
 	)
 	itemsLoaded = items.size
 	totalItems = items.size
+	addRowToParentIfResultsReceived()
 }
 
 private fun ItemRowAdapter.latestMediaRowItem(item: BaseItemDto) = BaseItemDtoBaseRowItem(
@@ -856,21 +879,18 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 				programs.map { program -> program.withChannelImage(channels[program.channelId]) }
 			}
 
-			setItems(
-				items = items,
-				transform = { item, _ ->
-					BaseItemDtoBaseRowItem(
-						item,
-						false,
-						isStaticHeight,
-						selectAction,
-					)
-				}
-			)
+			val rowItems = items.map { item ->
+				BaseItemDtoBaseRowItem(
+					item,
+					false,
+					isStaticHeight,
+					selectAction,
+				)
+			}
+			replaceIfChanged(rowItems, BaseRowItem::liveTvProgramSignature)
 			prefetchLiveTvTracks(api, items)
 
 			if (items.isEmpty()) removeRow()
-			else addRowToParentIfResultsReceived()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -1030,7 +1050,6 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 			prefetchLiveTvTracks(api, items)
 
 			if (itemsLoaded == 0) removeRow()
-			else addRowToParentIfResultsReceived()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
