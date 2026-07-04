@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,11 +31,19 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.network.httpHeaders
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.toBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.preference.UserPreferences
@@ -45,6 +54,7 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSubtitles
 import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
+import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
@@ -57,7 +67,9 @@ import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
+import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
+import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.compose.koinInject
 
 private const val DefaultVideoAspectRatio = 16f / 9f
@@ -85,6 +97,10 @@ fun VideoPlayerScreen(
 		?: remember { mutableStateOf(false) }
 	LiveTvTrackCacheUpdater(playbackManager)
 	val playing = playState.isActivePlayback
+	TrickplayTileSheetPrefetcher(
+		playbackManager = playbackManager,
+		enabled = userPreferences[UserPreferences.trickPlayEnabled],
+	)
 	ScreensaverLock(
 		enabled = playing,
 	)
@@ -132,6 +148,45 @@ fun VideoPlayerScreen(
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
 		)
+	}
+}
+
+@Composable
+private fun TrickplayTileSheetPrefetcher(
+	playbackManager: PlaybackManager,
+	enabled: Boolean,
+	api: ApiClient = koinInject(),
+	imageLoader: ImageLoader = koinInject(),
+) {
+	val context = LocalContext.current
+	val entry by playbackManager.queue.entry.collectAsState()
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val mediaSourceId = entry?.mediaSourceId
+	val sheets = remember(enabled, item?.id, item?.trickplay, mediaSourceId, api.accessToken) {
+		if (enabled && item != null) item.getTrickplayTileSheets(api, mediaSourceId)
+		else emptyList()
+	}
+
+	DisposableEffect(sheets) {
+		onDispose {
+			TrickplayTileSheetMemoryCache.clear(sheets.map { sheet -> sheet.url })
+		}
+	}
+
+	LaunchedEffect(sheets) {
+		withContext(Dispatchers.IO) {
+			sheets.forEach { sheet ->
+				val bitmap = imageLoader.execute(
+					ImageRequest.Builder(context)
+						.data(sheet.url)
+						.httpHeaders(sheet.headers)
+						.memoryCachePolicy(CachePolicy.DISABLED)
+						.diskCachePolicy(CachePolicy.DISABLED)
+						.build()
+				).image?.toBitmap()
+				if (bitmap != null) TrickplayTileSheetMemoryCache.put(sheet.url, bitmap)
+			}
+		}
 	}
 }
 
