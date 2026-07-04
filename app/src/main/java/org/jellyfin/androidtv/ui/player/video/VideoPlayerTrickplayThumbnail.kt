@@ -61,21 +61,11 @@ fun VideoPlayerTrickplayThumbnail(
 ) {
 	if (!enabled || item == null || position == null) return
 
-	val context = LocalContext.current
 	val timeMs = position.inWholeMilliseconds
 	val trickplayImage = remember(item.id, item.trickplay, mediaSourceId, timeMs, api.accessToken) {
 		item.getTrickplayImage(api, mediaSourceId, timeMs)
 	} ?: return
 	val thumbnailAspectRatio = trickplayImage.width.toFloat() / trickplayImage.height
-
-	LaunchedEffect(imageLoader, context, trickplayImage.url, api.accessToken) {
-		imageLoader.enqueue(
-			ImageRequest.Builder(context)
-				.data(trickplayImage.url)
-				.httpHeaders(trickplayImage.headers)
-				.build()
-		)
-	}
 
 	Box(
 		modifier = modifier
@@ -150,7 +140,8 @@ internal fun VideoPlayerTrickplayImage(
 			val nextRequest = latestRequest
 			runCatching {
 				withContext(Dispatchers.IO) {
-					imageLoader.execute(nextRequest).image?.toBitmap()?.asImageBitmap()
+					(latestRequestKey as? TrickplayImage)?.let(TrickplayTileSheetMemoryCache::getThumbnail)
+						?: imageLoader.execute(nextRequest).image?.toBitmap()?.asImageBitmap()
 				}
 			}.getOrNull()?.let { image = it }
 			loadedKey = nextKey
