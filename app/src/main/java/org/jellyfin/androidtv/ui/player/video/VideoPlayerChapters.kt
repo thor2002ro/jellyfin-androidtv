@@ -286,6 +286,7 @@ private fun ChapterThumbnail(
 			if (trickplayImage != null) {
 				VideoPlayerTrickplayImage(
 					request = rememberVideoPlayerTrickplayImageRequest(trickplayImage),
+					lastSuccessKey = item.id to mediaSourceId,
 					modifier = Modifier.fillMaxSize(),
 				)
 			}
