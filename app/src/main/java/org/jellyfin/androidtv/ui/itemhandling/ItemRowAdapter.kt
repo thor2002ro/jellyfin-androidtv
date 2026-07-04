@@ -108,6 +108,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var fullyLoaded = false
 	private val currentlyRetrievingSemaphore = Any()
 	private var currentlyRetrieving = false
+	private var pendingFullRetrieve = false
 	private lateinit var context: Context
 
 	private val api by inject<ApiClient>()
@@ -436,9 +437,19 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		currentlyRetrieving
 	}
 
-	private fun setCurrentlyRetrieving(currentlyRetrieving: Boolean) {
-		synchronized(currentlyRetrievingSemaphore) {
-			this.currentlyRetrieving = currentlyRetrieving
+	private fun finishRetrieveAndConsumePendingFullRetrieve() = synchronized(currentlyRetrievingSemaphore) {
+		currentlyRetrieving = false
+		pendingFullRetrieve.also { pendingFullRetrieve = false }
+	}
+
+	private fun notifyRetrieveStarted(queueIfBusy: Boolean = false) = synchronized(currentlyRetrievingSemaphore) {
+		if (currentlyRetrieving) {
+			if (queueIfBusy) pendingFullRetrieve = true
+			Timber.d("Not retrieving row because already retrieving")
+			false
+		} else {
+			currentlyRetrieving = true
+			true
 		}
 	}
 
@@ -514,16 +525,16 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 			return
 		}
 
-		siblingRow?.let { currentParent.remove(it) }
+		var removed = false
+		siblingRow?.let { removed = currentParent.remove(it) || removed }
+		row?.let { removed = currentParent.remove(it) || removed }
 
-		if (currentParent.size() == 1) {
+		if (removed && currentParent.size() == 0) {
 			val emptyRow = ArrayObjectAdapter(TextItemPresenter()).apply {
 				add(context.getString(R.string.lbl_no_items))
 			}
 			currentParent.add(ListRow(HeaderItem(context.getString(R.string.lbl_empty)), emptyRow))
 		}
-
-		row?.let { currentParent.remove(it) }
 	}
 
 	fun addRowToParentIfResultsReceived() {
@@ -590,25 +601,25 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		when (queryType) {
 			QueryType.LiveTvChannel -> {
 				val request = tvChannelQuery ?: return
-				notifyRetrieveStarted()
+				if (!notifyRetrieveStarted()) return
 				retrieveLiveTvChannels(api, request, itemsLoaded, chunkSize)
 			}
 
 			QueryType.Artists -> {
 				val request = artistsQuery ?: return
-				notifyRetrieveStarted()
+				if (!notifyRetrieveStarted()) return
 				retrieveArtists(api, request, itemsLoaded, chunkSize)
 			}
 
 			QueryType.AlbumArtists -> {
 				val request = albumArtistsQuery ?: return
-				notifyRetrieveStarted()
+				if (!notifyRetrieveStarted()) return
 				retrieveAlbumArtists(api, request, itemsLoaded, chunkSize)
 			}
 
 			else -> {
 				val request = query ?: return
-				notifyRetrieveStarted()
+				if (!notifyRetrieveStarted()) return
 				retrieveItems(api, request, itemsLoaded, chunkSize)
 			}
 		}
@@ -640,7 +651,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 
 	@Suppress("FunctionName")
 	fun Retrieve() {
-		notifyRetrieveStarted()
+		if (!notifyRetrieveStarted(queueIfBusy = true)) return
 		lastFullRetrieve = Instant.now()
 		itemsLoaded = 0
 
@@ -741,12 +752,13 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	fun notifyRetrieveFinished(exception: Exception? = null) {
 		if (exception != null) Timber.w(exception, "Failed to retrieve items")
 
-		setCurrentlyRetrieving(false)
+		val retrieveAgain = finishRetrieveAndConsumePendingFullRetrieve()
 		if (retrieveFinishedListener != null) {
 			if (exception == null) retrieveFinishedListener?.onResponse()
 			else retrieveFinishedListener?.onError(exception)
 		}
 		if (exception == null) retrieveFinishedRunnable?.run()
+		if (retrieveAgain) Retrieve()
 	}
 
 	fun setRetrieveFinishedListener(response: EmptyResponse?) {
@@ -757,7 +769,4 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		retrieveFinishedRunnable = response
 	}
 
-	private fun notifyRetrieveStarted() {
-		setCurrentlyRetrieving(true)
-	}
 }
