@@ -302,7 +302,7 @@ private fun VideoBufferingIndicator(
 	) {
 		Box(
 			contentAlignment = Alignment.Center,
-			modifier = Modifier.size(width = 144.dp, height = 40.dp),
+			modifier = Modifier.size(width = 192.dp, height = 64.dp),
 		) {
 			val transition = rememberInfiniteTransition(label = "video-buffering")
 			val phase by transition.animateFloat(
@@ -328,15 +328,18 @@ private fun VideoBufferingIndicator(
 					cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
 				)
 
-				val blockWidth = size.width * 0.16f
-				val blockHeight = size.height * 0.16f
+				val animationWidth = minOf(144.dp.toPx(), size.width)
+				val animationHeight = minOf(40.dp.toPx(), size.height)
+				val animationLeft = (size.width - animationWidth) / 2f
+				val blockWidth = animationWidth * 0.16f
+				val blockHeight = animationHeight * 0.16f
 				val cornerRadius = CornerRadius(blockHeight / 2f, blockHeight / 2f)
-				val travelWidth = size.width + blockWidth
+				val travelWidth = animationWidth + blockWidth
 				val top = (size.height - blockHeight) / 2f
 
 				repeat(BufferingBlockCount) { index ->
 					val blockPhase = (phase + (index.toFloat() / BufferingBlockCount)) % 1f
-					val x = blockPhase * travelWidth - blockWidth
+					val x = animationLeft + blockPhase * travelWidth - blockWidth
 					val edgeFade = minOf(blockPhase, 1f - blockPhase).coerceIn(0f, 0.16f) / 0.16f
 					val alpha = 0.28f + edgeFade * 0.72f
 
