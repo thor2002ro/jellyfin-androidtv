@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.player.video
 
 import android.view.KeyEvent
 import android.widget.ImageView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -58,8 +60,8 @@ import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-private val ChapterThumbnailWidth = 132.dp
-private val ChapterThumbnailHeight = 74.dp
+internal val ChapterThumbnailWidth = 132.dp
+internal val ChapterThumbnailHeight = 74.dp
 private val ChapterListHeight = 90.dp
 private val ChapterThumbnailShape = RoundedCornerShape(4.dp)
 private const val ChapterThumbnailAspectRatio = 16f / 9f
@@ -267,17 +269,32 @@ private fun ChapterThumbnail(
 		val image = chapter.image
 		if (image != null) {
 			val density = LocalDensity.current
-			AsyncImage(
-				url = image.getUrl(
+			val fillWidth = with(density) { ChapterThumbnailWidth.roundToPx() }
+			val fillHeight = with(density) { ChapterThumbnailHeight.roundToPx() }
+			val url = remember(image, api.accessToken, fillWidth, fillHeight) {
+				image.getUrl(
 					api = api,
-					fillWidth = with(density) { ChapterThumbnailWidth.roundToPx() },
-					fillHeight = with(density) { ChapterThumbnailHeight.roundToPx() },
-				),
-				blurHash = image.blurHash,
-				aspectRatio = ChapterThumbnailAspectRatio,
-				scaleType = ImageView.ScaleType.CENTER_CROP,
-				modifier = Modifier.fillMaxSize(),
-			)
+					fillWidth = fillWidth,
+					fillHeight = fillHeight,
+				)
+			}
+			val cachedImage = ChapterThumbnailMemoryCache.get(url)
+			if (cachedImage != null) {
+				Image(
+					bitmap = cachedImage,
+					contentDescription = null,
+					contentScale = ContentScale.Crop,
+					modifier = Modifier.fillMaxSize(),
+				)
+			} else {
+				AsyncImage(
+					url = url,
+					blurHash = image.blurHash,
+					aspectRatio = ChapterThumbnailAspectRatio,
+					scaleType = ImageView.ScaleType.CENTER_CROP,
+					modifier = Modifier.fillMaxSize(),
+				)
+			}
 		} else if (trickPlayEnabled && item != null) {
 			val timeMs = chapter.startPositionTicks.ticks.inWholeMilliseconds
 			val trickplayImage = remember(item.id, item.trickplay, mediaSourceId, timeMs, api.accessToken) {
