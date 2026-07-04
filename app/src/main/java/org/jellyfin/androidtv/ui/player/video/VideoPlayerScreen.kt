@@ -56,8 +56,6 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
 import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
-import org.jellyfin.androidtv.util.apiclient.getUrl
-import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
@@ -169,17 +167,7 @@ private fun ChapterThumbnailPrefetcher(
 	val entry by playbackManager.queue.entry.collectAsState()
 	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
 	val thumbnailUrls = remember(item?.id, item?.chapters, api.accessToken, thumbnailWidth, thumbnailHeight) {
-		item?.buildChapterItems()
-			.orEmpty()
-			.mapNotNull { chapter -> chapter.image }
-			.map { image ->
-				image.getUrl(
-					api = api,
-					fillWidth = thumbnailWidth,
-					fillHeight = thumbnailHeight,
-				)
-			}
-			.distinct()
+		item?.getChapterThumbnailUrls(api, thumbnailWidth, thumbnailHeight).orEmpty()
 	}
 
 	DisposableEffect(thumbnailUrls) {
