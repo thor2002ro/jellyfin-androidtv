@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +56,8 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
 import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
+import org.jellyfin.androidtv.util.apiclient.getUrl
+import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.liveTvChannelId
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
@@ -71,6 +74,7 @@ import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.compose.koinInject
+import timber.log.Timber
 
 private const val DefaultVideoAspectRatio = 16f / 9f
 private const val BufferingBlockCount = 5
@@ -101,6 +105,7 @@ fun VideoPlayerScreen(
 		playbackManager = playbackManager,
 		enabled = userPreferences[UserPreferences.trickPlayEnabled],
 	)
+	ChapterThumbnailPrefetcher(playbackManager = playbackManager)
 	ScreensaverLock(
 		enabled = playing,
 	)
@@ -152,6 +157,61 @@ fun VideoPlayerScreen(
 }
 
 @Composable
+private fun ChapterThumbnailPrefetcher(
+	playbackManager: PlaybackManager,
+	api: ApiClient = koinInject(),
+	imageLoader: ImageLoader = koinInject(),
+) {
+	val context = LocalContext.current
+	val density = LocalDensity.current
+	val thumbnailWidth = with(density) { ChapterThumbnailWidth.roundToPx() }
+	val thumbnailHeight = with(density) { ChapterThumbnailHeight.roundToPx() }
+	val entry by playbackManager.queue.entry.collectAsState()
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val thumbnailUrls = remember(item?.id, item?.chapters, api.accessToken, thumbnailWidth, thumbnailHeight) {
+		item?.buildChapterItems()
+			.orEmpty()
+			.mapNotNull { chapter -> chapter.image }
+			.map { image ->
+				image.getUrl(
+					api = api,
+					fillWidth = thumbnailWidth,
+					fillHeight = thumbnailHeight,
+				)
+			}
+			.distinct()
+	}
+
+	DisposableEffect(thumbnailUrls) {
+		onDispose {
+			val stats = ChapterThumbnailMemoryCache.clear(thumbnailUrls)
+			if (stats.count > 0) {
+				Timber.i("Cleared chapter thumbnail memory cache: ${stats.count} thumbnails, ${"%.1f".format(stats.mib)} MiB")
+			}
+		}
+	}
+
+	LaunchedEffect(thumbnailUrls) {
+		withContext(Dispatchers.IO) {
+			thumbnailUrls.forEach { url ->
+				val bitmap = imageLoader.execute(
+					ImageRequest.Builder(context)
+						.data(url)
+						.memoryCachePolicy(CachePolicy.DISABLED)
+						.diskCachePolicy(CachePolicy.DISABLED)
+						.build()
+				).image?.toBitmap()
+				if (bitmap != null) ChapterThumbnailMemoryCache.put(url, bitmap)
+			}
+		}
+		val stats = ChapterThumbnailMemoryCache.stats(thumbnailUrls)
+		if (stats.count > 0) {
+			Timber.i("Prefetched chapter thumbnail memory cache: ${stats.count}/${thumbnailUrls.size} thumbnails, ${"%.1f".format(stats.mib)} MiB")
+		}
+	}
+}
+
+@Composable
 private fun TrickplayTileSheetPrefetcher(
 	playbackManager: PlaybackManager,
 	enabled: Boolean,
@@ -169,7 +229,10 @@ private fun TrickplayTileSheetPrefetcher(
 
 	DisposableEffect(sheets) {
 		onDispose {
-			TrickplayTileSheetMemoryCache.clear(sheets.map { sheet -> sheet.url })
+			val stats = TrickplayTileSheetMemoryCache.clear(sheets.map { sheet -> sheet.url })
+			if (stats.count > 0) {
+				Timber.i("Cleared trickplay memory cache: ${stats.count} sheets, ${"%.1f".format(stats.mib)} MiB")
+			}
 		}
 	}
 
@@ -186,6 +249,10 @@ private fun TrickplayTileSheetPrefetcher(
 				).image?.toBitmap()
 				if (bitmap != null) TrickplayTileSheetMemoryCache.put(sheet.url, bitmap)
 			}
+		}
+		val stats = TrickplayTileSheetMemoryCache.stats(sheets.map { sheet -> sheet.url })
+		if (stats.count > 0) {
+			Timber.i("Prefetched trickplay memory cache: ${stats.count}/${sheets.size} sheets, ${"%.1f".format(stats.mib)} MiB")
 		}
 	}
 }
