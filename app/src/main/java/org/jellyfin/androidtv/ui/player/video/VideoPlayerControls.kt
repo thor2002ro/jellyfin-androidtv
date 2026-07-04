@@ -76,6 +76,8 @@ fun VideoPlayerControls(
 	item: BaseItemDto? = null,
 	mediaSourceId: String? = null,
 	trickPlayEnabled: Boolean = false,
+	seekPreviewPosition: Duration? = null,
+	onSeekPreview: (Duration) -> Unit = {},
 	zoomMode: ZoomMode,
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onPlaybackInfoClick: () -> Unit = {},
@@ -139,8 +141,19 @@ fun VideoPlayerControls(
 		}
 	}
 
+	fun previewRelativeSeek(amount: Duration) {
+		val positionInfo = playbackManager.state.positionInfo
+		val basePosition = seekPreviewPosition ?: positionInfo.active
+		onSeekPreview((basePosition + amount).let { position ->
+			if (positionInfo.duration > Duration.ZERO) position.coerceIn(Duration.ZERO, positionInfo.duration)
+			else position.coerceAtLeast(Duration.ZERO)
+		})
+	}
+
 	Column(
+		horizontalAlignment = Alignment.CenterHorizontally,
 		verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
+		modifier = Modifier.fillMaxWidth(),
 	) {
 		BoxWithConstraints(
 			modifier = Modifier.fillMaxWidth(),
@@ -182,8 +195,16 @@ fun VideoPlayerControls(
 					enabled = playPauseEnabled,
 				)
 				StopButton(onClick = onStopClick)
-				RewindButton(playbackManager, seekEnabled)
-				FastForwardButton(playbackManager, seekEnabled)
+				RewindButton(
+					playbackManager = playbackManager,
+					enabled = seekEnabled,
+					onPreview = { previewRelativeSeek(-playbackManager.options.defaultRewindAmount()) },
+				)
+				FastForwardButton(
+					playbackManager = playbackManager,
+					enabled = seekEnabled,
+					onPreview = { previewRelativeSeek(playbackManager.options.defaultFastForwardAmount()) },
+				)
 
 				Spacer(Modifier.weight(1f))
 
@@ -210,11 +231,20 @@ fun VideoPlayerControls(
 			)
 		}
 
+		VideoPlayerTrickplayThumbnail(
+			item = item,
+			mediaSourceId = mediaSourceId,
+			position = seekPreviewPosition.takeIf { liveTvProgramTimeline == null },
+			enabled = trickPlayEnabled,
+		)
+
 		TimelineSeekbar(
 			playbackManager = playbackManager,
+			position = seekPreviewPosition,
 			markers = chapterMarkers,
 			liveTvProgramTimeline = liveTvProgramTimeline,
 			liveTvProgramPosition = liveTvProgramPosition,
+			onSeek = onSeekPreview,
 			enabled = seekEnabled,
 			modifier = Modifier
 				.fillMaxWidth()
@@ -225,6 +255,7 @@ fun VideoPlayerControls(
 			horizontalArrangement = Arrangement.spacedBy(12.dp),
 			verticalAlignment = Alignment.CenterVertically,
 			modifier = Modifier
+				.fillMaxWidth()
 				.focusRestorer()
 				.focusGroup()
 		) {
@@ -297,10 +328,7 @@ private fun UpHint(
 @Composable
 fun VideoPlayerSeekControls(
 	playbackManager: PlaybackManager = koinInject(),
-	item: BaseItemDto? = null,
-	mediaSourceId: String? = null,
 	position: Duration? = null,
-	trickPlayEnabled: Boolean = false,
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
 	enabled: Boolean = true,
@@ -308,14 +336,8 @@ fun VideoPlayerSeekControls(
 	Column(
 		horizontalAlignment = Alignment.CenterHorizontally,
 		verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
+		modifier = Modifier.fillMaxWidth(),
 	) {
-		VideoPlayerTrickplayThumbnail(
-			item = item,
-			mediaSourceId = mediaSourceId,
-			position = position.takeIf { liveTvProgramTimeline == null },
-			enabled = trickPlayEnabled,
-		)
-
 		TimelineSeekbar(
 			playbackManager = playbackManager,
 			position = position,
@@ -327,7 +349,9 @@ fun VideoPlayerSeekControls(
 				.height(4.dp),
 		)
 
-		Row {
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+		) {
 			Spacer(Modifier.weight(1f))
 			PositionText(
 				playbackManager = playbackManager,
@@ -432,10 +456,11 @@ private fun StopButton(
 private fun RewindButton(
 	playbackManager: PlaybackManager,
 	enabled: Boolean,
+	onPreview: () -> Unit,
 ) {
 	val tooltip = stringResource(R.string.rewind)
 	IconButton(
-		onClick = { playbackManager.state.rewind() },
+		onClick = onPreview,
 		enabled = enabled,
 		tooltip = tooltip,
 	) {
@@ -450,10 +475,11 @@ private fun RewindButton(
 private fun FastForwardButton(
 	playbackManager: PlaybackManager,
 	enabled: Boolean,
+	onPreview: () -> Unit,
 ) {
 	val tooltip = stringResource(R.string.fast_forward)
 	IconButton(
-		onClick = { playbackManager.state.fastForward() },
+		onClick = onPreview,
 		enabled = enabled,
 		tooltip = tooltip,
 	) {
@@ -609,6 +635,8 @@ private fun TimelineSeekbar(
 	markers: List<Duration> = emptyList(),
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	onPreviewSeek: ((Duration?) -> Unit)? = null,
+	onSeek: ((Duration) -> Unit)? = null,
 	modifier: Modifier = Modifier,
 	enabled: Boolean = true,
 ) {
@@ -625,6 +653,8 @@ private fun TimelineSeekbar(
 			playbackManager = playbackManager,
 			progress = position,
 			markers = markers,
+			onPreviewSeek = onPreviewSeek,
+			onSeek = onSeek,
 			enabled = enabled,
 			modifier = modifier,
 		)
