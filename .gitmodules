@@ -1,0 +1,6 @@
+[submodule "dependencies/libass-android"]
+	path = dependencies/libass-android
+	url = https://github.com/thor2002ro/libass-android.git
+[submodule "dependencies/jellyfin-androidx-media"]
+	path = dependencies/jellyfin-androidx-media
+	url = https://github.com/thor2002ro/jellyfin-androidx-media.git
