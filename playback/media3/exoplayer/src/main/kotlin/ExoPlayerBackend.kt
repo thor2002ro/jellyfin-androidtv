@@ -368,7 +368,9 @@ class ExoPlayerBackend(
 			// Timing offsets are applied by SubtitleTimingOffsetDecoderFactory in the renderer.
 			// Extraction-time parsing emits pre-timed Media3 cue samples and bypasses that decoder.
 			@Suppress("DEPRECATION")
-			experimentalParseSubtitlesDuringExtraction(exoPlayerOptions.parseSubtitlesDuringExtraction)
+			experimentalParseSubtitlesDuringExtraction(
+				exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass
+			)
 			setSubtitleParserFactory(subtitleParserFactory)
 		}
 
@@ -380,20 +382,24 @@ class ExoPlayerBackend(
 		val renderersFactory: RenderersFactory
 		if (exoPlayerOptions.enableLibass) {
 			val assSubtitleParserFactory = AssSubtitleParserFactory(assHandler)
+			val subtitleParserFactory = when (exoPlayerOptions.libassRenderType) {
+				AssRenderType.CUES -> DefaultSubtitleParserFactory()
+				else -> assSubtitleParserFactory
+			}
 			val normalMediaSourceFactory = DefaultMediaSourceFactory(
 				dataSourceFactory,
 				normalExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(assSubtitleParserFactory)
+			).configureSubtitles(subtitleParserFactory)
 			val liveTvMediaSourceFactory = DefaultMediaSourceFactory(
 				dataSourceFactory,
 				liveTvExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(assSubtitleParserFactory)
+			).configureSubtitles(subtitleParserFactory)
 			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
 				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
-				subtitleParserFactory = assSubtitleParserFactory,
+				subtitleParserFactory = subtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
 				setExtensionRendererMode(
@@ -909,7 +915,35 @@ class ExoPlayerBackend(
 			videoHdrMode = videoInputFormat.hdrMode(),
 			audioDecoderName = audioDecoderName,
 			audioPassthroughSupported = audioPassthroughSupported,
+			subtitleExtractor = subtitleExtractorDebug(),
+			subtitleRender = subtitleRenderDebug(),
+			subtitleParser = subtitleParserDebug(),
+			subtitlePath = subtitlePathDebug(),
 		)
+	}
+
+	private fun subtitleExtractorDebug(): String = when {
+		exoPlayerOptions.enableLibass -> "AssMatroskaExtractor (MKV)"
+		else -> "Media3 default"
+	}
+
+	private fun subtitleRenderDebug(): String = when {
+		!exoPlayerOptions.enableLibass -> "Media3 cues"
+		exoPlayerOptions.libassRenderType == AssRenderType.OVERLAY_OPEN_GL -> "libass OpenGL overlay"
+		exoPlayerOptions.libassRenderType == AssRenderType.OVERLAY_CANVAS -> "libass Canvas overlay"
+		exoPlayerOptions.libassRenderType == AssRenderType.CUES -> "Media3 cues"
+		else -> exoPlayerOptions.libassRenderType.name
+	}
+
+	private fun subtitleParserDebug(): String = when {
+		exoPlayerOptions.enableLibass && exoPlayerOptions.libassRenderType != AssRenderType.CUES -> "AssSubtitleParserFactory"
+		else -> "DefaultSubtitleParserFactory"
+	}
+
+	private fun subtitlePathDebug(): String = when {
+		exoPlayerOptions.enableLibass -> "libass renderer; extraction parser off"
+		exoPlayerOptions.parseSubtitlesDuringExtraction -> "extraction parser"
+		else -> "renderer parser"
 	}
 
 	private fun refreshAudioPassthroughSupport(
