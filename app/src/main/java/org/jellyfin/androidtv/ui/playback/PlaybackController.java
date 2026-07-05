@@ -189,6 +189,22 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         return hasInitializedVideoManager() ? mVideoManager.getSubtitleTimingOffsetUs() : 0L;
     }
 
+    public @Nullable String getSubtitleExtractorDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleExtractorDebug() : null;
+    }
+
+    public @Nullable String getSubtitleRenderDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleRenderDebug() : null;
+    }
+
+    public @Nullable String getSubtitleParserDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleParserDebug() : null;
+    }
+
+    public @Nullable String getSubtitlePathDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitlePathDebug() : null;
+    }
+
     public void adjustSubtitleTimingOffsetUs(long deltaUs) {
         if (hasInitializedVideoManager()) {
             mVideoManager.adjustSubtitleTimingOffsetUs(deltaUs);

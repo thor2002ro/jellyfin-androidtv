@@ -328,6 +328,8 @@ private object NewPlayerStreamStatusBuilder {
 					externalSubtitle.index == selectedSubtitle?.streamIndex ||
 					externalSubtitle.index == selectedSubtitle?.index
 			}
+		val selectedSubtitleCodec = subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle)
+		val showAssStats = selectedSubtitle != null && selectedSubtitleCodec.isAssSubtitleCodec()
 
 		return listOf(
 			PlaybackInfoSection(
@@ -363,7 +365,7 @@ private object NewPlayerStreamStatusBuilder {
 						"Subtitle conversion",
 						TranscodingStatusFormatter.subtitleConversion(
 							transcodingInfo,
-							subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle),
+							selectedSubtitleCodec,
 							isBurnedIn = false,
 							deliveryMethod = subtitleDeliveryLabel(selectedSubtitleStream, selectedExternalSubtitle),
 						)
@@ -376,9 +378,15 @@ private object NewPlayerStreamStatusBuilder {
 					row("Status", subtitleStatus(selectedSubtitle, selectedSubtitleStream))
 					row("IDs", subtitleIds(selectedSubtitle, selectedSubtitleStream))
 					row("Title", selectedSubtitle?.label ?: selectedSubtitleStream?.title ?: selectedExternalSubtitle?.title)
-					row("Codec", subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle).formatCodec())
+					row("Codec", selectedSubtitleCodec.formatCodec())
 					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
+					if (showAssStats) {
+						row("ASS extractor", frameStats.subtitleExtractor)
+						row("ASS render", frameStats.subtitleRender)
+						row("ASS parser", frameStats.subtitleParser)
+						row("ASS path", frameStats.subtitlePath)
+					}
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
 					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
 				},
@@ -468,6 +476,11 @@ private object NewPlayerStreamStatusBuilder {
 		stream: MediaStreamSubtitleTrack?,
 		externalSubtitle: ExternalSubtitle?,
 	): String? = track?.codec ?: stream?.codec ?: externalSubtitle?.mimeType
+
+	private fun String?.isAssSubtitleCodec(): Boolean = when (this?.lowercase()) {
+		"ass", "ssa", "text/x-ssa", "text/ssa", "text/ass", "application/x-ass" -> true
+		else -> false
+	}
 
 	private fun subtitleDeliveryLabel(
 		stream: MediaStreamSubtitleTrack?,

@@ -890,7 +890,35 @@ class ExoPlayerBackend(
 			videoDecoderName = videoDecoderName,
 			audioDecoderName = audioDecoderName,
 			audioPassthroughSupported = audioPassthroughSupported,
+			subtitleExtractor = subtitleExtractorDebug(),
+			subtitleRender = subtitleRenderDebug(),
+			subtitleParser = subtitleParserDebug(),
+			subtitlePath = subtitlePathDebug(),
 		)
+	}
+
+	private fun subtitleExtractorDebug(): String = when {
+		exoPlayerOptions.enableLibass -> "AssMatroskaExtractor (MKV)"
+		else -> "Media3 default"
+	}
+
+	private fun subtitleRenderDebug(): String = when {
+		!exoPlayerOptions.enableLibass -> "Media3 cues"
+		exoPlayerOptions.libassRenderType == AssRenderType.OVERLAY_OPEN_GL -> "libass OpenGL overlay"
+		exoPlayerOptions.libassRenderType == AssRenderType.OVERLAY_CANVAS -> "libass Canvas overlay"
+		exoPlayerOptions.libassRenderType == AssRenderType.CUES -> "Media3 cues"
+		else -> exoPlayerOptions.libassRenderType.name
+	}
+
+	private fun subtitleParserDebug(): String = when {
+		exoPlayerOptions.enableLibass && exoPlayerOptions.libassRenderType != AssRenderType.CUES -> "AssSubtitleParserFactory"
+		else -> "DefaultSubtitleParserFactory"
+	}
+
+	private fun subtitlePathDebug(): String = when {
+		exoPlayerOptions.enableLibass -> "libass renderer; extraction parser off"
+		exoPlayerOptions.parseSubtitlesDuringExtraction -> "extraction parser"
+		else -> "renderer parser"
 	}
 
 	private fun refreshAudioPassthroughSupport(
