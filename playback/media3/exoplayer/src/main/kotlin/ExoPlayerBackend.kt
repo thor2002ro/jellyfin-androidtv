@@ -362,7 +362,9 @@ class ExoPlayerBackend(
 			// Timing offsets are applied by SubtitleTimingOffsetDecoderFactory in the renderer.
 			// Extraction-time parsing emits pre-timed Media3 cue samples and bypasses that decoder.
 			@Suppress("DEPRECATION")
-			experimentalParseSubtitlesDuringExtraction(exoPlayerOptions.parseSubtitlesDuringExtraction)
+			experimentalParseSubtitlesDuringExtraction(
+				exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass
+			)
 			setSubtitleParserFactory(subtitleParserFactory)
 		}
 
@@ -374,20 +376,24 @@ class ExoPlayerBackend(
 		val renderersFactory: RenderersFactory
 		if (exoPlayerOptions.enableLibass) {
 			val assSubtitleParserFactory = AssSubtitleParserFactory(assHandler)
+			val subtitleParserFactory = when (exoPlayerOptions.libassRenderType) {
+				AssRenderType.CUES -> DefaultSubtitleParserFactory()
+				else -> assSubtitleParserFactory
+			}
 			val normalMediaSourceFactory = DefaultMediaSourceFactory(
 				dataSourceFactory,
 				normalExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(assSubtitleParserFactory)
+			).configureSubtitles(subtitleParserFactory)
 			val liveTvMediaSourceFactory = DefaultMediaSourceFactory(
 				dataSourceFactory,
 				liveTvExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(assSubtitleParserFactory)
+			).configureSubtitles(subtitleParserFactory)
 			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
 				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
-				subtitleParserFactory = assSubtitleParserFactory,
+				subtitleParserFactory = subtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
 				setExtensionRendererMode(

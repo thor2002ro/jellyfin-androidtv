@@ -255,18 +255,21 @@ public class VideoManager {
 
         if (assHandler != null) {
             AssSubtitleParserFactory assSubtitleParserFactory = new AssSubtitleParserFactory(assHandler);
+            SubtitleParser.Factory subtitleParserFactory = assHandler.getRenderType() == AssRenderType.CUES
+                    ? new DefaultSubtitleParserFactory()
+                    : assSubtitleParserFactory;
             SubtitleTimingOffsetRenderersFactory rendererFactory = new SubtitleTimingOffsetRenderersFactory(
                     context,
                     subtitleTimingOffsetState,
-                    assSubtitleParserFactory
+                    subtitleParserFactory
             );
             rendererFactory.setEnableDecoderFallback(true);
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
 
             ExtractorsFactory assExtractorsFactory = AssPlayerKt.withAssMkvSupport(extractorsFactory, assSubtitleParserFactory, assHandler);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, assExtractorsFactory);
-            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
-            mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory);
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(false);
+            mediaSourceFactory.setSubtitleParserFactory(subtitleParserFactory);
             exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
             exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, rendererFactory));
         } else {
