@@ -14,6 +14,12 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "jellyfin-androidtv"
 
+includeBuild("dependencies/libass-android") {
+	dependencySubstitution {
+		substitute(module("io.github.peerless2012:ass-media")).using(project(":lib_ass_media"))
+	}
+}
+
 // Application
 include(":app")
 
