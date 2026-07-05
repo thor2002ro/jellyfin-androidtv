@@ -24,7 +24,11 @@ object StreamStatusBuilder {
 		val mediaSource = playbackController.currentMediaSource ?: streamInfo?.mediaSource
 		val videoStream = mediaSource?.stream(MediaStreamType.VIDEO)
 		val audioStream = mediaSource?.stream(MediaStreamType.AUDIO, playbackController.audioStreamIndex)
-		val subtitleStream = mediaSource?.stream(MediaStreamType.SUBTITLE, playbackController.subtitleStreamIndex)
+		val selectedSubtitleStreamIndex = playbackController.subtitleStreamIndex
+		val subtitleStream = selectedSubtitleStreamIndex
+			.takeIf { it >= 0 }
+			?.let { mediaSource?.stream(MediaStreamType.SUBTITLE, it) }
+		val showAssStats = subtitleStream?.codec.isAssSubtitleCodec() && !playbackController.isBurningSubtitlesForStatus()
 
 		row("Play", streamInfo?.playMethod?.displayName() ?: "Unknown")
 		row("Container", streamInfo?.container ?: mediaSource?.container)
@@ -40,6 +44,12 @@ object StreamStatusBuilder {
 		row("Sub source", subtitleSource(subtitleStream, playbackController.isBurningSubtitlesForStatus()))
 		row("Sub flags", subtitleFlags(subtitleStream))
 		row("Sub offset", subtitleOffset(subtitleStream, playbackController.isBurningSubtitlesForStatus(), playbackController.subtitleTimingOffsetUs))
+		if (showAssStats) {
+			row("ASS extractor", playbackController.subtitleExtractorDebug)
+			row("ASS render", playbackController.subtitleRenderDebug)
+			row("ASS parser", playbackController.subtitleParserDebug)
+			row("ASS path", playbackController.subtitlePathDebug)
+		}
 		row("Progress", TranscodingStatusFormatter.progress(transcodingInfo))
 		row("T speed", TranscodingStatusFormatter.speed(transcodingInfo))
 		row("T bitrate", TranscodingStatusFormatter.bitrate(transcodingInfo))
@@ -154,6 +164,11 @@ object StreamStatusBuilder {
 		if (codec.isNullOrBlank()) return false
 
 		return isSubtitleTimingOffsetSupported(getSubtitleMediaStreamCodec(this))
+	}
+
+	private fun String?.isAssSubtitleCodec(): Boolean = when (this?.lowercase()) {
+		"ass", "ssa", "text/x-ssa", "text/ssa", "text/ass", "application/x-ass" -> true
+		else -> false
 	}
 
 	private fun PlayMethod.displayName() = when (this) {

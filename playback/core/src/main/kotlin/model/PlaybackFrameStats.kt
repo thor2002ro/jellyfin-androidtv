@@ -7,6 +7,10 @@ data class PlaybackFrameStats(
 	val videoDecoderName: String? = null,
 	val audioDecoderName: String? = null,
 	val audioPassthroughSupported: Boolean? = null,
+	val subtitleExtractor: String? = null,
+	val subtitleRender: String? = null,
+	val subtitleParser: String? = null,
+	val subtitlePath: String? = null,
 ) {
 	companion object {
 		val EMPTY = PlaybackFrameStats(
