@@ -179,6 +179,7 @@ public class HorizontalGridPresenter extends Presenter {
         }
         Timber.v("mNumRows %s", mNumRows);
         vh.getGridView().setNumRows(mNumRows);
+        vh.getGridView().setAnimateChildLayout(false);
         vh.mInitialized = true;
 
         vh.mItemBridgeAdapter.setWrapper(mWrapper);

@@ -139,6 +139,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final int GRID_MAX_PENDING_DPAD_MOVES = 2;
     private final float GRID_SCROLL_SPEED_FACTOR = 0.65f;
     private final int GRID_HELD_DPAD_SCROLL_INTERVAL_MS = 90;
+    private final int SELECTION_RESTORE_WINDOW_MS = 1500;
     private final int IMAGE_PREFETCH_MAX_ITEMS = 150;
 
     private boolean mDirty = true; // CardHeight, RowDef or GridSize changed
@@ -147,6 +148,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private int mLastImagePrefetchPosition = -1;
     private int mLastImagePrefetchItemsLoaded = -1;
     private int mPendingSelectedPosition = -1;
+    private boolean mRestoringSelectedPosition = false;
+    private int mSelectionRestoreGeneration = 0;
     private long mLastHeldScrollAt = 0L;
     private boolean mDpadHoldConsumed = false;
     private final Set<String> mPrefetchedImageUrls = new HashSet<>();
@@ -328,16 +331,17 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         int currentPosition = mSelectedPosition >= 0 ? mSelectedPosition : Math.max(mGridView.getSelectedPosition(), 0);
         int nextPosition = Math.max(0, Math.min(total - 1, currentPosition + (forward ? distance : -distance)));
         mSelectedPosition = nextPosition;
+        mPendingSelectedPosition = nextPosition;
+        mRestoringSelectedPosition = false;
+        mSelectionRestoreGeneration++;
         updateCounter(nextPosition + 1);
 
         if (nextPosition < itemsLoaded) {
-            mPendingSelectedPosition = -1;
             mGridView.setSelectedPosition(nextPosition);
             mAdapter.loadMoreItemsIfNeeded(nextPosition);
             prefetchCardImages(nextPosition);
         } else {
             int loadedPosition = Math.max(0, itemsLoaded - 1);
-            mPendingSelectedPosition = nextPosition;
             mGridView.setSelectedPosition(loadedPosition);
             mAdapter.loadMoreItemsIfNeeded(loadedPosition);
             prefetchCardImages(loadedPosition);
@@ -370,16 +374,38 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void applyPendingSelectedPosition() {
-        if (mPendingSelectedPosition < 0 || mAdapter == null || mGridView == null || mAdapter.getItemsLoaded() <= 0) return;
+        if (mAdapter == null || mGridView == null || mAdapter.getItemsLoaded() <= 0) return;
 
-        int position = Math.min(mPendingSelectedPosition, mAdapter.getItemsLoaded() - 1);
-        if (position >= 0) {
-            mSelectedPosition = position;
-            mGridView.setSelectedPosition(position);
-        }
-        if (position == mPendingSelectedPosition || mAdapter.getItemsLoaded() >= mAdapter.getTotalItems()) {
-            mPendingSelectedPosition = -1;
-        }
+        int position = getSafeSelectedPosition(
+                mPendingSelectedPosition,
+                mSelectedPosition,
+                mGridView.getSelectedPosition(),
+                mAdapter.getItemsLoaded()
+        );
+        if (position < 0) return;
+
+        mSelectedPosition = position;
+        mPendingSelectedPosition = position;
+        mRestoringSelectedPosition = true;
+        int restoreGeneration = ++mSelectionRestoreGeneration;
+        mGridView.setSelectedPosition(position);
+        mHandler.postDelayed(() -> {
+            if (mSelectionRestoreGeneration == restoreGeneration) {
+                mRestoringSelectedPosition = false;
+            }
+        }, SELECTION_RESTORE_WINDOW_MS);
+    }
+
+    static int getSafeSelectedPosition(int pendingSelectedPosition, int selectedPosition, int gridSelectedPosition, int itemsLoaded) {
+        if (itemsLoaded <= 0) return -1;
+
+        int position = pendingSelectedPosition >= 0
+                ? pendingSelectedPosition
+                : selectedPosition >= 0
+                        ? selectedPosition
+                        : Math.max(gridSelectedPosition, 0);
+
+        return Math.min(position, itemsLoaded - 1);
     }
 
     private void prefetchCardImages(int position) {
@@ -412,7 +438,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private void updateAdapter() {
         if (mGridView != null) {
             mGridPresenter.onBindViewHolder(mGridViewHolder, mAdapter);
-            if (mSelectedPosition != -1) {
+            if (mSelectedPosition >= 0 && mAdapter != null && mAdapter.getItemsLoaded() > mSelectedPosition) {
                 mGridView.setSelectedPosition(mSelectedPosition);
             }
         }
@@ -503,9 +529,18 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                                            RowPresenter.ViewHolder rowViewHolder, Row row) {
                     int position = mGridView.getSelectedPosition();
                     Timber.v("row selected position %s", position);
+                    if (position < 0) {
+                        mGridView.post(BrowseGridFragment.this::applyPendingSelectedPosition);
+                        return;
+                    }
+                    if (mRestoringSelectedPosition && mPendingSelectedPosition >= 0 && position != mPendingSelectedPosition) {
+                        applyPendingSelectedPosition();
+                        return;
+                    }
                     if (position != mSelectedPosition) {
                         mSelectedPosition = position;
                     }
+                    mPendingSelectedPosition = position;
                     // Update the counter
                     updateCounter(position + 1);
                     if (position >= 0) {
@@ -775,7 +810,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                         return;
 
                     if (mAdapter != null && mAdapter.size() > 0) {
-                        if (!mAdapter.ReRetrieveIfNeeded()) {
+                        int selectedPosition = mSelectedPosition;
+                        if (mAdapter.ReRetrieveIfNeeded()) {
+                            if (selectedPosition >= 0) mPendingSelectedPosition = selectedPosition;
+                        } else {
                             refreshCurrentItem();
                         }
                     }
@@ -877,6 +915,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         }
 
         mAdapter.setSortBy(getSortOption(libraryPreferences.get(LibraryPreferences.Companion.getSortBy())));
+        if (mSelectedPosition >= 0) mPendingSelectedPosition = mSelectedPosition;
         mAdapter.Retrieve();
     }
 
@@ -1118,8 +1157,6 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 int position = mAdapter.indexOf(mCurrentItem);
                 if (!determiningPosterSize)
                     mAdapter.loadMoreItemsIfNeeded(position);
-                if (position == mPendingSelectedPosition)
-                    mPendingSelectedPosition = -1;
                 prefetchCardImages(position);
             }
         }
