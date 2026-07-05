@@ -102,6 +102,10 @@ public class VideoManager {
 
     private final UserPreferences userPreferences = KoinJavaComponent.get(UserPreferences.class);
     private final HttpDataSource.Factory exoPlayerHttpDataSourceFactory = KoinJavaComponent.get(HttpDataSource.Factory.class);
+    private String subtitleExtractorDebug;
+    private String subtitleRenderDebug;
+    private String subtitleParserDebug;
+    private String subtitlePathDebug;
 
     public VideoManager(@NonNull Activity activity, @NonNull View view, @NonNull PlaybackOverlayFragmentHelper helper) {
         mActivity = activity;
@@ -110,6 +114,13 @@ public class VideoManager {
 
         boolean assDirectPlay = userPreferences.get(UserPreferences.Companion.getAssDirectPlay());
         AssRenderType assRenderType = assDirectPlay ? userPreferences.get(UserPreferences.Companion.getLibassRenderType()).getAssRenderType() : null;
+        boolean parseSubtitlesDuringExtraction = userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction());
+        subtitleExtractorDebug = assDirectPlay ? "AssMatroskaExtractor (MKV)" : "Media3 default";
+        subtitleRenderDebug = subtitleRenderDebug(assRenderType);
+        subtitleParserDebug = assDirectPlay && assRenderType != AssRenderType.CUES ? "AssSubtitleParserFactory" : "DefaultSubtitleParserFactory";
+        subtitlePathDebug = assDirectPlay
+                ? "libass renderer; extraction parser off"
+                : parseSubtitlesDuringExtraction ? "extraction parser" : "renderer parser";
         AssHandler assHandler = assDirectPlay ? new AssHandler(
                 assRenderType,
                 new AssHandlerConfig(
@@ -234,6 +245,12 @@ public class VideoManager {
         return renderType == AssRenderType.OVERLAY_OPEN_GL || renderType == AssRenderType.OVERLAY_CANVAS;
     }
 
+    private static String subtitleRenderDebug(@Nullable AssRenderType renderType) {
+        if (renderType == AssRenderType.OVERLAY_OPEN_GL) return "libass OpenGL overlay";
+        if (renderType == AssRenderType.OVERLAY_CANVAS) return "libass Canvas overlay";
+        return "Media3 cues";
+    }
+
     /**
      * Configures Exoplayer for video playback. Initially we try with core decoders, but allow
      * ExoPlayer to silently fallback to software renderers.
@@ -255,18 +272,21 @@ public class VideoManager {
 
         if (assHandler != null) {
             AssSubtitleParserFactory assSubtitleParserFactory = new AssSubtitleParserFactory(assHandler);
+            SubtitleParser.Factory subtitleParserFactory = assHandler.getRenderType() == AssRenderType.CUES
+                    ? new DefaultSubtitleParserFactory()
+                    : assSubtitleParserFactory;
             SubtitleTimingOffsetRenderersFactory rendererFactory = new SubtitleTimingOffsetRenderersFactory(
                     context,
                     subtitleTimingOffsetState,
-                    assSubtitleParserFactory
+                    subtitleParserFactory
             );
             rendererFactory.setEnableDecoderFallback(true);
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
 
             ExtractorsFactory assExtractorsFactory = AssPlayerKt.withAssMkvSupport(extractorsFactory, assSubtitleParserFactory, assHandler);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, assExtractorsFactory);
-            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
-            mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory);
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(false);
+            mediaSourceFactory.setSubtitleParserFactory(subtitleParserFactory);
             exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
             exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, rendererFactory));
         } else {
@@ -653,6 +673,22 @@ public class VideoManager {
 
     public long getSubtitleTimingOffsetUs() {
         return subtitleTimingOffsetState.getOffsetUs();
+    }
+
+    public String getSubtitleExtractorDebug() {
+        return subtitleExtractorDebug;
+    }
+
+    public String getSubtitleRenderDebug() {
+        return subtitleRenderDebug;
+    }
+
+    public String getSubtitleParserDebug() {
+        return subtitleParserDebug;
+    }
+
+    public String getSubtitlePathDebug() {
+        return subtitlePathDebug;
     }
 
 
