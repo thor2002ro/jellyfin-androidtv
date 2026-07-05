@@ -72,8 +72,8 @@ open class MutableObjectAdapter<T : Any> : ObjectAdapter, Iterable<T> {
 		val size = data.size
 		if (size == 0) return
 
-		notifyItemRangeRemoved(0, size)
 		data.clear()
+		notifyItemRangeRemoved(0, size)
 	}
 
 	fun remove(element: T): Boolean {
