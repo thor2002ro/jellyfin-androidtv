@@ -1,5 +1,3 @@
-import java.net.URI
-
 plugins {
 	alias(libs.plugins.android.application) apply false
 	alias(libs.plugins.android.library) apply false
@@ -7,26 +5,11 @@ plugins {
 	java
 }
 
-val thorMedia3FfmpegDecoderAarUrl =
-	"https://raw.githubusercontent.com/thor2002ro/jellyfin-androidx-media/master/OUTPUT/media3-ffmpeg-decoder-latest-SNAPSHOT.aar"
 val thorMedia3FfmpegDecoderAarFile =
-	layout.projectDirectory.file(".gradle/thor-media3/media3-ffmpeg-decoder-latest-SNAPSHOT.aar").asFile
+	layout.projectDirectory.file("dependencies/jellyfin-androidx-media/OUTPUT/media3-ffmpeg-decoder-latest-SNAPSHOT.aar").asFile
 
 if (!thorMedia3FfmpegDecoderAarFile.isFile || thorMedia3FfmpegDecoderAarFile.length() == 0L) {
-	thorMedia3FfmpegDecoderAarFile.parentFile.mkdirs()
-	val temporaryFile = thorMedia3FfmpegDecoderAarFile.resolveSibling("${thorMedia3FfmpegDecoderAarFile.name}.tmp")
-	temporaryFile.delete()
-	URI(thorMedia3FfmpegDecoderAarUrl).toURL().openStream().use { input ->
-		temporaryFile.outputStream().use { output -> input.copyTo(output) }
-	}
-	if (!temporaryFile.renameTo(thorMedia3FfmpegDecoderAarFile)) {
-		temporaryFile.copyTo(thorMedia3FfmpegDecoderAarFile, overwrite = true)
-		temporaryFile.delete()
-	}
-}
-
-if (!thorMedia3FfmpegDecoderAarFile.isFile || thorMedia3FfmpegDecoderAarFile.length() == 0L) {
-	throw GradleException("Failed to download thor Media3 FFmpeg decoder from $thorMedia3FfmpegDecoderAarUrl")
+	throw GradleException("Missing thor Media3 FFmpeg decoder at $thorMedia3FfmpegDecoderAarFile")
 }
 
 extra["thorMedia3FfmpegDecoderAarFile"] = thorMedia3FfmpegDecoderAarFile
