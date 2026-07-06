@@ -949,21 +949,6 @@ class ExoPlayerBackend(
 		else -> "renderer parser"
 	}
 
-	private fun Format?.hdrMode(): String? {
-		val format = this ?: return null
-		if (format.sampleMimeType == "video/dolby-vision") return "Dolby Vision"
-
-		return when (format.colorInfo?.colorTransfer) {
-			C.COLOR_TRANSFER_ST2084 -> "HDR10/PQ"
-			C.COLOR_TRANSFER_HLG -> "HLG"
-			C.COLOR_TRANSFER_SDR -> "SDR"
-			C.COLOR_TRANSFER_SRGB -> "sRGB"
-			C.COLOR_TRANSFER_LINEAR -> "Linear"
-			C.COLOR_TRANSFER_GAMMA_2_2 -> "Gamma 2.2"
-			else -> null
-		}
-	}
-
 	private fun refreshAudioPassthroughSupport(
 		format: Format? = audioInputFormat,
 		attributes: AudioAttributes = audioAttributeState.audioAttributes ?: AudioAttributes.DEFAULT,
@@ -1344,3 +1329,33 @@ class ExoPlayerBackend(
 		}
 	}
 }
+
+internal fun Format?.hdrMode(): String? {
+	val format = this ?: return null
+	if (format.sampleMimeType == "video/dolby-vision") return format.dolbyVisionMode()
+
+	return when (format.colorInfo?.colorTransfer) {
+		C.COLOR_TRANSFER_ST2084 -> "HDR10/PQ"
+		C.COLOR_TRANSFER_HLG -> "HLG"
+		C.COLOR_TRANSFER_SDR -> "SDR"
+		C.COLOR_TRANSFER_SRGB -> "sRGB"
+		C.COLOR_TRANSFER_LINEAR -> "Linear"
+		C.COLOR_TRANSFER_GAMMA_2_2 -> "Gamma 2.2"
+		else -> null
+	}
+}
+
+private fun Format.dolbyVisionMode(): String = codecs
+	?.split(',')
+	?.firstNotNullOfOrNull { codec ->
+		val parts = codec.trim().split('.')
+		val prefix = parts.firstOrNull()
+		val profile = parts.getOrNull(1)?.toIntOrNull()
+		when {
+			profile == null -> null
+			prefix == "dav1" -> "DV AV1 P$profile"
+			prefix?.startsWith("dv") == true -> "DV P$profile"
+			else -> null
+		}
+	}
+	?: "Dolby Vision"

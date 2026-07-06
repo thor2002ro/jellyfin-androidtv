@@ -360,7 +360,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
-					row("HDR mode", frameStats.videoHdrMode)
+					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
@@ -442,6 +442,16 @@ private object NewPlayerStreamStatusBuilder {
 			else -> source
 		}
 	}
+
+	private fun streamingHdrMode(
+		hdrMode: String?,
+		track: MediaStreamVideoTrack?,
+		transcodingInfo: TranscodingInfo?,
+	): String? = hdrMode ?: track
+		?.videoRange
+		?.toVideoRangeType()
+		?.takeIf { transcodingInfo?.isVideoDirect != false }
+		?.workaroundLabel()
 
 	private fun streamingAudioCodec(
 		track: MediaStreamAudioTrack?,
