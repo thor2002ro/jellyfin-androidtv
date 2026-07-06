@@ -155,6 +155,7 @@ class ExoPlayerBackend(
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
 	private var pendingInitialTrackSelectionRetryCount = 0
 	private var videoDecoderName: String? = null
+	private var videoInputFormat: Format? = null
 	private var audioDecoderName: String? = null
 	private var audioInputFormat: Format? = null
 	private var audioPassthroughSupported: Boolean? = null
@@ -280,6 +281,7 @@ class ExoPlayerBackend(
 
 	private fun resetPlaybackStats() {
 		videoDecoderName = null
+		videoInputFormat = null
 		audioDecoderName = null
 		audioInputFormat = null
 		audioPassthroughSupported = null
@@ -493,11 +495,20 @@ class ExoPlayerBackend(
 			if (videoDecoderName == decoderName) videoDecoderName = null
 		}
 
+		override fun onVideoInputFormatChanged(
+			eventTime: AnalyticsListener.EventTime,
+			format: Format,
+			decoderReuseEvaluation: DecoderReuseEvaluation?,
+		) {
+			videoInputFormat = format
+		}
+
 		override fun onVideoDisabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
 		) {
 			videoDecoderName = null
+			videoInputFormat = null
 		}
 
 		override fun onAudioDecoderInitialized(
@@ -904,6 +915,7 @@ class ExoPlayerBackend(
 				it.renderedOutputBufferCount + it.skippedOutputBufferCount + it.droppedBufferCount
 			} ?: 0,
 			videoDecoderName = videoDecoderName,
+			videoHdrMode = videoInputFormat.hdrMode(),
 			audioDecoderName = audioDecoderName,
 			audioPassthroughSupported = audioPassthroughSupported,
 			subtitleExtractor = subtitleExtractorDebug(),
@@ -935,6 +947,21 @@ class ExoPlayerBackend(
 		exoPlayerOptions.enableLibass -> "libass renderer; extraction parser off"
 		exoPlayerOptions.parseSubtitlesDuringExtraction -> "extraction parser"
 		else -> "renderer parser"
+	}
+
+	private fun Format?.hdrMode(): String? {
+		val format = this ?: return null
+		if (format.sampleMimeType == "video/dolby-vision") return "Dolby Vision"
+
+		return when (format.colorInfo?.colorTransfer) {
+			C.COLOR_TRANSFER_ST2084 -> "HDR10/PQ"
+			C.COLOR_TRANSFER_HLG -> "HLG"
+			C.COLOR_TRANSFER_SDR -> "SDR"
+			C.COLOR_TRANSFER_SRGB -> "sRGB"
+			C.COLOR_TRANSFER_LINEAR -> "Linear"
+			C.COLOR_TRANSFER_GAMMA_2_2 -> "Gamma 2.2"
+			else -> null
+		}
 	}
 
 	private fun refreshAudioPassthroughSupport(

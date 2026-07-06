@@ -5,6 +5,7 @@ data class PlaybackFrameStats(
 	val corruptedFrames: Int,
 	val videoDecodedFrames: Int = 0,
 	val videoDecoderName: String? = null,
+	val videoHdrMode: String? = null,
 	val audioDecoderName: String? = null,
 	val audioPassthroughSupported: Boolean? = null,
 	val subtitleExtractor: String? = null,

@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.player.video
 
+import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,14 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -40,7 +38,12 @@ import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
+import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
@@ -72,6 +75,7 @@ fun PlaybackInfoOverlay(
 	playbackManager: PlaybackManager,
 	modifier: Modifier = Modifier,
 ) {
+	val context = LocalContext.current
 	val transcodingStatusRepository = koinInject<TranscodingStatusRepository>()
 	val userPreferences = koinInject<UserPreferences>()
 	val api = koinInject<ApiClient>()
@@ -93,6 +97,7 @@ fun PlaybackInfoOverlay(
 	val mediaTest = remember(softwareCodecsEnabled) { MediaCodecCapabilitiesTest(softwareCodecsEnabled) }
 	val forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE)
 	val forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)
+	val displayHdrModes = remember(context, mediaTest) { getDisplayHdrModes(context, mediaTest) }
 	var refreshTick by remember { mutableStateOf(0) }
 	var positionInfo by remember(playbackManager, stream.identifier) { mutableStateOf(playbackManager.state.positionInfo) }
 	var frameStats by remember(playbackManager, stream.identifier) { mutableStateOf(playbackManager.backend.getFrameStats()) }
@@ -155,6 +160,7 @@ fun PlaybackInfoOverlay(
 		positionInfo,
 		frameStats,
 		refreshTick,
+		displayHdrModes,
 	) {
 		NewPlayerStreamStatusBuilder.build(
 			playbackManager = playbackManager,
@@ -169,6 +175,7 @@ fun PlaybackInfoOverlay(
 			transcodingInfo = transcodingInfo,
 			isQualityForcedTranscode = isQualityForcedTranscode,
 			clientWorkaroundInfo = clientWorkaroundInfo,
+			displayHdrModes = displayHdrModes,
 		)
 	}
 
@@ -305,6 +312,7 @@ private object NewPlayerStreamStatusBuilder {
 		transcodingInfo: TranscodingInfo?,
 		isQualityForcedTranscode: Boolean,
 		clientWorkaroundInfo: String?,
+		displayHdrModes: String,
 	): List<PlaybackInfoSection> {
 		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
 		val audioTrack = stream.tracks.filterIsInstance<MediaStreamAudioTrack>().firstOrNull()
@@ -339,6 +347,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Play method", stream.conversionMethod.displayName())
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
+					row("Display HDR", displayHdrModes)
 					row("Position", "${positionInfo.active.formatDuration()}/${positionInfo.duration.formatDuration()}")
 					row("Buffer", positionInfo.formatBuffer())
 					if (speed != 1f) row("Speed", "${"%.2f".format(speed)}x")
@@ -351,6 +360,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
+					row("HDR mode", frameStats.videoHdrMode)
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
@@ -656,6 +666,65 @@ private fun buildClientWorkaroundInfo(
 	}.joinToString("; ").takeIf { it.isNotBlank() }
 }
 
+private fun getDisplayHdrModes(
+	context: Context,
+	mediaTest: MediaCodecCapabilitiesTest,
+): String =
+	formatDisplayHdrModes(
+		supportedHdrTypes = getSupportedDisplayHdrTypes(context),
+		dolbyVisionModes = getDolbyVisionModes(mediaTest),
+	)
+
+internal fun formatDisplayHdrModes(
+	supportedHdrTypes: Set<Int>,
+	dolbyVisionModes: String = "None",
+): String =
+	supportedHdrTypes
+		.map { type ->
+			when (type) {
+				DISPLAY_HDR_TYPE_DOLBY_VISION -> formatDolbyVisionDisplayMode(dolbyVisionModes)
+				DISPLAY_HDR_TYPE_HDR10 -> "HDR10"
+				DISPLAY_HDR_TYPE_HDR10_PLUS -> "HDR10+"
+				DISPLAY_HDR_TYPE_HLG -> "HLG"
+				else -> "Unknown $type"
+			}
+		}
+		.takeIf { it.isNotEmpty() }
+		?.joinToString("; ")
+		?: "None"
+
+private fun formatDolbyVisionDisplayMode(dolbyVisionModes: String): String =
+	when (dolbyVisionModes) {
+		"None" -> "DV"
+		else -> "DV $dolbyVisionModes"
+	}
+
+private fun getDolbyVisionModes(mediaTest: MediaCodecCapabilitiesTest): String =
+	formatDolbyVisionModes(
+		hevcProfile5 = mediaTest.supportsHevcDolbyVisionProfile5(),
+		hevcProfile7 = mediaTest.supportsHevcDolbyVisionProfile7(),
+		hevcProfile8 = mediaTest.supportsHevcDolbyVisionProfile8(),
+		hevcEnhancementLayer = mediaTest.supportsHevcDolbyVisionEL(),
+		av1Profile10 = mediaTest.supportsAV1DolbyVision(),
+	)
+
+internal fun formatDolbyVisionModes(
+	hevcProfile5: Boolean,
+	hevcProfile7: Boolean,
+	hevcProfile8: Boolean,
+	hevcEnhancementLayer: Boolean,
+	av1Profile10: Boolean,
+): String = buildList {
+	val hevcProfiles = buildList {
+		if (hevcProfile5) add("P5")
+		if (hevcProfile7) add("P7")
+		if (hevcProfile8) add("P8")
+		if (hevcEnhancementLayer) add("EL")
+	}
+	if (hevcProfiles.isNotEmpty()) add("HEVC ${hevcProfiles.joinToString("/")}")
+	if (av1Profile10) add("AV1 P10")
+}.joinToString(", ").ifBlank { "None" }
+
 private fun liveTvQualityWorkaroundInfo(
 	isQualityForcedTranscode: Boolean,
 	forceTranscodingSourceBitrate: Int?,
@@ -727,25 +796,26 @@ private fun PlaybackInfoStaticRow(
 	label: String,
 	value: String,
 ) {
-	Text(
-		text = buildAnnotatedString {
-			withStyle(SpanStyle(fontWeight = FontWeight.W700)) {
-				append(label)
-				append(": ")
-			}
-			append(value)
-		},
-		modifier = Modifier.fillMaxWidth(),
-		softWrap = false,
-		maxLines = 1,
-		overflow = TextOverflow.Clip,
-		style = TextStyle(
-			color = Color.White,
-			fontSize = 6.sp,
-			lineHeight = 7.sp,
-			fontFamily = FontFamily.Monospace,
-		),
+	val style = TextStyle(
+		color = Color.White,
+		fontSize = 6.sp,
+		lineHeight = 7.sp,
+		fontFamily = FontFamily.Monospace,
 	)
+
+	Row(
+		modifier = Modifier.fillMaxWidth(),
+	) {
+		Text(
+			text = "$label: ",
+			style = style.copy(fontWeight = FontWeight.W700),
+		)
+		Text(
+			text = value,
+			modifier = Modifier.weight(1f),
+			style = style,
+		)
+	}
 }
 
 private data class PlaybackInfoSection(
