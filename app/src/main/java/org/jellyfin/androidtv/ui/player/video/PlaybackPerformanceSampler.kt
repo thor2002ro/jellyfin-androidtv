@@ -49,8 +49,9 @@ internal class PlaybackPerformanceSampler(context: Context) {
 				method.name == "getDeviceTemperatures" && method.parameterTypes.size == 2
 			}
 	}
-	private val detectedGpuLabel by lazy { detectGpuLabel() }
-	private val detectedGpuTokens by lazy { detectedGpuLabel.toSourceTokens() }
+	private val detectedGpuRendererLabel by lazy { detectGpuRendererLabel() }
+	private val detectedGpuLabel by lazy { buildGpuLabel() }
+	private val detectedGpuTokens by lazy { detectedGpuRendererLabel.toSourceTokens() }
 
 	private val cpuClockTicksPerSecond by lazy {
 		runCatching { Os.sysconf(OsConstants._SC_CLK_TCK) }
@@ -689,11 +690,43 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			.toSet()
 	}
 
-	private fun detectGpuLabel(): String =
+	private fun buildGpuLabel(): String =
+		listOfNotNull(detectedGpuRendererLabel, detectSocLabel())
+			.distinctBy { label -> label.lowercase() }
+			.joinToString(" / ")
+
+	private fun detectGpuRendererLabel(): String =
 		runCatching { detectOpenGlRenderer() }
 			.getOrNull()
 			?.sanitizeGpuLabel()
 			?: "GPU"
+
+	private fun detectSocLabel(): String? = buildList {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Build.SOC_MODEL)
+		add(readCpuInfoValue("Hardware"))
+		add(readCpuInfoValue("model name"))
+		add(readCpuInfoValue("Processor"))
+		add(Build.HARDWARE)
+		add(Build.BOARD)
+	}.firstNotNullOfOrNull { value -> value.sanitizeSocLabel() }
+
+	private fun readCpuInfoValue(key: String): String? = runCatching {
+		File("/proc/cpuinfo").useLines { lines ->
+			lines.firstNotNullOfOrNull { line ->
+				val separator = line.indexOf(':')
+				if (separator <= 0) return@firstNotNullOfOrNull null
+				if (!line.substring(0, separator).trim().equals(key, ignoreCase = true)) return@firstNotNullOfOrNull null
+				line.substring(separator + 1).trim()
+			}
+		}
+	}.getOrNull()
+
+	private fun String?.sanitizeSocLabel(): String? = this
+		?.trim()
+		?.replace(Regex("\\s+"), " ")
+		?.takeIf { label -> label.isNotBlank() && !label.equals("unknown", ignoreCase = true) }
+		?.let(SocModelRegex::find)
+		?.value
 
 	private fun detectOpenGlRenderer(): String? {
 		val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -885,6 +918,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		private const val SysfsHintMaxLength = 512
 		private const val GpuRendererLabelMaxWords = 4
 		private val FirstNumberRegex = Regex("-?\\d+(?:\\.\\d+)?")
+		private val SocModelRegex = Regex("\\b[A-Za-z]{1,8}\\d[A-Za-z0-9._-]*\\b")
 		private val GpuRendererVersionToken = Regex("(?:[vrp]\\d+(?:[._-]?[a-z]?\\d+)+.*|\\d+(?:[._-][a-z]?\\d+)+.*)")
 		private val GpuRendererVendorTokens = setOf(
 			"adreno",

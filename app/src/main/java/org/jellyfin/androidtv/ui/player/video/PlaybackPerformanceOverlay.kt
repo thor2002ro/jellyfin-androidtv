@@ -152,20 +152,26 @@ private fun PlaybackPerformanceGraphAddon(
 		modifier = Modifier.width(146.dp),
 		verticalArrangement = Arrangement.spacedBy(4.dp),
 	) {
-		Row(
-			modifier = Modifier.fillMaxWidth(),
-			horizontalArrangement = Arrangement.spacedBy(4.dp),
-		) {
-			PlaybackTemperatureOverlay(
-				label = "CPU",
-				temperatureCelsius = sample.cpu.temperatureCelsius,
-				modifier = Modifier.weight(1f),
-			)
-			PlaybackTemperatureOverlay(
-				label = "GPU",
-				temperatureCelsius = sample.gpu.temperatureCelsius,
-				modifier = Modifier.weight(1f),
-			)
+		if (sample.cpu.temperatureCelsius != null || sample.gpu.temperatureCelsius != null) {
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				horizontalArrangement = Arrangement.spacedBy(4.dp),
+			) {
+				sample.cpu.temperatureCelsius?.let { temperature ->
+					PlaybackTemperatureOverlay(
+						label = "CPU",
+						temperatureCelsius = temperature,
+						modifier = Modifier.weight(1f),
+					)
+				}
+				sample.gpu.temperatureCelsius?.let { temperature ->
+					PlaybackTemperatureOverlay(
+						label = "GPU",
+						temperatureCelsius = temperature,
+						modifier = Modifier.weight(1f),
+					)
+				}
+			}
 		}
 
 		Column(
@@ -195,7 +201,7 @@ private fun PlaybackPerformanceGraphAddon(
 @Composable
 private fun PlaybackTemperatureOverlay(
 	label: String,
-	temperatureCelsius: Float?,
+	temperatureCelsius: Float,
 	modifier: Modifier = Modifier,
 ) {
 	Row(
@@ -211,7 +217,7 @@ private fun PlaybackTemperatureOverlay(
 			modifier = Modifier.weight(1f),
 		)
 		PlaybackInfoGraphText(
-			text = temperatureCelsius.formatTemperatureValue(),
+			text = temperatureCelsius.formatTemperature(),
 			modifier = Modifier.weight(1f),
 			textAlign = TextAlign.End,
 		)
@@ -240,6 +246,7 @@ private fun PlaybackPerformanceGraphs(
 			metric = sample.gpu,
 			history = gpuUsageHistory,
 			color = Color(0xFFAA5CC3),
+			labelOnly = sample.gpu.percent == null,
 		)
 		PlaybackUsageGraph(
 			metric = UsageMetric(label = "Decoder", percent = decoderActivity.percent),
@@ -334,6 +341,7 @@ private fun PlaybackUsageGraph(
 	color: Color,
 	modifier: Modifier = Modifier,
 	valueText: String = metric.formatUsageValue(),
+	labelOnly: Boolean = false,
 ) {
 	Column(
 		modifier = modifier.fillMaxWidth(),
@@ -349,13 +357,17 @@ private fun PlaybackUsageGraph(
 				modifier = Modifier.weight(1.15f),
 				minLines = 2,
 			)
-			PlaybackInfoGraphText(
-				text = valueText,
-				modifier = Modifier.weight(1.45f),
-				textAlign = TextAlign.End,
-				minLines = 2,
-			)
+			if (!labelOnly) {
+				PlaybackInfoGraphText(
+					text = valueText,
+					modifier = Modifier.weight(1.45f),
+					textAlign = TextAlign.End,
+					minLines = 2,
+				)
+			}
 		}
+
+		if (labelOnly) return@Column
 
 		Canvas(
 			modifier = Modifier
@@ -459,8 +471,6 @@ private fun Float?.formatUsagePercent() = this
 private fun UsageMetric.formatUsageValue(): String = percent.formatUsagePercent()
 
 private fun Float.formatTemperature() = "%.0fC".format(this)
-
-private fun Float?.formatTemperatureValue() = this?.formatTemperature() ?: "n/a"
 
 private fun Float?.formatThroughput(): String = this
 	?.let { bytesPerSecond ->
