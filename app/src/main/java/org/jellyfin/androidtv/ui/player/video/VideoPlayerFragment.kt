@@ -84,6 +84,11 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 				notifyPlaybackChanged(mediaStream.queueEntry.baseItem)
 				if (showNextUpIfAvailable(mediaStream)) return
 
+				if (!playbackManager.queue.hasNext(usePlaybackOrder = true, useRepeatMode = true)) {
+					Timber.i("Video queue ended, closing player")
+					closePlayer()
+					return
+				}
 				closeWhenVideoQueueEnds = true
 				closePlayerIfVideoQueueEnded()
 			}
