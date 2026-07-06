@@ -2,7 +2,7 @@ package org.jellyfin.androidtv.ui.presentation
 
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.ImageView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -12,12 +12,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.leanback.widget.Presenter
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.GridButton
@@ -54,18 +55,11 @@ class GridButtonPresenter @JvmOverloads constructor(
 					.background(colorResource(R.color.button_default_normal_background))
 			) {
 				if (value.imageRes != null) {
-					AndroidView(
-						factory = { context ->
-							ImageView(context).apply {
-								contentDescription = value.text
-								scaleType = ImageView.ScaleType.CENTER_CROP
-							}
-						},
-						update = { imageView ->
-							imageView.contentDescription = value.text
-							imageView.setImageResource(value.imageRes)
-						},
-						modifier = Modifier.size(width.dp, imageHeight.dp)
+					Image(
+						painter = painterResource(value.imageRes),
+						contentDescription = value.text,
+						modifier = Modifier.size(width.dp, imageHeight.dp),
+						contentScale = ContentScale.Crop,
 					)
 				}
 
