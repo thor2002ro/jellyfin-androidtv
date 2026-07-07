@@ -1,13 +1,19 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.content.Context
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -22,11 +28,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.findViewTreeCompositionContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.leanback.widget.Presenter
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -47,9 +55,12 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowType
 import org.jellyfin.androidtv.ui.itemhandling.GridButtonBaseRowItem
 import org.jellyfin.androidtv.util.ImageHelper
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage
+import org.jellyfin.androidtv.util.apiclient.channelPrimaryImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
+import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.design.Tokens
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.compose.koinInject
 
@@ -58,8 +69,11 @@ class CardPresenter(
 	val imageType: ImageType,
 	val staticHeight: Int,
 	val uniformAspect: Boolean,
+	private val onLongClick: ((item: Any?, view: View) -> Boolean)? = null,
 ) : Presenter() {
+	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int) : this(showInfo, imageType, staticHeight, false)
+	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, onLongClick: ((item: Any?, view: View) -> Boolean)?) : this(showInfo, imageType, staticHeight, false, onLongClick)
 	constructor(showInfo: Boolean, staticHeight: Int) : this(showInfo, ImageType.POSTER, staticHeight)
 	constructor(showInfo: Boolean) : this(showInfo, 150)
 	constructor() : this(true)
@@ -77,9 +91,14 @@ class CardPresenter(
 
 	override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
 		if (viewHolder !is CardViewHolder) return
-		if (item !is BaseRowItem) return
 
-		viewHolder.bind(item)
+		val rowItem = when (item) {
+			is BaseRowItem -> item
+			is BaseItemDto -> BaseItemDtoBaseRowItem(item, staticHeight = true)
+			else -> return
+		}
+
+		viewHolder.bind(rowItem, item)
 	}
 
 	override fun onUnbindViewHolder(viewHolder: ViewHolder) {
@@ -88,7 +107,7 @@ class CardPresenter(
 		viewHolder.unbind()
 	}
 
-	private inner class CardViewHolder(composeView: ComposeView) : ViewHolder(composeView) {
+	private inner class CardViewHolder(private val composeView: ComposeView) : ViewHolder(composeView) {
 		private val _item = MutableStateFlow<BaseRowItem?>(null)
 		private val _focused = MutableStateFlow(false)
 
@@ -109,12 +128,20 @@ class CardPresenter(
 			}
 		}
 
-		fun bind(item: BaseRowItem) {
+		fun bind(item: BaseRowItem, originalItem: Any?) {
 			_item.value = item
+			composeView.tag = item.itemId
+			composeView.setOnLongClickListener(
+				onLongClick?.let { handler ->
+					View.OnLongClickListener { view -> handler(originalItem, view) }
+				}
+			)
 		}
 
 		fun unbind() {
 			_item.value = null
+			composeView.tag = null
+			composeView.setOnLongClickListener(null)
 		}
 	}
 }
@@ -126,6 +153,7 @@ private data class BaseRowItemDisplayConfig(
 	val backgroundColor: Color = Tokens.Color.colorBluegrey900,
 	val overrideShowInfo: Boolean? = null,
 	val scaleType: ImageView.ScaleType? = null,
+	val imageHeightRes: Int? = null,
 )
 
 private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Boolean): BaseRowItemDisplayConfig = when (baseRowType) {
@@ -224,6 +252,7 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 		},
 		image = getImage(imageType),
 		scaleType = ImageView.ScaleType.FIT_CENTER,
+		imageHeightRes = R.dimen.live_tv_card_logo_height,
 		iconRes = R.drawable.ic_tv,
 	)
 
@@ -233,7 +262,9 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 			ImageType.THUMB -> ImageHelper.ASPECT_RATIO_16_9.toFloat()
 			else -> baseItem?.primaryImageAspectRatio?.toFloat() ?: ImageHelper.ASPECT_RATIO_7_9.toFloat()
 		},
-		image = getImage(imageType),
+		image = baseItem?.channelPrimaryImage ?: getImage(imageType),
+		scaleType = ImageView.ScaleType.FIT_CENTER,
+		imageHeightRes = R.dimen.live_tv_card_logo_height,
 		iconRes = R.drawable.ic_tv,
 		overrideShowInfo = true,
 	)
@@ -289,6 +320,7 @@ private fun CardViewHolderContent(
 
 	val title = remember(item, context) { item?.getCardName(context) }
 	val subtitle = remember(item, context) { item?.getSubText(context) }
+	val liveTvText = remember(item, context) { item?.getLiveTvCardText(context) }
 	val displayConfig = remember(item, imageType, uniformAspect) { item?.getDisplayConfig(imageType, uniformAspect) }
 	if (item == null || displayConfig == null) return
 
@@ -302,7 +334,7 @@ private fun CardViewHolderContent(
 		else -> DpSize(150.dp * aspectRatio, 150.dp)
 	}
 
-	val usePreview = displayConfig.overrideShowInfo ?: showInfo
+	val usePreview = if (liveTvText != null) false else displayConfig.overrideShowInfo ?: showInfo
 
 	val card = @Composable {
 		ItemCard(
@@ -320,8 +352,14 @@ private fun CardViewHolderContent(
 						blurHash = image.blurHash,
 						aspectRatio = aspectRatio,
 						scaleType = displayConfig.scaleType ?: ImageView.ScaleType.CENTER_CROP,
-						modifier = Modifier
+						modifier = displayConfig.imageHeightRes?.let { heightRes ->
+							Modifier
+								.fillMaxWidth()
+								.height(dimensionResource(heightRes))
+								.align(Alignment.Center)
+						} ?: Modifier
 							.fillMaxSize()
+							.align(Alignment.Center)
 					)
 				} else if (item is GridButtonBaseRowItem && item.gridButton.imageRes != null) {
 					Image(
@@ -347,7 +385,9 @@ private fun CardViewHolderContent(
 						item = baseItem,
 						streamBadgeItem = (item as? BaseItemDtoBaseRowItem)?.streamBadgeItem ?: baseItem,
 						footer = {
-							if (showInfo && title != null) {
+							if (liveTvText != null) {
+								LiveTvCardFooter(liveTvText)
+							} else if (showInfo && title != null) {
 								val focusModifier = if (focused) Modifier.basicMarquee(
 									iterations = Int.MAX_VALUE,
 									initialDelayMillis = 0,
@@ -412,5 +452,106 @@ private fun CardViewHolderContent(
 		)
 	} else {
 		card()
+	}
+}
+
+private data class LiveTvCardText(
+	val channelNumber: String?,
+	val channelName: String?,
+	val program: String?,
+	val time: String?,
+)
+
+private fun BaseRowItem.getLiveTvCardText(context: Context): LiveTvCardText? {
+	val item = baseItem ?: return null
+	val program = when (baseRowType) {
+		BaseRowType.LiveTvChannel -> item.currentProgram
+		BaseRowType.LiveTvProgram -> item
+		else -> return null
+	}
+	val channelNumber = when (baseRowType) {
+		BaseRowType.LiveTvChannel -> item.number
+		BaseRowType.LiveTvProgram -> item.channelNumber
+	}.takeIf { !it.isNullOrBlank() }
+	val channelName = when (baseRowType) {
+		BaseRowType.LiveTvChannel -> item.name
+		BaseRowType.LiveTvProgram -> item.channelName
+	}.takeIf { !it.isNullOrBlank() }
+	val time = program?.let { currentProgram ->
+		val startDate = currentProgram.startDate ?: return@let null
+		val endDate = currentProgram.endDate ?: return@let null
+		val formatter = context.getTimeFormatter()
+		"${formatter.format(startDate)}-${formatter.format(endDate)}"
+	}
+
+	return LiveTvCardText(
+		channelNumber = channelNumber,
+		channelName = channelName,
+		program = program?.name ?: context.getString(R.string.no_program_data),
+		time = time,
+	)
+}
+
+@Composable
+private fun LiveTvCardFooter(
+	text: LiveTvCardText,
+) {
+	Box(
+		modifier = Modifier
+			.fillMaxWidth()
+			.background(Tokens.Color.colorBluegrey900.copy(alpha = 0.72f), JellyfinTheme.shapes.extraSmall)
+			.padding(horizontal = Tokens.Space.spaceSm, vertical = Tokens.Space.spaceXs),
+	) {
+		Row(
+			horizontalArrangement = Arrangement.spacedBy(Tokens.Space.spaceSm),
+			verticalAlignment = Alignment.Top,
+		) {
+			Column(
+				horizontalAlignment = Alignment.CenterHorizontally,
+				verticalArrangement = Arrangement.Center,
+				modifier = Modifier.size(width = 32.dp, height = 42.dp),
+			) {
+				text.channelNumber?.let { channelNumber ->
+					Text(
+						text = channelNumber,
+						color = Tokens.Color.colorWhite,
+						fontSize = 10.sp,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+						textAlign = TextAlign.Center,
+						modifier = Modifier.fillMaxWidth(),
+					)
+				}
+			}
+			Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+				text.channelName?.let { channelName ->
+					Text(
+						text = channelName,
+						color = Tokens.Color.colorWhite,
+						fontSize = 11.sp,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+				text.program?.let { program ->
+					Text(
+						text = program,
+						color = Tokens.Color.colorWhite,
+						fontSize = 12.sp,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+				text.time?.let { time ->
+					Text(
+						text = time,
+						color = Tokens.Color.colorWhite,
+						fontSize = 10.sp,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+			}
+		}
 	}
 }

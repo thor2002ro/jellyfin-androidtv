@@ -62,6 +62,11 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 		}
 
 	override val itemId get() = baseItem?.id
+	override val detailBaseItem get() = when (baseItem?.type) {
+		BaseItemKind.TV_CHANNEL,
+		BaseItemKind.LIVE_TV_CHANNEL -> baseItem.currentProgram ?: baseItem
+		else -> baseItem
+	}
 
 	override val isFavorite get() = baseItem?.userData?.isFavorite == true
 	override val isPlayed get() = baseItem?.userData?.played == true
@@ -77,10 +82,16 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	override fun getFullName(context: Context) = baseItem?.getFullName(context)
 	override fun getName(context: Context) = when (baseItem?.type) {
 		BaseItemKind.AUDIO -> baseItem.getFullName(context)
+		BaseItemKind.TV_CHANNEL,
+		BaseItemKind.LIVE_TV_CHANNEL -> baseItem.currentProgram?.name ?: baseItem.name
 		else -> baseItem?.name
 	}
 
-	override fun getSummary(context: Context) = baseItem?.overview
+	override fun getSummary(context: Context) = when (baseItem?.type) {
+		BaseItemKind.TV_CHANNEL,
+		BaseItemKind.LIVE_TV_CHANNEL -> baseItem.currentProgram?.overview ?: baseItem.overview
+		else -> baseItem?.overview
+	}
 
 	override fun getSubText(context: Context) = when (baseItem?.type) {
 		BaseItemKind.TV_CHANNEL -> baseItem.number
