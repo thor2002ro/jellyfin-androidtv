@@ -33,6 +33,7 @@ import org.jellyfin.androidtv.ui.base.Seekbar
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.languageCodesMatch
 import org.jellyfin.androidtv.util.toIso2LanguageBadgeOrNull
 import org.jellyfin.design.Tokens
@@ -91,18 +92,22 @@ private fun StateIndicator(
 	modifier: Modifier = Modifier,
 ) {
 	val isFavorited = item.userData?.isFavorite == true
-	val isRecording = item.timerId?.takeIf { item.type == BaseItemKind.LIVE_TV_PROGRAM || item.type == BaseItemKind.PROGRAM } != null
-	val isRecordingActive = item.seriesTimerId != null && isRecording
+	val recordingItem = item.recordingStateItem()
+	val recordingIcon = when {
+		recordingItem?.seriesTimerId != null -> R.drawable.ic_record_series
+		recordingItem?.timerId != null -> R.drawable.ic_record
+		else -> null
+	}
 
 	Column(
 		modifier = modifier,
 		verticalArrangement = Arrangement.spacedBy(Tokens.Space.spaceXs)
 	) {
-		if (isRecording) {
+		if (recordingIcon != null) {
 			Icon(
-				imageVector = ImageVector.vectorResource(R.drawable.ic_record_series),
+				imageVector = ImageVector.vectorResource(recordingIcon),
 				contentDescription = null,
-				tint = if (isRecordingActive) Tokens.Color.colorRed600 else Tokens.Color.colorGrey100,
+				tint = if (recordingItem?.timerId != null) Tokens.Color.colorRed600 else Tokens.Color.colorGrey100,
 				modifier = modifier
 					.size(24.dp)
 			)
@@ -118,6 +123,12 @@ private fun StateIndicator(
 			)
 		}
 	}
+}
+
+private fun BaseItemDto.recordingStateItem() = when (type) {
+	BaseItemKind.TV_CHANNEL,
+	BaseItemKind.LIVE_TV_CHANNEL -> currentProgram
+	else -> this
 }
 
 @Composable
@@ -172,7 +183,7 @@ private fun MediaStreamBadges(
 	val badges = item.streamBadges(
 		audioLanguagePreference = configuration?.takeUnless { it.playDefaultAudioTrack }?.audioLanguagePreference,
 		subtitleLanguagePreference = configuration?.subtitleLanguagePreference,
-	) ?: return
+	) ?: item.liveTvTrackBadges() ?: return
 
 	Column(
 		modifier = modifier,
@@ -252,6 +263,31 @@ internal fun BaseItemDto.streamBadges(
 
 	return StreamBadges(audio, subtitle).takeIf { badges -> badges.audio != null || badges.subtitle != null }
 }
+
+private fun BaseItemDto.liveTvTrackBadges(): StreamBadges? {
+	when (type) {
+		BaseItemKind.TV_CHANNEL,
+		BaseItemKind.LIVE_TV_CHANNEL,
+		BaseItemKind.PROGRAM,
+		BaseItemKind.TV_PROGRAM,
+		BaseItemKind.LIVE_TV_PROGRAM -> Unit
+		else -> return null
+	}
+
+	val tracks = LiveTvTrackCache.get(this) ?: currentProgram?.let(LiveTvTrackCache::get) ?: return null
+	val audio = tracks.audio.selectedTrack(tracks.selectedAudioTrackIndex)?.language.toIso2LanguageBadgeOrNull()
+	val subtitle = tracks.subtitles
+		.takeUnless { tracks.selectedSubtitleTrackIndex == -1 }
+		?.selectedTrack(tracks.selectedSubtitleTrackIndex)
+		?.language.toIso2LanguageBadgeOrNull()
+
+	return StreamBadges(audio, subtitle).takeIf { badges -> badges.audio != null || badges.subtitle != null }
+}
+
+private fun List<LiveTvTrackCache.Track>.selectedTrack(index: Int?) =
+	index?.takeIf { it >= 0 }?.let { selected -> firstOrNull { track -> track.index == selected } }
+		?: firstOrNull { track -> track.isDefault }
+		?: firstOrNull()
 
 private fun List<MediaStream>.badgeText(
 	type: MediaStreamType,

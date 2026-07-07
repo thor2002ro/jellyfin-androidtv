@@ -48,7 +48,6 @@ import org.jellyfin.androidtv.ui.navigation.Destinations;
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
 import org.jellyfin.androidtv.ui.playback.MediaManager;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
-import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter;
 import org.jellyfin.androidtv.ui.presentation.GridButtonPresenter;
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter;
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter;
@@ -255,10 +254,10 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getSimilarQuery(), QueryType.SimilarMovies, mCardPresenter, mRowsAdapter);
                     break;
                 case LiveTvChannel:
-                    rowAdapter = new ItemRowAdapter(requireContext(), def.getTvChannelQuery(), 40, getChannelCardPresenter(), mRowsAdapter);
+                    rowAdapter = new ItemRowAdapter(requireContext(), def.getTvChannelQuery(), 40, getLiveTvCardPresenter(), mRowsAdapter);
                     break;
                 case LiveTvProgram:
-                    rowAdapter = new ItemRowAdapter(requireContext(), def.getProgramQuery(), def.getUseChannelCards() ? getChannelCardPresenter() : mCardPresenter, mRowsAdapter, def.getLiveTvProgramSelectAction());
+                    rowAdapter = new ItemRowAdapter(requireContext(), def.getProgramQuery(), def.getUseChannelCards() ? getLiveTvCardPresenter() : mCardPresenter, mRowsAdapter, def.getLiveTvProgramSelectAction());
                     break;
                 case LiveTvRecording:
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getRecordingQuery(), def.getChunkSize(), mCardPresenter, mRowsAdapter);
@@ -464,8 +463,8 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         return ImageType.POSTER;
     }
 
-    protected Presenter getChannelCardPresenter() {
-        return new ChannelCardPresenter();
+    protected Presenter getLiveTvCardPresenter() {
+        return mCardPresenter;
     }
 
     protected int getDefaultCardHeight() {
@@ -501,8 +500,8 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
             else mSummary.setText(null);
 
             mInfoRow.removeAllViews();
-            InfoLayoutHelper.addInfoRow(requireContext(), rowItem.getBaseItem(), mInfoRow, true);
-            backgroundService.getValue().setBackground(rowItem.getBaseItem());
+            InfoLayoutHelper.addInfoRow(requireContext(), rowItem.getDetailBaseItem(), mInfoRow, true);
+            backgroundService.getValue().setBackground(rowItem.getDetailBaseItem());
         }
     };
 

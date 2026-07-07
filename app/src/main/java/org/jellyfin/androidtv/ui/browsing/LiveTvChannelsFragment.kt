@@ -20,6 +20,7 @@ import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ChangeTriggerType
 import org.jellyfin.androidtv.constant.Extras
+import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.PosterSize
 import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.databinding.HorizontalGridBrowseBinding
@@ -29,7 +30,7 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
-import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter
+import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter
 import org.jellyfin.androidtv.util.InfoLayoutHelper
 import org.jellyfin.androidtv.util.KeyProcessor
@@ -191,11 +192,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 	private fun buildAdapter(metrics: GridMetrics) {
 		val viewBinding = binding ?: return
-		val presenter = ChannelCardPresenter(
-			metrics.cardWidthPx,
-			metrics.cardHeightPx,
-			liveTvActions::onLongClick,
-		)
+		val presenter = CardPresenter(false, ImageType.THUMB, pxToDp(metrics.cardHeightPx), liveTvActions::onLongClick)
 
 		val rowAdapter = ItemRowAdapter(
 			requireContext(),
@@ -283,10 +280,10 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		handler.postAtTime({
 			if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@postAtTime
 			val selectedItem = currentItem ?: return@postAtTime
-			backgroundService.setBackground(selectedItem.baseItem)
+			backgroundService.setBackground(selectedItem.detailBaseItem)
 			binding?.infoRow?.let { infoRow ->
 				infoRow.removeAllViews()
-				InfoLayoutHelper.addInfoRow(requireContext(), selectedItem.baseItem, infoRow, true)
+				InfoLayoutHelper.addInfoRow(requireContext(), selectedItem.detailBaseItem, infoRow, true)
 			}
 		}, DELAYED_ITEM_TOKEN, SystemClock.uptimeMillis() + VIEW_SELECT_UPDATE_DELAY_MS)
 	}
@@ -472,14 +469,16 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 	}
 
 	private fun rowsForPosterSize(posterSize: PosterSize) = when (posterSize) {
-		PosterSize.SMALLEST -> 7
-		PosterSize.SMALL -> 6
-		PosterSize.MED -> 5
-		PosterSize.LARGE -> 4
+		PosterSize.SMALLEST -> 5
+		PosterSize.SMALL -> 4
+		PosterSize.MED -> 4
+		PosterSize.LARGE -> 3
 		PosterSize.X_LARGE -> 2
 	}
 
 	private fun dp(value: Int) = org.jellyfin.androidtv.util.Utils.convertDpToPixel(requireContext(), value)
+
+	private fun pxToDp(value: Int) = (value / resources.displayMetrics.density).roundToInt()
 
 	private data class GridMetrics(
 		val rows: Int,
@@ -498,7 +497,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		const val CHANNEL_REFRESH_DELAY_MS = 500L
 		const val VIEW_SELECT_UPDATE_DELAY_MS = 250L
 		const val FALLBACK_VERTICAL_CHROME_DP = 131
-		const val BOTTOM_COUNTER_CLEARANCE_DP = 50
+		const val BOTTOM_COUNTER_CLEARANCE_DP = 32
 		const val MIN_CARD_HEIGHT_DP = 72
 		const val ROW_SPACING_DP = 6
 		const val GRID_HORIZONTAL_PADDING_DP = 44

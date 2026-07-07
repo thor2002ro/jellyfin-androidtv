@@ -1,12 +1,12 @@
 package org.jellyfin.androidtv.ui.home
 
 import android.content.Context
+import android.view.View
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.ChangeTriggerType
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
-import org.jellyfin.androidtv.ui.card.ChannelCardView
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -66,7 +66,7 @@ class HomeFragmentHelper(
 		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_next_up), query, arrayOf(ChangeTriggerType.TvPlayback)))
 	}
 
-	fun loadOnNow(onLongClick: ((item: Any?, cardView: ChannelCardView) -> Boolean)? = null): HomeFragmentRow {
+	fun loadOnNow(onLongClick: ((item: Any?, view: View) -> Boolean)? = null): HomeFragmentRow {
 		val query = GetRecommendedProgramsRequest(
 			isAiring = true,
 			fields = ItemRepository.itemFields,
