@@ -18,6 +18,10 @@
     <fraction name="card_scale_default">100%</fraction>
     <fraction name="card_scale_focus">115%</fraction>
     <dimen name="card_focus_stroke_width">1dp</dimen>
+    <dimen name="live_tv_action_tile_width">168dp</dimen>
+    <dimen name="live_tv_action_tile_height">104dp</dimen>
+    <dimen name="live_tv_card_height">106dp</dimen>
+    <dimen name="live_tv_card_logo_height">66dp</dimen>
 
     <!-- Set leanback card scale values -->
     <fraction name="lb_focus_zoom_factor_small">@fraction/card_scale_focus</fraction>
