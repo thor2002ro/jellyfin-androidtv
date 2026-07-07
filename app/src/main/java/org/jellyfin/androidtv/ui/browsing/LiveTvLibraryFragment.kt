@@ -2,6 +2,8 @@ package org.jellyfin.androidtv.ui.browsing
 
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
+import android.view.View
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ListRow
@@ -17,7 +19,7 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
 import org.jellyfin.androidtv.ui.livetv.liveTvActionButtons
-import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter
+import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.LiveTvActionButtonPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.util.PlaybackHelper
@@ -26,13 +28,14 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.time.LocalDateTime
+import kotlin.math.roundToInt
 
 open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 	private val userRepository by inject<UserRepository>()
 	private val playbackHelper by inject<PlaybackHelper>()
 	private val api by inject<ApiClient>()
 	private val liveTvRowAdapters = mutableListOf<ItemRowAdapter>()
-	private val liveTvActions by lazy { LiveTvCardActionHandler(this, api, playbackHelper) { _, _ -> refreshLiveTvChannelRows() } }
+	private val liveTvActions by lazy { LiveTvCardActionHandler(this, api, playbackHelper) { _, _ -> refreshLiveTvRows() } }
 
 	override fun onResume() {
 		val wasJustLoaded = justLoaded
@@ -40,6 +43,21 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 		if (wasJustLoaded) return
 
 		Handler(Looper.getMainLooper()).postDelayed({ refreshLiveTvRows() }, LIVE_TV_ROWS_REFRESH_DELAY_MS)
+	}
+
+	override fun onViewCreated(view: View, savedInstanceState: android.os.Bundle?) {
+		super.onViewCreated(view, savedInstanceState)
+		view.findViewById<android.widget.TextView>(R.id.summary).apply {
+			setTextSize(TypedValue.COMPLEX_UNIT_SP, LIVE_TV_SUMMARY_TEXT_SIZE_SP)
+			maxLines = LIVE_TV_SUMMARY_MAX_LINES
+			layoutParams = layoutParams.apply {
+				height = TypedValue.applyDimension(
+					TypedValue.COMPLEX_UNIT_DIP,
+					LIVE_TV_SUMMARY_HEIGHT_DP,
+					resources.displayMetrics,
+				).toInt()
+			}
+		}
 	}
 
 	override fun onPause() {
@@ -57,8 +75,6 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 			}
 		}
 	}
-
-	private fun refreshLiveTvChannelRows() = refreshLiveTvRows(includePrograms = false)
 
 	private fun getSmartRowInsertIndex() = minOf(SMART_ROW_INSERT_INDEX, mRowsAdapter.size())
 
@@ -163,19 +179,22 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 		rowAdapter.add(0, ListRow(HeaderItem(0, getString(R.string.pref_live_tv_cat)), gridRowAdapter))
 	}
 
-	override fun getChannelCardPresenter() = ChannelCardPresenter(onLongClick = liveTvActions::onLongClick)
+	override fun getLiveTvCardPresenter() = CardPresenter(false, getDefaultCardImageType(), getDefaultCardHeight(), liveTvActions::onLongClick)
 
 	override fun getDefaultCardImageType() = ImageType.THUMB
 
-	override fun getDefaultCardHeight() = LIVE_TV_TILE_HEIGHT_DP
+	override fun getDefaultCardHeight() = dimenDp(R.dimen.live_tv_card_height)
 
-	override fun getDefaultGridButtonWidth() = LIVE_TV_TILE_WIDTH_DP
+	override fun getDefaultGridButtonWidth() = dimenDp(R.dimen.live_tv_action_tile_width)
 
-	override fun getDefaultGridButtonHeight() = LIVE_TV_TILE_HEIGHT_DP
+	override fun getDefaultGridButtonHeight() = dimenDp(R.dimen.live_tv_action_tile_height)
+
+	private fun dimenDp(resId: Int) = (resources.getDimension(resId) / resources.displayMetrics.density).roundToInt()
 
 	private companion object {
-		const val LIVE_TV_TILE_WIDTH_DP = 184
-		const val LIVE_TV_TILE_HEIGHT_DP = 112
+		const val LIVE_TV_SUMMARY_TEXT_SIZE_SP = 11f
+		const val LIVE_TV_SUMMARY_HEIGHT_DP = 72f
+		const val LIVE_TV_SUMMARY_MAX_LINES = 4
 		const val SMART_ROW_INSERT_INDEX = 2
 		const val SMART_ROW_ORDER = 0.5
 		const val LIVE_TV_ROWS_REFRESH_DELAY_MS = 3_500L

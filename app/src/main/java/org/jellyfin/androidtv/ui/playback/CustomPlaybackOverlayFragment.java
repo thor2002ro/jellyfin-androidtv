@@ -65,7 +65,6 @@ import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
 import org.jellyfin.androidtv.ui.playback.overlay.LeanbackOverlayFragment;
 import org.jellyfin.androidtv.ui.playback.overlay.action.StreamStatusBuilder;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
-import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter;
 import org.jellyfin.androidtv.ui.presentation.CircularObjectAdapter;
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter;
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter;
@@ -2153,7 +2152,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
             if (binding == null) return null;
             List<BaseItemDto> channels = TvManager.getAllChannels();
             if (channels == null) return null;
-            ArrayObjectAdapter innerAdapter = new ArrayObjectAdapter(new ChannelCardPresenter());
+            ArrayObjectAdapter innerAdapter = new ArrayObjectAdapter(new CardPresenter(false, org.jellyfin.androidtv.constant.ImageType.THUMB, 96));
             innerAdapter.addAll(0, channels);
             mCircularChannelAdapter = new CircularObjectAdapter(innerAdapter);
             if (mChapterRow != null) mPopupRowAdapter.remove(mChapterRow);
