@@ -60,7 +60,6 @@ import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-private val ChapterListVerticalOffset = 8.dp
 internal val ChapterThumbnailWidth = 132.dp
 internal val ChapterThumbnailHeight = 74.dp
 private val ChapterListHeight = 90.dp
