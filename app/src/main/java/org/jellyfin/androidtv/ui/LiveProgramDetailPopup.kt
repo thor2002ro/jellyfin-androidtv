@@ -21,7 +21,6 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
-import org.jellyfin.androidtv.ui.livetv.LiveTvGuide
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
@@ -33,8 +32,7 @@ import java.util.UUID
 class LiveProgramDetailPopup(
 	context: Context,
 	lifecycleOwner: LifecycleOwner,
-	private val tvGuide: LiveTvGuide,
-	width: Int,
+	private val onFavoriteChanged: (UUID, Boolean) -> Unit,
 	private val tuneAction: EmptyResponse?,
 ) {
 	val mContext: Context = context
@@ -60,8 +58,13 @@ class LiveProgramDetailPopup(
 
 	init {
 		val layout = LayoutInflater.from(context).inflate(R.layout.program_detail_popup, null)
+		val horizontalMargin = Utils.convertDpToPixel(context, 48)
+		val popupWidth = minOf(
+			Utils.convertDpToPixel(context, 600),
+			(context.resources.displayMetrics.widthPixels - horizontalMargin * 2).coerceAtLeast(horizontalMargin),
+		)
 		val popupHeight = Utils.convertDpToPixel(context, 400)
-		popup = PopupWindow(layout, width, popupHeight)
+		popup = PopupWindow(layout, popupWidth, popupHeight)
 		popup.contentView.setViewTreeLifecycleOwner(lifecycleOwner)
 		popup.isFocusable = true
 		popup.isOutsideTouchable = true
@@ -231,7 +234,7 @@ class LiveProgramDetailPopup(
 	}
 
 	private fun notifyFavoriteChanged(channelId: UUID, isFavorite: Boolean) {
-		tvGuide.refreshFavorite(channelId, isFavorite)
+		onFavoriteChanged(channelId, isFavorite)
 	}
 
 	private fun addFavoriteButton(layout: LinearLayout, isFavorite: Boolean): ImageButton {
