@@ -19,10 +19,13 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
 import org.jellyfin.androidtv.ui.livetv.liveTvActionButtons
+import org.jellyfin.androidtv.ui.playback.VideoQueueManager
+import org.jellyfin.androidtv.ui.player.video.LiveTvGuidePlayback
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.LiveTvActionButtonPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.util.PlaybackHelper
+import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.android.inject
@@ -34,12 +37,18 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 	private val userRepository by inject<UserRepository>()
 	private val playbackHelper by inject<PlaybackHelper>()
 	private val api by inject<ApiClient>()
+	private val playbackManager by inject<PlaybackManager>()
+	private val videoQueueManager by inject<VideoQueueManager>()
 	private val liveTvRowAdapters = mutableListOf<ItemRowAdapter>()
 	private val liveTvActions by lazy { LiveTvCardActionHandler(this, api, playbackHelper) { _, _ -> refreshLiveTvRows() } }
 
 	override fun onResume() {
 		val wasJustLoaded = justLoaded
 		super.onResume()
+		LiveTvGuidePlayback.stopIfStarted(
+			playbackManager = playbackManager,
+			videoQueueManager = videoQueueManager,
+		)
 		if (wasJustLoaded) return
 
 		Handler(Looper.getMainLooper()).postDelayed({ refreshLiveTvRows() }, LIVE_TV_ROWS_REFRESH_DELAY_MS)

@@ -710,7 +710,7 @@ fun VideoPlayerOverlay(
 				playbackManager = playbackManager,
 				currentItem = guideItem,
 				onDismiss = ::closeLiveTvGuide,
-				showPreview = !openLiveTvGuideOnStart,
+				showPreview = false,
 				onCurrentChannelSelected = { dismissLiveTvGuide() },
 				onRemoteKeyEventHandlerChanged = { handler ->
 					liveTvGuideKeyEventHandler.handler = handler
