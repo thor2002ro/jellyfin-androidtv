@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,6 +135,7 @@ fun VideoPlayerOverlay(
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
+	val currentOnRemoteKeyEventHandlerChanged by rememberUpdatedState(onRemoteKeyEventHandlerChanged)
 	val nextUpBehavior = userPreferences[UserPreferences.nextUpBehavior]
 	val trickPlayEnabled = userPreferences[UserPreferences.trickPlayEnabled]
 	val nextUpPositionInfo by rememberPlayerPositionInfo(
@@ -237,7 +239,11 @@ fun VideoPlayerOverlay(
 	}
 
 	LaunchedEffect(currentLiveTvItem?.id) {
-		if (currentLiveTvItem != null) liveTvGuideItem = currentLiveTvItem
+		if (currentLiveTvItem != null) {
+			liveTvGuideItem = currentLiveTvItem
+		} else if (showLiveTvGuide) {
+			dismissLiveTvGuide()
+		}
 	}
 
 	LaunchedEffect(openLiveTvGuideOnStart, currentLiveTvItem?.id) {
@@ -531,7 +537,7 @@ fun VideoPlayerOverlay(
 		}
 	}
 
-	DisposableEffect(onRemoteKeyEventHandlerChanged) {
+	DisposableEffect(Unit) {
 		onDispose {
 			centerLongPressJob?.cancel()
 			seekOverlayJob?.cancel()
@@ -539,7 +545,7 @@ fun VideoPlayerOverlay(
 			pendingSeekCommitJob?.cancel()
 			seekScrubJob?.cancel()
 			playbackManager.state.setScrubbing(false)
-			onRemoteKeyEventHandlerChanged(null)
+			currentOnRemoteKeyEventHandlerChanged(null)
 		}
 	}
 
@@ -710,7 +716,7 @@ fun VideoPlayerOverlay(
 				playbackManager = playbackManager,
 				currentItem = guideItem,
 				onDismiss = ::closeLiveTvGuide,
-				showPreview = !openLiveTvGuideOnStart,
+				showPreview = false,
 				onCurrentChannelSelected = { dismissLiveTvGuide() },
 				onRemoteKeyEventHandlerChanged = { handler ->
 					liveTvGuideKeyEventHandler.handler = handler
