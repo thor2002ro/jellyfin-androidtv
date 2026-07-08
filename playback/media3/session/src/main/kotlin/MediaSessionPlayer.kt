@@ -135,6 +135,7 @@ internal class MediaSessionPlayer(
 
 			setCurrentMediaItemIndex(if (previous == null || playlist.size <= 1) 0 else 1)
 		} else {
+			setPlaylist(emptyList())
 			setPlaybackState(STATE_IDLE)
 			setCurrentMediaItemIndex(C.INDEX_UNSET)
 		}

@@ -93,12 +93,6 @@ fun VideoPlayerScreen(
 	}
 
 	val playState by playbackManager.state.playState.collectAsState()
-	val networkRecoveryService = remember(playbackManager) {
-		playbackManager.getService<NetworkPlaybackRecoveryService>()
-	}
-	val networkRecovering by networkRecoveryService?.recovering?.collectAsState()
-		?: remember { mutableStateOf(false) }
-	LiveTvTrackCacheUpdater(playbackManager)
 	val playing = playState.isActivePlayback
 	TrickplayTileSheetPrefetcher(
 		playbackManager = playbackManager,
@@ -129,19 +123,9 @@ fun VideoPlayerScreen(
 			.requiredSize(viewportSize.width, viewportSize.height)
 			.align(Alignment.Center)
 
-		PlayerSurface(
+		PlayerVideoOutput(
 			playbackManager = playbackManager,
-			modifier = videoModifier
-		)
-
-		PlayerSubtitles(
-			playbackManager = playbackManager,
-			modifier = videoModifier
-		)
-
-		VideoBufferingIndicator(
-			visible = playState == PlayState.BUFFERING || networkRecovering,
-			modifier = Modifier.align(Alignment.Center),
+			modifier = videoModifier,
 		)
 
 		VideoPlayerOverlay(
@@ -152,6 +136,39 @@ fun VideoPlayerScreen(
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
 			openLiveTvGuideOnStart = openLiveTvGuideOnStart,
+		)
+	}
+}
+
+@Composable
+internal fun PlayerVideoOutput(
+	playbackManager: PlaybackManager,
+	modifier: Modifier = Modifier,
+	showBufferingIndicator: Boolean = true,
+) {
+	val playState by playbackManager.state.playState.collectAsState()
+	val networkRecoveryService = remember(playbackManager) {
+		playbackManager.getService<NetworkPlaybackRecoveryService>()
+	}
+	val networkRecovering by networkRecoveryService?.recovering?.collectAsState()
+		?: remember { mutableStateOf(false) }
+
+	LiveTvTrackCacheUpdater(playbackManager)
+
+	Box(modifier = modifier) {
+		PlayerSurface(
+			playbackManager = playbackManager,
+			modifier = Modifier.fillMaxSize()
+		)
+
+		PlayerSubtitles(
+			playbackManager = playbackManager,
+			modifier = Modifier.fillMaxSize()
+		)
+
+		VideoBufferingIndicator(
+			visible = showBufferingIndicator && (playState == PlayState.BUFFERING || networkRecovering),
+			modifier = Modifier.align(Alignment.Center),
 		)
 	}
 }

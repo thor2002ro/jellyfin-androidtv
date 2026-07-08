@@ -72,6 +72,7 @@
     <string name="lbl_runs">"Runs"</string>
     <string name="runtime_hours_minutes">%1$dh %2$dm</string>
     <string name="runtime_minutes">%1$dm</string>
+    <string name="lbl_epg_age_minutes">EPG age: %1$dm</string>
     <string name="lbl_ends">"Ends"</string>
     <string name="lbl_directed_by">"Directed by"</string>
     <string name="lbl_last_played">"Last played "</string>
