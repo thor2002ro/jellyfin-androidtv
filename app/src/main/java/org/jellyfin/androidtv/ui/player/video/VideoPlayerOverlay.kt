@@ -71,6 +71,8 @@ private val DpadSeekCommitDelay = 1500.milliseconds
 private val DpadSeekToastDuration = 1500.milliseconds
 private val BackToStopTimeout = 2.seconds
 private val BackDuplicateGuardDuration = 250.milliseconds
+private val SeekAccelerationWindow = 1500.milliseconds
+private val SeekAccelerationMultipliers = intArrayOf(1, 2, 4, 8)
 
 @Composable
 fun VideoPlayerOverlay(
@@ -103,6 +105,9 @@ fun VideoPlayerOverlay(
 	var seekPreviewJob by remember { mutableStateOf<Job?>(null) }
 	var pendingSeekCommitJob by remember { mutableStateOf<Job?>(null) }
 	var seekScrubJob by remember { mutableStateOf<Job?>(null) }
+	var consecutiveSeekPresses by remember { mutableStateOf(0) }
+	var lastSeekTime by remember { mutableStateOf(0L) }
+	var lastSeekForward by remember { mutableStateOf(true) }
 	var backToStopDeadline by remember { mutableStateOf(0L) }
 	var backToStopKeyCode by remember { mutableStateOf<Int?>(null) }
 	var lastBackRequestAt by remember { mutableStateOf(0L) }
@@ -228,6 +233,7 @@ fun VideoPlayerOverlay(
 
 	LaunchedEffect(entryIndex) {
 		nextUpStartInProgress = false
+		consecutiveSeekPresses = 0
 	}
 
 	LaunchedEffect(currentLiveTvItem?.id) {
@@ -329,19 +335,37 @@ fun VideoPlayerOverlay(
 		}
 	}
 
+	fun nextSeekMultiplier(forward: Boolean): Int {
+		val now = SystemClock.elapsedRealtime()
+		if (now - lastSeekTime > SeekAccelerationWindow.inWholeMilliseconds || forward != lastSeekForward) {
+			consecutiveSeekPresses = 0
+		}
+
+		consecutiveSeekPresses = (consecutiveSeekPresses + 1).coerceAtMost(SeekAccelerationMultipliers.size)
+		lastSeekTime = now
+		lastSeekForward = forward
+
+		return SeekAccelerationMultipliers[consecutiveSeekPresses - 1]
+	}
+
 	fun dpadSeek(forward: Boolean) {
 		val positionInfo = playbackManager.state.positionInfo
+		val multiplier = nextSeekMultiplier(forward)
 		val amount = if (forward) {
 			playbackManager.options.defaultFastForwardAmount()
 		} else {
 			-playbackManager.options.defaultRewindAmount()
-		}
+		} * multiplier
 		val basePosition = pendingSeekPosition ?: positionInfo.active
 
 		previewSeek(basePosition + amount)
 
 		mediaToastRegistry.emit(
 			icon = if (forward) R.drawable.ic_fast_forward else R.drawable.ic_rewind,
+			progress = multiplier
+				.takeIf { it > 1 }
+				?.toFloat()
+				?.div(SeekAccelerationMultipliers.last()),
 			duration = DpadSeekToastDuration,
 		)
 	}
@@ -543,6 +567,7 @@ fun VideoPlayerOverlay(
 					trickPlayEnabled = trickPlayEnabled,
 					seekPreviewPosition = seekPreviewPosition,
 					onSeekPreview = { previewSeek(it) },
+					onRelativeSeekPreview = { dpadSeek(it) },
 					zoomMode = zoomMode,
 					onZoomModeSelected = onZoomModeSelected,
 					onPlaybackInfoClick = { showPlaybackInfo = !showPlaybackInfo },

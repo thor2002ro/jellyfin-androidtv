@@ -78,6 +78,7 @@ fun VideoPlayerControls(
 	trickPlayEnabled: Boolean = false,
 	seekPreviewPosition: Duration? = null,
 	onSeekPreview: (Duration) -> Unit = {},
+	onRelativeSeekPreview: (Boolean) -> Unit = {},
 	zoomMode: ZoomMode,
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onPlaybackInfoClick: () -> Unit = {},
@@ -141,15 +142,6 @@ fun VideoPlayerControls(
 		}
 	}
 
-	fun previewRelativeSeek(amount: Duration) {
-		val positionInfo = playbackManager.state.positionInfo
-		val basePosition = seekPreviewPosition ?: positionInfo.active
-		onSeekPreview((basePosition + amount).let { position ->
-			if (positionInfo.duration > Duration.ZERO) position.coerceIn(Duration.ZERO, positionInfo.duration)
-			else position.coerceAtLeast(Duration.ZERO)
-		})
-	}
-
 	Column(
 		horizontalAlignment = Alignment.CenterHorizontally,
 		verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
@@ -198,12 +190,12 @@ fun VideoPlayerControls(
 				RewindButton(
 					playbackManager = playbackManager,
 					enabled = seekEnabled,
-					onPreview = { previewRelativeSeek(-playbackManager.options.defaultRewindAmount()) },
+					onPreview = { onRelativeSeekPreview(false) },
 				)
 				FastForwardButton(
 					playbackManager = playbackManager,
 					enabled = seekEnabled,
-					onPreview = { previewRelativeSeek(playbackManager.options.defaultFastForwardAmount()) },
+					onPreview = { onRelativeSeekPreview(true) },
 				)
 
 				Spacer(Modifier.weight(1f))
