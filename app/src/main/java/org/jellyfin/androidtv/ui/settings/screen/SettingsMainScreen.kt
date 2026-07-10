@@ -1,6 +1,8 @@
 package org.jellyfin.androidtv.ui.settings.screen
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
@@ -10,11 +12,16 @@ import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.settings.Routes
+import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButton
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.clientLogApi
+import org.koin.compose.koinInject
 
 @Composable
 fun SettingsMainScreen() {
 	val router = LocalRouter.current
+	val context = LocalContext.current
 
 	SettingsColumn {
 		item {
@@ -65,6 +72,28 @@ fun SettingsMainScreen() {
 				onClick = { router.push(Routes.TELEMETRY) }
 			)
 
+		}
+
+		item {
+			val api = koinInject<ApiClient>()
+			SettingsAsyncActionListButton(
+				headingContent = { Text(stringResource(R.string.pref_upload_logs_title)) },
+				captionContent = { Text(stringResource(R.string.pref_upload_logs_summary)) },
+				action = {
+					val logs = ProcessBuilder("logcat", "-d", "-v", "threadtime")
+						.redirectErrorStream(true)
+						.start()
+						.inputStream.bufferedReader().use { it.readText() }
+					val response by api.clientLogApi.logFile(logs)
+					response
+				},
+				onSuccess = { result ->
+					Toast.makeText(context, context.getString(R.string.pref_upload_logs_success, result.fileName), Toast.LENGTH_LONG).show()
+				},
+				onFailure = {
+					Toast.makeText(context, R.string.pref_upload_logs_failure, Toast.LENGTH_LONG).show()
+				},
+			)
 		}
 
 		item {
