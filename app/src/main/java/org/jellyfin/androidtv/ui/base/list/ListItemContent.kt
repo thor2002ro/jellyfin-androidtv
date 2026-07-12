@@ -31,8 +31,7 @@ fun ListItemContent(
 ) {
 	Column(
 		modifier = modifier
-			// TODO: Add suitable space token for this padding
-			.padding(12.dp),
+			.padding(horizontal = 12.dp, vertical = 8.dp),
 	) {
 		Row(
 			verticalAlignment = Alignment.CenterVertically,
@@ -48,7 +47,7 @@ fun ListItemContent(
 						}
 					}
 				)
-				Spacer(Modifier.width(Tokens.Space.spaceMd))
+				Spacer(Modifier.width(Tokens.Space.spaceSm))
 			}
 
 			Column(
@@ -67,7 +66,7 @@ fun ListItemContent(
 				}
 
 				captionContent?.let { content ->
-					Spacer(Modifier.height(Tokens.Space.spaceXs))
+					Spacer(Modifier.height(Tokens.Space.space2xs))
 					ProvideTextStyle(JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption)) {
 						content()
 					}
@@ -75,7 +74,7 @@ fun ListItemContent(
 			}
 
 			trailingContent?.let { content ->
-				Spacer(Modifier.width(Tokens.Space.spaceMd))
+				Spacer(Modifier.width(Tokens.Space.spaceSm))
 
 				Box(
 					modifier = Modifier
@@ -87,7 +86,7 @@ fun ListItemContent(
 		}
 
 		footerContent?.let { content ->
-			Spacer(Modifier.height(Tokens.Space.spaceXs))
+			Spacer(Modifier.height(Tokens.Space.space2xs))
 
 			ProvideTextStyle(LocalTextStyle.current.copy(color = JellyfinTheme.colorScheme.listCaption)) {
 				content()
