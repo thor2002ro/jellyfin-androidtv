@@ -35,6 +35,10 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
+import org.jellyfin.androidtv.ui.playback.appendInline
+import org.jellyfin.androidtv.ui.playback.displayName
+import org.jellyfin.androidtv.ui.playback.formatCodec
+import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
 import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
@@ -359,11 +363,13 @@ private object NewPlayerStreamStatusBuilder {
 				title = "Streaming Info",
 				rows = rows {
 					row("Player resolution", playerVideoSize.resolution())
+					row("Video decoder", frameStats.videoDecoderLabel())
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
-					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
+					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod))
 					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
-					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
+					row("Audio decoder", frameStats.audioDecoderLabel())
+					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
 					row("Audio language", audioLanguage(selectedAudio))
@@ -424,6 +430,14 @@ private object NewPlayerStreamStatusBuilder {
 
 	private inline fun rows(build: MutableList<PlaybackInfoRowModel>.() -> Unit) = buildList(build)
 
+	private fun PlaybackFrameStats.videoDecoderLabel() = videoDecoderName?.let { name ->
+		videoDecoderType?.let { type -> "$name ($type)" } ?: name
+	}
+
+	private fun PlaybackFrameStats.audioDecoderLabel() = audioDecoderName?.let { name ->
+		audioDecoderType?.let { type -> "$name ($type)" } ?: name
+	}
+
 	private fun MutableList<PlaybackInfoRowModel>.row(label: String, value: String?) {
 		if (!value.isNullOrBlank()) add(PlaybackInfoRowModel(label, value))
 	}
@@ -431,16 +445,16 @@ private object NewPlayerStreamStatusBuilder {
 	private fun streamingVideoCodec(
 		track: MediaStreamVideoTrack?,
 		transcodingInfo: TranscodingInfo?,
-		decoderName: String?,
+		conversionMethod: MediaConversionMethod,
 	): String? {
 		val source = track?.codec.formatCodec()
 		val target = transcodingInfo?.videoCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.let { "$it (${decoderName.directCodecLabel()})" }
-			transcodingInfo.isVideoDirect && source != null -> "$source (${decoderName.directCodecLabel()})"
-			source != null && target != null -> "$source -> $target"
-			target != null -> "-> $target"
+			transcodingInfo == null -> source?.withKnownPath(conversionMethod)
+			transcodingInfo.isVideoDirect && source != null -> "$source (remux)"
+			source != null && target != null -> "$source -> $target (transcoding)"
+			target != null -> "-> $target (transcoding)"
 			else -> source
 		}
 	}
@@ -459,16 +473,16 @@ private object NewPlayerStreamStatusBuilder {
 		track: MediaStreamAudioTrack?,
 		selectedTrack: PlayerTrack?,
 		transcodingInfo: TranscodingInfo?,
-		decoderName: String?,
+		conversionMethod: MediaConversionMethod,
 	): String? {
 		val source = (selectedTrack?.codec ?: track?.codec).formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.let { "$it (${decoderName.directCodecLabel()})" }
-			transcodingInfo.isAudioDirect && source != null -> "$source (${decoderName.directCodecLabel()})"
-			source != null && target != null -> "$source -> $target"
-			target != null -> "-> $target"
+			transcodingInfo == null -> source?.withKnownPath(conversionMethod)
+			transcodingInfo.isAudioDirect && source != null -> "$source (remux)"
+			source != null && target != null -> "$source -> $target (transcoding)"
+			target != null -> "-> $target (transcoding)"
 			else -> source
 		}
 	}
@@ -498,11 +512,6 @@ private object NewPlayerStreamStatusBuilder {
 		stream: MediaStreamSubtitleTrack?,
 		externalSubtitle: ExternalSubtitle?,
 	): String? = track?.codec ?: stream?.codec ?: externalSubtitle?.mimeType
-
-	private fun String?.isAssSubtitleCodec(): Boolean = when (this?.lowercase()) {
-		"ass", "ssa", "text/x-ssa", "text/ssa", "text/ass", "application/x-ass" -> true
-		else -> false
-	}
 
 	private fun subtitleDeliveryLabel(
 		stream: MediaStreamSubtitleTrack?,
@@ -599,10 +608,15 @@ private object NewPlayerStreamStatusBuilder {
 		.filter(String::isNotBlank)
 		.joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 
-	private fun MediaConversionMethod.displayName() = when (this) {
-		MediaConversionMethod.None -> "Direct play"
-		MediaConversionMethod.Remux -> "Direct stream"
-		MediaConversionMethod.Transcode -> "Transcoding"
+	private fun MediaConversionMethod.codecPathLabel() = when (this) {
+		MediaConversionMethod.None -> "direct"
+		MediaConversionMethod.Remux -> "remux"
+		MediaConversionMethod.Transcode -> "transcoding"
+	}
+
+	private fun String.withKnownPath(conversionMethod: MediaConversionMethod) = when (conversionMethod) {
+		MediaConversionMethod.Transcode -> this
+		else -> "$this (${conversionMethod.codecPathLabel()})"
 	}
 
 	private fun resolution(width: Int?, height: Int?) = when {
@@ -635,22 +649,6 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
 
-	private fun String?.formatCodec(): String? = this
-		?.takeIf { it.isNotBlank() }
-		?.uppercase()
-
-	private fun String?.directCodecLabel() = when {
-		isFfmpegDecoderName() -> "ffmpeg direct"
-		else -> "direct"
-	}
-
-	private fun String?.isFfmpegDecoderName() = this?.contains("ffmpeg", ignoreCase = true) == true
-
-	private fun StringBuilder.appendInline(value: String?) {
-		if (value.isNullOrBlank()) return
-		if (isNotEmpty()) append(' ')
-		append(value)
-	}
 }
 
 internal fun List<MediaStreamAudioTrack>.selectedTrack(selectedTrack: PlayerTrack?): MediaStreamAudioTrack? =
