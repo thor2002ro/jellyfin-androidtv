@@ -35,6 +35,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioCapabilitiesReceiver
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -103,6 +104,11 @@ class ExoPlayerBackend(
 		private const val LIVE_TV_TS_EXTRACTOR_FLAG_NAMES = "DETECT_ACCESS_UNITS|ALLOW_NON_IDR_KEYFRAMES"
 		private const val INITIAL_TRACK_SELECTION_RETRY_LIMIT = 8
 		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
+		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
+		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
+		private const val VIDEO_DECODER_STAGE_HARDWARE = 0
+		private const val VIDEO_DECODER_STAGE_ANDROID_SOFTWARE = 1
+		private const val VIDEO_DECODER_STAGE_FFMPEG = 2
 
 		private fun formatTsExtractorFlags(flags: Int) =
 			if (flags == 0) "none (0)" else "$LIVE_TV_TS_EXTRACTOR_FLAG_NAMES ($flags)"
@@ -151,11 +157,17 @@ class ExoPlayerBackend(
 	private val subtitleTimingOffsetState = SubtitleTimingOffsetState()
 	private val startHandler = Handler(Looper.getMainLooper())
 	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
+	private val videoFirstFrameHandler = Handler(Looper.getMainLooper())
+	private val videoRendererSwitchHandler = Handler(Looper.getMainLooper())
 	private var pendingLiveStartStream: PlayableMediaStream? = null
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
 	private var pendingInitialTrackSelectionRetryCount = 0
 	private var videoDecoderName: String? = null
 	private var videoInputFormat: Format? = null
+	private var videoDecoderCounters: DecoderCounters? = null
+	private var videoDecoderStage = VIDEO_DECODER_STAGE_HARDWARE
+	private var hardwareVideoDecoderRetryCount = 0
+	private var disabledHardwareVideoRendererIndex: Int? = null
 	private var audioDecoderName: String? = null
 	private var audioInputFormat: Format? = null
 	private var audioPassthroughSupported: Boolean? = null
@@ -280,13 +292,94 @@ class ExoPlayerBackend(
 	}
 
 	private fun resetPlaybackStats() {
+		resetVideoDecoderFallback()
 		videoDecoderName = null
 		videoInputFormat = null
+		videoDecoderCounters = null
 		audioDecoderName = null
 		audioInputFormat = null
 		audioPassthroughSupported = null
 		audioPassthroughSupportDirty = true
 		audioCapabilitiesReceiverFailed = false
+	}
+
+	private fun resetVideoDecoderFallback() {
+		videoFirstFrameHandler.removeCallbacksAndMessages(null)
+		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
+		videoDecoderStage = VIDEO_DECODER_STAGE_HARDWARE
+		hardwareVideoDecoderRetryCount = 0
+		disabledHardwareVideoRendererIndex?.let { rendererIndex ->
+			trackSelector.setParameters(
+				trackSelector.buildUponParameters().setRendererDisabled(rendererIndex, false)
+			)
+		}
+		disabledHardwareVideoRendererIndex = null
+	}
+
+	private fun scheduleVideoFirstFrameFallback(decoderName: String) {
+		if (exoPlayerOptions.preferFfmpegVideo || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
+
+		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
+		val counters = videoDecoderCounters ?: return
+		val queuedInputBufferCount = counters.queuedInputBufferCount
+		val renderedOutputBufferCount = counters.renderedOutputBufferCount
+		videoFirstFrameHandler.removeCallbacksAndMessages(null)
+		videoFirstFrameHandler.postDelayed({
+			if (videoDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) {
+				return@postDelayed
+			}
+			if (counters.queuedInputBufferCount == queuedInputBufferCount ||
+				counters.renderedOutputBufferCount > renderedOutputBufferCount
+			) return@postDelayed
+
+			val hardwareRendererIndex = (0 until exoPlayer.rendererCount)
+				.firstOrNull { exoPlayer.getRendererType(it) == C.TRACK_TYPE_VIDEO }
+				?: return@postDelayed
+			val retryHardware = videoDecoderStage == VIDEO_DECODER_STAGE_HARDWARE &&
+				hardwareVideoDecoderRetryCount < HARDWARE_VIDEO_DECODER_RETRY_LIMIT
+			val nextStage = when {
+				retryHardware -> VIDEO_DECODER_STAGE_HARDWARE
+				videoDecoderStage == VIDEO_DECODER_STAGE_HARDWARE -> VIDEO_DECODER_STAGE_ANDROID_SOFTWARE
+				else -> VIDEO_DECODER_STAGE_FFMPEG
+			}
+			if (retryHardware) hardwareVideoDecoderRetryCount++
+			videoDecoderStage = nextStage
+			Timber.w(
+				"Video decoder rendered no frames after %dms; resetting decoder=%s target=%s mediaId=%s queuedInputs=%d hardwareRetry=%d/%d",
+				VIDEO_FIRST_FRAME_TIMEOUT_MS,
+				decoderName,
+				when (nextStage) {
+					VIDEO_DECODER_STAGE_HARDWARE -> "hardware"
+					VIDEO_DECODER_STAGE_ANDROID_SOFTWARE -> "Android software"
+					else -> "FFmpeg"
+				},
+				mediaId,
+				counters.queuedInputBufferCount,
+				hardwareVideoDecoderRetryCount,
+				HARDWARE_VIDEO_DECODER_RETRY_LIMIT,
+			)
+			trackSelector.setParameters(
+				trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, true)
+			)
+			if (nextStage != VIDEO_DECODER_STAGE_FFMPEG) {
+				videoRendererSwitchHandler.post {
+					trackSelector.setParameters(
+						trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, false)
+					)
+				}
+			} else {
+				disabledHardwareVideoRendererIndex = hardwareRendererIndex
+			}
+		}, VIDEO_FIRST_FRAME_TIMEOUT_MS)
+	}
+
+	private val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+		val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+		if (!mimeType.startsWith("video/")) decoders else when (videoDecoderStage) {
+			VIDEO_DECODER_STAGE_HARDWARE -> decoders.filterNot { it.softwareOnly }
+			VIDEO_DECODER_STAGE_ANDROID_SOFTWARE -> decoders.filter { it.softwareOnly }
+			else -> emptyList()
+		}
 	}
 
 	private fun unregisterAudioCapabilitiesReceiver() {
@@ -352,6 +445,19 @@ class ExoPlayerBackend(
 			AssRenderType.OVERLAY_OPEN_GL -> true
 			else -> false
 		}
+
+	private val trackSelector by lazy {
+		DefaultTrackSelector(context).apply {
+			setParameters(buildUponParameters().apply {
+				setAudioOffloadPreferences(
+					TrackSelectionParameters.AudioOffloadPreferences.DEFAULT.buildUpon().apply {
+						setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+					}.build()
+				)
+				setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
+			})
+		}
+	}
 
 	private val exoPlayer by lazy {
 		val dataSourceFactory = DefaultDataSource.Factory(
@@ -434,6 +540,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = subtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
+				setMediaCodecSelector(mediaCodecSelector)
 				setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 			}.let { AssRenderersFactory(assHandler, it) }
 		} else {
@@ -454,6 +561,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = defaultSubtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
+				setMediaCodecSelector(mediaCodecSelector)
 				setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 			}
 		}
@@ -471,16 +579,7 @@ class ExoPlayerBackend(
 		ExoPlayer.Builder(context)
 			.setLoadControl(loadControl)
 			.setRenderersFactory(renderersFactory.withFfmpegPreferences())
-			.setTrackSelector(DefaultTrackSelector(context).apply {
-				setParameters(buildUponParameters().apply {
-					setAudioOffloadPreferences(
-						TrackSelectionParameters.AudioOffloadPreferences.DEFAULT.buildUpon().apply {
-							setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-						}.build()
-					)
-					setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
-				})
-			})
+			.setTrackSelector(trackSelector)
 			.setMediaSourceFactory(mediaSourceFactory)
 			.setPauseAtEndOfMediaItems(true)
 			.build()
@@ -499,6 +598,13 @@ class ExoPlayerBackend(
 	}
 
 	inner class DecoderAnalyticsListener : AnalyticsListener {
+		override fun onVideoEnabled(
+			eventTime: AnalyticsListener.EventTime,
+			decoderCounters: DecoderCounters,
+		) {
+			videoDecoderCounters = decoderCounters
+		}
+
 		override fun onVideoDecoderInitialized(
 			eventTime: AnalyticsListener.EventTime,
 			decoderName: String,
@@ -506,13 +612,25 @@ class ExoPlayerBackend(
 			initializationDurationMs: Long,
 		) {
 			videoDecoderName = decoderName
+			scheduleVideoFirstFrameFallback(decoderName)
+		}
+
+		override fun onRenderedFirstFrame(
+			eventTime: AnalyticsListener.EventTime,
+			output: Any,
+			renderTimeMs: Long,
+		) {
+			videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		}
 
 		override fun onVideoDecoderReleased(
 			eventTime: AnalyticsListener.EventTime,
 			decoderName: String,
 		) {
-			if (videoDecoderName == decoderName) videoDecoderName = null
+			videoFirstFrameHandler.removeCallbacksAndMessages(null)
+			if (videoDecoderName == decoderName) {
+				videoDecoderName = null
+			}
 		}
 
 		override fun onVideoInputFormatChanged(
@@ -521,14 +639,17 @@ class ExoPlayerBackend(
 			decoderReuseEvaluation: DecoderReuseEvaluation?,
 		) {
 			videoInputFormat = format
+			videoDecoderName?.let(::scheduleVideoFirstFrameFallback)
 		}
 
 		override fun onVideoDisabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
 		) {
+			videoFirstFrameHandler.removeCallbacksAndMessages(null)
 			videoDecoderName = null
 			videoInputFormat = null
+			videoDecoderCounters = null
 		}
 
 		override fun onAudioDecoderInitialized(
