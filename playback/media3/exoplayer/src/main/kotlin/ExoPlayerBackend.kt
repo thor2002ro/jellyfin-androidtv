@@ -164,12 +164,15 @@ class ExoPlayerBackend(
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
 	private var pendingInitialTrackSelectionRetryCount = 0
 	private var videoDecoderName: String? = null
+	private var videoDecoderType: String? = null
 	private var videoInputFormat: Format? = null
 	private var videoDecoderCounters: DecoderCounters? = null
 	private var videoDecoderStage = VIDEO_DECODER_STAGE_HARDWARE
 	private var hardwareVideoDecoderRetryCount = 0
 	private var disabledHardwareVideoRendererIndex: Int? = null
 	private var audioDecoderName: String? = null
+	private var audioDecoderType: String? = null
+	private var audioDecoderCounters: DecoderCounters? = null
 	private var audioInputFormat: Format? = null
 	private var audioPassthroughSupported: Boolean? = null
 	private var audioPassthroughSupportDirty = true
@@ -296,9 +299,12 @@ class ExoPlayerBackend(
 	private fun resetPlaybackStats() {
 		resetVideoDecoderFallback()
 		videoDecoderName = null
+		videoDecoderType = null
 		videoInputFormat = null
 		videoDecoderCounters = null
 		audioDecoderName = null
+		audioDecoderType = null
+		audioDecoderCounters = null
 		audioInputFormat = null
 		audioPassthroughSupported = null
 		audioPassthroughSupportDirty = true
@@ -624,6 +630,13 @@ class ExoPlayerBackend(
 	}
 
 	inner class DecoderAnalyticsListener : AnalyticsListener {
+		override fun onAudioEnabled(
+			eventTime: AnalyticsListener.EventTime,
+			decoderCounters: DecoderCounters,
+		) {
+			audioDecoderCounters = decoderCounters
+		}
+
 		override fun onVideoEnabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
@@ -638,6 +651,11 @@ class ExoPlayerBackend(
 			initializationDurationMs: Long,
 		) {
 			videoDecoderName = decoderName
+			videoDecoderType = when {
+				decoderName.startsWith("ffmpeg", ignoreCase = true) -> "ffmpeg"
+				videoDecoderStage == VIDEO_DECODER_STAGE_ANDROID_SOFTWARE -> "sw"
+				else -> "hw"
+			}
 			scheduleVideoFirstFrameFallback(decoderName)
 		}
 
@@ -656,6 +674,7 @@ class ExoPlayerBackend(
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
 			if (videoDecoderName == decoderName) {
 				videoDecoderName = null
+				videoDecoderType = null
 			}
 		}
 
@@ -673,9 +692,12 @@ class ExoPlayerBackend(
 			decoderCounters: DecoderCounters,
 		) {
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
-			videoDecoderName = null
-			videoInputFormat = null
-			videoDecoderCounters = null
+			if (videoDecoderCounters === decoderCounters) {
+				videoDecoderName = null
+				videoDecoderType = null
+				videoInputFormat = null
+				videoDecoderCounters = null
+			}
 		}
 
 		override fun onAudioDecoderInitialized(
@@ -685,13 +707,17 @@ class ExoPlayerBackend(
 			initializationDurationMs: Long,
 		) {
 			audioDecoderName = decoderName
+			audioDecoderType = decoderType(decoderName, audioInputFormat)
 		}
 
 		override fun onAudioDecoderReleased(
 			eventTime: AnalyticsListener.EventTime,
 			decoderName: String,
 		) {
-			if (audioDecoderName == decoderName) audioDecoderName = null
+			if (audioDecoderName == decoderName) {
+				audioDecoderName = null
+				audioDecoderType = null
+			}
 		}
 
 		override fun onAudioInputFormatChanged(
@@ -700,6 +726,7 @@ class ExoPlayerBackend(
 			decoderReuseEvaluation: DecoderReuseEvaluation?,
 		) {
 			audioInputFormat = format
+			audioDecoderName?.let { audioDecoderType = decoderType(it, format) }
 			audioPassthroughSupported = null
 			audioPassthroughSupportDirty = true
 			audioCapabilitiesReceiverFailed = false
@@ -713,13 +740,27 @@ class ExoPlayerBackend(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
 		) {
-			audioDecoderName = null
-			audioInputFormat = null
-			audioPassthroughSupported = null
-			audioPassthroughSupportDirty = true
-			audioCapabilitiesReceiverFailed = false
-			unregisterAudioCapabilitiesReceiver()
+			if (audioDecoderCounters === decoderCounters) {
+				audioDecoderName = null
+				audioDecoderType = null
+				audioDecoderCounters = null
+				audioInputFormat = null
+				audioPassthroughSupported = null
+				audioPassthroughSupportDirty = true
+				audioCapabilitiesReceiverFailed = false
+				unregisterAudioCapabilitiesReceiver()
+			}
 		}
+	}
+
+	private fun decoderType(decoderName: String, format: Format?): String {
+		if (decoderName.startsWith("ffmpeg", ignoreCase = true)) return "ffmpeg"
+
+		val mimeType = format?.sampleMimeType ?: return "hw"
+		val decoderInfo = runCatching {
+			MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, false, false)
+		}.getOrNull()?.firstOrNull { info -> info.name == decoderName }
+		return if (decoderInfo?.softwareOnly == true) "sw" else "hw"
 	}
 
 	inner class PlayerListener : Player.Listener {
@@ -1083,8 +1124,10 @@ class ExoPlayerBackend(
 				it.renderedOutputBufferCount + it.skippedOutputBufferCount + it.droppedBufferCount
 			} ?: 0,
 			videoDecoderName = videoDecoderName,
+			videoDecoderType = videoDecoderType,
 			videoHdrMode = videoInputFormat.hdrMode(),
 			audioDecoderName = audioDecoderName,
+			audioDecoderType = audioDecoderType,
 			audioPassthroughSupported = audioPassthroughSupported,
 			subtitleExtractor = subtitleExtractorDebug(),
 			subtitleRender = subtitleRenderDebug(),
