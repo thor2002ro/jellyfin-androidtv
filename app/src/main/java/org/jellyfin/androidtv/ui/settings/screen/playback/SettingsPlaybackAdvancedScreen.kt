@@ -371,6 +371,16 @@ fun SettingsPlaybackAdvancedScreen() {
 			)
 		}
 
+		item {
+			var preferExoPlayerFfmpegVideo by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegVideo)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video)) },
+				trailingContent = { Checkbox(checked = preferExoPlayerFfmpegVideo) },
+				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_content)) },
+				onClick = { preferExoPlayerFfmpegVideo = !preferExoPlayerFfmpegVideo }
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_troubleshooting)) }) }
 
 		item {

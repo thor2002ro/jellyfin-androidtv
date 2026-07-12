@@ -379,6 +379,36 @@ class ExoPlayerBackend(
 		fun MediaSource.Factory.withExternalSubtitlesInRenderer() =
 			ExternalSubtitleMediaSourceFactory(this, dataSourceFactory)
 
+		fun RenderersFactory.withFfmpegPreferences() = RenderersFactory {
+				eventHandler,
+				videoRendererEventListener,
+				audioRendererEventListener,
+				textRendererOutput,
+				metadataRendererOutput,
+			->
+			val renderers = createRenderers(
+				eventHandler,
+				videoRendererEventListener,
+				audioRendererEventListener,
+				textRendererOutput,
+				metadataRendererOutput,
+			).toMutableList()
+
+			fun preferFfmpeg(trackType: Int) {
+				val firstRendererIndex = renderers.indexOfFirst { it.trackType == trackType }
+				val ffmpegRendererIndex = renderers.indexOfFirst {
+					it.trackType == trackType && it.javaClass.name.startsWith("androidx.media3.decoder.ffmpeg.")
+				}
+				if (firstRendererIndex >= 0 && ffmpegRendererIndex > firstRendererIndex) {
+					renderers.add(firstRendererIndex, renderers.removeAt(ffmpegRendererIndex))
+				}
+			}
+
+			if (exoPlayerOptions.preferFfmpegVideo) preferFfmpeg(C.TRACK_TYPE_VIDEO)
+			if (exoPlayerOptions.preferFfmpegAudio) preferFfmpeg(C.TRACK_TYPE_AUDIO)
+			renderers.toTypedArray()
+		}
+
 		val normalExtractorsFactory = createExtractorsFactory()
 		val liveTvExtractorsFactory = createExtractorsFactory(LIVE_TV_TS_EXTRACTOR_FLAGS)
 		val renderersFactory: RenderersFactory
@@ -404,12 +434,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = subtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
-				setExtensionRendererMode(
-					when (exoPlayerOptions.preferFfmpeg) {
-						true -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-						false -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-					}
-				)
+				setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 			}.let { AssRenderersFactory(assHandler, it) }
 		} else {
 			val defaultSubtitleParserFactory = DefaultSubtitleParserFactory()
@@ -429,12 +454,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = defaultSubtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
-				setExtensionRendererMode(
-					when (exoPlayerOptions.preferFfmpeg) {
-						true -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-						false -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-					}
-				)
+				setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 			}
 		}
 
@@ -450,7 +470,7 @@ class ExoPlayerBackend(
 
 		ExoPlayer.Builder(context)
 			.setLoadControl(loadControl)
-			.setRenderersFactory(renderersFactory)
+			.setRenderersFactory(renderersFactory.withFfmpegPreferences())
 			.setTrackSelector(DefaultTrackSelector(context).apply {
 				setParameters(buildUponParameters().apply {
 					setAudioOffloadPreferences(
