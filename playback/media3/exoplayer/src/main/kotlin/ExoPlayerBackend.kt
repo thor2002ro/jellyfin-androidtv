@@ -25,6 +25,8 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.decoder.ffmpeg.ExperimentalFfmpegVideoRenderer
+import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DecoderCounters
@@ -140,6 +142,7 @@ class ExoPlayerBackend(
 	}
 
 	private var currentStream: PlayableMediaStream? = null
+	private var playerSurfaceView: PlayerSurfaceView? = null
 	private var subtitleSurfaceView: PlayerSubtitleView? = null
 	private var subtitleView: SubtitleView? = null
 	private val audioPipeline = ExoPlayerAudioPipeline()
@@ -163,6 +166,7 @@ class ExoPlayerBackend(
 	private var audioCapabilitiesReceiverFailed = false
 	private var reportedPlayState: PlayState? = null
 	private var reportedEndedStream: PlayableMediaStream? = null
+	private var rendererPreferencesDirty = false
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 	private val audioCapabilitiesReceiver by lazy {
 		AudioCapabilitiesReceiver(
@@ -351,7 +355,25 @@ class ExoPlayerBackend(
 			else -> false
 		}
 
-	private val exoPlayer by lazy {
+	private fun createTrackSelector() =
+		DefaultTrackSelector(context).apply {
+			setParameters(buildUponParameters().apply {
+				setAudioOffloadPreferences(
+					TrackSelectionParameters.AudioOffloadPreferences.DEFAULT.buildUpon().apply {
+						setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+					}.build()
+				)
+				setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
+			})
+		}
+
+	private var trackSelectorDelegate = lazy(::createTrackSelector)
+	private val trackSelector get() = trackSelectorDelegate.value
+
+	private var exoPlayerDelegate = lazy(::createExoPlayer)
+	private val exoPlayer get() = exoPlayerDelegate.value
+
+	private fun createExoPlayer(): ExoPlayer {
 		val dataSourceFactory = DefaultDataSource.Factory(
 			context,
 			exoPlayerOptions.baseDataSourceFactory,
@@ -376,6 +398,40 @@ class ExoPlayerBackend(
 
 		fun MediaSource.Factory.withExternalSubtitlesInRenderer() =
 			ExternalSubtitleMediaSourceFactory(this, dataSourceFactory)
+
+		fun RenderersFactory.withFfmpegPreferences() = RenderersFactory {
+				eventHandler,
+				videoRendererEventListener,
+				audioRendererEventListener,
+				textRendererOutput,
+				metadataRendererOutput,
+			->
+			val renderers = createRenderers(
+				eventHandler,
+				videoRendererEventListener,
+				audioRendererEventListener,
+				textRendererOutput,
+				metadataRendererOutput,
+			).toMutableList()
+
+			fun preferFfmpeg(trackType: Int) {
+				val firstRendererIndex = renderers.indexOfFirst { it.trackType == trackType }
+				val ffmpegRendererIndex = renderers.indexOfFirst {
+					when (trackType) {
+						C.TRACK_TYPE_AUDIO -> it is FfmpegAudioRenderer
+						C.TRACK_TYPE_VIDEO -> it is ExperimentalFfmpegVideoRenderer
+						else -> false
+					}
+				}
+				if (firstRendererIndex >= 0 && ffmpegRendererIndex > firstRendererIndex) {
+					renderers.add(firstRendererIndex, renderers.removeAt(ffmpegRendererIndex))
+				}
+			}
+
+			if (exoPlayerOptions.preferFfmpegVideo()) preferFfmpeg(C.TRACK_TYPE_VIDEO)
+			if (exoPlayerOptions.preferFfmpegAudio()) preferFfmpeg(C.TRACK_TYPE_AUDIO)
+			renderers.toTypedArray()
+		}
 
 		val normalExtractorsFactory = createExtractorsFactory()
 		val liveTvExtractorsFactory = createExtractorsFactory(LIVE_TV_TS_EXTRACTOR_FLAGS)
@@ -402,12 +458,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = subtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
-				setExtensionRendererMode(
-					when (exoPlayerOptions.preferFfmpeg) {
-						true -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-						false -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-					}
-				)
+				setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 			}.let { AssRenderersFactory(assHandler, it) }
 		} else {
 			val defaultSubtitleParserFactory = DefaultSubtitleParserFactory()
@@ -427,12 +478,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = defaultSubtitleParserFactory,
 			).apply {
 				setEnableDecoderFallback(true)
-				setExtensionRendererMode(
-					when (exoPlayerOptions.preferFfmpeg) {
-						true -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-						false -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-					}
-				)
+				setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 			}
 		}
 
@@ -446,9 +492,9 @@ class ExoPlayerBackend(
 			.setPrioritizeTimeOverSizeThresholds(true)
 			.build()
 
-		ExoPlayer.Builder(context)
+		return ExoPlayer.Builder(context)
 			.setLoadControl(loadControl)
-			.setRenderersFactory(renderersFactory)
+			.setRenderersFactory(renderersFactory.withFfmpegPreferences())
 			.setTrackSelector(DefaultTrackSelector(context).apply {
 				setParameters(buildUponParameters().apply {
 					setAudioOffloadPreferences(
@@ -463,6 +509,7 @@ class ExoPlayerBackend(
 			.setPauseAtEndOfMediaItems(true)
 			.build()
 			.also { player ->
+				player.setVideoSurfaceView(playerSurfaceView?.surface)
 				player.addListener(PlayerListener())
 				player.addAnalyticsListener(DecoderAnalyticsListener())
 
@@ -474,6 +521,20 @@ class ExoPlayerBackend(
 					assHandler.init(player)
 				}
 			}
+	}
+
+	fun invalidateRendererPreferences() {
+		rendererPreferencesDirty = true
+		applyRendererPreferences()
+		exoPlayerDelegate.value
+	}
+
+	private fun applyRendererPreferences() {
+		if (!rendererPreferencesDirty) return
+		if (exoPlayerDelegate.isInitialized()) exoPlayer.release()
+		trackSelectorDelegate = lazy(::createTrackSelector)
+		exoPlayerDelegate = lazy(::createExoPlayer)
+		rendererPreferencesDirty = false
 	}
 
 	inner class DecoderAnalyticsListener : AnalyticsListener {
@@ -662,6 +723,7 @@ class ExoPlayerBackend(
 	): PlaySupportReport = exoPlayer.getPlaySupportReport(stream.toFormats())
 
 	override fun setSurfaceView(surfaceView: PlayerSurfaceView?) {
+		playerSurfaceView = surfaceView
 		exoPlayer.setVideoSurfaceView(surfaceView?.surface)
 	}
 
@@ -711,6 +773,7 @@ class ExoPlayerBackend(
 	}
 
 	override fun prepareItem(item: QueueEntry) {
+		applyRendererPreferences()
 		val stream = requireNotNull(item.mediaStream)
 		val player = exoPlayer
 

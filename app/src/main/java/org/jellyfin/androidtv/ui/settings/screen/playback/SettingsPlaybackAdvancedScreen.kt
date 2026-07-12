@@ -35,6 +35,8 @@ import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButt
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.createDeviceProfileReport
 import org.jellyfin.design.Tokens
+import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.clientLogApi
 import org.jellyfin.sdk.model.ServerVersion
@@ -49,6 +51,7 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val playbackManager = koinInject<PlaybackManager>()
 
 	var ac3Enabled by rememberPreference(userPreferences, UserPreferences.ac3Enabled)
 	var eac3Enabled by rememberPreference(userPreferences, UserPreferences.eac3Enabled)
@@ -367,7 +370,25 @@ fun SettingsPlaybackAdvancedScreen() {
 				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg)) },
 				trailingContent = { Checkbox(checked = preferExoPlayerFfmpeg) },
 				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_content)) },
-				onClick = { preferExoPlayerFfmpeg = !preferExoPlayerFfmpeg }
+				onClick = {
+					preferExoPlayerFfmpeg = !preferExoPlayerFfmpeg
+					userPreferences[UserPreferences.preferExoPlayerFfmpeg] = preferExoPlayerFfmpeg
+					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
+				}
+			)
+		}
+
+		item {
+			var preferExoPlayerFfmpegVideo by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegVideo)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video)) },
+				trailingContent = { Checkbox(checked = preferExoPlayerFfmpegVideo) },
+				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_content)) },
+				onClick = {
+					preferExoPlayerFfmpegVideo = !preferExoPlayerFfmpegVideo
+					userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] = preferExoPlayerFfmpegVideo
+					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
+				}
 			)
 		}
 
