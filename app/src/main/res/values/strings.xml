@@ -210,6 +210,7 @@
     <string name="dovi_profile_8_description">Single-layer with HDR10 fallback</string>
     <string name="desc_audio_night_mode">Levels out audio volume automatically</string>
     <string name="lbl_zoom">Zoom</string>
+    <string name="lbl_video_decoder">Video decoder</string>
     <string name="playback_info">Stats for nerds</string>
     <string name="playback_info_play_method">Play method: %1$s</string>
     <string name="playback_info_direct_play">Directplay</string>
