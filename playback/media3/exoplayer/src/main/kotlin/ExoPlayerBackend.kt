@@ -92,6 +92,15 @@ import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
+enum class VideoDecoder {
+	HARDWARE,
+	SOFTWARE,
+	FFMPEG,
+}
+
+internal fun VideoDecoder?.prefersFfmpeg(defaultPreference: Boolean) =
+	this?.let { decoder -> decoder == VideoDecoder.FFMPEG } ?: defaultPreference
+
 @OptIn(UnstableApi::class)
 class ExoPlayerBackend(
 	private val context: Context,
@@ -106,9 +115,6 @@ class ExoPlayerBackend(
 		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
 		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
-		private const val VIDEO_DECODER_STAGE_HARDWARE = 0
-		private const val VIDEO_DECODER_STAGE_ANDROID_SOFTWARE = 1
-		private const val VIDEO_DECODER_STAGE_FFMPEG = 2
 
 		private fun formatTsExtractorFlags(flags: Int) =
 			if (flags == 0) "none (0)" else "ALLOW_NON_IDR_KEYFRAMES ($flags)"
@@ -167,9 +173,11 @@ class ExoPlayerBackend(
 	private var videoDecoderType: String? = null
 	private var videoInputFormat: Format? = null
 	private var videoDecoderCounters: DecoderCounters? = null
-	private var videoDecoderStage = VIDEO_DECODER_STAGE_HARDWARE
+	private var videoDecoderStage = VideoDecoder.HARDWARE
 	private var hardwareVideoDecoderRetryCount = 0
 	private var disabledHardwareVideoRendererIndex: Int? = null
+	var forcedVideoDecoder: VideoDecoder? = null
+		private set
 	private var audioDecoderName: String? = null
 	private var audioDecoderType: String? = null
 	private var audioDecoderCounters: DecoderCounters? = null
@@ -314,7 +322,7 @@ class ExoPlayerBackend(
 	private fun resetVideoDecoderFallback() {
 		videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
-		videoDecoderStage = VIDEO_DECODER_STAGE_HARDWARE
+		videoDecoderStage = VideoDecoder.HARDWARE
 		hardwareVideoDecoderRetryCount = 0
 		disabledHardwareVideoRendererIndex?.let { rendererIndex ->
 			trackSelector.setParameters(
@@ -325,7 +333,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun scheduleVideoFirstFrameFallback(decoderName: String) {
-		if (exoPlayerOptions.preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
+		if (forcedVideoDecoder != null || exoPlayerOptions.preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
 
 		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
 		val counters = videoDecoderCounters ?: return
@@ -343,12 +351,12 @@ class ExoPlayerBackend(
 			val hardwareRendererIndex = (0 until exoPlayer.rendererCount)
 				.firstOrNull { exoPlayer.getRendererType(it) == C.TRACK_TYPE_VIDEO }
 				?: return@postDelayed
-			val retryHardware = videoDecoderStage == VIDEO_DECODER_STAGE_HARDWARE &&
+			val retryHardware = videoDecoderStage == VideoDecoder.HARDWARE &&
 				hardwareVideoDecoderRetryCount < HARDWARE_VIDEO_DECODER_RETRY_LIMIT
 			val nextStage = when {
-				retryHardware -> VIDEO_DECODER_STAGE_HARDWARE
-				videoDecoderStage == VIDEO_DECODER_STAGE_HARDWARE -> VIDEO_DECODER_STAGE_ANDROID_SOFTWARE
-				else -> VIDEO_DECODER_STAGE_FFMPEG
+				retryHardware -> VideoDecoder.HARDWARE
+				videoDecoderStage == VideoDecoder.HARDWARE -> VideoDecoder.SOFTWARE
+				else -> VideoDecoder.FFMPEG
 			}
 			if (retryHardware) hardwareVideoDecoderRetryCount++
 			videoDecoderStage = nextStage
@@ -357,8 +365,8 @@ class ExoPlayerBackend(
 				VIDEO_FIRST_FRAME_TIMEOUT_MS,
 				decoderName,
 				when (nextStage) {
-					VIDEO_DECODER_STAGE_HARDWARE -> "hardware"
-					VIDEO_DECODER_STAGE_ANDROID_SOFTWARE -> "Android software"
+					VideoDecoder.HARDWARE -> "hardware"
+					VideoDecoder.SOFTWARE -> "Android software"
 					else -> "FFmpeg"
 				},
 				mediaId,
@@ -369,7 +377,7 @@ class ExoPlayerBackend(
 			trackSelector.setParameters(
 				trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, true)
 			)
-			if (nextStage != VIDEO_DECODER_STAGE_FFMPEG) {
+			if (nextStage != VideoDecoder.FFMPEG) {
 				videoRendererSwitchHandler.post {
 					trackSelector.setParameters(
 						trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, false)
@@ -383,9 +391,9 @@ class ExoPlayerBackend(
 
 	private val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
 		val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
-		if (!mimeType.startsWith("video/")) decoders else when (videoDecoderStage) {
-			VIDEO_DECODER_STAGE_HARDWARE -> decoders.filterNot { it.softwareOnly }
-			VIDEO_DECODER_STAGE_ANDROID_SOFTWARE -> decoders.filter { it.softwareOnly }
+		if (!mimeType.startsWith("video/")) decoders else when (forcedVideoDecoder ?: videoDecoderStage) {
+			VideoDecoder.HARDWARE -> decoders.filterNot { it.softwareOnly }
+			VideoDecoder.SOFTWARE -> decoders.filter { it.softwareOnly }
 			else -> emptyList()
 		}
 	}
@@ -527,7 +535,10 @@ class ExoPlayerBackend(
 				}
 			}
 
-			if (exoPlayerOptions.preferFfmpegVideo()) preferFfmpeg(C.TRACK_TYPE_VIDEO)
+			if (forcedVideoDecoder != null && forcedVideoDecoder != VideoDecoder.FFMPEG) {
+				renderers.removeAll { renderer -> renderer is ExperimentalFfmpegVideoRenderer }
+			}
+			if (forcedVideoDecoder.prefersFfmpeg(exoPlayerOptions.preferFfmpegVideo())) preferFfmpeg(C.TRACK_TYPE_VIDEO)
 			if (exoPlayerOptions.preferFfmpegAudio()) preferFfmpeg(C.TRACK_TYPE_AUDIO)
 			renderers.toTypedArray()
 		}
@@ -621,6 +632,12 @@ class ExoPlayerBackend(
 		exoPlayerDelegate.value
 	}
 
+	fun setForcedVideoDecoder(decoder: VideoDecoder?) {
+		if (forcedVideoDecoder == decoder) return
+		forcedVideoDecoder = decoder
+		rendererPreferencesDirty = true
+	}
+
 	private fun applyRendererPreferences() {
 		if (!rendererPreferencesDirty) return
 		if (exoPlayerDelegate.isInitialized()) exoPlayer.release()
@@ -653,7 +670,7 @@ class ExoPlayerBackend(
 			videoDecoderName = decoderName
 			videoDecoderType = when {
 				decoderName.startsWith("ffmpeg", ignoreCase = true) -> "ffmpeg"
-				videoDecoderStage == VIDEO_DECODER_STAGE_ANDROID_SOFTWARE -> "sw"
+				(forcedVideoDecoder ?: videoDecoderStage) == VideoDecoder.SOFTWARE -> "sw"
 				else -> "hw"
 			}
 			scheduleVideoFirstFrameFallback(decoderName)
@@ -1032,6 +1049,7 @@ class ExoPlayerBackend(
 	}
 
 	override fun replaceItem(item: QueueEntry) {
+		applyRendererPreferences()
 		clearPendingLiveStart()
 		val stream = requireNotNull(item.mediaStream)
 		val player = exoPlayer
@@ -1087,6 +1105,7 @@ class ExoPlayerBackend(
 		reportedEndedStream = null
 		clearPendingInitialTrackSelection()
 		unregisterAudioCapabilitiesReceiver()
+		setForcedVideoDecoder(null)
 		resetPlaybackStats()
 	}
 
