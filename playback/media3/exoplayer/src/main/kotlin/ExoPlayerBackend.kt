@@ -85,7 +85,8 @@ import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetRenderersFactory
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetState
-import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
+import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingRendererInvalidator
+import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingAdjustmentSupported
 import org.jellyfin.playback.media3.exoplayer.support.getPlaySupportReport
 import org.jellyfin.playback.media3.exoplayer.support.toFormats
 import timber.log.Timber
@@ -162,6 +163,15 @@ class ExoPlayerBackend(
 	private val timedEventState = TimedEventState()
 	private var lastKnownDuration: Duration? = null
 	private val subtitleTimingOffsetState = SubtitleTimingOffsetState()
+	private val subtitleTimingRendererInvalidator by lazy {
+		SubtitleTimingRendererInvalidator(
+			state = subtitleTimingOffsetState,
+			playerProvider = { if (exoPlayerDelegate.isInitialized()) exoPlayer else null },
+			refreshSupported = {
+				exoPlayerDelegate.isInitialized() && canAdjustSubtitleTiming(exoPlayer.currentTracks)
+			},
+		)
+	}
 	private val startHandler = Handler(Looper.getMainLooper())
 	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
 	private val videoFirstFrameHandler = Handler(Looper.getMainLooper())
@@ -612,6 +622,7 @@ class ExoPlayerBackend(
 			.setPauseAtEndOfMediaItems(true)
 			.build()
 			.also { player ->
+				subtitleTimingRendererInvalidator
 				player.setVideoSurfaceView(playerSurfaceView?.surface)
 				player.addListener(PlayerListener())
 				player.addAnalyticsListener(DecoderAnalyticsListener())
@@ -640,10 +651,31 @@ class ExoPlayerBackend(
 
 	private fun applyRendererPreferences() {
 		if (!rendererPreferencesDirty) return
-		if (exoPlayerDelegate.isInitialized()) exoPlayer.release()
+		if (exoPlayerDelegate.isInitialized()) {
+			subtitleTimingRendererInvalidator.cancel()
+			exoPlayer.release()
+		}
 		trackSelectorDelegate = lazy(::createTrackSelector)
 		exoPlayerDelegate = lazy(::createExoPlayer)
 		rendererPreferencesDirty = false
+	}
+
+	private fun canAdjustSubtitleTiming(tracks: Tracks): Boolean {
+		val stream = currentStream ?: return false
+		val isLiveTv = stream.queueEntry.liveStreamTargetOffset != null
+		val subtitlesParsedDuringExtraction =
+			exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass
+		return tracks.groups.any { group ->
+			group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { trackIndex ->
+				group.isTrackSelected(trackIndex) && isSubtitleTimingAdjustmentSupported(
+					format = group.getTrackFormat(trackIndex),
+					isExternal = group.mediaTrackGroup.isExternalSubtitleTrack(trackIndex),
+					isLiveTv = isLiveTv,
+					subtitlesParsedDuringExtraction = subtitlesParsedDuringExtraction,
+					usesLibassOverlay = shouldUseLibassOverlayView,
+				)
+			}
+		}
 	}
 
 	inner class DecoderAnalyticsListener : AnalyticsListener {
@@ -846,13 +878,10 @@ class ExoPlayerBackend(
 			applyPendingInitialTrackSelection()
 			schedulePendingInitialTrackSelectionRetry()
 
-			val canAdjustSubtitleTiming = tracks.groups
-				.asSequence()
-				.filter { it.type == C.TRACK_TYPE_TEXT }
-				.flatMap { group -> (0 until group.length).asSequence().filter(group::isTrackSelected).map(group::getTrackFormat) }
-				.any(::isSubtitleTimingOffsetSupported)
-
-			listener?.onSubtitleTimingOffsetSupportChange(canAdjustSubtitleTiming)
+			listener?.onSubtitleTimingOffsetSupportChange(
+				supported = canAdjustSubtitleTiming(tracks),
+				resetTimingOnUnsupported = currentStream != null,
+			)
 		}
 
 		override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -968,6 +997,8 @@ class ExoPlayerBackend(
 		if (currentStream == stream) return
 
 		clearSubtitleCues()
+		currentStream = null
+		listener?.onSubtitleTimingOffsetSupportChange(false, resetTimingOnUnsupported = false)
 		currentStream = stream
 		reportedEndedStream = null
 		resetPlaybackStats()
@@ -1102,6 +1133,7 @@ class ExoPlayerBackend(
 		exoPlayer.stop()
 		clearSubtitleCues()
 		currentStream = null
+		listener?.onSubtitleTimingOffsetSupportChange(false)
 		reportedEndedStream = null
 		clearPendingInitialTrackSelection()
 		unregisterAudioCapabilitiesReceiver()
@@ -1238,8 +1270,8 @@ class ExoPlayerBackend(
 		timedEventState.setTimedEvents(exoPlayer, timedEvents)
 	}
 
-	override fun setSubtitleTimingOffset(offset: Duration) {
-		subtitleTimingOffsetState.setOffsetUs(offset.inWholeMicroseconds)
+	override fun setSubtitleTiming(offset: Duration, speed: Float) {
+		subtitleTimingOffsetState.setTiming(offset.inWholeMicroseconds, speed)
 	}
 
 	// TrackSelectionBackend implementation
