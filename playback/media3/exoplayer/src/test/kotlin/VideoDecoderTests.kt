@@ -11,4 +11,17 @@ class VideoDecoderTests : FunSpec({
 		VideoDecoder.SOFTWARE.prefersFfmpeg(true) shouldBe false
 		VideoDecoder.FFMPEG.prefersFfmpeg(false) shouldBe true
 	}
+
+	test("Live TV starts on target buffer or timeout") {
+		shouldStartLivePlayback(true, 5_000, 5_000, false) shouldBe true
+		shouldStartLivePlayback(true, 4_999, 5_000, false) shouldBe false
+		shouldStartLivePlayback(false, 5_000, 5_000, false) shouldBe false
+		shouldStartLivePlayback(false, 0, 5_000, true) shouldBe true
+	}
+
+	test("decoder stall requires new input without new output") {
+		hasDecoderStalled(10, 5, 11, 5) shouldBe true
+		hasDecoderStalled(10, 5, 10, 5) shouldBe false
+		hasDecoderStalled(10, 5, 11, 6) shouldBe false
+	}
 })

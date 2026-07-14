@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.TypedValue
 import android.view.ViewGroup
 import androidx.annotation.OptIn
@@ -102,6 +103,21 @@ enum class VideoDecoder {
 internal fun VideoDecoder?.prefersFfmpeg(defaultPreference: Boolean) =
 	this?.let { decoder -> decoder == VideoDecoder.FFMPEG } ?: defaultPreference
 
+internal fun shouldStartLivePlayback(
+	isReady: Boolean,
+	bufferedDurationMs: Long,
+	targetBufferDurationMs: Long,
+	timedOut: Boolean,
+) = timedOut || (isReady && bufferedDurationMs >= targetBufferDurationMs)
+
+internal fun hasDecoderStalled(
+	queuedInputBufferCount: Int,
+	renderedOutputBufferCount: Int,
+	currentQueuedInputBufferCount: Int,
+	currentRenderedOutputBufferCount: Int,
+) = currentQueuedInputBufferCount > queuedInputBufferCount &&
+	currentRenderedOutputBufferCount <= renderedOutputBufferCount
+
 @OptIn(UnstableApi::class)
 class ExoPlayerBackend(
 	private val context: Context,
@@ -114,7 +130,10 @@ class ExoPlayerBackend(
 			DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
 		private const val INITIAL_TRACK_SELECTION_RETRY_LIMIT = 8
 		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
+		private const val LIVE_START_CHECK_INTERVAL_MS = 250L
+		private const val LIVE_START_TIMEOUT_MS = 15_000L
 		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
+		private const val VIDEO_BUFFERING_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
 
 		private fun formatTsExtractorFlags(flags: Int) =
@@ -175,6 +194,7 @@ class ExoPlayerBackend(
 	private val startHandler = Handler(Looper.getMainLooper())
 	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
 	private val videoFirstFrameHandler = Handler(Looper.getMainLooper())
+	private val videoBufferingHandler = Handler(Looper.getMainLooper())
 	private val videoRendererSwitchHandler = Handler(Looper.getMainLooper())
 	private var pendingLiveStartStream: PlayableMediaStream? = null
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
@@ -183,6 +203,7 @@ class ExoPlayerBackend(
 	private var videoDecoderType: String? = null
 	private var videoInputFormat: Format? = null
 	private var videoDecoderCounters: DecoderCounters? = null
+	private var hasRenderedFirstVideoFrame = false
 	private var videoDecoderStage = VideoDecoder.HARDWARE
 	private var hardwareVideoDecoderRetryCount = 0
 	private var disabledHardwareVideoRendererIndex: Int? = null
@@ -331,7 +352,9 @@ class ExoPlayerBackend(
 
 	private fun resetVideoDecoderFallback() {
 		videoFirstFrameHandler.removeCallbacksAndMessages(null)
+		videoBufferingHandler.removeCallbacksAndMessages(null)
 		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
+		hasRenderedFirstVideoFrame = false
 		videoDecoderStage = VideoDecoder.HARDWARE
 		hardwareVideoDecoderRetryCount = 0
 		disabledHardwareVideoRendererIndex?.let { rendererIndex ->
@@ -354,49 +377,84 @@ class ExoPlayerBackend(
 			if (videoDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) {
 				return@postDelayed
 			}
-			if (counters.queuedInputBufferCount == queuedInputBufferCount ||
-				counters.renderedOutputBufferCount > renderedOutputBufferCount
-			) return@postDelayed
-
-			val hardwareRendererIndex = (0 until exoPlayer.rendererCount)
-				.firstOrNull { exoPlayer.getRendererType(it) == C.TRACK_TYPE_VIDEO }
-				?: return@postDelayed
-			val retryHardware = videoDecoderStage == VideoDecoder.HARDWARE &&
-				hardwareVideoDecoderRetryCount < HARDWARE_VIDEO_DECODER_RETRY_LIMIT
-			val nextStage = when {
-				retryHardware -> VideoDecoder.HARDWARE
-				videoDecoderStage == VideoDecoder.HARDWARE -> VideoDecoder.SOFTWARE
-				else -> VideoDecoder.FFMPEG
-			}
-			if (retryHardware) hardwareVideoDecoderRetryCount++
-			videoDecoderStage = nextStage
-			Timber.w(
-				"Video decoder rendered no frames after %dms; resetting decoder=%s target=%s mediaId=%s queuedInputs=%d hardwareRetry=%d/%d",
-				VIDEO_FIRST_FRAME_TIMEOUT_MS,
-				decoderName,
-				when (nextStage) {
-					VideoDecoder.HARDWARE -> "hardware"
-					VideoDecoder.SOFTWARE -> "Android software"
-					else -> "FFmpeg"
-				},
-				mediaId,
+			if (!hasDecoderStalled(
+				queuedInputBufferCount,
+				renderedOutputBufferCount,
 				counters.queuedInputBufferCount,
-				hardwareVideoDecoderRetryCount,
-				HARDWARE_VIDEO_DECODER_RETRY_LIMIT,
-			)
-			trackSelector.setParameters(
-				trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, true)
-			)
-			if (nextStage != VideoDecoder.FFMPEG) {
-				videoRendererSwitchHandler.post {
-					trackSelector.setParameters(
-						trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, false)
-					)
-				}
-			} else {
-				disabledHardwareVideoRendererIndex = hardwareRendererIndex
-			}
+				counters.renderedOutputBufferCount,
+			)) return@postDelayed
+
+			fallbackVideoDecoder(decoderName, counters, "rendered no first frame after ${VIDEO_FIRST_FRAME_TIMEOUT_MS}ms")
 		}, VIDEO_FIRST_FRAME_TIMEOUT_MS)
+	}
+
+	private fun scheduleVideoBufferingFallback() {
+		videoBufferingHandler.removeCallbacksAndMessages(null)
+		if (!hasRenderedFirstVideoFrame || currentStream?.queueEntry?.liveStreamTargetOffset == null) return
+
+		val decoderName = videoDecoderName ?: return
+		if (forcedVideoDecoder != null || exoPlayerOptions.preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
+		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
+		val counters = videoDecoderCounters ?: return
+		val queuedInputBufferCount = counters.queuedInputBufferCount
+		val renderedOutputBufferCount = counters.renderedOutputBufferCount
+
+		videoBufferingHandler.postDelayed({
+			if (exoPlayer.playbackState != Player.STATE_BUFFERING || !exoPlayer.playWhenReady) return@postDelayed
+			if (videoDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) return@postDelayed
+			if (!hasDecoderStalled(
+				queuedInputBufferCount,
+				renderedOutputBufferCount,
+				counters.queuedInputBufferCount,
+				counters.renderedOutputBufferCount,
+			)) return@postDelayed
+
+			fallbackVideoDecoder(decoderName, counters, "stalled while buffering for ${VIDEO_BUFFERING_STALL_TIMEOUT_MS}ms")
+		}, VIDEO_BUFFERING_STALL_TIMEOUT_MS)
+	}
+
+	private fun fallbackVideoDecoder(decoderName: String, counters: DecoderCounters, reason: String) {
+		if (videoDecoderName != decoderName || forcedVideoDecoder != null || exoPlayerOptions.preferFfmpegVideo()) return
+
+		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
+		val hardwareRendererIndex = (0 until exoPlayer.rendererCount)
+			.firstOrNull { exoPlayer.getRendererType(it) == C.TRACK_TYPE_VIDEO }
+			?: return
+		val retryHardware = videoDecoderStage == VideoDecoder.HARDWARE &&
+			hardwareVideoDecoderRetryCount < HARDWARE_VIDEO_DECODER_RETRY_LIMIT
+		val nextStage = when {
+			retryHardware -> VideoDecoder.HARDWARE
+			videoDecoderStage == VideoDecoder.HARDWARE -> VideoDecoder.SOFTWARE
+			else -> VideoDecoder.FFMPEG
+		}
+		if (retryHardware) hardwareVideoDecoderRetryCount++
+		videoDecoderStage = nextStage
+		Timber.w(
+			"Video decoder %s; resetting decoder=%s target=%s mediaId=%s queuedInputs=%d hardwareRetry=%d/%d",
+			reason,
+			decoderName,
+			when (nextStage) {
+				VideoDecoder.HARDWARE -> "hardware"
+				VideoDecoder.SOFTWARE -> "Android software"
+				else -> "FFmpeg"
+			},
+			mediaId,
+			counters.queuedInputBufferCount,
+			hardwareVideoDecoderRetryCount,
+			HARDWARE_VIDEO_DECODER_RETRY_LIMIT,
+		)
+		trackSelector.setParameters(
+			trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, true)
+		)
+		if (nextStage != VideoDecoder.FFMPEG) {
+			videoRendererSwitchHandler.post {
+				trackSelector.setParameters(
+					trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, false)
+				)
+			}
+		} else {
+			disabledHardwareVideoRendererIndex = hardwareRendererIndex
+		}
 	}
 
 	private val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
@@ -699,6 +757,7 @@ class ExoPlayerBackend(
 			initializedTimestampMs: Long,
 			initializationDurationMs: Long,
 		) {
+			hasRenderedFirstVideoFrame = false
 			videoDecoderName = decoderName
 			videoDecoderType = when {
 				decoderName.startsWith("ffmpeg", ignoreCase = true) -> "ffmpeg"
@@ -713,6 +772,7 @@ class ExoPlayerBackend(
 			output: Any,
 			renderTimeMs: Long,
 		) {
+			hasRenderedFirstVideoFrame = true
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		}
 
@@ -721,6 +781,7 @@ class ExoPlayerBackend(
 			decoderName: String,
 		) {
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
+			videoBufferingHandler.removeCallbacksAndMessages(null)
 			if (videoDecoderName == decoderName) {
 				videoDecoderName = null
 				videoDecoderType = null
@@ -741,6 +802,7 @@ class ExoPlayerBackend(
 			decoderCounters: DecoderCounters,
 		) {
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
+			videoBufferingHandler.removeCallbacksAndMessages(null)
 			if (videoDecoderCounters === decoderCounters) {
 				videoDecoderName = null
 				videoDecoderType = null
@@ -868,6 +930,8 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
+			if (playbackState == Player.STATE_BUFFERING) scheduleVideoBufferingFallback()
+			else videoBufferingHandler.removeCallbacksAndMessages(null)
 			onIsPlayingChanged(exoPlayer.isPlaying)
 			if (playbackState == Player.STATE_ENDED) {
 				reportCurrentMediaStreamEnd("playback-state-ended")
@@ -1063,17 +1127,36 @@ class ExoPlayerBackend(
 		}
 
 		clearPendingLiveStart()
-		val liveStartDelay = item.liveTvBufferDuration().takeIf { delayLiveStart }
-		if (liveStartDelay != null && liveStartDelay > Duration.ZERO) {
+		val liveStartBuffer = item.liveTvBufferDuration().takeIf { delayLiveStart }
+		if (liveStartBuffer != null && liveStartBuffer > Duration.ZERO) {
 			pendingLiveStartStream = stream
 			exoPlayer.pause()
 			listener?.onPlayStateChange(PlayState.BUFFERING)
-			startHandler.postDelayed({
-				if (pendingLiveStartStream == stream && currentStream == stream) {
-					pendingLiveStartStream = null
-					startPlayback()
+			val deadlineMs = SystemClock.elapsedRealtime() + LIVE_START_TIMEOUT_MS
+			startHandler.post(object : Runnable {
+				override fun run() {
+					if (pendingLiveStartStream != stream || currentStream != stream) return
+
+					val timedOut = SystemClock.elapsedRealtime() >= deadlineMs
+					if (shouldStartLivePlayback(
+						isReady = exoPlayer.playbackState == Player.STATE_READY,
+						bufferedDurationMs = exoPlayer.totalBufferedDuration,
+						targetBufferDurationMs = liveStartBuffer.inWholeMilliseconds,
+						timedOut = timedOut,
+					)) {
+						Timber.i(
+							"Starting Live TV bufferedMs=%s targetMs=%s timedOut=%s",
+							exoPlayer.totalBufferedDuration,
+							liveStartBuffer.inWholeMilliseconds,
+							timedOut,
+						)
+						pendingLiveStartStream = null
+						startPlayback()
+					} else {
+						startHandler.postDelayed(this, LIVE_START_CHECK_INTERVAL_MS)
+					}
 				}
-			}, liveStartDelay.inWholeMilliseconds)
+			})
 		} else {
 			startPlayback()
 		}
