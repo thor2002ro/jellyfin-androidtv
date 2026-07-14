@@ -93,6 +93,7 @@ import org.jellyfin.playback.media3.exoplayer.support.toFormats
 import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 enum class VideoDecoder {
 	HARDWARE,
@@ -102,6 +103,17 @@ enum class VideoDecoder {
 
 internal fun VideoDecoder?.prefersFfmpeg(defaultPreference: Boolean) =
 	this?.let { decoder -> decoder == VideoDecoder.FFMPEG } ?: defaultPreference
+
+internal fun VideoDecoder?.effectiveVideoDecoder(
+	stage: VideoDecoder,
+	preferFfmpeg: Boolean,
+	decoderName: String?,
+): VideoDecoder = this ?: when {
+	decoderName?.startsWith("ffmpeg", ignoreCase = true) == true -> VideoDecoder.FFMPEG
+	decoderName != null -> stage
+	preferFfmpeg -> VideoDecoder.FFMPEG
+	else -> stage
+}
 
 internal fun shouldStartLivePlayback(
 	isReady: Boolean,
@@ -118,6 +130,16 @@ internal fun hasDecoderStalled(
 ) = currentQueuedInputBufferCount > queuedInputBufferCount &&
 	currentRenderedOutputBufferCount <= renderedOutputBufferCount
 
+internal fun targetLiveTvBufferDuration(
+	liveStreamOffset: Duration?,
+	configuredOffset: Duration?,
+	initialLiveStreamOffset: Duration = 5.seconds,
+): Duration? {
+	if (liveStreamOffset == null) return null
+	if (configuredOffset != null) return maxOf(liveStreamOffset, configuredOffset)
+	return liveStreamOffset.takeIf { it > initialLiveStreamOffset }
+}
+
 @OptIn(UnstableApi::class)
 class ExoPlayerBackend(
 	private val context: Context,
@@ -133,7 +155,7 @@ class ExoPlayerBackend(
 		private const val LIVE_START_CHECK_INTERVAL_MS = 250L
 		private const val LIVE_START_TIMEOUT_MS = 15_000L
 		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
-		private const val VIDEO_BUFFERING_STALL_TIMEOUT_MS = 3_000L
+		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
 
 		private fun formatTsExtractorFlags(flags: Int) =
@@ -209,6 +231,12 @@ class ExoPlayerBackend(
 	private var disabledHardwareVideoRendererIndex: Int? = null
 	var forcedVideoDecoder: VideoDecoder? = null
 		private set
+	val activeVideoDecoder: VideoDecoder
+		get() = forcedVideoDecoder.effectiveVideoDecoder(
+			stage = videoDecoderStage,
+			preferFfmpeg = exoPlayerOptions.preferFfmpegVideo(),
+			decoderName = videoDecoderName,
+		)
 	private var audioDecoderName: String? = null
 	private var audioDecoderType: String? = null
 	private var audioDecoderCounters: DecoderCounters? = null
@@ -330,9 +358,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
-		val liveStreamOffset = liveStreamTargetOffset ?: return null
-		val configuredOffset = exoPlayerOptions.liveTvBufferDuration ?: return liveStreamOffset
-		return maxOf(liveStreamOffset, configuredOffset)
+		return targetLiveTvBufferDuration(liveStreamTargetOffset, exoPlayerOptions.liveTvBufferDuration)
 	}
 
 	private fun resetPlaybackStats() {
@@ -388,7 +414,7 @@ class ExoPlayerBackend(
 		}, VIDEO_FIRST_FRAME_TIMEOUT_MS)
 	}
 
-	private fun scheduleVideoBufferingFallback() {
+	private fun scheduleLiveTvDecoderStallFallback() {
 		videoBufferingHandler.removeCallbacksAndMessages(null)
 		if (!hasRenderedFirstVideoFrame || currentStream?.queueEntry?.liveStreamTargetOffset == null) return
 
@@ -409,8 +435,8 @@ class ExoPlayerBackend(
 				counters.renderedOutputBufferCount,
 			)) return@postDelayed
 
-			fallbackVideoDecoder(decoderName, counters, "stalled while buffering for ${VIDEO_BUFFERING_STALL_TIMEOUT_MS}ms")
-		}, VIDEO_BUFFERING_STALL_TIMEOUT_MS)
+			fallbackVideoDecoder(decoderName, counters, "decoder accepted input without rendering output for ${VIDEO_DECODER_STALL_TIMEOUT_MS}ms")
+		}, VIDEO_DECODER_STALL_TIMEOUT_MS)
 	}
 
 	private fun fallbackVideoDecoder(decoderName: String, counters: DecoderCounters, reason: String) {
@@ -930,7 +956,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
-			if (playbackState == Player.STATE_BUFFERING) scheduleVideoBufferingFallback()
+			if (playbackState == Player.STATE_BUFFERING) scheduleLiveTvDecoderStallFallback()
 			else videoBufferingHandler.removeCallbacksAndMessages(null)
 			onIsPlayingChanged(exoPlayer.isPlaying)
 			if (playbackState == Player.STATE_ENDED) {
