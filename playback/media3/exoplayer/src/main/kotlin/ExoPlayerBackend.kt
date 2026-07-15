@@ -176,7 +176,7 @@ private fun isH264TransportStream(container: String?, videoCodecs: Iterable<Stri
 	container.tokens().any { it in transportStreamContainers } &&
 		videoCodecs.any(::isH264Codec)
 
-private val transportStreamContainers = setOf("ts", "mpegts", "mpeg-ts", "mpeg_ts")
+private val transportStreamContainers = setOf("ts", "mpegts", "mpeg-ts", "mpeg_ts", "mpegtsraw")
 
 private fun String?.tokens() = this
 	?.lowercase()
@@ -1361,6 +1361,7 @@ class ExoPlayerBackend(
 		val counters = exoPlayer.videoDecoderCounters
 		counters?.ensureUpdated()
 		refreshAudioPassthroughSupport(allowReceiverRegistration = true)
+		val tsExtractorFlags = currentTsExtractorFlags()
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
@@ -1378,7 +1379,14 @@ class ExoPlayerBackend(
 			subtitleRender = subtitleRenderDebug(),
 			subtitleParser = subtitleParserDebug(),
 			subtitlePath = subtitlePathDebug(),
+			extractorFlags = tsExtractorFlags?.let(::formatTsExtractorFlags),
 		)
+	}
+
+	private fun currentTsExtractorFlags(): Int? {
+		val entry = exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry ?: return null
+		if (entry.liveStreamTargetOffset == null) return null
+		return entry.liveTvTsExtractorFlags()
 	}
 
 	private fun subtitleExtractorDebug(): String = when {

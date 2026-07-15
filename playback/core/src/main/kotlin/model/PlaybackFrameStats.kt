@@ -14,6 +14,7 @@ data class PlaybackFrameStats(
 	val subtitleRender: String? = null,
 	val subtitleParser: String? = null,
 	val subtitlePath: String? = null,
+	val extractorFlags: String? = null,
 ) {
 	companion object {
 		val EMPTY = PlaybackFrameStats(

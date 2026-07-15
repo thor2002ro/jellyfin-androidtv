@@ -56,6 +56,8 @@ class VideoDecoderTests : FunSpec({
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
 		liveTvTsExtractorFlags(isAmlogic = true, container = "hls|mpegts", videoCodecs = listOf("avc")) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegtsraw", videoCodecs = listOf("avc")) shouldBe
+			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
 		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("avc1.640028")) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
 		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("hevc")) shouldBe 0
