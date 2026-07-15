@@ -3,6 +3,8 @@ package org.jellyfin.playback.media3.exoplayer
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.media.MediaCodecList
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -45,6 +47,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
@@ -70,6 +73,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
@@ -140,6 +144,53 @@ internal fun targetLiveTvBufferDuration(
 	return liveStreamOffset.takeIf { it > initialLiveStreamOffset }
 }
 
+internal fun isAmlogicDevice(fields: Iterable<String?> = amlogicDeviceFields()) =
+	fields.any { field -> field?.contains("amlogic", ignoreCase = true) == true }
+
+internal fun liveTvTsExtractorFlags(
+	isAmlogic: Boolean,
+	container: String?,
+	videoCodecs: Iterable<String>,
+) = when {
+	!isAmlogic -> DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+	isH264TransportStream(container, videoCodecs) -> DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+	else -> 0
+}
+
+private fun amlogicDeviceFields() = buildList {
+	add(Build.MANUFACTURER)
+	add(Build.BRAND)
+	add(Build.HARDWARE)
+	add(Build.BOARD)
+	add(Build.PRODUCT)
+	add(Build.DEVICE)
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Build.SOC_MODEL)
+	addAll(codecNames())
+}
+
+private fun codecNames() = runCatching {
+	MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.map { it.name }
+}.getOrDefault(emptyList())
+
+private fun isH264TransportStream(container: String?, videoCodecs: Iterable<String>) =
+	container.tokens().any { it in transportStreamContainers } &&
+		videoCodecs.any(::isH264Codec)
+
+private val transportStreamContainers = setOf("ts", "mpegts", "mpeg-ts", "mpeg_ts")
+
+private fun String?.tokens() = this
+	?.lowercase()
+	?.split(',', '|', ';', ' ')
+	?.map(String::trim)
+	?.filter(String::isNotEmpty)
+	.orEmpty()
+
+private fun isH264Codec(codec: String) = codec.lowercase().let { value ->
+	value.contains("h264") || value.contains("avc")
+}
+
+private val currentDeviceIsAmlogic by lazy { isAmlogicDevice() }
+
 @OptIn(UnstableApi::class)
 class ExoPlayerBackend(
 	private val context: Context,
@@ -148,8 +199,6 @@ class ExoPlayerBackend(
 	companion object {
 		const val TS_SEARCH_BYTES = 3 * TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES
 		const val MEDIA_ITEM_COUNT_MAX = 10
-		private val LIVE_TV_TS_EXTRACTOR_FLAGS =
-			DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
 		private const val INITIAL_TRACK_SELECTION_RETRY_LIMIT = 8
 		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
 		private const val LIVE_START_CHECK_INTERVAL_MS = 250L
@@ -158,8 +207,25 @@ class ExoPlayerBackend(
 		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
 
-		private fun formatTsExtractorFlags(flags: Int) =
-			if (flags == 0) "none (0)" else "ALLOW_NON_IDR_KEYFRAMES ($flags)"
+		private fun QueueEntry.liveTvTsExtractorFlags(): Int {
+			val stream = mediaStream ?: return if (currentDeviceIsAmlogic) 0 else
+				DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+
+			return liveTvTsExtractorFlags(
+				isAmlogic = currentDeviceIsAmlogic,
+				container = stream.container.format,
+				videoCodecs = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().map { track -> track.codec },
+			)
+		}
+
+		private fun formatTsExtractorFlags(flags: Int): String {
+			if (flags == 0) return "none (0)"
+			val names = buildList {
+				if (flags and DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES != 0) add("ALLOW_NON_IDR_KEYFRAMES")
+				if (flags and DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS != 0) add("DETECT_ACCESS_UNITS")
+			}
+			return "${names.joinToString("|")} ($flags)"
+		}
 
 		private fun Player.playbackStateName(): String = when (playbackState) {
 			Player.STATE_IDLE -> "IDLE"
@@ -597,6 +663,18 @@ class ExoPlayerBackend(
 			setSubtitleParserFactory(subtitleParserFactory)
 		}
 
+		fun createMediaSourceFactory(
+			extractorsFactory: DefaultExtractorsFactory,
+			subtitleParserFactory: SubtitleParser.Factory,
+			assSubtitleParserFactory: AssSubtitleParserFactory? = null,
+		): DefaultMediaSourceFactory {
+			val extractors: ExtractorsFactory = assSubtitleParserFactory
+				?.let { extractorsFactory.withAssMkvSupport(it, assHandler) }
+				?: extractorsFactory
+			return DefaultMediaSourceFactory(dataSourceFactory, extractors)
+				.configureSubtitles(subtitleParserFactory)
+		}
+
 		fun MediaSource.Factory.withExternalSubtitlesInRenderer() =
 			ExternalSubtitleMediaSourceFactory(this, dataSourceFactory)
 
@@ -638,7 +716,30 @@ class ExoPlayerBackend(
 		}
 
 		val normalExtractorsFactory = createExtractorsFactory()
-		val liveTvExtractorsFactory = createExtractorsFactory(LIVE_TV_TS_EXTRACTOR_FLAGS)
+		val liveTvExtractorsFactory = createExtractorsFactory(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
+		val amlogicH264LiveTvExtractorsFactory = createExtractorsFactory(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+
+		fun createLiveTvMediaSourceFactory(
+			subtitleParserFactory: SubtitleParser.Factory,
+			assSubtitleParserFactory: AssSubtitleParserFactory? = null,
+		) = LiveTvMediaSourceFactory(
+			defaultFactory = createMediaSourceFactory(
+				normalExtractorsFactory,
+				subtitleParserFactory,
+				assSubtitleParserFactory,
+			),
+			liveTvFactory = createMediaSourceFactory(
+				liveTvExtractorsFactory,
+				subtitleParserFactory,
+				assSubtitleParserFactory,
+			),
+			amlogicH264LiveTvFactory = createMediaSourceFactory(
+				amlogicH264LiveTvExtractorsFactory,
+				subtitleParserFactory,
+				assSubtitleParserFactory,
+			),
+		)
+
 		val renderersFactory: RenderersFactory
 		if (exoPlayerOptions.enableLibass) {
 			val assSubtitleParserFactory = AssSubtitleParserFactory(assHandler)
@@ -646,15 +747,7 @@ class ExoPlayerBackend(
 				AssRenderType.CUES -> DefaultSubtitleParserFactory()
 				else -> assSubtitleParserFactory
 			}
-			val normalMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				normalExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(subtitleParserFactory)
-			val liveTvMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				liveTvExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(subtitleParserFactory)
-			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
+			mediaSourceFactory = createLiveTvMediaSourceFactory(subtitleParserFactory, assSubtitleParserFactory)
 				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
@@ -667,15 +760,7 @@ class ExoPlayerBackend(
 			}.let { AssRenderersFactory(assHandler, it) }
 		} else {
 			val defaultSubtitleParserFactory = DefaultSubtitleParserFactory()
-			val normalMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				normalExtractorsFactory,
-			).configureSubtitles(defaultSubtitleParserFactory)
-			val liveTvMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				liveTvExtractorsFactory,
-			).configureSubtitles(defaultSubtitleParserFactory)
-			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
+			mediaSourceFactory = createLiveTvMediaSourceFactory(defaultSubtitleParserFactory)
 				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
@@ -1138,7 +1223,7 @@ class ExoPlayerBackend(
 
 		fun startPlayback() {
 			val isLiveTv = item.liveStreamTargetOffset != null
-			val tsExtractorFlags = if (isLiveTv) LIVE_TV_TS_EXTRACTOR_FLAGS else 0
+			val tsExtractorFlags = if (isLiveTv) item.liveTvTsExtractorFlags() else 0
 			Timber.i(
 				"Playback source check mediaId=%s isLiveTv=%s liveTargetOffsetMs=%s method=%s container=%s intendedTsExtractorFlags=%s uri=%s",
 				stream.hashCode().toString(),
@@ -1663,16 +1748,19 @@ class ExoPlayerBackend(
 	private inner class LiveTvMediaSourceFactory(
 		private val defaultFactory: MediaSource.Factory,
 		private val liveTvFactory: MediaSource.Factory,
+		private val amlogicH264LiveTvFactory: MediaSource.Factory,
 	) : MediaSource.Factory {
 		override fun setDrmSessionManagerProvider(drmSessionManagerProvider: DrmSessionManagerProvider): MediaSource.Factory {
 			defaultFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
 			liveTvFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
+			amlogicH264LiveTvFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
 			return this
 		}
 
 		override fun setLoadErrorHandlingPolicy(loadErrorHandlingPolicy: LoadErrorHandlingPolicy): MediaSource.Factory {
 			defaultFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
 			liveTvFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+			amlogicH264LiveTvFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
 			return this
 		}
 
@@ -1681,8 +1769,12 @@ class ExoPlayerBackend(
 		override fun createMediaSource(mediaItem: MediaItem): MediaSource {
 			val queueEntry = mediaItem.localConfiguration?.tag as? QueueEntry
 			val isLiveTv = queueEntry?.liveStreamTargetOffset != null
-			val tsExtractorFlags = if (isLiveTv) LIVE_TV_TS_EXTRACTOR_FLAGS else 0
-			val factory = if (isLiveTv) liveTvFactory else defaultFactory
+			val tsExtractorFlags = if (isLiveTv) queueEntry.liveTvTsExtractorFlags() else 0
+			val factory = when (tsExtractorFlags) {
+				DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES -> liveTvFactory
+				DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS -> amlogicH264LiveTvFactory
+				else -> defaultFactory
+			}
 
 			Timber.i(
 				"Creating %s media source for mediaId=%s uri=%s liveTargetOffsetMs=%s tsExtractorFlags=%s",

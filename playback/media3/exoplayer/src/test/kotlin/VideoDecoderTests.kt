@@ -1,5 +1,6 @@
 package org.jellyfin.playback.media3.exoplayer
 
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import kotlin.time.Duration.Companion.seconds
@@ -40,5 +41,26 @@ class VideoDecoderTests : FunSpec({
 		hasDecoderStalled(10, 5, 11, 5) shouldBe true
 		hasDecoderStalled(10, 5, 10, 5) shouldBe false
 		hasDecoderStalled(10, 5, 11, 6) shouldBe false
+	}
+
+	test("Amlogic devices are matched from Android build fields") {
+		isAmlogicDevice(listOf("Google", "Amlogic S905X4")) shouldBe true
+		isAmlogicDevice(listOf("c2.amlogic.avc.decoder")) shouldBe true
+		isAmlogicDevice(listOf("NVIDIA", "tegra", null)) shouldBe false
+	}
+
+	test("Amlogic H264 TS Live TV detects access units without allowing non-IDR keyframes") {
+		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("h264")) shouldBe
+			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+		liveTvTsExtractorFlags(isAmlogic = true, container = "ts", videoCodecs = listOf("avc")) shouldBe
+			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+		liveTvTsExtractorFlags(isAmlogic = true, container = "hls|mpegts", videoCodecs = listOf("avc")) shouldBe
+			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("avc1.640028")) shouldBe
+			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("hevc")) shouldBe 0
+		liveTvTsExtractorFlags(isAmlogic = true, container = "hls", videoCodecs = listOf("h264")) shouldBe 0
+		liveTvTsExtractorFlags(isAmlogic = false, container = "mpegts", videoCodecs = listOf("h264")) shouldBe
+			DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
 	}
 })
