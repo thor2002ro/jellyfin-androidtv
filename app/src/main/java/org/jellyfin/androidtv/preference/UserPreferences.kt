@@ -205,6 +205,16 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 */
 		var liveTvDirectPlayEnabled = booleanPreference("pref_live_direct", true)
 
+		/**
+		 * Whether ExoPlayer should prefer the FFmpeg video renderer for Live TV.
+		 */
+		var preferExoPlayerFfmpegVideoForLiveTv = booleanPreference("exoplayer_prefer_ffmpeg_video_livetv", defaultValue = false)
+
+		/**
+		 * Whether ExoPlayer should prefer the FFmpeg audio renderer for Live TV.
+		 */
+		var preferExoPlayerFfmpegAudioForLiveTv = booleanPreference("exoplayer_prefer_ffmpeg_audio_livetv", defaultValue = false)
+
 		/* Developer options */
 		/**
 		 * Show additional debug information
