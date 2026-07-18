@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.constant.ZoomMode
@@ -53,12 +55,16 @@ import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
+import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
+import org.jellyfin.playback.media3.exoplayer.VideoDecoder
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
+import timber.log.Timber
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.roundToLong
@@ -201,6 +207,7 @@ fun VideoPlayerControls(
 				Spacer(Modifier.weight(1f))
 
 				PlaybackInfoButton(onClick = onPlaybackInfoClick)
+				VideoDecoderButton(playbackManager)
 				ZoomModeButton(
 					zoomMode = zoomMode,
 					onZoomModeSelected = onZoomModeSelected,
@@ -666,5 +673,71 @@ fun PlaybackInfoButton(
 			imageVector = ImageVector.vectorResource(R.drawable.ic_info),
 			contentDescription = tooltip,
 		)
+	}
+}
+
+@Composable
+private fun VideoDecoderButton(playbackManager: PlaybackManager) {
+	val backend = playbackManager.backend as? ExoPlayerBackend ?: return
+	val coroutineScope = rememberCoroutineScope()
+	var expanded by remember { mutableStateOf(false) }
+	var switching by remember { mutableStateOf(false) }
+
+	Box {
+		val tooltip = stringResource(R.string.lbl_video_decoder)
+		IconButton(
+			onClick = { expanded = true },
+			enabled = !switching,
+			tooltip = tooltip,
+		) {
+			Icon(
+				imageVector = ImageVector.vectorResource(R.drawable.ic_memory),
+				contentDescription = tooltip,
+			)
+		}
+
+		PlayerSelectionPopover(
+			expanded = expanded,
+			onDismissRequest = { expanded = false },
+			title = tooltip,
+		) {
+			VideoDecoder.entries.forEach { decoder ->
+				PlayerSelectionItem(
+					label = when (decoder) {
+						VideoDecoder.HARDWARE -> "HW"
+						VideoDecoder.SOFTWARE -> "SW"
+						VideoDecoder.FFMPEG -> "FFmpeg"
+					},
+					isSelected = decoder == backend.activeVideoDecoder,
+					onClick = {
+						expanded = false
+						if (decoder == backend.forcedVideoDecoder) return@PlayerSelectionItem
+
+						val previousDecoder = backend.forcedVideoDecoder
+						val position = playbackManager.state.positionInfo.active
+							.takeUnless { playbackManager.queue.entry.value?.isLiveTv == true }
+						val playWhenReady = playbackManager.state.playState.value.isActivePlayback
+						switching = true
+						backend.setForcedVideoDecoder(decoder)
+
+						coroutineScope.launch {
+							try {
+								if (!playbackManager.reloadCurrentMediaStream(position, playWhenReady)) {
+									backend.setForcedVideoDecoder(previousDecoder)
+									Timber.w("Unable to reload stream after forcing video decoder")
+								}
+							} catch (error: CancellationException) {
+								throw error
+							} catch (error: Exception) {
+								backend.setForcedVideoDecoder(previousDecoder)
+								Timber.e(error, "Failed to reload stream after forcing video decoder")
+							} finally {
+								switching = false
+							}
+						}
+					},
+				)
+			}
+		}
 	}
 }
