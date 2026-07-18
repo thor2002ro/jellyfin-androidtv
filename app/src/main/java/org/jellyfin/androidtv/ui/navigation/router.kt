@@ -35,6 +35,8 @@ class Router(
 	val routes: Map<String, RouteComposable>,
 	val backStack: SnapshotStateList<RouteContext>,
 ) {
+	private val focusedKeys = mutableMapOf<RouteContext, Long>()
+
 	// Route resolving
 
 	fun resolve(route: String): RouteComposable? = routes[route]
@@ -53,16 +55,23 @@ class Router(
 		verifyRoute(route, parameters)
 
 		val context = RouteContext(route, parameters)
-		backStack.removeLastOrNull()
+		backStack.removeLastOrNull()?.let(focusedKeys::remove)
 		backStack.add(context)
 	}
 
 	fun back() {
-		backStack.removeLastOrNull()
+		backStack.removeLastOrNull()?.let(focusedKeys::remove)
 	}
+
+	fun saveFocusedKey(context: RouteContext, key: Long) {
+		focusedKeys[context] = key
+	}
+
+	fun focusedKey(context: RouteContext): Long? = focusedKeys[context]
 }
 
 val LocalRouter = compositionLocalOf<Router> { error("No router provided") }
+val LocalRouteContext = compositionLocalOf<RouteContext?> { null }
 val LocalRouterTransitionScope = compositionLocalOf<SharedTransitionScope> { error("No router transition scope provided") }
 
 @Composable
@@ -112,12 +121,16 @@ fun RouterContent(
 						val route = backStackEntry.route
 						val composable = router.resolve(route)
 						if (composable == null) {
-							val fallbackComposable = router.resolve(fallbackRoute)
-								?: error("Unknown route $route, fallback $fallbackRoute is invalid")
 							val context = backStackEntry.copy(route = fallbackRoute)
-							fallbackComposable(context)
+							CompositionLocalProvider(LocalRouteContext provides context) {
+								val fallbackComposable = router.resolve(fallbackRoute)
+									?: error("Unknown route $route, fallback $fallbackRoute is invalid")
+								fallbackComposable(context)
+							}
 						} else {
-							composable(backStackEntry)
+							CompositionLocalProvider(LocalRouteContext provides backStackEntry) {
+								composable(backStackEntry)
+							}
 						}
 					}
 				}

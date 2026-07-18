@@ -47,11 +47,14 @@ class AppUpdater(
 		}
 	}
 
-	suspend fun download(update: AppUpdate): DownloadResult = withContext(Dispatchers.IO) {
+	suspend fun download(
+		update: AppUpdate,
+		onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> },
+	): DownloadResult = withContext(Dispatchers.IO) {
 		runCatching {
 			val file = File(appContext.cacheDir, "updater/${update.assetName}")
 			file.parentFile?.mkdirs()
-			downloadTo(update.assetUrl, file)
+			downloadTo(update.assetUrl, file, update.assetSize, onProgress)
 			validateApk(file)?.let { error ->
 				file.delete()
 				return@withContext DownloadResult.Failed(error)
@@ -165,12 +168,23 @@ class AppUpdater(
 		}
 	}
 
-	private fun downloadTo(url: String, file: File) {
+	private fun downloadTo(url: String, file: File, assetSize: Long, onProgress: (Long, Long) -> Unit) {
 		val connection = openConnection(url)
 		connection.use {
 			if (responseCode !in 200..299) throw IOException("Download failed: $responseCode")
+			val total = contentLengthLong.takeIf { it > 0 } ?: assetSize
+			var downloaded = 0L
 			inputStream.use { input ->
-				FileOutputStream(file).use { output -> input.copyTo(output) }
+				FileOutputStream(file).use { output ->
+					val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+					while (true) {
+						val bytes = input.read(buffer)
+						if (bytes < 0) break
+						output.write(buffer, 0, bytes)
+						downloaded += bytes
+						onProgress(downloaded, total)
+					}
+				}
 			}
 		}
 	}
