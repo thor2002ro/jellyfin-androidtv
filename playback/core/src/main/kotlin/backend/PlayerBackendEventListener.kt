@@ -8,5 +8,8 @@ abstract class PlayerBackendEventListener {
 	open fun onPlaybackError(error: PlaybackError) = Unit
 	open fun onVideoSizeChange(width: Int, height: Int) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream) = Unit
-	open fun onSubtitleTimingOffsetSupportChange(supported: Boolean) = Unit
+	open fun onSubtitleTimingOffsetSupportChange(
+		supported: Boolean,
+		resetTimingOnUnsupported: Boolean = true,
+	) = Unit
 }
