@@ -7,7 +7,9 @@ import kotlin.time.Duration
 
 data class ExoPlayerOptions(
 	val preferFfmpegAudio: () -> Boolean = { false },
+	val preferFfmpegAudioForLiveTv: () -> Boolean = { false },
 	val preferFfmpegVideo: () -> Boolean = { false },
+	val preferFfmpegVideoForLiveTv: () -> Boolean = { false },
 	val enableDebugLogging: Boolean = false,
 	val enableLibass: Boolean = false,
 	val libassRenderType: AssRenderType = AssRenderType.OVERLAY_OPEN_GL,

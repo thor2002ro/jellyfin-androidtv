@@ -300,6 +300,36 @@ fun SettingsPlaybackAdvancedScreen() {
 			)
 		}
 
+		item {
+			var preferFfmpegVideoForLiveTv by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegVideoForLiveTv)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_livetv)) },
+				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_livetv_content)) },
+				trailingContent = { Checkbox(checked = preferFfmpegVideoForLiveTv) },
+				onClick = {
+					preferFfmpegVideoForLiveTv = !preferFfmpegVideoForLiveTv
+					userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv] = preferFfmpegVideoForLiveTv
+					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
+				}
+			)
+		}
+
+		item {
+			var preferFfmpegAudioForLiveTv by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegAudioForLiveTv)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_audio_livetv)) },
+				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_audio_livetv_content)) },
+				trailingContent = { Checkbox(checked = preferFfmpegAudioForLiveTv) },
+				onClick = {
+					preferFfmpegAudioForLiveTv = !preferFfmpegAudioForLiveTv
+					userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] = preferFfmpegAudioForLiveTv
+					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
+				}
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_audio)) }) }
 
 		item {
