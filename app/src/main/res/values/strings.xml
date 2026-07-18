@@ -210,6 +210,7 @@
     <string name="dovi_profile_8_description">Single-layer with HDR10 fallback</string>
     <string name="desc_audio_night_mode">Levels out audio volume automatically</string>
     <string name="lbl_zoom">Zoom</string>
+    <string name="lbl_video_decoder">Video decoder</string>
     <string name="playback_info">Stats for nerds</string>
     <string name="playback_info_play_method">Play method: %1$s</string>
     <string name="playback_info_direct_play">Directplay</string>
@@ -599,6 +600,8 @@
     <string name="past_24_hours">Past 24 hours</string>
     <string name="prefer_exoplayer_ffmpeg">Prefer FFmpeg for audio playback</string>
     <string name="prefer_exoplayer_ffmpeg_content">Use FFmpeg to decode audio, even if platform codecs are available.</string>
+    <string name="prefer_exoplayer_ffmpeg_video">Prefer FFmpeg for video playback</string>
+    <string name="prefer_exoplayer_ffmpeg_video_content">Use FFmpeg to decode video, even if platform codecs are available.</string>
     <string name="default_video_zoom">Default zoom mode</string>
     <string name="video_start_delay">Video start delay</string>
     <string name="playback_buffer_length">Playback buffer size</string>
