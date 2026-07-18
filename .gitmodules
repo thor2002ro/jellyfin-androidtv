@@ -4,3 +4,4 @@
 [submodule "dependencies/jellyfin-androidx-media"]
 	path = dependencies/jellyfin-androidx-media
 	url = https://github.com/thor2002ro/jellyfin-androidx-media.git
+	branch = master
