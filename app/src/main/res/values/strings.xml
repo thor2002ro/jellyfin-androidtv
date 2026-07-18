@@ -791,6 +791,9 @@
     <string name="lbl_help">Help</string>
     <string name="lbl_subtitle_offset_help">Subtitles too late: use − | Subtitles too early: use +</string>
     <string name="lbl_subtitle_offset_seconds">%1$s s</string>
+    <string name="lbl_subtitle_sync">Subtitle synchronization</string>
+    <string name="lbl_subtitle_sync_current">Offset %1$s · speed %2$s</string>
+    <string name="lbl_subtitle_speed">Subtitle speed</string>
     <string name="lbl_bitstream_eac3">Bitstream Dolby Digital Plus</string>
     <string name="lbl_bitstream_dts">Bitstream Digital Theater System</string>
     <string name="lbl_bitstream_truehd">Bitstream Dolby TrueHD</string>

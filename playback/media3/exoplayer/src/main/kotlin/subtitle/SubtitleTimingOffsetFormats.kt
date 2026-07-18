@@ -16,3 +16,15 @@ fun isSubtitleTimingOffsetSupported(mimeType: String?): Boolean = when (mimeType
 @UnstableApi
 fun isSubtitleTimingOffsetSupported(format: Format): Boolean =
 	isSubtitleTimingOffsetSupported(format.sampleMimeType)
+
+@UnstableApi
+internal fun isSubtitleTimingAdjustmentSupported(
+	format: Format,
+	isExternal: Boolean,
+	isLiveTv: Boolean,
+	subtitlesParsedDuringExtraction: Boolean,
+	usesLibassOverlay: Boolean,
+): Boolean = isSubtitleTimingOffsetSupported(format) &&
+	!isLiveTv &&
+	(isExternal || !subtitlesParsedDuringExtraction) &&
+	(format.sampleMimeType != MimeTypes.TEXT_SSA || !usesLibassOverlay)
