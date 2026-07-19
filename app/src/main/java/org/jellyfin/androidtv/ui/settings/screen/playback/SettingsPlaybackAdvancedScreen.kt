@@ -261,6 +261,14 @@ fun SettingsPlaybackAdvancedScreen() {
 			)
 		}
 
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_libvlc_options)) },
+				captionContent = { Text(stringResource(R.string.preference_libvlc_options_description)) },
+				onClick = { router.push(LibVlcSettingsRoutes.PLAYBACK_LIBVLC) }
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_subtitles)) }) }
 
 		item {

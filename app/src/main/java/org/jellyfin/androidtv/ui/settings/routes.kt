@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackZoomMo
 import org.jellyfin.androidtv.ui.settings.screen.playback.PreferredLanguageType
 import org.jellyfin.androidtv.ui.settings.screen.playback.exoPlayerSettingsRoutes
 import org.jellyfin.androidtv.ui.settings.screen.playback.libassSettingsRoutes
+import org.jellyfin.androidtv.ui.settings.screen.playback.libVlcSettingsRoutes
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentsScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.nextup.SettingsPlaybackNextUpBehaviorScreen
@@ -317,4 +318,4 @@ val routes = mapOf<String, RouteComposable>(
 			artifactId = context.parameters["artifactId"]!!
 		)
 	},
-) + libassSettingsRoutes + exoPlayerSettingsRoutes
+) + libassSettingsRoutes + libVlcSettingsRoutes + exoPlayerSettingsRoutes
