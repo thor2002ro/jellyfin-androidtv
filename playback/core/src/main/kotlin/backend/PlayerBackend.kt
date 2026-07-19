@@ -10,11 +10,19 @@ import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import kotlin.time.Duration
 
+data class VideoDecoderOption(
+	val id: String,
+	val label: String,
+)
+
 /**
  * Implementation for a media player backend. A backend is unaware of queues and can only play or
  * preload items.
  */
 interface PlayerBackend {
+	val reportsBufferedPosition: Boolean
+		get() = true
+
 	// Testing
 	fun supportsStream(stream: MediaStream): PlaySupportReport
 
@@ -33,6 +41,17 @@ interface PlayerBackend {
 	fun prepareItem(item: QueueEntry)
 	fun playItem(item: QueueEntry)
 	fun replaceItem(item: QueueEntry)
+
+	fun setLiveTvBufferDuration(duration: Duration?) = Unit
+
+	val videoDecoderOptions: List<VideoDecoderOption>
+		get() = emptyList()
+	val selectedVideoDecoderOption: VideoDecoderOption?
+		get() = null
+	val forcedVideoDecoderOption: VideoDecoderOption?
+		get() = null
+
+	fun setForcedVideoDecoderOption(option: VideoDecoderOption?) = Unit
 
 	fun play()
 	fun pause()

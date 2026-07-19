@@ -66,6 +66,7 @@ import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.backend.VideoDecoderOption
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
@@ -163,6 +164,7 @@ internal fun targetLiveTvBufferDuration(
 internal fun isAmlogicDevice(fields: Iterable<String?> = amlogicDeviceFields()) =
 	fields.any { field -> field?.contains("amlogic", ignoreCase = true) == true }
 
+@UnstableApi
 internal fun liveTvTsExtractorFlags(
 	isAmlogic: Boolean,
 	container: String?,
@@ -311,6 +313,7 @@ class ExoPlayerBackend(
 	private var videoDecoderStage = VideoDecoder.HARDWARE
 	private var hardwareVideoDecoderRetryCount = 0
 	private var disabledHardwareVideoRendererIndex: Int? = null
+	private var liveTvBufferDuration = exoPlayerOptions.liveTvBufferDuration
 	var forcedVideoDecoder: VideoDecoder? = null
 		private set
 	val activeVideoDecoder: VideoDecoder
@@ -319,6 +322,20 @@ class ExoPlayerBackend(
 			preferFfmpeg = preferFfmpegVideo(),
 			decoderName = videoDecoderName,
 		)
+	override val videoDecoderOptions = VideoDecoder.entries.map { decoder ->
+		VideoDecoderOption(
+			id = decoder.name,
+			label = when (decoder) {
+				VideoDecoder.HARDWARE -> "HW"
+				VideoDecoder.SOFTWARE -> "SW"
+				VideoDecoder.FFMPEG -> "FFmpeg"
+			},
+		)
+	}
+	override val selectedVideoDecoderOption: VideoDecoderOption
+		get() = requireNotNull(activeVideoDecoder.toOption())
+	override val forcedVideoDecoderOption: VideoDecoderOption?
+		get() = forcedVideoDecoder?.toOption()
 	private var audioDecoderName: String? = null
 	private var audioDecoderType: String? = null
 	private var audioDecoderCounters: DecoderCounters? = null
@@ -441,7 +458,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
-		return targetLiveTvBufferDuration(liveStreamTargetOffset, exoPlayerOptions.liveTvBufferDuration)
+		return targetLiveTvBufferDuration(liveStreamTargetOffset, liveTvBufferDuration)
 	}
 
 	private fun resetPlaybackStats() {
@@ -856,6 +873,12 @@ class ExoPlayerBackend(
 		if (forcedVideoDecoder == decoder) return
 		forcedVideoDecoder = decoder
 		rendererPreferencesDirty = true
+	}
+
+	private fun VideoDecoder.toOption() = videoDecoderOptions.firstOrNull { option -> option.id == name }
+
+	override fun setForcedVideoDecoderOption(option: VideoDecoderOption?) {
+		setForcedVideoDecoder(option?.let { VideoDecoder.valueOf(it.id) })
 	}
 
 	private fun applyRendererPreferences() {
@@ -1345,6 +1368,10 @@ class ExoPlayerBackend(
 		playItem(item, delayLiveStart = false)
 	}
 
+	override fun setLiveTvBufferDuration(duration: Duration?) {
+		liveTvBufferDuration = duration
+	}
+
 	override fun play() {
 		if (pendingLiveStartStream != null && pendingLiveStartStream == currentStream) {
 			listener?.onPlayStateChange(PlayState.BUFFERING)
@@ -1408,6 +1435,7 @@ class ExoPlayerBackend(
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
 			corruptedFrames = counters?.skippedInputBufferCount ?: 0,
+			playerName = "ExoPlayer",
 			videoDecodedFrames = counters?.let {
 				it.renderedOutputBufferCount + it.skippedOutputBufferCount + it.droppedBufferCount
 			} ?: 0,
