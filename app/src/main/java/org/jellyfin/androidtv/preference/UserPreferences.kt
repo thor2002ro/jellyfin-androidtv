@@ -330,7 +330,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Parse subtitles in Media3's extractor path.
 		 */
-		var libassParseSubtitlesDuringExtraction = booleanPreference("libass_parse_subtitles_during_extraction", false)
+		var exoPlayerParseSubtitlesDuringExtraction = booleanPreference("exoplayer_parse_subtitles_during_extraction", true)
 
 		/**
 		 * Always burn in subtitles when transcoding.
