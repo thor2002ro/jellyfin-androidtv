@@ -11,4 +11,8 @@
     <string name="prefer_exoplayer_ffmpeg_video_livetv_content">Use FFmpeg to decode Live TV video, even if platform codecs are available.</string>
     <string name="prefer_exoplayer_ffmpeg_audio_livetv">Prefer FFmpeg for Live TV audio</string>
     <string name="prefer_exoplayer_ffmpeg_audio_livetv_content">Use FFmpeg to decode Live TV audio, even if platform codecs are available.</string>
+    <string name="preference_exoplayer_parse_subtitles_during_extraction">Experimental subtitle extraction</string>
+    <string name="preference_exoplayer_parse_subtitles_during_extraction_description">Parse subtitles in the Media3 extractor path.</string>
+    <string name="preference_exoplayer_parse_subtitles_during_extraction_offset_warning">When this is enabled, subtitle offset controls will not move embedded extracted subtitles. External subtitles still use the renderer path.</string>
+    <string name="preference_exoplayer_parse_subtitles_during_extraction_disabled_by_libass">Disabled by LibASS.</string>
 </resources>
