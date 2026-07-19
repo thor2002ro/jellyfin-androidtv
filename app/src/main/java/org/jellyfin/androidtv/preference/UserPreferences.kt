@@ -114,16 +114,6 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var refreshRateSwitchingBehavior = enumPreference("refresh_rate_switching_behavior", RefreshRateSwitchingBehavior.DISABLED)
 
 		/**
-		 * Whether ExoPlayer should prefer FFmpeg audio renderers to core ones.
-		 */
-		var preferExoPlayerFfmpeg = booleanPreference("exoplayer_prefer_ffmpeg", defaultValue = true)
-
-		/**
-		 * Whether ExoPlayer should prefer FFmpeg video renderers to core ones.
-		 */
-		var preferExoPlayerFfmpegVideo = booleanPreference("exoplayer_prefer_ffmpeg_video", defaultValue = false)
-
-		/**
 		 * Enable trickplay thumbnails while seeking.
 		 */
 		var trickPlayEnabled = booleanPreference("pref_enable_trickplay", true)
@@ -204,16 +194,6 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Use direct play
 		 */
 		var liveTvDirectPlayEnabled = booleanPreference("pref_live_direct", true)
-
-		/**
-		 * Whether ExoPlayer should prefer the FFmpeg video renderer for Live TV.
-		 */
-		var preferExoPlayerFfmpegVideoForLiveTv = booleanPreference("exoplayer_prefer_ffmpeg_video_livetv", defaultValue = false)
-
-		/**
-		 * Whether ExoPlayer should prefer the FFmpeg audio renderer for Live TV.
-		 */
-		var preferExoPlayerFfmpegAudioForLiveTv = booleanPreference("exoplayer_prefer_ffmpeg_audio_livetv", defaultValue = false)
 
 		/* Developer options */
 		/**
