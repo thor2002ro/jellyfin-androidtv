@@ -36,8 +36,6 @@ import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButt
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.createDeviceProfileReport
 import org.jellyfin.design.Tokens
-import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.clientLogApi
 import org.jellyfin.sdk.model.ServerVersion
@@ -52,7 +50,6 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
-	val playbackManager = koinInject<PlaybackManager>()
 
 	var ac3Enabled by rememberPreference(userPreferences, UserPreferences.ac3Enabled)
 	var eac3Enabled by rememberPreference(userPreferences, UserPreferences.eac3Enabled)
@@ -265,6 +262,15 @@ fun SettingsPlaybackAdvancedScreen() {
 			)
 		}
 
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_exoplayer_options)) },
+				captionContent = { Text(stringResource(R.string.preference_exoplayer_options_description)) },
+				onClick = { router.push(ExoPlayerSettingsRoutes.PLAYBACK_EXOPLAYER) },
+				modifier = Modifier.focusKey(ExoPlayerSettingsRoutes.PLAYBACK_EXOPLAYER)
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_subtitles)) }) }
 
 		item {
@@ -283,8 +289,8 @@ fun SettingsPlaybackAdvancedScreen() {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.preference_libass_options)) },
 				captionContent = { Text(stringResource(R.string.preference_libass_options_description)) },
-				onClick = { router.push(Routes.PLAYBACK_LIBASS) },
-				modifier = Modifier.focusKey(Routes.PLAYBACK_LIBASS)
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS) },
+				modifier = Modifier.focusKey(LibassSettingsRoutes.PLAYBACK_LIBASS)
 			)
 		}
 
@@ -310,36 +316,6 @@ fun SettingsPlaybackAdvancedScreen() {
 				trailingContent = { Checkbox(checked = liveTvDirectPlayEnabled) },
 				onClick = { liveTvDirectPlayEnabled = !liveTvDirectPlayEnabled },
 				modifier = Modifier.focusKey("live_tv_direct_play_enabled")
-			)
-		}
-
-		item {
-			var preferFfmpegVideoForLiveTv by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegVideoForLiveTv)
-
-			ListButton(
-				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_livetv)) },
-				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_livetv_content)) },
-				trailingContent = { Checkbox(checked = preferFfmpegVideoForLiveTv) },
-				onClick = {
-					preferFfmpegVideoForLiveTv = !preferFfmpegVideoForLiveTv
-					userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv] = preferFfmpegVideoForLiveTv
-					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
-				}
-			)
-		}
-
-		item {
-			var preferFfmpegAudioForLiveTv by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegAudioForLiveTv)
-
-			ListButton(
-				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_audio_livetv)) },
-				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_audio_livetv_content)) },
-				trailingContent = { Checkbox(checked = preferFfmpegAudioForLiveTv) },
-				onClick = {
-					preferFfmpegAudioForLiveTv = !preferFfmpegAudioForLiveTv
-					userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] = preferFfmpegAudioForLiveTv
-					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
-				}
 			)
 		}
 
@@ -411,36 +387,6 @@ fun SettingsPlaybackAdvancedScreen() {
 				trailingContent = { Checkbox(checked = truehdEnabled) },
 				onClick = { truehdEnabled = !truehdEnabled },
 				modifier = Modifier.focusKey("truehd_enabled")
-			)
-		}
-
-		item {
-			var preferExoPlayerFfmpeg by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpeg)
-			ListButton(
-				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg)) },
-				trailingContent = { Checkbox(checked = preferExoPlayerFfmpeg) },
-				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_content)) },
-				onClick = {
-					preferExoPlayerFfmpeg = !preferExoPlayerFfmpeg
-					userPreferences[UserPreferences.preferExoPlayerFfmpeg] = preferExoPlayerFfmpeg
-					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
-				},
-				modifier = Modifier.focusKey("prefer_exoplayer_ffmpeg")
-			)
-		}
-
-		item {
-			var preferExoPlayerFfmpegVideo by rememberPreference(userPreferences, UserPreferences.preferExoPlayerFfmpegVideo)
-			ListButton(
-				headingContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video)) },
-				trailingContent = { Checkbox(checked = preferExoPlayerFfmpegVideo) },
-				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_content)) },
-				onClick = {
-					preferExoPlayerFfmpegVideo = !preferExoPlayerFfmpegVideo
-					userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] = preferExoPlayerFfmpegVideo
-					(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
-				},
-				modifier = Modifier.focusKey("prefer_exoplayer_ffmpeg_video")
 			)
 		}
 
