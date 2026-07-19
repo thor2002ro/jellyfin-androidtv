@@ -353,7 +353,7 @@ private object NewPlayerStreamStatusBuilder {
 			PlaybackInfoSection(
 				title = "",
 				rows = rows {
-					row("Player", "ExoPlayer")
+					row("Player", frameStats.playerName)
 					row("Play method", stream.conversionMethod.displayName())
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())

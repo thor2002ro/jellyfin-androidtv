@@ -59,8 +59,6 @@ import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
-import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
-import org.jellyfin.playback.media3.exoplayer.VideoDecoder
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
@@ -678,7 +676,8 @@ fun PlaybackInfoButton(
 
 @Composable
 private fun VideoDecoderButton(playbackManager: PlaybackManager) {
-	val backend = playbackManager.backend as? ExoPlayerBackend ?: return
+	val backend = playbackManager.backend
+	if (backend.videoDecoderOptions.isEmpty()) return
 	val coroutineScope = rememberCoroutineScope()
 	var expanded by remember { mutableStateOf(false) }
 	var switching by remember { mutableStateOf(false) }
@@ -701,35 +700,31 @@ private fun VideoDecoderButton(playbackManager: PlaybackManager) {
 			onDismissRequest = { expanded = false },
 			title = tooltip,
 		) {
-			VideoDecoder.entries.forEach { decoder ->
+			backend.videoDecoderOptions.forEach { decoder ->
 				PlayerSelectionItem(
-					label = when (decoder) {
-						VideoDecoder.HARDWARE -> "HW"
-						VideoDecoder.SOFTWARE -> "SW"
-						VideoDecoder.FFMPEG -> "FFmpeg"
-					},
-					isSelected = decoder == backend.activeVideoDecoder,
+					label = decoder.label,
+					isSelected = decoder == backend.selectedVideoDecoderOption,
 					onClick = {
 						expanded = false
-						if (decoder == backend.forcedVideoDecoder) return@PlayerSelectionItem
+						if (decoder == backend.forcedVideoDecoderOption) return@PlayerSelectionItem
 
-						val previousDecoder = backend.forcedVideoDecoder
+						val previousDecoder = backend.forcedVideoDecoderOption
 						val position = playbackManager.state.positionInfo.active
 							.takeUnless { playbackManager.queue.entry.value?.isLiveTv == true }
 						val playWhenReady = playbackManager.state.playState.value.isActivePlayback
 						switching = true
-						backend.setForcedVideoDecoder(decoder)
+						backend.setForcedVideoDecoderOption(decoder)
 
 						coroutineScope.launch {
 							try {
 								if (!playbackManager.reloadCurrentMediaStream(position, playWhenReady)) {
-									backend.setForcedVideoDecoder(previousDecoder)
+									backend.setForcedVideoDecoderOption(previousDecoder)
 									Timber.w("Unable to reload stream after forcing video decoder")
 								}
 							} catch (error: CancellationException) {
 								throw error
 							} catch (error: Exception) {
-								backend.setForcedVideoDecoder(previousDecoder)
+								backend.setForcedVideoDecoderOption(previousDecoder)
 								Timber.e(error, "Failed to reload stream after forcing video decoder")
 							} finally {
 								switching = false
