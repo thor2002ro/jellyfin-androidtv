@@ -283,14 +283,6 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
-			ListButton(
-				headingContent = { Text(stringResource(R.string.preference_libass_options)) },
-				captionContent = { Text(stringResource(R.string.preference_libass_options_description)) },
-				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS) }
-			)
-		}
-
-		item {
 			var subtitlesBurnDuringTranscode by rememberPreference(userPreferences, UserPreferences.subtitlesBurnDuringTranscode)
 
 			ListButton(

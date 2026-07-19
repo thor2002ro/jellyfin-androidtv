@@ -45,7 +45,4 @@
     <string name="preference_libass_glyph_cache_10000_description">Balanced glyph cache for most styled subtitles.</string>
     <string name="preference_libass_glyph_cache_20000">20,000 glyphs</string>
     <string name="preference_libass_glyph_cache_20000_description">Default glyph cache for heavy ASS tracks. Helps very complex subtitle tracks but uses more memory.</string>
-    <string name="preference_libass_parse_subtitles_during_extraction">Experimental subtitle extraction</string>
-    <string name="preference_libass_parse_subtitles_during_extraction_description">Parse subtitles in the Media3 extractor path.</string>
-    <string name="preference_libass_parse_subtitles_during_extraction_offset_warning">Disabled by default because subtitle offset is applied in the renderer; when this is enabled, subtitle offset controls will not move embedded extracted subtitles. External subtitles still use the renderer path.</string>
 </resources>
