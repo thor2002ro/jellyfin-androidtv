@@ -3,11 +3,11 @@ package org.jellyfin.androidtv.ui.settings.screen.playback
 import org.jellyfin.androidtv.ui.navigation.RouteComposable
 
 object LibassSettingsRoutes {
-	const val PLAYBACK_LIBASS = "/playback/advanced/libass"
-	const val PLAYBACK_LIBASS_RENDER_TYPE = "/playback/advanced/libass/render-type"
-	const val PLAYBACK_LIBASS_MAX_RENDER_PIXELS = "/playback/advanced/libass/max-render-pixels"
-	const val PLAYBACK_LIBASS_CACHE_SIZE = "/playback/advanced/libass/cache-size"
-	const val PLAYBACK_LIBASS_GLYPH_SIZE = "/playback/advanced/libass/glyph-size"
+	const val PLAYBACK_LIBASS = "/playback/advanced/exoplayer/libass"
+	const val PLAYBACK_LIBASS_RENDER_TYPE = "/playback/advanced/exoplayer/libass/render-type"
+	const val PLAYBACK_LIBASS_MAX_RENDER_PIXELS = "/playback/advanced/exoplayer/libass/max-render-pixels"
+	const val PLAYBACK_LIBASS_CACHE_SIZE = "/playback/advanced/exoplayer/libass/cache-size"
+	const val PLAYBACK_LIBASS_GLYPH_SIZE = "/playback/advanced/exoplayer/libass/glyph-size"
 }
 
 val libassSettingsRoutes = mapOf<String, RouteComposable>(
