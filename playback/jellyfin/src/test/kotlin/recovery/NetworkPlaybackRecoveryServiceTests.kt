@@ -11,4 +11,11 @@ class NetworkPlaybackRecoveryServiceTests : FunSpec({
 		hasPlaybackRecovered(PlayState.PAUSED, 2.seconds, 2.seconds) shouldBe true
 		hasPlaybackRecovered(PlayState.ERROR, 2.seconds, 2.seconds) shouldBe false
 	}
+
+	test("automatic recovery only handles network and LibVLC errors") {
+		isRecoverablePlaybackError("ERROR_CODE_IO_NETWORK_CONNECTION_FAILED") shouldBe true
+		isRecoverablePlaybackError("ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT") shouldBe true
+		isRecoverablePlaybackError("LIBVLC_ERROR") shouldBe true
+		isRecoverablePlaybackError("ERROR_CODE_DECODING_FAILED") shouldBe false
+	}
 })

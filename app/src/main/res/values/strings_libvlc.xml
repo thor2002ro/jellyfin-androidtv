@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="playback_backend_libvlc_name">LibVLC</string>
+    <string name="playback_backend_libvlc_description">Built-in VLC playback engine</string>
     <string name="preference_libvlc_options">LibVLC options</string>
     <string name="preference_libvlc_options_description">VLC playback engine options. Startup changes apply to newly started playback.</string>
     <string name="preference_libvlc_restart_required">Applies to newly started playback.</string>
