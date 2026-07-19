@@ -19,7 +19,6 @@ import org.jellyfin.androidtv.ui.base.form.RadioButton
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
-import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.koin.compose.koinInject
@@ -62,7 +61,7 @@ fun SettingsPlaybackLibassScreen() {
 				overlineContent = { Text(stringResource(renderType.nameRes)) },
 				headingContent = { Text(stringResource(R.string.preference_libass_render_type)) },
 				captionContent = { Text(description) },
-				onClick = { router.push(Routes.PLAYBACK_LIBASS_RENDER_TYPE) },
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS_RENDER_TYPE) },
 			)
 		}
 
@@ -73,7 +72,7 @@ fun SettingsPlaybackLibassScreen() {
 				overlineContent = { Text(stringResource(maxRenderPixels.nameRes)) },
 				headingContent = { Text(stringResource(R.string.preference_libass_max_render_pixels)) },
 				captionContent = { Text(description) },
-				onClick = { router.push(Routes.PLAYBACK_LIBASS_MAX_RENDER_PIXELS) },
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS_MAX_RENDER_PIXELS) },
 			)
 		}
 
@@ -84,7 +83,7 @@ fun SettingsPlaybackLibassScreen() {
 				overlineContent = { Text(stringResource(cacheSize.nameRes)) },
 				headingContent = { Text(stringResource(R.string.preference_libass_cache_size)) },
 				captionContent = { Text(description) },
-				onClick = { router.push(Routes.PLAYBACK_LIBASS_CACHE_SIZE) },
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS_CACHE_SIZE) },
 			)
 		}
 
@@ -95,7 +94,7 @@ fun SettingsPlaybackLibassScreen() {
 				overlineContent = { Text(stringResource(glyphSize.nameRes)) },
 				headingContent = { Text(stringResource(R.string.preference_libass_glyph_cache_size)) },
 				captionContent = { Text(description) },
-				onClick = { router.push(Routes.PLAYBACK_LIBASS_GLYPH_SIZE) },
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS_GLYPH_SIZE) },
 			)
 		}
 
