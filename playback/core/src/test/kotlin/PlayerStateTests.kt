@@ -2,6 +2,7 @@ package org.jellyfin.playback.core
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
@@ -21,6 +22,27 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class PlayerStateTests : FunSpec({
+	test("playback manager switches its active backend") {
+		val initial = backend()
+		val replacement = backend()
+		val manager = PlaybackManager(
+			backend = initial,
+			services = mutableListOf(),
+			options = PlaybackManagerOptions(
+				playerVolumeState = NoOpPlayerVolumeState(),
+				defaultRewindAmount = { 10.seconds },
+				defaultFastForwardAmount = { 10.seconds },
+			),
+		)
+
+		manager.state.setSpeed(1.5f)
+		manager.switchBackend(replacement)
+
+		manager.backend shouldBeSameInstanceAs replacement
+		verify { initial.stop() }
+		verify { replacement.setSpeed(1.5f) }
+	}
+
 	test("direct play Live TV ignores seek requests") {
 		val backend = backend()
 		val entry = QueueEntry().apply {
