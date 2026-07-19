@@ -17,12 +17,14 @@ import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.navigation.focus.focusKey
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.playback.core.PlaybackManager
 import org.koin.compose.koinInject
 
 @Composable
 fun SettingsPlaybackBufferLengthScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
+	val playbackManager = koinInject<PlaybackManager>()
 	var bufferLength by rememberPreference(userPreferences, UserPreferences.bufferLength)
 
 	SettingsColumn {
@@ -39,6 +41,7 @@ fun SettingsPlaybackBufferLengthScreen() {
 				trailingContent = { RadioButton(checked = bufferLength == entry) },
 				onClick = {
 					bufferLength = entry
+					playbackManager.backend.setLiveTvBufferDuration(entry.liveTvBufferDuration)
 					router.back()
 				},
 				modifier = Modifier.focusKey("buffer_length_${entry.name}")

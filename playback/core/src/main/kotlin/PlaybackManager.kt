@@ -14,16 +14,18 @@ import kotlin.reflect.KClass
 import kotlin.time.Duration
 
 class PlaybackManager internal constructor(
-	val backend: PlayerBackend,
+	backend: PlayerBackend,
 	private val services: MutableList<PlayerService>,
 	val options: PlaybackManagerOptions,
 	parentJob: Job? = null,
 ) {
 	internal val backendService = BackendService().also { service ->
+		applyBackendOptions(backend)
 		service.switchBackend(backend)
 	}
 
 	private val job = SupervisorJob(parentJob)
+	val backend: PlayerBackend get() = requireNotNull(backendService.backend)
 	val state: PlayerState = MutablePlayerState(
 		options = options,
 		backendService = backendService,
@@ -52,6 +54,20 @@ class PlaybackManager internal constructor(
 
 	fun removeBackendEventListener(listener: PlayerBackendEventListener) {
 		backendService.removeListener(listener)
+	}
+
+	fun switchBackend(backend: PlayerBackend) {
+		applyBackendOptions(backend)
+		if (backend !== backendService.backend) {
+			backendService.switchBackend(backend)
+			backend.setSpeed(state.speed.value)
+		}
+	}
+
+	private fun applyBackendOptions(backend: PlayerBackend) {
+		options.liveTvBufferDuration?.let { liveTvBufferDuration ->
+			backend.setLiveTvBufferDuration(liveTvBufferDuration())
+		}
 	}
 
 	fun <T : PlayerService> getService(kclass: KClass<T>): T? {

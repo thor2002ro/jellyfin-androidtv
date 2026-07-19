@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.base.BaseScreen
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.Destinations
@@ -33,6 +35,8 @@ import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
+import org.jellyfin.playback.libvlc.LibVlcBackend
+import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -50,6 +54,8 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 	private val videoQueueManager by inject<VideoQueueManager>()
 	private val playbackManager by inject<PlaybackManager>()
+	private val exoPlayerBackend by inject<ExoPlayerBackend>()
+	private val libVlcBackend by inject<LibVlcBackend>()
 	private val navigationRepository by inject<NavigationRepository>()
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
@@ -63,6 +69,11 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
+
+		playbackManager.switchBackend(when (userPreferences[UserPreferences.playbackBackend]) {
+			PlaybackBackend.EXOPLAYER -> exoPlayerBackend
+			PlaybackBackend.LIBVLC -> libVlcBackend
+		})
 
 		if (
 			arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
