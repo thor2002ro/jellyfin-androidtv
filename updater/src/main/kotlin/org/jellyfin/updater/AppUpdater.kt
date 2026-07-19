@@ -172,7 +172,7 @@ class AppUpdater(
 		val connection = openConnection(url)
 		connection.use {
 			if (responseCode !in 200..299) throw IOException("Download failed: $responseCode")
-			val total = contentLengthLong.takeIf { it > 0 } ?: assetSize
+			val total = getHeaderField("Content-Length")?.toLongOrNull()?.takeIf { it > 0 } ?: assetSize
 			var downloaded = 0L
 			inputStream.use { input ->
 				FileOutputStream(file).use { output ->
