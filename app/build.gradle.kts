@@ -33,6 +33,10 @@ android {
 		isCoreLibraryDesugaringEnabled = true
 	}
 
+	packaging {
+		jniLibs.pickFirsts += "**/libc++_shared.so"
+	}
+
 	signingConfigs {
 		val keystoreFile = getProperty("keystore.file")
 		val keystorePassword = getProperty("keystore.password")
@@ -120,6 +124,7 @@ dependencies {
 	implementation(projects.playback.jellyfin)
 	implementation(projects.playback.media3.exoplayer)
 	implementation(projects.playback.media3.session)
+	implementation(projects.playback.libvlc)
 	implementation(projects.preference)
 	implementation(projects.updater)
 	implementation(libs.jellyfin.sdk) {
