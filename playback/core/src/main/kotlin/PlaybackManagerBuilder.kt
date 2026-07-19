@@ -21,7 +21,7 @@ class PlaybackManagerBuilder(context: Context) {
 	// Options
 	var defaultRewindAmount: (() -> Duration)? = null
 	var defaultFastForwardAmount: (() -> Duration)? = null
-	var liveTvBufferDuration: (() -> Duration?)? = null
+	var bufferOptions: (() -> PlaybackBufferOptions)? = null
 
 	fun install(pluginFactory: PlaybackPlugin) {
 		factories.add(pluginFactory)
@@ -60,7 +60,7 @@ class PlaybackManagerBuilder(context: Context) {
 			playerVolumeState = volumeState,
 			defaultRewindAmount = defaultRewindAmount ?: { 10.seconds },
 			defaultFastForwardAmount = defaultFastForwardAmount ?: { 10.seconds },
-			liveTvBufferDuration = liveTvBufferDuration,
+			bufferOptions = bufferOptions,
 		)
 		return PlaybackManager(backends.first(), services, options)
 	}

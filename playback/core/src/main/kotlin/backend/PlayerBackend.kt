@@ -1,5 +1,6 @@
 package org.jellyfin.playback.core.backend
 
+import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
@@ -42,7 +43,9 @@ interface PlayerBackend {
 	fun playItem(item: QueueEntry)
 	fun replaceItem(item: QueueEntry)
 
-	fun setLiveTvBufferDuration(duration: Duration?) = Unit
+	fun setBufferOptions(options: PlaybackBufferOptions) = Unit
+
+	fun onActivated() = Unit
 
 	val videoDecoderOptions: List<VideoDecoderOption>
 		get() = emptyList()
@@ -61,6 +64,9 @@ interface PlayerBackend {
 	fun setScrubbing(scrubbing: Boolean)
 
 	fun setSpeed(speed: Float)
+
+	val supportsSubtitleTimingSpeed: Boolean
+		get() = true
 
 	fun setSubtitleTiming(offset: Duration, speed: Float)
 

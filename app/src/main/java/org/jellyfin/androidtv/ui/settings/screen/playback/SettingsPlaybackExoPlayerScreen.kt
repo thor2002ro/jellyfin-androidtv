@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.ExoPlayerBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpeg
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegAudioForLiveTv
@@ -16,17 +17,12 @@ import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
-import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.koin.compose.koinInject
 
 @Composable
 fun SettingsPlaybackExoPlayerScreen() {
 	val userPreferences = koinInject<UserPreferences>()
-	val playbackManager = koinInject<PlaybackManager>()
-	fun invalidateRendererPreferences() {
-		(playbackManager.backend as? ExoPlayerBackend)?.invalidateRendererPreferences()
-	}
+	val backendSettings = koinInject<ExoPlayerBackendSettings>()
 
 	SettingsColumn {
 		item {
@@ -46,7 +42,7 @@ fun SettingsPlaybackExoPlayerScreen() {
 				trailingContent = { Checkbox(checked = preferFfmpegVideoForLiveTv) },
 				onClick = {
 					preferFfmpegVideoForLiveTv = !preferFfmpegVideoForLiveTv
-					invalidateRendererPreferences()
+					backendSettings.invalidateRendererPreferences()
 				},
 			)
 		}
@@ -60,7 +56,7 @@ fun SettingsPlaybackExoPlayerScreen() {
 				trailingContent = { Checkbox(checked = preferFfmpegAudioForLiveTv) },
 				onClick = {
 					preferFfmpegAudioForLiveTv = !preferFfmpegAudioForLiveTv
-					invalidateRendererPreferences()
+					backendSettings.invalidateRendererPreferences()
 				},
 			)
 		}
@@ -74,7 +70,7 @@ fun SettingsPlaybackExoPlayerScreen() {
 				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_content)) },
 				onClick = {
 					preferExoPlayerFfmpeg = !preferExoPlayerFfmpeg
-					invalidateRendererPreferences()
+					backendSettings.invalidateRendererPreferences()
 				},
 			)
 		}
@@ -88,7 +84,7 @@ fun SettingsPlaybackExoPlayerScreen() {
 				captionContent = { Text(stringResource(R.string.prefer_exoplayer_ffmpeg_video_content)) },
 				onClick = {
 					preferExoPlayerFfmpegVideo = !preferExoPlayerFfmpegVideo
-					invalidateRendererPreferences()
+					backendSettings.invalidateRendererPreferences()
 				},
 			)
 		}

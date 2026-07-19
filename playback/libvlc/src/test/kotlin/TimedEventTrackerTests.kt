@@ -22,6 +22,13 @@ class TimedEventTrackerTests : StringSpec({
 		bufferingPlayState(100f) shouldBe PlayState.PLAYING
 	}
 
+	"LibVLC descriptions follow media track IDs with unmatched slaves appended" {
+		orderedLibVlcTrackIds(
+			mediaTrackIds = listOf(7, 3),
+			descriptionTrackIds = listOf(-1, 3, 7, 9),
+		) shouldBe listOf(7, 3, 9)
+	}
+
 	"fires an instant event once when playback crosses it" {
 		var activations = 0
 		val tracker = TimedEventTracker()
@@ -33,17 +40,25 @@ class TimedEventTrackerTests : StringSpec({
 		activations shouldBe 1
 	}
 
-	"LibVLC network cache follows the live tv buffer duration" {
+	"LibVLC network cache follows the normal buffer duration and live tv override" {
 		libVlcMediaOptions(
 			isLiveTv = true,
+			normalBufferDuration = 120.seconds,
 			liveTvBufferDuration = 5.seconds,
 			options = LibVlcPlaybackOptions(),
 		).contains(":network-caching=5000") shouldBe true
 		libVlcMediaOptions(
 			isLiveTv = false,
+			normalBufferDuration = 120.seconds,
 			liveTvBufferDuration = 5.seconds,
 			options = LibVlcPlaybackOptions(),
-		).contains(":network-caching=5000") shouldBe false
+		).contains(":network-caching=120000") shouldBe true
+		libVlcMediaOptions(
+			isLiveTv = false,
+			normalBufferDuration = null,
+			liveTvBufferDuration = 5.seconds,
+			options = LibVlcPlaybackOptions(),
+		).any { option -> option.startsWith(":network-caching=") } shouldBe false
 	}
 
 	"automatic deblocking follows VLC Android device defaults" {

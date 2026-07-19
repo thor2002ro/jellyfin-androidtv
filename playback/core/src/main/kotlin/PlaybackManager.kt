@@ -26,6 +26,7 @@ class PlaybackManager internal constructor(
 
 	private val job = SupervisorJob(parentJob)
 	val backend: PlayerBackend get() = requireNotNull(backendService.backend)
+	val activeBackends: List<PlayerBackend> get() = backendService.activeBackends
 	val state: PlayerState = MutablePlayerState(
 		options = options,
 		backendService = backendService,
@@ -64,10 +65,15 @@ class PlaybackManager internal constructor(
 		}
 	}
 
+	fun isBackendActive(backend: PlayerBackend): Boolean =
+		activeBackends.any { activeBackend -> activeBackend === backend }
+
+	fun setBufferOptions(options: PlaybackBufferOptions) {
+		activeBackends.forEach { backend -> backend.setBufferOptions(options) }
+	}
+
 	private fun applyBackendOptions(backend: PlayerBackend) {
-		options.liveTvBufferDuration?.let { liveTvBufferDuration ->
-			backend.setLiveTvBufferDuration(liveTvBufferDuration())
-		}
+		options.bufferOptions?.invoke()?.let(backend::setBufferOptions)
 	}
 
 	fun <T : PlayerService> getService(kclass: KClass<T>): T? {
