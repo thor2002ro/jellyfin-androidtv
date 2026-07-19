@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="playback_backend_exoplayer_name">ExoPlayer</string>
     <string name="preference_exoplayer_options">ExoPlayer options</string>
     <string name="preference_exoplayer_options_description">ExoPlayer playback engine options.</string>
     <string name="prefer_exoplayer_ffmpeg">Prefer FFmpeg for audio playback</string>
