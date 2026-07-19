@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.LibVLCBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCAudioTimeStretch
@@ -35,7 +36,6 @@ import org.jellyfin.androidtv.preference.constant.LibVLCDeblocking
 import org.jellyfin.androidtv.preference.constant.LibVLCDecoder
 import org.jellyfin.androidtv.preference.constant.LibVLCReplayGainMode
 import org.jellyfin.androidtv.preference.constant.LibVLCVideoOutput
-import org.jellyfin.androidtv.preference.constant.libVLCPlaybackOptions
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -46,7 +46,6 @@ import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
-import org.jellyfin.playback.libvlc.LibVLCBackend
 import org.koin.compose.koinInject
 import java.text.DecimalFormat
 import kotlin.math.roundToInt
@@ -55,7 +54,7 @@ import kotlin.math.roundToInt
 fun SettingsPlaybackLibVLCScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
-	val libVLCBackend = koinInject<LibVLCBackend>()
+	val backendSettings = koinInject<LibVLCBackendSettings>()
 	var decoder by rememberPreference(userPreferences, UserPreferences.libVLCDecoder)
 	var videoOutput by rememberPreference(userPreferences, UserPreferences.libVLCVideoOutput)
 	var audioOutput by rememberPreference(userPreferences, UserPreferences.libVLCAudioOutput)
@@ -73,13 +72,11 @@ fun SettingsPlaybackLibVLCScreen() {
 		newFrameSkip: Boolean = frameSkip,
 		newAudioTimeStretch: Boolean = audioTimeStretch,
 		newDav1dThreadFrames: Int = dav1dThreadFrames,
-	) = libVLCBackend.setPlaybackOptions(
-		userPreferences.libVLCPlaybackOptions(
-			deblocking = newDeblocking,
-			frameSkip = newFrameSkip,
-			audioTimeStretch = newAudioTimeStretch,
-			dav1dThreadFrames = newDav1dThreadFrames,
-		),
+	) = backendSettings.setPlaybackOptions(
+		deblocking = newDeblocking,
+		frameSkip = newFrameSkip,
+		audioTimeStretch = newAudioTimeStretch,
+		dav1dThreadFrames = newDav1dThreadFrames,
 	)
 
 	SettingsColumn {
@@ -253,8 +250,8 @@ fun SettingsPlaybackLibVLCScreen() {
 fun SettingsPlaybackLibVLCDecoderScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
-	val libVLCBackend = koinInject<LibVLCBackend>()
-	var decoder by rememberPreference(userPreferences, UserPreferences.libVLCDecoder)
+	val backendSettings = koinInject<LibVLCBackendSettings>()
+	val decoder = userPreferences[UserPreferences.libVLCDecoder]
 
 	SettingsColumn {
 		item {
@@ -271,8 +268,8 @@ fun SettingsPlaybackLibVLCDecoderScreen() {
 				captionContent = { Text(stringResource(entry.descriptionRes)) },
 				trailingContent = { RadioButton(checked = decoder == entry) },
 				onClick = {
-					decoder = entry
-					libVLCBackend.setVideoDecoder(entry.decoder)
+					userPreferences[UserPreferences.libVLCDecoder] = entry
+					backendSettings.setVideoDecoder(entry)
 					router.back()
 				},
 			)
@@ -326,7 +323,7 @@ private fun LibVLCDbRangeControl(
 fun SettingsPlaybackLibVLCVideoOutputScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
-	var videoOutput by rememberPreference(userPreferences, UserPreferences.libVLCVideoOutput)
+	val videoOutput = userPreferences[UserPreferences.libVLCVideoOutput]
 
 	SettingsColumn {
 		item {
@@ -343,7 +340,7 @@ fun SettingsPlaybackLibVLCVideoOutputScreen() {
 				captionContent = { Text(stringResource(entry.descriptionRes)) },
 				trailingContent = { RadioButton(checked = videoOutput == entry) },
 				onClick = {
-					videoOutput = entry
+					userPreferences[UserPreferences.libVLCVideoOutput] = entry
 					router.back()
 				},
 			)
@@ -355,7 +352,7 @@ fun SettingsPlaybackLibVLCVideoOutputScreen() {
 fun SettingsPlaybackLibVLCAudioOutputScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
-	var audioOutput by rememberPreference(userPreferences, UserPreferences.libVLCAudioOutput)
+	val audioOutput = userPreferences[UserPreferences.libVLCAudioOutput]
 
 	SettingsColumn {
 		item {
@@ -372,7 +369,7 @@ fun SettingsPlaybackLibVLCAudioOutputScreen() {
 				captionContent = { Text(stringResource(entry.descriptionRes)) },
 				trailingContent = { RadioButton(checked = audioOutput == entry) },
 				onClick = {
-					audioOutput = entry
+					userPreferences[UserPreferences.libVLCAudioOutput] = entry
 					router.back()
 				},
 			)
@@ -384,7 +381,7 @@ fun SettingsPlaybackLibVLCAudioOutputScreen() {
 fun SettingsPlaybackLibVLCReplayGainModeScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
-	var replayGainMode by rememberPreference(userPreferences, UserPreferences.libVLCReplayGainMode)
+	val replayGainMode = userPreferences[UserPreferences.libVLCReplayGainMode]
 
 	SettingsColumn {
 		item {
@@ -401,7 +398,7 @@ fun SettingsPlaybackLibVLCReplayGainModeScreen() {
 				captionContent = { Text(stringResource(entry.descriptionRes)) },
 				trailingContent = { RadioButton(checked = replayGainMode == entry) },
 				onClick = {
-					replayGainMode = entry
+					userPreferences[UserPreferences.libVLCReplayGainMode] = entry
 					router.back()
 				},
 			)
@@ -413,8 +410,8 @@ fun SettingsPlaybackLibVLCReplayGainModeScreen() {
 fun SettingsPlaybackLibVLCDeblockingScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
-	val libVLCBackend = koinInject<LibVLCBackend>()
-	var deblocking by rememberPreference(userPreferences, UserPreferences.libVLCDeblocking)
+	val backendSettings = koinInject<LibVLCBackendSettings>()
+	val deblocking = userPreferences[UserPreferences.libVLCDeblocking]
 
 	SettingsColumn {
 		item {
@@ -431,8 +428,8 @@ fun SettingsPlaybackLibVLCDeblockingScreen() {
 				captionContent = { Text(stringResource(entry.descriptionRes)) },
 				trailingContent = { RadioButton(checked = deblocking == entry) },
 				onClick = {
-					deblocking = entry
-					libVLCBackend.setPlaybackOptions(userPreferences.libVLCPlaybackOptions(deblocking = entry))
+					userPreferences[UserPreferences.libVLCDeblocking] = entry
+					backendSettings.setPlaybackOptions(deblocking = entry)
 					router.back()
 				},
 			)
