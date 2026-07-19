@@ -33,7 +33,11 @@ class NetworkPlaybackRecoveryService(
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
 			override fun onPlaybackError(error: PlaybackError) {
 				val entry = manager.queue.entry.value
-				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry)) return
+				if (
+					entry == null ||
+					liveTvPlaybackPolicy.isLiveTv(entry) ||
+					!isRecoverablePlaybackError(error.codeName)
+				) return
 				if (errorRecoveryAttemptedEntry === entry) {
 					Timber.w("Automatic recovery already attempted for ${error.codeName}")
 					return
@@ -58,7 +62,13 @@ class NetworkPlaybackRecoveryService(
 
 				val entry = manager.queue.entry.value
 				val playState = state.playState.value
-				if (entry !== errorRecoveryAttemptedEntry) errorRecoveryAttemptedEntry = null
+				if (
+					entry !== errorRecoveryAttemptedEntry ||
+					recoveryJob?.isActive != true &&
+					(playState == PlayState.PLAYING || playState == PlayState.PAUSED)
+				) {
+					errorRecoveryAttemptedEntry = null
+				}
 				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry) || playState == PlayState.STOPPED) {
 					disconnectedEntry = null
 					clearRecovering()
@@ -185,3 +195,11 @@ internal fun hasPlaybackRecovered(
 	positionAfterGrace: Duration,
 ) = playState == PlayState.PAUSED ||
 	playState == PlayState.PLAYING && positionAfterGrace > positionBeforeGrace
+
+internal fun isRecoverablePlaybackError(codeName: String) = when (codeName) {
+	"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
+	"ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT",
+	"LIBVLC_ERROR",
+	-> true
+	else -> false
+}

@@ -4,9 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -25,7 +23,6 @@ import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListMessage
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
-import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.componentName
 import org.koin.compose.koinInject
@@ -41,8 +38,8 @@ fun SettingsPlaybackPlayerScreen() {
 	val externalPlayerApps = remember(context) { externalAppRepository.getExternalPlayerApps(context) }
 	val currentExternalPlayer = remember(context) { externalAppRepository.getCurrentExternalPlayerApp(context) }
 
-	var playbackRewriteVideoEnabled by rememberPreference(userPreferences, UserPreferences.playbackRewriteVideoEnabled)
-	var playbackBackend by rememberPreference(userPreferences, UserPreferences.playbackBackend)
+	val playbackRewriteVideoEnabled = userPreferences[UserPreferences.playbackRewriteVideoEnabled]
+	val playbackBackend = userPreferences[UserPreferences.playbackBackend]
 
 	SettingsColumn {
 		item {
@@ -67,7 +64,7 @@ fun SettingsPlaybackPlayerScreen() {
 				trailingContent = { RadioButton(checked = currentExternalPlayer == null && !playbackRewriteVideoEnabled) },
 				captionContent = { Text(stringResource(R.string.video_player_internal)) },
 				onClick = {
-					playbackRewriteVideoEnabled = false
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = false
 					externalAppRepository.setExternalPlayerapp(null)
 					router.back()
 				}
@@ -85,14 +82,12 @@ fun SettingsPlaybackPlayerScreen() {
 							.clip(LocalShapes.current.small)
 					)
 				},
-				headingContent = { Text("ExoPlayer") },
+				headingContent = { Text(stringResource(R.string.playback_backend_exoplayer_name)) },
 				trailingContent = {
 					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.EXOPLAYER)
 				},
 				captionContent = { Text(stringResource(R.string.enable_playback_module_description)) },
 				onClick = {
-					playbackRewriteVideoEnabled = true
-					playbackBackend = PlaybackBackend.EXOPLAYER
 					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
 					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.EXOPLAYER
 					externalAppRepository.setExternalPlayerapp(null)
@@ -112,14 +107,12 @@ fun SettingsPlaybackPlayerScreen() {
 							.clip(LocalShapes.current.small)
 					)
 				},
-				headingContent = { Text("LibVLC") },
+				headingContent = { Text(stringResource(R.string.playback_backend_libvlc_name)) },
 				trailingContent = {
 					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.LIBVLC)
 				},
-				captionContent = { Text("Built-in VLC playback engine") },
+				captionContent = { Text(stringResource(R.string.playback_backend_libvlc_description)) },
 				onClick = {
-					playbackRewriteVideoEnabled = true
-					playbackBackend = PlaybackBackend.LIBVLC
 					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
 					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.LIBVLC
 					externalAppRepository.setExternalPlayerapp(null)
