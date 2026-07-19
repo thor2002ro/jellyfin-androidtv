@@ -40,7 +40,7 @@ import org.jellyfin.androidtv.ui.playback.PlaybackControllerContainer
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.ui.playback.external.DefaultExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
-import org.jellyfin.androidtv.ui.playback.external.MpvExternalPlayerApi
+import org.jellyfin.androidtv.ui.playback.external.LibMPVExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.MxExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.VimuExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.VlcExternalPlayerApi
@@ -188,7 +188,7 @@ val appModule = module {
 	// External player APIs
 	single { VlcExternalPlayerApi() } bind ExternalPlayerApi::class
 	single { MxExternalPlayerApi() } bind ExternalPlayerApi::class
-	single { MpvExternalPlayerApi() } bind ExternalPlayerApi::class
+	single { LibMPVExternalPlayerApi() } bind ExternalPlayerApi::class
 	single { VimuExternalPlayerApi() } bind ExternalPlayerApi::class
 	single { DefaultExternalPlayerApi() }
 

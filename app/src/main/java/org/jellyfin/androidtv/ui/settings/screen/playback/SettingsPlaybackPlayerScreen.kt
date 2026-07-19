@@ -16,6 +16,8 @@ import coil3.compose.rememberAsyncImagePainter
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.repository.ExternalAppRepository
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.playbackBackend
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.base.LocalShapes
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -40,6 +42,7 @@ fun SettingsPlaybackPlayerScreen() {
 	val currentExternalPlayer = remember(context) { externalAppRepository.getCurrentExternalPlayerApp(context) }
 
 	var playbackRewriteVideoEnabled by rememberPreference(userPreferences, UserPreferences.playbackRewriteVideoEnabled)
+	var playbackBackend by rememberPreference(userPreferences, UserPreferences.playbackBackend)
 
 	SettingsColumn {
 		item {
@@ -82,11 +85,43 @@ fun SettingsPlaybackPlayerScreen() {
 							.clip(LocalShapes.current.small)
 					)
 				},
-				headingContent = { Text("New video player") },
-				trailingContent = { RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled) },
+				headingContent = { Text("ExoPlayer") },
+				trailingContent = {
+					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.EXOPLAYER)
+				},
 				captionContent = { Text(stringResource(R.string.enable_playback_module_description)) },
 				onClick = {
 					playbackRewriteVideoEnabled = true
+					playbackBackend = PlaybackBackend.EXOPLAYER
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
+					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.EXOPLAYER
+					externalAppRepository.setExternalPlayerapp(null)
+					router.back()
+				}
+			)
+		}
+
+		item {
+			ListButton(
+				leadingContent = {
+					Image(
+						painter = rememberAsyncImagePainter(R.drawable.ic_flask),
+						contentDescription = null,
+						modifier = Modifier
+							.size(32.dp)
+							.clip(LocalShapes.current.small)
+					)
+				},
+				headingContent = { Text("LibVLC") },
+				trailingContent = {
+					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.LIBVLC)
+				},
+				captionContent = { Text("Built-in VLC playback engine") },
+				onClick = {
+					playbackRewriteVideoEnabled = true
+					playbackBackend = PlaybackBackend.LIBVLC
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
+					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.LIBVLC
 					externalAppRepository.setExternalPlayerapp(null)
 					router.back()
 				}
