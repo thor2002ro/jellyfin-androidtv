@@ -1,77 +1,102 @@
-<h1 align="center">Jellyfin for Android TV</h1>
-<h3 align="center">Part of the <a href="https://jellyfin.org">Jellyfin Project</a></h3>
+<div align="center">
 
----
+<img alt="Jellyfin banner" src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/banner-logo-solid.svg?sanitize=true" width="640" />
 
-<p align="center">
-<img alt="Logo banner" src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/banner-logo-solid.svg?sanitize=true"/>
-<br/><br/>
-<a href="https://github.com/jellyfin/jellyfin-androidtv">
-<img alt="GPL 2.0 License" src="https://img.shields.io/github/license/jellyfin/jellyfin-androidtv.svg"/>
-</a>
-<a href="https://github.com/jellyfin/jellyfin-androidtv/releases">
-<img alt="Current Release" src="https://img.shields.io/github/release/jellyfin/jellyfin-androidtv.svg"/>
-</a>
-<a href="https://translate.jellyfin.org/projects/jellyfin-android/jellyfin-androidtv/">
-<img alt="Translation Status" src="https://translate.jellyfin.org/widgets/jellyfin-android/-/jellyfin-androidtv/svg-badge.svg"/>
-</a>
-<br/>
-<a href="https://opencollective.com/jellyfin">
-<img alt="Donate" src="https://img.shields.io/opencollective/all/jellyfin.svg?label=backers"/>
-</a>
-<a href="https://features.jellyfin.org">
-<img alt="Feature Requests" src="https://img.shields.io/badge/fider-vote%20on%20features-success.svg"/>
-</a>
-<a href="https://matrix.to/#/+jellyfin:matrix.org">
-<img alt="Chat on Matrix" src="https://img.shields.io/matrix/jellyfin:matrix.org.svg?logo=matrix"/>
-</a>
-<br/>
-<a href="https://play.google.com/store/apps/details?id=org.jellyfin.androidtv">
-<img width="153" alt="Jellyfin on Google Play" src="https://jellyfin.org/images/store-icons/google-play.png"/>
-</a>
-<a href="https://www.amazon.com/gp/aw/d/B07TX7Z725">
-<img width="153" alt="Jellyfin on Amazon Appstore" src="https://jellyfin.org/images/store-icons/amazon.png"/>
-</a>
-<a href="https://f-droid.org/en/packages/org.jellyfin.androidtv/">
-<img width="153" alt="Jellyfin on F-Droid" src="https://jellyfin.org/images/store-icons/fdroid.png"/>
-</a>
-<br/>
-<a href="https://repo.jellyfin.org/releases/client/androidtv/">Download archive</a>
-</p>
+# Jellyfin Thor for Android TV
 
-Jellyfin for Android TV is a Jellyfin client for Android TV, Nvidia Shield, and Amazon Fire TV devices. We welcome all contributions and pull
-requests! If you have a larger feature in mind please open an issue so we can discuss the implementation before you start. 
+**Anime-grade subtitles, flexible playback engines, and better diagnostics.**
+
+[![Latest release](https://img.shields.io/github/release-date/thor2002ro/jellyfin-androidtv?label=latest%20release)](https://github.com/thor2002ro/jellyfin-androidtv/releases/latest)
+[![License](https://img.shields.io/github/license/thor2002ro/jellyfin-androidtv)](LICENSE)
+![Android 6.0+](https://img.shields.io/badge/Android%20TV-6.0%2B-3DDC84?logo=android&logoColor=white)
+![Unofficial fork](https://img.shields.io/badge/Jellyfin-unofficial%20community%20fork-orange)
+
+[Download APK](https://github.com/thor2002ro/jellyfin-androidtv/releases/latest)
+· [Report an issue](https://github.com/thor2002ro/jellyfin-androidtv/issues/new/choose)
+· [Upstream project](https://github.com/jellyfin/jellyfin-androidtv)
+
+</div>
+
+> [!WARNING]
+> Jellyfin Thor is an unofficial community fork. It is not supported by the Jellyfin team. Report fork-specific issues in this repository.
+
+Jellyfin Thor is a playback-focused fork of the Jellyfin Android TV client for Android TV, NVIDIA Shield, and compatible Fire TV devices.
+
+## Features
+
+- First-class ASS/SSA subtitle rendering through a custom `libass` integration
+- Media3/ExoPlayer, LibVLC, and external-player support
+- Hardware, software, and FFmpeg decoder selection with fallback and recovery
+- Expanded in-player **Stats for Nerds**
+- Live TV startup, buffering, and stream-recovery improvements
+- Device-specific MPEG-TS and decoder workarounds
+- Side-by-side installation with the official Jellyfin Android TV app
+
+The release package ID is:
+
+```text
+org.jellyfin.androidtv.thor
+```
+
+## Installation
+
+Requirements:
+
+- Android TV 6.0 / API 23 or newer
+- A reachable Jellyfin server
+- Permission to sideload applications when installing outside an app store
+
+Steps:
+
+1. Open the [latest release](https://github.com/thor2002ro/jellyfin-androidtv/releases/latest).
+2. Download the appropriate APK from **Assets**.
+3. Transfer and install it on the device.
+4. Launch Jellyfin Thor and connect to your server.
+
+> [!CAUTION]
+> Builds signed with different keys cannot update one another. Switching between a local build and a GitHub release may require uninstalling the existing app first.
 
 ## Building
 
-The app uses Gradle and requires the Android SDK. We recommend using Android Studio, which includes all required dependencies, for
-development and building. For manual building without Android Studio make sure a compatible JDK and Android SDK are installed and in your
-PATH, then use the Gradle wrapper (`./gradlew`) to build the project with the `assembleDebug` Gradle task to generate an apk file:
+Requirements:
+
+- Git with submodule support
+- JDK 21
+- Android Studio or a compatible Android SDK
 
 ```shell
+git clone --recurse-submodules https://github.com/thor2002ro/jellyfin-androidtv.git
+cd jellyfin-androidtv
 ./gradlew assembleDebug
 ```
 
-The task will create an APK file in the `/app/build/outputs/apk/debug` directory. This APK file uses a different app-id from our stable
-builds and can be manually installed to your device.
+The APK is written to:
 
-## Branching
+```text
+app/build/outputs/apk/debug/
+```
 
-The `master` branch is the primary development branch and the target for all pull requests. It is **unstable** and may contain breaking
-changes or unresolved bugs. For production deployments and forks, always use the latest `release-x.y.z` branch. Do not base production work
-or long-lived forks on `master`.
+Run tests with:
 
-Release branches are created at the start of a beta cycle and are kept up to date with each published release. Maintainers will cherry-pick
-selected changes into release branches as needed for backports. These branches are reused for subsequent patch releases.
+```shell
+./gradlew test
+```
 
-## Translating
+The build requires the custom Media3/FFmpeg decoder artifact:
 
-Translations can be improved very easily from our [Weblate](https://translate.jellyfin.org/projects/jellyfin-android/jellyfin-androidtv)
-instance. Look through the following graphic to see if your native language could use some work! We cannot accept changes to translation
-files via pull requests.
+```text
+dependencies/jellyfin-androidx-media/OUTPUT/media3-ffmpeg-decoder-latest-SNAPSHOT.aar
+```
 
-<p align="center">
-<a href="https://translate.jellyfin.org/engage/jellyfin-android/">
-<img alt="Detailed Translation Status" src="https://translate.jellyfin.org/widgets/jellyfin-android/-/jellyfin-androidtv/multi-auto.svg"/>
-</a>
-</p>
+See [`dependencies/jellyfin-androidx-media/README.md`](dependencies/jellyfin-androidx-media/README.md) if the artifact must be rebuilt.
+
+## Related projects
+
+- [`libass-android`](https://github.com/thor2002ro/libass-android) — Android libass build and Media3 ASS/SSA renderer
+- [`jellyfin-androidx-media`](https://github.com/thor2002ro/jellyfin-androidx-media) — Custom Media3 build with FFmpeg video decoding
+
+## License
+
+Based on [`jellyfin/jellyfin-androidtv`](https://github.com/jellyfin/jellyfin-androidtv) and distributed under the **GNU General Public License v2.0**. See [LICENSE](LICENSE).
+
+Jellyfin Thor is not affiliated with, endorsed by, or supported by the Jellyfin project.
