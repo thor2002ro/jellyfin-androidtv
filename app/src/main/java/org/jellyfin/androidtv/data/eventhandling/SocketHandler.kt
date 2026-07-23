@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.model.DataRefreshService
+import org.jellyfin.androidtv.ui.itemhandling.DirectStreamBadgeCache
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.ui.navigation.Destinations
@@ -174,7 +175,9 @@ class SocketHandler(
 			.mapNotNull { itemId -> itemId.toUUIDOrNull() }
 			.toSet()
 		if (changedItemIds.isNotEmpty()) {
-			SeriesStreamBadgeCache.remove(resolveSeriesStreamBadgeInvalidationIds(info, changedItemIds))
+			val invalidationIds = resolveSeriesStreamBadgeInvalidationIds(info, changedItemIds)
+			DirectStreamBadgeCache.remove(invalidationIds)
+			SeriesStreamBadgeCache.remove(invalidationIds)
 			dataRefreshService.lastLibraryChange = Instant.now()
 		}
 	}
