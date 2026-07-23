@@ -16,6 +16,8 @@ import org.jellyfin.androidtv.preference.TelemetryPreferences
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.DISABLED
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.LAST_USER
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.SPECIFIC_USER
+import org.jellyfin.androidtv.ui.itemhandling.DirectStreamBadgeCache
+import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.util.sdk.forUser
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
@@ -88,8 +90,8 @@ class SessionRepositoryImpl(
 	}
 
 	override suspend fun switchCurrentSession(serverId: UUID, userId: UUID): Boolean {
-		// No change in user - don't switch
-		if (currentSession.value?.userId == userId) {
+		// No change in session - don't switch
+		if (currentSession.value?.let { it.serverId == serverId && it.userId == userId } == true) {
 			Timber.d("Current session user is the same as the requested user")
 			return false
 		}
@@ -112,6 +114,7 @@ class SessionRepositoryImpl(
 	override fun destroyCurrentSession() {
 		Timber.i("Destroying current session")
 
+		clearStreamBadgeCaches()
 		userRepository.setCurrentUser(null)
 		serverRepository.setCurrentServer(null)
 		_currentSession.value = null
@@ -119,11 +122,20 @@ class SessionRepositoryImpl(
 	}
 
 	private suspend fun setCurrentSession(session: Session?): Boolean {
+		val previousSession = currentSession.value
+		val previousLastServerId = authenticationPreferences[AuthenticationPreferences.lastServerId].toUUIDOrNull()
+		val previousLastUserId = authenticationPreferences[AuthenticationPreferences.lastUserId].toUUIDOrNull()
+		val shouldClearStreamBadgeCaches = shouldClearStreamBadgeCaches(
+			previousSession,
+			previousLastServerId,
+			previousLastUserId,
+			session,
+		)
 		var server: Server? = null
 
 		if (session != null) {
 			// No change in session - don't switch
-			if (currentSession.value?.userId == session.userId) return true
+			if (previousSession == session) return true
 
 			// Update last active user
 			authenticationPreferences[AuthenticationPreferences.lastServerId] = session.serverId.toString()
@@ -144,6 +156,7 @@ class SessionRepositoryImpl(
 				val user = withContext(Dispatchers.IO) {
 					userApiClient.userApi.getCurrentUser().content
 				}
+				if (shouldClearStreamBadgeCaches) clearStreamBadgeCaches()
 				userRepository.setCurrentUser(user)
 				serverRepository.setCurrentServer(server)
 			} catch (err: ApiClientException) {
@@ -165,6 +178,11 @@ class SessionRepositoryImpl(
 		_currentSession.value = session
 
 		return true
+	}
+
+	private fun clearStreamBadgeCaches() {
+		DirectStreamBadgeCache.clear()
+		SeriesStreamBadgeCache.clear()
 	}
 
 	private fun createLastUserSession(): Session? {
@@ -206,4 +224,16 @@ class SessionRepositoryImpl(
 
 		return true
 	}
+}
+
+internal fun shouldClearStreamBadgeCaches(
+	previousSession: Session?,
+	previousLastServerId: UUID?,
+	previousLastUserId: UUID?,
+	nextSession: Session?,
+) = when {
+	nextSession == null -> false
+	previousSession != null -> previousSession != nextSession
+	previousLastServerId == null || previousLastUserId == null -> true
+	else -> previousLastServerId != nextSession.serverId || previousLastUserId != nextSession.userId
 }
