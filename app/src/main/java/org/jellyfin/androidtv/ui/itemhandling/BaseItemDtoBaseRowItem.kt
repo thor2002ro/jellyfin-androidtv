@@ -142,10 +142,76 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 
 	override fun equals(other: Any?): Boolean {
 		if (other is BaseItemDtoBaseRowItem) {
-			return other.baseItem == baseItem && other.streamBadgeMediaSources == streamBadgeMediaSources
+			return other.baseItem == baseItem &&
+				other.streamBadgeMediaSources == streamBadgeMediaSources &&
+				other.showRemainingTimeBadge == showRemainingTimeBadge
 		}
 		return super.equals(other)
 	}
 
-	override fun hashCode() = 31 * (baseItem?.hashCode() ?: 0) + (streamBadgeMediaSources?.hashCode() ?: 0)
+	override fun hashCode(): Int {
+		var result = baseItem?.hashCode() ?: 0
+		result = 31 * result + (streamBadgeMediaSources?.hashCode() ?: 0)
+		result = 31 * result + showRemainingTimeBadge.hashCode()
+		return result
+	}
+}
+
+internal fun BaseItemDto.toBaseItemRowItem(
+	preferParentThumb: Boolean,
+	staticHeight: Boolean,
+	showRemainingTimeBadge: Boolean = false,
+) = if (showRemainingTimeBadge) {
+	ResumeItemBaseRowItem(
+		item = this,
+		preferParentThumb = preferParentThumb,
+		staticHeight = staticHeight,
+	)
+} else {
+	BaseItemDtoBaseRowItem(
+		item = this,
+		preferParentThumb = preferParentThumb,
+		staticHeight = staticHeight,
+	)
+}
+
+fun BaseItemDtoBaseRowItem.copyWithItem(
+	item: BaseItemDto,
+	streamBadgeMediaSources: List<MediaSourceInfo>? = this.streamBadgeMediaSources,
+) = when (this) {
+	is ResumeItemBaseRowItem -> ResumeItemBaseRowItem(
+		item = item,
+		preferParentThumb = preferParentThumb,
+		staticHeight = staticHeight,
+		selectAction = selectAction,
+		preferSeriesPoster = preferSeriesPoster,
+		streamBadgeMediaSources = streamBadgeMediaSources,
+	)
+
+	else -> BaseItemDtoBaseRowItem(
+		item = item,
+		preferParentThumb = preferParentThumb,
+		staticHeight = staticHeight,
+		selectAction = selectAction,
+		preferSeriesPoster = preferSeriesPoster,
+		streamBadgeMediaSources = streamBadgeMediaSources,
+	)
+}
+
+class ResumeItemBaseRowItem(
+	item: BaseItemDto,
+	preferParentThumb: Boolean,
+	staticHeight: Boolean,
+	selectAction: BaseRowItemSelectAction = BaseRowItemSelectAction.ShowDetails,
+	preferSeriesPoster: Boolean = false,
+	streamBadgeMediaSources: List<MediaSourceInfo>? = null,
+) : BaseItemDtoBaseRowItem(
+	item = item,
+	preferParentThumb = preferParentThumb,
+	staticHeight = staticHeight,
+	selectAction = selectAction,
+	preferSeriesPoster = preferSeriesPoster,
+	streamBadgeMediaSources = streamBadgeMediaSources,
+) {
+	override val showRemainingTimeBadge = true
 }
