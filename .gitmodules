@@ -5,3 +5,11 @@
 	path = dependencies/jellyfin-androidx-media
 	url = https://github.com/thor2002ro/jellyfin-androidx-media.git
 	branch = master
+[submodule "dependencies/mpv-android-lib"]
+	path = dependencies/mpv-android-lib
+	url = https://github.com/thor2002ro/mpv-android-lib.git
+	branch = library
+[submodule "dependencies/libdovi-android"]
+	path = dependencies/libdovi-android
+	url = https://github.com/thor2002ro/libdovi-android.git
+	branch = main
