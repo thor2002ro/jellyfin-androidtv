@@ -599,11 +599,13 @@ private suspend fun ApiClient.loadCachedSeasonStreamBadgeSamples(
 	seriesId: UUID,
 	seasonId: UUID,
 ): List<BaseItemDto> {
-	SeriesStreamBadgeCache.get(seasonId)?.let { cached -> return cached }
+	val cached = SeriesStreamBadgeCache.get(seasonId)
+	if (cached?.hasCompleteSeriesStreamBadgeSource(seasonId) == true) return cached
 
-	return loadSeasonStreamBadgeSamples(seriesId, seasonId).also { samples ->
+	val samples = loadSeasonStreamBadgeSamples(seriesId, seasonId)
+	return samples.also {
 		if (samples.isNotEmpty()) SeriesStreamBadgeCache.save(seriesId, seasonId, samples)
-	}
+	}.ifEmpty { cached.orEmpty() }
 }
 
 private suspend fun ApiClient.loadSeasonStreamBadgeSamples(seriesId: UUID, seasonId: UUID): List<BaseItemDto> {
@@ -638,7 +640,7 @@ private suspend fun ApiClient.loadSeasonStreamBadgeSamples(seriesId: UUID, seaso
 	return emptyList()
 }
 
-private fun List<BaseItemDto>.hasCompleteSeriesStreamBadgeSource(seasonId: UUID) =
+internal fun List<BaseItemDto>.hasCompleteSeriesStreamBadgeSource(seasonId: UUID) =
 	BaseItemDto(id = seasonId, type = BaseItemKind.SEASON)
 		.withSeriesStreamBadgeSource(this)
 		.mediaSources

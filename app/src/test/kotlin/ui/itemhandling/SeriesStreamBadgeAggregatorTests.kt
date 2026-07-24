@@ -476,6 +476,18 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 			?.map { "${it.width}x${it.height}:${it.codec}" } shouldBe listOf("1920x1080:h264")
 	}
 
+	test("language-only cached season samples are incomplete") {
+		val seasonId = UUID.randomUUID()
+		val seriesId = UUID.randomUUID()
+
+		listOf(
+			episode(seriesId, source(stream(MediaStreamType.AUDIO, 0, "eng", isDefault = true))),
+		).hasCompleteSeriesStreamBadgeSource(seasonId) shouldBe false
+		listOf(
+			completeBadgeEpisode(seriesId),
+		).hasCompleteSeriesStreamBadgeSource(seasonId) shouldBe true
+	}
+
 	test("complete language samples keep different existing language badge values") {
 		val seasonId = UUID.randomUUID()
 		val item = BaseItemDto(
