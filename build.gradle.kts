@@ -16,30 +16,59 @@ val customMedia3FfmpegDecoderAarFile = run {
 	}
 	files.single()
 }
+val customMedia3AarFiles = run {
+	val outputDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/OUTPUT").asFile
+	listOf(
+		"common",
+		"container",
+		"database",
+		"datasource",
+		"datasource-okhttp",
+		"decoder",
+		"extractor",
+		"exoplayer",
+		"exoplayer-hls",
+		"session",
+		"ui",
+	).associateWith { artifact ->
+		outputDir.resolve("media3-$artifact-patched-release.aar").also { file ->
+			if (!file.isFile || file.length() == 0L) {
+				throw GradleException("Missing patched Media3 AAR at $file; run dependencies/jellyfin-androidx-media/rebuild-media3-pr-aars.bat")
+			}
+		}
+	}
+}
 val customMedia3Version = run {
-	val mediaVersionFile = listOf(
-		layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/constants.gradle").asFile,
-		layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/gradle/libs.versions.toml").asFile,
-	).first { it.isFile }
-	val releaseVersion = requireNotNull(Regex("""releaseVersion\s*=\s*['"]([^'"]+)['"]""").find(mediaVersionFile.readText())) {
-		"Could not read Media3 releaseVersion from $mediaVersionFile"
-	}.groupValues[1]
-	val mediaDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/media").asFile.absolutePath
-	val commit = providers.exec {
-		commandLine("git", "-c", "safe.directory=$mediaDir", "-C", mediaDir, "rev-parse", "--short", "HEAD")
-	}.standardOutput.asText.get().trim()
+	val versionFile = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/OUTPUT/media3-version.txt").asFile
+	if (versionFile.isFile) {
+		versionFile.readText().trim()
+	} else {
+		val mediaVersionFile = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/constants.gradle").asFile
+		val releaseVersion = requireNotNull(Regex("""releaseVersion\s*=\s*['"]([^'"]+)['"]""").find(mediaVersionFile.readText())) {
+			"Could not read Media3 releaseVersion from $mediaVersionFile"
+		}.groupValues[1]
+		val mediaDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/media").asFile.absolutePath
+		val commit = providers.exec {
+			commandLine("git", "-c", "safe.directory=$mediaDir", "-C", mediaDir, "rev-parse", "--short", "HEAD")
+		}.standardOutput.asText.get().trim()
 
-	"$releaseVersion+$commit"
+		"$releaseVersion+$commit"
+	}
 }
 val customMedia3FfmpegDecoderVersion = customMedia3Version
 val customFfmpegVersion = run {
-	val releaseVersion = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/ffmpeg/RELEASE").asFile.readText().trim()
-	val ffmpegDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/ffmpeg").asFile.absolutePath
-	val commit = providers.exec {
-		commandLine("git", "-c", "safe.directory=$ffmpegDir", "-C", ffmpegDir, "rev-parse", "--short", "HEAD")
-	}.standardOutput.asText.get().trim()
+	val versionFile = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/OUTPUT/ffmpeg-version.txt").asFile
+	if (versionFile.isFile) {
+		versionFile.readText().trim()
+	} else {
+		val releaseVersion = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/ffmpeg/RELEASE").asFile.readText().trim()
+		val ffmpegDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/ffmpeg").asFile.absolutePath
+		val commit = providers.exec {
+			commandLine("git", "-c", "safe.directory=$ffmpegDir", "-C", ffmpegDir, "rev-parse", "--short", "HEAD")
+		}.standardOutput.asText.get().trim()
 
-	"$releaseVersion+$commit"
+		"$releaseVersion+$commit"
+	}
 }
 val customLibyuvVersion = run {
 	val libyuvDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/build/libyuv").asFile.absolutePath
@@ -58,6 +87,7 @@ if (!customMedia3FfmpegDecoderAarFile.isFile || customMedia3FfmpegDecoderAarFile
 }
 
 extra["customMedia3FfmpegDecoderAarFile"] = customMedia3FfmpegDecoderAarFile
+extra["customMedia3AarFiles"] = customMedia3AarFiles
 extra["customMedia3Version"] = customMedia3Version
 extra["customMedia3FfmpegDecoderVersion"] = customMedia3FfmpegDecoderVersion
 extra["customFfmpegVersion"] = customFfmpegVersion

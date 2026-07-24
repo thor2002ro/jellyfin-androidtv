@@ -29,6 +29,7 @@ coil = "3.5.0"
 detekt = "2.0.0-alpha.5"
 java-jdk = "21"
 jellyfin-sdk = "1.8.11"
+guava = "33.6.0-android"
 koin = "4.2.2"
 koin-compose = "4.2.2"
 kotest = "6.2.2"
@@ -59,6 +60,7 @@ kotlin-gradle = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-guava = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-guava", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
 
 # Android(x)
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
