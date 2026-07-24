@@ -30,6 +30,7 @@ dependencies {
 
 	// AndroidX
 	implementation(libs.androidx.core)
+	implementation(libs.androidx.lifecycle.service)
 
 	// media3
 	implementation(libs.androidx.media3.session)
