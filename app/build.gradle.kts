@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
 	alias(libs.plugins.aboutlibraries)
 	alias(libs.plugins.android.application)
@@ -7,6 +9,23 @@ plugins {
 
 val thorApplicationId = "org.jellyfin.androidtv.thor"
 val appVersionName = project.getVersionName()
+val libassAndroidVersion = run {
+	val properties = Properties()
+	rootProject.file("dependencies/libass-android/gradle.properties").inputStream().use {
+		properties.load(it)
+	}
+	requireNotNull(properties.getProperty("VERSION_NAME")) {
+		"VERSION_NAME not found in dependencies/libass-android/gradle.properties"
+	}
+}
+val libassVersion = run {
+	val header = rootProject.file("dependencies/libass-android/lib_ass/src/main/cpp/libass-cmake/src/ass/libass/ass.h").readText()
+	val (major, minor, patch) = requireNotNull(Regex("""(?m)^#define\s+LIBASS_VERSION\s+0x([0-9])([0-9]{2})([0-9]{2})[0-9A-Fa-f]{3}\s*$""").find(header)) {
+		"LIBASS_VERSION not found in vendored libass header"
+	}.destructured
+
+	"$major.${minor.toInt()}.${patch.toInt()}"
+}
 
 android {
 	namespace = "org.jellyfin.androidtv"
@@ -20,6 +39,14 @@ android {
 		applicationId = thorApplicationId
 		versionName = appVersionName
 		versionCode = getVersionCode(appVersionName)
+
+		buildConfigField("String", "MEDIA3_VERSION", "\"${rootProject.extra["customMedia3Version"]}\"")
+		buildConfigField("String", "MEDIA3_FFMPEG_DECODER_VERSION", "\"${rootProject.extra["customMedia3FfmpegDecoderVersion"]}\"")
+		buildConfigField("String", "FFMPEG_VERSION", "\"${rootProject.extra["customFfmpegVersion"]}\"")
+		buildConfigField("String", "LIBYUV_VERSION", "\"${rootProject.extra["customLibyuvVersion"]}\"")
+		buildConfigField("String", "LIBASS_ANDROID_VERSION", "\"$libassAndroidVersion\"")
+		buildConfigField("String", "LIBASS_VERSION", "\"$libassVersion\"")
+		buildConfigField("String", "LIBVLC_VERSION", "\"${libs.versions.libvlc.get()}\"")
 	}
 
 	buildFeatures {

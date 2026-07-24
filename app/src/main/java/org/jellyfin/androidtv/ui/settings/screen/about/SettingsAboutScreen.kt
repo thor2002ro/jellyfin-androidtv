@@ -60,6 +60,25 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 		}
 
 		item {
+			val heading = "Main library versions"
+			val caption = listOf(
+				"Media3 ${BuildConfig.MEDIA3_VERSION}",
+				"Media3 FFmpeg decoder ${BuildConfig.MEDIA3_FFMPEG_DECODER_VERSION}",
+				"FFmpeg ${BuildConfig.FFMPEG_VERSION}",
+				"libyuv ${BuildConfig.LIBYUV_VERSION}",
+				"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
+				"libass ${BuildConfig.LIBASS_VERSION}",
+				"LibVLC ${BuildConfig.LIBVLC_VERSION}",
+			).joinToString("\n")
+			ListButton(
+				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },
+				headingContent = { Text(heading) },
+				captionContent = { Text(caption) },
+				onClick = copyAction(ClipData.newPlainText(heading, caption)),
+			)
+		}
+
+		item {
 			ListButton(
 				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },
 				headingContent = { Text(stringResource(R.string.licenses_link)) },
