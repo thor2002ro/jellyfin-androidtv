@@ -33,7 +33,7 @@ val customMedia3AarFiles = run {
 	).associateWith { artifact ->
 		outputDir.resolve("media3-$artifact-patched-release.aar").also { file ->
 			if (!file.isFile || file.length() == 0L) {
-				throw GradleException("Missing patched Media3 AAR at $file; run dependencies/jellyfin-androidx-media/rebuild-media3-pr-aars.bat")
+				throw GradleException("Missing patched Media3 AAR at $file; run dependencies/jellyfin-androidx-media/build.bat")
 			}
 		}
 	}
@@ -71,15 +71,20 @@ val customFfmpegVersion = run {
 	}
 }
 val customLibyuvVersion = run {
-	val libyuvDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/build/libyuv").asFile.absolutePath
-	val branch = providers.exec {
-		commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "branch", "--show-current")
-	}.standardOutput.asText.get().trim().ifBlank { "unknown" }
-	val commit = providers.exec {
-		commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "rev-parse", "--short", "HEAD")
-	}.standardOutput.asText.get().trim()
+	val versionFile = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/OUTPUT/libyuv-version.txt").asFile
+	if (versionFile.isFile) {
+		versionFile.readText().trim()
+	} else {
+		val libyuvDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/build/libyuv").asFile.absolutePath
+		val branch = providers.exec {
+			commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "branch", "--show-current")
+		}.standardOutput.asText.get().trim().ifBlank { "unknown" }
+		val commit = providers.exec {
+			commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "rev-parse", "--short", "HEAD")
+		}.standardOutput.asText.get().trim()
 
-	"$branch+$commit"
+		"$branch+$commit"
+	}
 }
 
 if (!customMedia3FfmpegDecoderAarFile.isFile || customMedia3FfmpegDecoderAarFile.length() == 0L) {
