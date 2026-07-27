@@ -39,6 +39,7 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 libass-android = "0.5.0"
 libvlc = "3.7.5"
+mpv-android-lib = "0.1.12"
 markwon = "4.6.2"
 mockk = "1.14.11"
 slf4j-timber = "0.0.8"
@@ -103,6 +104,8 @@ androidx-media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls
 androidx-media3-session = { module = "androidx.media3:media3-session", version.ref = "androidx-media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3" }
 libass-media3 = { module = "io.github.peerless2012:ass-media", version.ref = "libass-android" }
+libvlc = { module = "org.videolan.android:libvlc-all", version.ref = "libvlc" }
+mpv-android-lib = { module = "io.github.abdallahmehiz:mpv-android-lib", version.ref = "mpv-android-lib" }
 
 # Markwon
 markwon-core = { module = "io.noties.markwon:core", version.ref = "markwon" }
