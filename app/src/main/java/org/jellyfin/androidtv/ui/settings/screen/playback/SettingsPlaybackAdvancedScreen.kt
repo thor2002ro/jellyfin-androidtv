@@ -269,6 +269,14 @@ fun SettingsPlaybackAdvancedScreen() {
 			)
 		}
 
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_mpv_options)) },
+				captionContent = { Text(stringResource(R.string.preference_mpv_options_description)) },
+				onClick = { router.push(LibMPVSettingsRoutes.PLAYBACK_MPV) }
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_subtitles)) }) }
 
 		item {
