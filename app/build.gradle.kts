@@ -152,6 +152,7 @@ dependencies {
 	implementation(projects.playback.media3.exoplayer)
 	implementation(projects.playback.media3.session)
 	implementation(projects.playback.libvlc)
+	implementation(projects.playback.mpv)
 	implementation(projects.preference)
 	implementation(projects.updater)
 	implementation(libs.jellyfin.sdk) {

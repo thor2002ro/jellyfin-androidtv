@@ -124,6 +124,31 @@ fun SettingsPlaybackPlayerScreen() {
 			)
 		}
 
+		item {
+			ListButton(
+				leadingContent = {
+					Image(
+						painter = rememberAsyncImagePainter(R.drawable.ic_flask),
+						contentDescription = null,
+						modifier = Modifier
+							.size(32.dp)
+							.clip(LocalShapes.current.small)
+					)
+				},
+				headingContent = { Text(stringResource(R.string.playback_backend_mpv_name)) },
+				trailingContent = {
+					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.MPV)
+				},
+				captionContent = { Text(stringResource(R.string.playback_backend_mpv_description)) },
+				onClick = {
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
+					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.MPV
+					externalAppRepository.setExternalPlayerapp(null)
+					router.back()
+				}
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.video_player_external)) }) }
 
 		if (externalPlayerApps.isEmpty()) {
