@@ -22,6 +22,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.formatBufferBytes
@@ -35,6 +36,7 @@ import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import timber.log.Timber
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -89,7 +91,12 @@ class LibMPVBackend(
 		private set
 	private var forcedVideoDecoder: LibMPVVideoDecoder? = null
 	private val effectiveVideoDecoder: LibMPVVideoDecoder
-		get() = forcedVideoDecoder ?: videoDecoder
+		get() = effectiveLibMPVVideoDecoder(
+			configured = videoDecoder,
+			forced = forcedVideoDecoder,
+			softwareForLiveTv = playbackOptions.softwareDecodingForLiveTv,
+			isLiveTv = currentStream?.queueEntry?.isLiveTv == true,
+		)
 	private var playbackOptions = playbackOptionsProvider?.invoke() ?: LibMPVPlaybackOptions.DEFAULT
 	private val effectiveVideoDecoderValue: String
 		get() = effectiveVideoDecoder.mpvValue
@@ -125,6 +132,7 @@ class LibMPVBackend(
 	private var subtitleTimingSpeed = 1f
 	private var playbackSpeed = 1f
 	private var lastTickPosition = Duration.ZERO
+	private var lastPositionInfo = PositionInfo.EMPTY
 	private var endReported = false
 	private var externalSubtitlesAdded = false
 	private var loadRequested = false
@@ -140,6 +148,7 @@ class LibMPVBackend(
 	private var videoWidth = 0
 	private var videoHeight = 0
 	private var tracks = emptyList<LibMPVTrack>()
+	private var notifiedTracks = emptyList<LibMPVTrack>()
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
 	private val appliedCustomOptions = mutableSetOf<String>()
 	private val frameStatPropertyMisses = mutableMapOf<String, Long>()
@@ -170,6 +179,8 @@ class LibMPVBackend(
 		"config" to "no",
 		"gpu-shader-cache-dir" to appContext.cacheDir.absolutePath,
 		"icc-cache-dir" to appContext.cacheDir.absolutePath,
+		"sub-font-provider" to "fontconfig",
+		"embeddedfonts" to "yes",
 		// Jellyfin reuses one backend for the full queue, so keep libMPV alive after EOF.
 		"idle" to "yes",
 		"osc" to "no",
@@ -178,6 +189,7 @@ class LibMPVBackend(
 		"audio-file-auto" to "no",
 		"cover-art-auto" to "no",
 		"autoload-files" to "no",
+		"ytdl" to "no",
 		"keep-open" to "no",
 		"force-window" to "no",
 		"input-default-bindings" to "no",
@@ -355,7 +367,7 @@ class LibMPVBackend(
 		if (style == null) return
 		subtitleStyle = style
 		setProperty("sub-ass-override", playbackOptions.subtitleAssOverride)
-		setProperty("sub-font-size", (style.textSizeDp * 1.5f).coerceIn(8f, 96f).toString())
+		setProperty("sub-font-size", mpvSubtitleFontSize(style.textSizeDp).toString())
 		setProperty("sub-bold", if (style.textWeight >= 600) "yes" else "no")
 		setProperty("sub-color", style.textColor.mpvColor())
 		setProperty("sub-back-color", style.backgroundColor.mpvColor())
@@ -366,15 +378,14 @@ class LibMPVBackend(
 			"sub-border-style",
 			if (style.backgroundColor.alpha() > 0) "background-box" else "outline-and-shadow",
 		)
-		val position = (100f - style.bottomPaddingFraction * 100f).coerceIn(0f, 100f)
-		setProperty("sub-pos", position.toString())
+		setProperty("sub-margin-y", mpvSubtitleMarginY(style.bottomPaddingFraction).toString())
 	}
 
 	override fun prepareItem(item: QueueEntry) = Unit
 
 	override fun playItem(item: QueueEntry) {
 		val stream = requireNotNull(item.mediaStream)
-		if (stream == currentStream && resolvePlayState() == PlayState.PLAYING) return
+		if (stream == currentStream && terminalState == null) return play()
 		setMedia(stream)
 	}
 
@@ -394,6 +405,7 @@ class LibMPVBackend(
 		seeking = false
 		terminalState = null
 		tracks = emptyList()
+		notifiedTracks = emptyList()
 		videoWidth = 0
 		videoHeight = 0
 		pendingInitialTrackTypes.clear()
@@ -401,7 +413,9 @@ class LibMPVBackend(
 			if (stream.selectedAudioStreamIndex != null) pendingInitialTrackTypes += TrackType.AUDIO
 			if (stream.selectedSubtitleStreamIndex != null) pendingInitialTrackTypes += TrackType.SUBTITLE
 		}
-		lastTickPosition = Duration.ZERO
+		val startPosition = stream.queueEntry.startPosition ?: Duration.ZERO
+		lastPositionInfo = PositionInfo(startPosition, startPosition, Duration.ZERO)
+		lastTickPosition = startPosition
 		listener?.onSubtitleTimingOffsetSupportChange(true)
 		publishPlayState(force = true)
 
@@ -412,7 +426,13 @@ class LibMPVBackend(
 		applySubtitleTiming()
 		applyPlaybackSpeed()
 
-		if (!runCommand("loadfile", stream.url, "replace")) {
+		val startOption = stream.queueEntry.startPosition.mpvStartOption()
+		val loaded = if (startOption == null) {
+			runCommand("loadfile", stream.url, "replace")
+		} else {
+			runCommand("loadfile", stream.url, "replace", "-1", startOption)
+		}
+		if (!loaded) {
 			handlePlaybackError("Unable to issue MPV loadfile command")
 			return
 		}
@@ -465,6 +485,7 @@ class LibMPVBackend(
 		handler.removeCallbacks(tick)
 		loadRequested = false
 		endReported = true
+		lastPositionInfo = getPositionInfo()
 		runCommand("stop")
 		currentStream = null
 		activePlaylistEntryId = null
@@ -475,6 +496,7 @@ class LibMPVBackend(
 		seeking = false
 		terminalState = PlayState.STOPPED
 		tracks = emptyList()
+		notifiedTracks = emptyList()
 		pendingInitialTrackTypes.clear()
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
@@ -663,14 +685,13 @@ class LibMPVBackend(
 	}
 
 	override fun getPositionInfo(): PositionInfo {
-		val active = player.getPropertyDouble("time-pos").toDuration()
-		val duration = player.getPropertyDouble("duration").toDuration()
-		val cacheEnd = player.getPropertyDouble("demuxer-cache-time").toDuration()
-		val cacheDuration = player.getPropertyDouble("demuxer-cache-duration").toDuration()
-		val buffered = maxOf(active, if (cacheDuration > Duration.ZERO) active + cacheDuration else cacheEnd).let { value ->
-			if (duration > Duration.ZERO) minOf(value, duration) else value
-		}
-		return PositionInfo(active, buffered, duration)
+		return mpvPositionInfo(
+			activeSeconds = player.getPropertyDouble("time-pos"),
+			durationSeconds = player.getPropertyDouble("duration"),
+			cacheEndSeconds = player.getPropertyDouble("demuxer-cache-time"),
+			cacheDurationSeconds = player.getPropertyDouble("demuxer-cache-duration"),
+			fallback = lastPositionInfo,
+		).also { lastPositionInfo = it }
 	}
 
 	override fun getFrameStats(): PlaybackFrameStats {
@@ -799,7 +820,7 @@ class LibMPVBackend(
 
 	private fun handleEventProperty(generation: Long, property: String, value: MPVNode) = onPlayerEvent(generation) {
 		if (property == "track-list") {
-			tracks = parseTracks(value)
+			updateTracks(value)
 			applyInitialTrackSelection()
 		}
 	}
@@ -953,7 +974,16 @@ class LibMPVBackend(
 	}
 
 	private fun refreshTracks() {
-		player.getPropertyNode("track-list")?.let { node -> tracks = parseTracks(node) }
+		player.getPropertyNode("track-list")?.let(::updateTracks)
+	}
+
+	private fun updateTracks(node: MPVNode, notify: Boolean = true) {
+		val updatedTracks = parseTracks(node)
+		tracks = updatedTracks
+		if (notify && updatedTracks != notifiedTracks) {
+			notifiedTracks = updatedTracks
+			notifyTracksChanged()
+		}
 	}
 
 	private fun parseTracks(node: MPVNode): List<LibMPVTrack> = node.asArray().orEmpty().mapNotNull { item ->
@@ -1027,7 +1057,7 @@ class LibMPVBackend(
 	}
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
-		refreshTracks()
+		player.getPropertyNode("track-list")?.let { node -> updateTracks(node, notify = false) }
 		val stream = currentStream
 		val sourceTracks = stream?.mpvSourceTracks(type).orEmpty()
 		val selectable = tracks.filter { track -> track.type == type }
@@ -1136,9 +1166,32 @@ private fun String?.matchesExternalUrl(url: String): Boolean {
 	return this == url || substringAfterLast('/') == url.substringAfterLast('/')
 }
 
-private fun Double?.toDuration(): Duration {
-	val value = this ?: return Duration.ZERO
-	return if (value.isFinite() && value >= 0.0) value.seconds else Duration.ZERO
+internal fun mpvPositionInfo(
+	activeSeconds: Double?,
+	durationSeconds: Double?,
+	cacheEndSeconds: Double?,
+	cacheDurationSeconds: Double?,
+	fallback: PositionInfo,
+): PositionInfo {
+	val activeValue = activeSeconds?.takeIf { it.isFinite() && it >= 0.0 } ?: return fallback
+	val active = activeValue.seconds
+	val duration = durationSeconds
+		?.takeIf { it.isFinite() && it >= 0.0 }
+		?.seconds
+		?: fallback.duration
+	val cacheEnd = cacheEndSeconds?.takeIf { it.isFinite() && it >= 0.0 }?.seconds
+	val cacheDuration = cacheDurationSeconds?.takeIf { it.isFinite() && it >= 0.0 }?.seconds
+	val buffered = maxOf(
+		active,
+		when {
+			cacheDuration != null -> active + cacheDuration
+			cacheEnd != null -> cacheEnd
+			else -> fallback.buffer
+		},
+	).let { value ->
+		if (duration > Duration.ZERO) minOf(value, duration) else value
+	}
+	return PositionInfo(active, buffered, duration)
 }
 
 private fun Double.toLibMPVString() = String.format(Locale.US, "%.3f", this)
@@ -1177,6 +1230,12 @@ internal fun mpvHdrPipeline(
 internal fun mpvGpuApi(currentContext: String?): String? =
 	if (currentContext == "android") "opengl" else null
 
+internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float) =
+	(bottomPaddingFraction * 720f).roundToInt().coerceIn(0, 600)
+
+internal fun mpvSubtitleFontSize(textSizeDp: Float) =
+	(textSizeDp * 38f / 24f).coerceIn(8f, 96f)
+
 internal fun formatLibMPVBufferDetails(
 	bufferedBytes: Long?,
 	isPausedForCache: Boolean,
@@ -1193,6 +1252,9 @@ internal fun formatLibMPVBufferDetails(
 			?.let { add("$it/s") }
 	}
 }.joinToString(", ").takeIf(String::isNotEmpty)
+
+internal fun Duration?.mpvStartOption() =
+	this?.takeIf { it > Duration.ZERO }?.let { "start=${it.inWholeMilliseconds / 1_000.0}" }
 
 private fun Int.mpvColor() = String.format(Locale.US, "#%08X", toLong() and 0xFFFF_FFFFL)
 
