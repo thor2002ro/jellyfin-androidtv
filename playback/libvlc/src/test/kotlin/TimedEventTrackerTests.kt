@@ -49,20 +49,27 @@ class TimedEventTrackerTests : StringSpec({
 			isLiveTv = true,
 			normalBufferDuration = 120.seconds,
 			liveTvBufferDuration = 5.seconds,
+			maxBufferBytes = null,
+			bitrate = 20_000_000,
 			options = LibVLCPlaybackOptions(),
 		).contains(":network-caching=5000") shouldBe true
 		libVLCMediaOptions(
 			isLiveTv = false,
 			normalBufferDuration = 120.seconds,
 			liveTvBufferDuration = 5.seconds,
+			maxBufferBytes = null,
+			bitrate = 20_000_000,
 			options = LibVLCPlaybackOptions(),
 		).contains(":network-caching=120000") shouldBe true
 		libVLCMediaOptions(
 			isLiveTv = false,
 			normalBufferDuration = null,
 			liveTvBufferDuration = 5.seconds,
+			maxBufferBytes = null,
+			bitrate = 20_000_000,
 			options = LibVLCPlaybackOptions(),
 		).any { option -> option.startsWith(":network-caching=") } shouldBe false
+		cappedBufferDuration(120.seconds, maxBufferBytes = 125_000_000, bitrate = 100_000_000) shouldBe 10.seconds
 	}
 
 	"automatic deblocking follows VLC Android device defaults" {
