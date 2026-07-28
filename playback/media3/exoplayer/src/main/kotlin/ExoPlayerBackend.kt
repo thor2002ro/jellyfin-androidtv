@@ -395,6 +395,7 @@ class ExoPlayerBackend(
 	private var rendererPreferencesDirty = false
 	private var loadControlDirty = false
 	private var bufferAllocator: DefaultAllocator? = null
+	private var estimatedBandwidthBytesPerSecond: Long? = null
 	private var appliedRendererPreferences: FfmpegRendererPreferences? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 	private val mediaSourceTsExtractorFlags = mutableMapOf<String, Int>()
@@ -514,6 +515,7 @@ class ExoPlayerBackend(
 		videoDecoderName = null
 		videoDecoderType = null
 		videoInputFormat = null
+		estimatedBandwidthBytesPerSecond = null
 		videoDecoderCounters = null
 		audioDecoderName = null
 		audioDecoderType = null
@@ -1029,6 +1031,15 @@ class ExoPlayerBackend(
 	}
 
 	inner class DecoderAnalyticsListener : AnalyticsListener {
+		override fun onBandwidthEstimate(
+			eventTime: AnalyticsListener.EventTime,
+			totalLoadTimeMs: Int,
+			totalBytesLoaded: Long,
+			bitrateEstimate: Long,
+		) {
+			estimatedBandwidthBytesPerSecond = (bitrateEstimate / 8).takeIf { it > 0 }
+		}
+
 		override fun onAudioEnabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
@@ -1610,6 +1621,13 @@ class ExoPlayerBackend(
 		counters?.ensureUpdated()
 		refreshAudioPassthroughSupport(allowReceiverRegistration = true)
 		val tsExtractorFlags = currentTsExtractorFlags()
+		val allocatedBytes = bufferAllocator?.totalBytesAllocated?.toLong()
+		val bufferDetails = formatExoBufferDetails(
+			allocatedBytes = allocatedBytes,
+			isBuffering = exoPlayer.playbackState == Player.STATE_BUFFERING,
+			isLoading = exoPlayer.isLoading,
+			estimatedBandwidthBytesPerSecond = estimatedBandwidthBytesPerSecond,
+		)
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
@@ -1625,7 +1643,7 @@ class ExoPlayerBackend(
 			audioDecoderName = audioDecoderName,
 			audioDecoderType = audioDecoderType,
 			audioPassthroughSupported = audioPassthroughSupported,
-			bufferedBytes = bufferAllocator?.totalBytesAllocated?.toLong()?.formatBufferBytes(),
+			bufferedBytes = bufferDetails,
 			subtitleExtractor = subtitleExtractorDebug(),
 			subtitleRender = subtitleRenderDebug(),
 			subtitleParser = subtitleParserDebug(),
@@ -2120,6 +2138,23 @@ internal fun Format?.colorDetails(): Map<String, String> {
 		}?.let { put("Color range", it) }
 	}
 }
+
+internal fun formatExoBufferDetails(
+	allocatedBytes: Long?,
+	isBuffering: Boolean,
+	isLoading: Boolean,
+	estimatedBandwidthBytesPerSecond: Long?,
+) = buildList {
+	allocatedBytes?.formatBufferBytes()?.let(::add)
+	when {
+		isBuffering -> add("buffering")
+		isLoading -> add("loading")
+		allocatedBytes != null -> add("idle")
+	}
+	if (isBuffering || isLoading) {
+		estimatedBandwidthBytesPerSecond?.formatBufferBytes()?.let { add("~$it/s") }
+	}
+}.joinToString(", ").takeIf(String::isNotEmpty)
 
 private fun Format.dolbyVisionMode(): String = codecs
 	?.split(',')
