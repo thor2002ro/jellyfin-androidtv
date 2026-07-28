@@ -59,12 +59,14 @@ class NetworkPlaybackRecoveryService(
 			var lastPlayState = state.playState.value
 			var bufferingEntry: QueueEntry? = null
 			var consecutiveBufferingChecks = 0
+			var playedEntry: QueueEntry? = null
 
 			while (true) {
 				delay(NETWORK_RECOVERY_CHECK_INTERVAL)
 
 				val entry = manager.queue.entry.value
 				val playState = state.playState.value
+				if (playState == PlayState.PLAYING) playedEntry = entry
 				if (
 					entry !== errorRecoveryAttemptedEntry ||
 					recoveryJob?.isActive != true &&
@@ -84,6 +86,7 @@ class NetworkPlaybackRecoveryService(
 					bufferingEntry = null
 					consecutiveBufferingChecks = 0
 					bufferingRecoveryAttemptedEntry = null
+					playedEntry = null
 					clearRecovering()
 					wasNetworkAvailable = isNetworkAvailable()
 					lastPlayState = playState
@@ -111,7 +114,11 @@ class NetworkPlaybackRecoveryService(
 					}
 					consecutiveBufferingChecks++
 					if (
-						shouldRecoverStalledBuffer(consecutiveBufferingChecks, BUFFERING_RECOVERY_CHECKS) &&
+						shouldRecoverStalledBuffer(
+							consecutiveChecks = consecutiveBufferingChecks,
+							requiredChecks = BUFFERING_RECOVERY_CHECKS,
+							hasPlayed = playedEntry === entry,
+						) &&
 						bufferingRecoveryAttemptedEntry !== entry
 					) {
 						bufferingRecoveryAttemptedEntry = entry
@@ -227,8 +234,8 @@ class NetworkPlaybackRecoveryService(
 	}
 }
 
-internal fun shouldRecoverStalledBuffer(consecutiveChecks: Int, requiredChecks: Int) =
-	consecutiveChecks >= requiredChecks
+internal fun shouldRecoverStalledBuffer(consecutiveChecks: Int, requiredChecks: Int, hasPlayed: Boolean) =
+	consecutiveChecks >= if (hasPlayed) requiredChecks else requiredChecks * 2
 
 internal fun hasPlaybackRecovered(
 	playState: PlayState,
