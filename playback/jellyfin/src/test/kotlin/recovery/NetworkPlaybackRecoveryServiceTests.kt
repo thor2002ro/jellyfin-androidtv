@@ -20,7 +20,12 @@ class NetworkPlaybackRecoveryServiceTests : FunSpec({
 	}
 
 	test("stalled buffering waits for the configured threshold") {
-		shouldRecoverStalledBuffer(consecutiveChecks = 4, requiredChecks = 5) shouldBe false
-		shouldRecoverStalledBuffer(consecutiveChecks = 5, requiredChecks = 5) shouldBe true
+		shouldRecoverStalledBuffer(consecutiveChecks = 4, requiredChecks = 5, hasPlayed = true) shouldBe false
+		shouldRecoverStalledBuffer(consecutiveChecks = 5, requiredChecks = 5, hasPlayed = true) shouldBe true
+	}
+
+	test("initial buffering uses a longer recovery threshold") {
+		shouldRecoverStalledBuffer(consecutiveChecks = 9, requiredChecks = 5, hasPlayed = false) shouldBe false
+		shouldRecoverStalledBuffer(consecutiveChecks = 10, requiredChecks = 5, hasPlayed = false) shouldBe true
 	}
 })
