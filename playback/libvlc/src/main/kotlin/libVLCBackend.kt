@@ -26,6 +26,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
@@ -454,6 +455,10 @@ class LibVLCBackend(
 			videoDecodedFrames = stats?.decodedVideo ?: 0,
 			videoDecoderName = "LibVLC ${effectiveVideoDecoder.label}",
 			audioDecoderName = "LibVLC",
+			bufferedBytes = estimateBufferedBytes(
+				stats?.demuxBitrate,
+				if (currentStream?.queueEntry?.isLiveTv == true) liveTvBufferDuration else normalBufferDuration,
+			)?.let { "~${it.formatBufferBytes()}" },
 			subtitleExtractor = "LibVLC",
 			subtitleRender = "LibVLC",
 		)
@@ -613,3 +618,8 @@ class LibVLCBackend(
 
 internal fun bufferingPlayState(percent: Float): PlayState? =
 	PlayState.PLAYING.takeIf { percent >= 100f }
+
+internal fun estimateBufferedBytes(bytesPerSecond: Float?, duration: Duration?): Long? {
+	if (bytesPerSecond == null || !bytesPerSecond.isFinite() || bytesPerSecond <= 0f || duration == null || duration <= Duration.ZERO) return null
+	return (bytesPerSecond * duration.inWholeMilliseconds / 1_000.0).toLong()
+}
