@@ -70,7 +70,7 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 				"libyuv ${BuildConfig.LIBYUV_VERSION}",
 				"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
 				"libass ${BuildConfig.LIBASS_VERSION}",
-				"LibVLC ${BuildConfig.LIBVLC_VERSION}",
+				"libVLC ${BuildConfig.LIBVLC_VERSION}",
 				"mpv-android-lib ${LibMPVBuildConfig.VERSION}",
 				"libMPV ${Utils.VERSIONS.mpv}",
 			).joinToString("\n")

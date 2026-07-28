@@ -357,7 +357,7 @@ class LibVLCBackend(
 	override fun seekTo(position: Duration) {
 		val previous = getPositionInfo()
 		if (player.setTime(position.inWholeMilliseconds) < 0) {
-			Timber.w("LibVLC rejected seek to %d ms", position.inWholeMilliseconds)
+			Timber.w("libVLC rejected seek to %d ms", position.inWholeMilliseconds)
 			return
 		}
 		timedEvents.advance(previous.active, position, previous.duration, natural = false)
@@ -421,12 +421,12 @@ class LibVLCBackend(
 	override fun setSubtitleTiming(offset: Duration, speed: Float) {
 		subtitleTimingOffset = offset
 		applySubtitleTimingOffset()
-		if (speed != 1f) Timber.w("LibVLC does not support subtitle timing speed")
+		if (speed != 1f) Timber.w("libVLC does not support subtitle timing speed")
 	}
 
 	private fun applySubtitleTimingOffset() {
 		if (!player.setSpuDelay(subtitleTimingOffset.inWholeMicroseconds)) {
-			Timber.w("LibVLC rejected subtitle timing offset")
+			Timber.w("libVLC rejected subtitle timing offset")
 		}
 	}
 
@@ -451,16 +451,16 @@ class LibVLCBackend(
 		return PlaybackFrameStats(
 			droppedFrames = stats?.lostPictures ?: 0,
 			corruptedFrames = stats?.demuxCorrupted ?: 0,
-			playerName = "LibVLC",
+			playerName = "libVLC",
 			videoDecodedFrames = stats?.decodedVideo ?: 0,
-			videoDecoderName = "LibVLC ${effectiveVideoDecoder.label}",
-			audioDecoderName = "LibVLC",
+			videoDecoderName = "libVLC ${effectiveVideoDecoder.label}",
+			audioDecoderName = "libVLC",
 			bufferedBytes = estimateBufferedBytes(
 				stats?.demuxBitrate,
 				if (currentStream?.queueEntry?.isLiveTv == true) liveTvBufferDuration else normalBufferDuration,
 			)?.let { "~${it.formatBufferBytes()}" },
-			subtitleExtractor = "LibVLC",
-			subtitleRender = "LibVLC",
+			subtitleExtractor = "libVLC",
+			subtitleRender = "libVLC",
 		)
 	}
 
@@ -537,7 +537,7 @@ class LibVLCBackend(
 			TrackType.SUBTITLE -> player.spuTrack == track.id || player.setSpuTrack(track.id)
 		}
 		if (selected) {
-			Timber.i("Applied initial %s stream index %d as LibVLC track %d", type.name.lowercase(), streamIndex, track.id)
+			Timber.i("Applied initial %s stream index %d as libVLC track %d", type.name.lowercase(), streamIndex, track.id)
 		}
 		return selected
 	}
