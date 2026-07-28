@@ -188,4 +188,10 @@ class TimedEventTrackerTests : StringSpec({
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 9) shouldBe 1
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 4) shouldBe 2
 	}
+
+	"libVLC buffer details clamp invalid progress and do not claim cache speed" {
+		normalizeBufferingPercent(120f, 50f) shouldBe 100f
+		normalizeBufferingPercent(Float.NaN, 50f) shouldBe 50f
+		formatLibVLCBufferDetails(1_048_576, 50f) shouldBe "~1.00 MiB, buffering 50%"
+	}
 })
