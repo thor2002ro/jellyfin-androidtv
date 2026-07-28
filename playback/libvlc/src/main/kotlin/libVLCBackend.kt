@@ -226,6 +226,7 @@ class LibVLCBackend(
 	private var subtitleLayoutListener: View.OnLayoutChangeListener? = null
 	private var lastTickPosition = Duration.ZERO
 	private var endReported = false
+	private var released = false
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
 
 	private val tick = object : Runnable {
@@ -308,7 +309,10 @@ class LibVLCBackend(
 		player.play()
 	}
 
-	override fun replaceItem(item: QueueEntry) = playItem(item)
+	override fun replaceItem(item: QueueEntry) {
+		setMedia(requireNotNull(item.mediaStream))
+		player.play()
+	}
 
 	override fun setBufferOptions(options: PlaybackBufferOptions) {
 		normalBufferDuration = options.bufferForPlaybackDuration
@@ -370,6 +374,28 @@ class LibVLCBackend(
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
 		listener?.onSubtitleTimingOffsetSupportChange(false)
+	}
+
+	override fun reset() {
+		if (!released) stop()
+	}
+
+	override fun cleanup() {
+		if (released) return
+		handler.removeCallbacks(tick)
+		setListener(null)
+		setSurfaceView(null)
+		setSubtitleView(null)
+	}
+
+	override fun release() {
+		if (released) return
+		reset()
+		cleanup()
+		player.setEventListener(null)
+		player.release()
+		libVLC.release()
+		released = true
 	}
 
 	override fun seekTo(position: Duration) {
