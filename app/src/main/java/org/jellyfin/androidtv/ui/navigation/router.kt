@@ -60,6 +60,7 @@ class Router(
 	}
 
 	fun back() {
+		if (backStack.size <= 1) return
 		backStack.removeLastOrNull()?.let(focusedKeys::remove)
 	}
 
