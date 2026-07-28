@@ -28,12 +28,20 @@ data class PlaybackFrameStats(
 	val corruptedFrames: Int,
 	val playerName: String? = null,
 	val videoDecodedFrames: Int = 0,
+	val videoDecoderFps: Float? = null,
 	val videoDecoderName: String? = null,
 	val videoDecoderType: String? = null,
 	val videoCodec: String? = null,
 	val videoHdrMode: String? = null,
+	val videoSourceFps: Float? = null,
+	val videoBitrate: Int? = null,
+	val videoRange: String? = null,
 	val audioDecoderName: String? = null,
 	val audioDecoderType: String? = null,
+	val audioCodec: String? = null,
+	val audioBitrate: Int? = null,
+	val audioChannels: String? = null,
+	val audioSampleRate: Int? = null,
 	val audioPassthroughSupported: Boolean? = null,
 	val bufferedBytes: String? = null,
 	val subtitleExtractor: String? = null,
@@ -42,6 +50,7 @@ data class PlaybackFrameStats(
 	val subtitlePath: String? = null,
 	val extractorFlags: String? = null,
 	val libass: PlaybackLibassStats? = null,
+	val backendDetails: Map<String, String> = emptyMap(),
 ) {
 	companion object {
 		val EMPTY = PlaybackFrameStats(
