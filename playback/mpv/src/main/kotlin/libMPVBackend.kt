@@ -99,6 +99,7 @@ class LibMPVBackend(
 			isLiveTv = currentStream?.queueEntry?.isLiveTv == true,
 		)
 	private var playbackOptions = playbackOptionsProvider?.invoke() ?: LibMPVPlaybackOptions.DEFAULT
+	private val vulkanSupported = isLibMPVVulkanSupported(context)
 	private val effectiveVideoDecoderValue: String
 		get() = effectiveVideoDecoder.mpvValue
 	private val effectiveVideoOutput: String
@@ -134,6 +135,7 @@ class LibMPVBackend(
 	@Volatile
 	private var playerGeneration = 0L
 	private var appliedInstanceOptions = emptyMap<String, String>()
+	private var appliedGpuApi = playbackOptions.gpuApi
 	private val timedEvents = TimedEventTracker()
 
 	private var bufferOptions = PlaybackBufferOptions()
@@ -212,7 +214,7 @@ class LibMPVBackend(
 		"input-vo-keyboard" to "no",
 		"terminal" to "no",
 	).apply {
-		putAll(playbackOptions.managedOptions())
+		putAll(playbackOptions.managedOptions(vulkanSupported))
 		put("hwdec", effectiveVideoDecoderValue)
 		putAll(currentCustomOptions())
 	}
@@ -250,6 +252,8 @@ class LibMPVBackend(
 		val desiredOptions = currentInstanceOptions()
 		if (forceRecreate || desiredOptions != appliedInstanceOptions) {
 			recreatePlayer(desiredOptions)
+		} else {
+			appliedGpuApi = playbackOptions.gpuApi
 		}
 	}
 
@@ -271,6 +275,7 @@ class LibMPVBackend(
 		player = replacement
 		playerObserver = null
 		appliedInstanceOptions = LinkedHashMap(desiredOptions)
+		appliedGpuApi = playbackOptions.gpuApi
 		surfaceAttached = false
 		finishPlayerSetup(replacement)
 	}
@@ -630,7 +635,7 @@ class LibMPVBackend(
 		val customOptions = currentCustomOptions()
 		val removedOptions = appliedCustomOptions - customOptions.keys
 
-		playbackOptions.managedOptions().forEach(::setOption)
+		playbackOptions.managedOptions(vulkanSupported).forEach(::setOption)
 		removedOptions.forEach(::restoreCustomOption)
 		customOptions.forEach(::setOption)
 
@@ -785,7 +790,19 @@ class LibMPVBackend(
 		val videoGamma = string("video-params/gamma")
 		val dolbyVisionProfile = integer("current-tracks/video/dolby-vision-profile")
 		val videoOutput = string("current-vo")
+		val videoOutputDisplay = mpvSelectionDisplay(effectiveVideoOutput, videoOutput)
 		val gpuApi = mpvGpuApi(string("current-gpu-context"))
+		val gpuApiVersion = gpuApi?.let(gpuApiVersionProvider)
+		val gpuApiDisplay = mpvGpuApiDisplay(
+			requested = appliedGpuApi,
+			actual = gpuApi,
+			requestedVersion = when (appliedGpuApi) {
+				"auto" -> null
+				gpuApi -> gpuApiVersion
+				else -> gpuApiVersionProvider(appliedGpuApi)
+			},
+			actualVersion = gpuApiVersion,
+		)
 		val audioFormat = string("audio-params/format")
 		val hasHdr10Plus = double("video-params/scene-max-r") != null ||
 			double("video-params/scene-max-g") != null ||
@@ -820,9 +837,7 @@ class LibMPVBackend(
 			string("deinterlace-active")?.let { put("Deinterlacing active", it) }
 			number("vsync-ratio")?.let { put("VSync ratio", it) }
 			number("vsync-jitter")?.let { put("VSync jitter", it) }
-			videoOutput?.let {
-				put("Video output", if (gpuApi == "opengl" || gpuApi == "vulkan") "$it ($gpuApi)" else it)
-			}
+			videoOutputDisplay?.let { put("Video output", "$it${gpuApiDisplay?.let { api -> " ($api)" }.orEmpty()}") }
 			string("current-ao")?.let { put("Audio output", it) }
 			string("video-params/pixelformat")?.let { put("Output pixel format", it) }
 			string("video-params/colormatrix")?.let { put("Color matrix", it) }
@@ -1295,7 +1310,29 @@ internal fun mpvHdrPipeline(
 }
 
 internal fun mpvGpuApi(currentContext: String?): String? =
-	if (currentContext == "android") "opengl" else null
+	when (currentContext) {
+		"android" -> "opengl"
+		"androidvk" -> "vulkan"
+		else -> null
+	}
+
+internal fun mpvSelectionDisplay(requested: String, actual: String?) =
+	actual?.let { if (requested != it) "$requested \u2192 $it" else it }
+
+internal fun mpvGpuApiDisplay(
+	requested: String,
+	actual: String?,
+	requestedVersion: String?,
+	actualVersion: String?,
+): String? {
+	actual ?: return null
+	fun apiVersion(api: String, version: String?) = listOfNotNull(api, version).joinToString(" ")
+	return if (requested != actual) {
+		"${apiVersion(requested, requestedVersion)} \u2192 ${apiVersion(actual, actualVersion)}"
+	} else {
+		apiVersion(actual, actualVersion)
+	}
+}
 
 internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float) =
 	(bottomPaddingFraction * 720f).roundToInt().coerceIn(0, 600)

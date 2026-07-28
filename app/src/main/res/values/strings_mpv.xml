@@ -105,7 +105,11 @@
 	<string name="preference_mpv_gpu_api_opengl">OpenGL</string>
 	<string name="preference_mpv_gpu_api_opengl_description">Force the OpenGL ES rendering path.</string>
 	<string name="preference_mpv_gpu_api_vulkan">Vulkan</string>
-	<string name="preference_mpv_gpu_api_vulkan_description">Force Vulkan when the device and bundled libMPV support it.</string>
+	<string name="preference_mpv_gpu_api_vulkan_description">Prefer Vulkan and fall back to OpenGL when Vulkan cannot initialize.</string>
+	<string name="preference_mpv_gpu_api_vulkan_unavailable">Requires Vulkan 1.2 support.</string>
+	<string name="preference_mpv_gpu_device">Current device graphics</string>
+	<string name="preference_mpv_gpu_device_versions">%1$s • Vulkan %2$s</string>
+	<string name="preference_mpv_gpu_version_unavailable">Unavailable</string>
 	<string name="preference_mpv_gpu_context">GPU context</string>
 	<string name="preference_mpv_gpu_context_android">Android</string>
 	<string name="preference_mpv_gpu_context_android_description">Use the Android EGL surface context expected by the embedded player.</string>
