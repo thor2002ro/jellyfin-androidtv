@@ -18,4 +18,9 @@ class NetworkPlaybackRecoveryServiceTests : FunSpec({
 		isRecoverablePlaybackError("LIBVLC_ERROR") shouldBe true
 		isRecoverablePlaybackError("ERROR_CODE_DECODING_FAILED") shouldBe false
 	}
+
+	test("stalled buffering waits for the configured threshold") {
+		shouldRecoverStalledBuffer(consecutiveChecks = 4, requiredChecks = 5) shouldBe false
+		shouldRecoverStalledBuffer(consecutiveChecks = 5, requiredChecks = 5) shouldBe true
+	}
 })
