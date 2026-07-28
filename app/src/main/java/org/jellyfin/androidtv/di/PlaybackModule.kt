@@ -34,6 +34,7 @@ import org.jellyfin.androidtv.preference.constant.toPlaybackBufferOptions
 import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
+import org.jellyfin.androidtv.util.DeviceGraphicsInfoProvider
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.androidtv.util.AndroidVersion
@@ -126,6 +127,7 @@ private fun Scope.createLibMPVBackend(): LibMPVBackend {
 		context = androidContext(),
 		videoDecoderProvider = { userPreferences[UserPreferences.mpvDecoder].decoder },
 		playbackOptionsProvider = { userPreferences.mpvPlaybackOptions() },
+		gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
 	)
 }
 
