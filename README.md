@@ -25,7 +25,7 @@ Jellyfin Thor is a playback-focused fork of the Jellyfin Android TV client for A
 ## Features
 
 - First-class ASS/SSA subtitle rendering through a custom `libass` integration
-- Media3/ExoPlayer, LibVLC, and external-player support
+- Media3/ExoPlayer, libVLC, and external-player support
 - Hardware, software, and FFmpeg decoder selection with fallback and recovery
 - Expanded in-player **Stats for Nerds**
 - Live TV startup, buffering, and stream-recovery improvements
