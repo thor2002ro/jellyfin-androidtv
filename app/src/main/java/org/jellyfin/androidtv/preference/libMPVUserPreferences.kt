@@ -20,7 +20,7 @@ import org.jellyfin.preference.intPreference
 import org.jellyfin.preference.stringPreference
 
 private val mpvDecoderPreference = enumPreference("mpv_decoder", LibMPVDecoder.AUTOMATIC)
-private val mpvVideoOutputPreference = enumPreference("mpv_video_output", LibMPVVideoOutput.GPU)
+private val mpvVideoOutputPreference = enumPreference("mpv_video_output", LibMPVVideoOutput.GPU_NEXT)
 private val mpvGpuContextPreference = enumPreference("mpv_gpu_context", LibMPVGpuContext.ANDROID)
 private val mpvGpuApiPreference = enumPreference("mpv_gpu_api", LibMPVGpuApi.AUTO)
 private val mpvVideoSyncPreference = enumPreference("mpv_video_sync", LibMPVVideoSync.AUDIO)
@@ -32,11 +32,12 @@ private val mpvAudioChannelsPreference = enumPreference("mpv_audio_channels", Li
 private val mpvAudioSpdifPreference = enumPreference("mpv_audio_spdif", LibMPVAudioSpdif.NONE)
 private val mpvReplayGainPreference = enumPreference("mpv_replay_gain", LibMPVReplayGain.DISABLED)
 private val mpvLoopFilterPreference = enumPreference("mpv_loop_filter", LibMPVLoopFilter.DEFAULT)
-private val mpvSubtitleAssOverridePreference = enumPreference("mpv_sub_ass_override", LibMPVSubtitleAssOverride.FORCE)
+private val mpvSubtitleAssOverridePreference = enumPreference("mpv_sub_ass_override", LibMPVSubtitleAssOverride.NO)
 private val mpvInterpolationPreference = booleanPreference("mpv_interpolation", false)
 private val mpvDebandPreference = booleanPreference("mpv_deband", false)
 private val mpvAudioPitchCorrectionPreference = booleanPreference("mpv_audio_pitch_correction", true)
 private val mpvSubtitleUseMarginsPreference = booleanPreference("mpv_sub_use_margins", true)
+private val mpvSoftwareDecodingForLiveTvPreference = booleanPreference("mpv_software_decoding_livetv", false)
 private val mpvDecoderThreadsPreference = intPreference("mpv_decoder_threads", 0)
 private val mpvOptionOverridesPreference = stringPreference("mpv_option_overrides", "")
 
@@ -58,5 +59,6 @@ val UserPreferences.Companion.mpvInterpolation get() = mpvInterpolationPreferenc
 val UserPreferences.Companion.mpvDeband get() = mpvDebandPreference
 val UserPreferences.Companion.mpvAudioPitchCorrection get() = mpvAudioPitchCorrectionPreference
 val UserPreferences.Companion.mpvSubtitleUseMargins get() = mpvSubtitleUseMarginsPreference
+val UserPreferences.Companion.mpvSoftwareDecodingForLiveTv get() = mpvSoftwareDecodingForLiveTvPreference
 val UserPreferences.Companion.mpvDecoderThreads get() = mpvDecoderThreadsPreference
 val UserPreferences.Companion.mpvOptionOverrides get() = mpvOptionOverridesPreference

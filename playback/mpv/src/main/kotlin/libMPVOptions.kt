@@ -5,18 +5,26 @@ import java.util.Locale
 
 /** Video decoder modes exposed by both the Jellyfin player controls and MPV settings. */
 enum class LibMPVVideoDecoder(val mpvValue: String, val label: String) {
-	AUTOMATIC("auto-safe", "Auto"),
+	AUTOMATIC("auto-unsafe", "Auto unsafe"),
+	AUTO_SAFE("auto-safe", "Auto safe"),
 	SOFTWARE("no", "Software"),
 	MEDIACODEC("mediacodec", "MediaCodec"),
 	MEDIACODEC_COPY("mediacodec-copy", "MediaCodec copy"),
 }
+
+internal fun effectiveLibMPVVideoDecoder(
+	configured: LibMPVVideoDecoder,
+	forced: LibMPVVideoDecoder?,
+	softwareForLiveTv: Boolean,
+	isLiveTv: Boolean,
+) = forced ?: if (softwareForLiveTv && isLiveTv) LibMPVVideoDecoder.SOFTWARE else configured
 
 /**
  * The Android-TV-friendly MPV profile. Every field has an explicit Jellyfin default.
  * Additional non-managed libMPV options are supplied through [customOptions].
  */
 data class LibMPVPlaybackOptions(
-	val videoOutput: String = "gpu",
+	val videoOutput: String = "gpu-next",
 	val gpuContext: String = "android",
 	val gpuApi: String = "auto",
 	val videoSync: String = "audio",
@@ -32,8 +40,9 @@ data class LibMPVPlaybackOptions(
 	val replayGain: String = "no",
 	val decoderThreads: Int = 0,
 	val skipLoopFilter: String = "default",
-	val subtitleAssOverride: String = "force",
+	val subtitleAssOverride: String = "no",
 	val subtitleUseMargins: Boolean = true,
+	val softwareDecodingForLiveTv: Boolean = false,
 	val customOptions: Map<String, String> = emptyMap(),
 ) {
 	internal fun managedOptions(): LinkedHashMap<String, String> = linkedMapOf(
@@ -268,7 +277,7 @@ internal val MPV_INTERNAL_OPTIONS = setOf(
 	"sub-outline-size",
 	"sub-shadow-offset",
 	"sub-border-style",
-	"sub-pos",
+	"sub-margin-y",
 )
 
 private val MPV_PROFILE_OPTIONS = buildSet {
