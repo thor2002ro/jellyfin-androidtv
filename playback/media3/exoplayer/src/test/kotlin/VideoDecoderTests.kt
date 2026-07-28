@@ -1,5 +1,8 @@
 package org.jellyfin.playback.media3.exoplayer
 
+import androidx.media3.common.C
+import androidx.media3.common.ColorInfo
+import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import io.kotest.core.spec.style.FunSpec
@@ -7,6 +10,24 @@ import io.kotest.matchers.shouldBe
 import kotlin.time.Duration.Companion.seconds
 
 class VideoDecoderTests : FunSpec({
+	test("video color info is exposed as player metrics") {
+		val format = Format.Builder()
+			.setColorInfo(
+				ColorInfo.Builder()
+					.setColorSpace(C.COLOR_SPACE_BT2020)
+					.setColorTransfer(C.COLOR_TRANSFER_ST2084)
+					.setColorRange(C.COLOR_RANGE_LIMITED)
+					.build()
+			)
+			.build()
+
+		format.colorDetails() shouldBe mapOf(
+			"Color space" to "BT.2020",
+			"Color transfer" to "PQ (ST 2084)",
+			"Color range" to "Limited",
+		)
+	}
+
 	test("forced decoder falls back to the previous working decoder before software") {
 		forcedVideoDecoderFallbacks(VideoDecoder.FFMPEG, VideoDecoder.HARDWARE) shouldBe
 			listOf(VideoDecoder.HARDWARE, VideoDecoder.SOFTWARE)
