@@ -22,6 +22,10 @@ class TimedEventTrackerTests : StringSpec({
 		bufferingPlayState(100f) shouldBe PlayState.PLAYING
 	}
 
+	"buffer size estimate uses demux bytes per second and configured duration" {
+		estimateBufferedBytes(2_000_000f, 5.seconds) shouldBe 10_000_000L
+	}
+
 	"LibVLC descriptions follow media track IDs with unmatched slaves appended" {
 		orderedLibVLCTrackIds(
 			mediaTrackIds = listOf(7, 3),
