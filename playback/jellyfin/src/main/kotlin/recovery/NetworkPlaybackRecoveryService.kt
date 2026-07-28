@@ -26,6 +26,7 @@ class NetworkPlaybackRecoveryService(
 	private var recoveryJob: Job? = null
 	private var recoveringEntry: QueueEntry? = null
 	private var errorRecoveryAttemptedEntry: QueueEntry? = null
+	private var bufferingRecoveryAttemptedEntry: QueueEntry? = null
 	private val _recovering = MutableStateFlow(false)
 	val recovering: StateFlow<Boolean> = _recovering.asStateFlow()
 
@@ -56,6 +57,8 @@ class NetworkPlaybackRecoveryService(
 			var disconnectedEntry: QueueEntry? = null
 			var wasNetworkAvailable = isNetworkAvailable()
 			var lastPlayState = state.playState.value
+			var bufferingEntry: QueueEntry? = null
+			var consecutiveBufferingChecks = 0
 
 			while (true) {
 				delay(NETWORK_RECOVERY_CHECK_INTERVAL)
@@ -69,8 +72,18 @@ class NetworkPlaybackRecoveryService(
 				) {
 					errorRecoveryAttemptedEntry = null
 				}
+				if (
+					entry !== bufferingRecoveryAttemptedEntry ||
+					recoveryJob?.isActive != true &&
+					(playState == PlayState.PLAYING || playState == PlayState.PAUSED)
+				) {
+					bufferingRecoveryAttemptedEntry = null
+				}
 				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry) || playState == PlayState.STOPPED) {
 					disconnectedEntry = null
+					bufferingEntry = null
+					consecutiveBufferingChecks = 0
+					bufferingRecoveryAttemptedEntry = null
 					clearRecovering()
 					wasNetworkAvailable = isNetworkAvailable()
 					lastPlayState = playState
@@ -79,6 +92,8 @@ class NetworkPlaybackRecoveryService(
 
 				val networkAvailable = isNetworkAvailable()
 				if (!networkAvailable) {
+					bufferingEntry = null
+					consecutiveBufferingChecks = 0
 					if (disconnectedEntry == null && (playState.isActivePlayback || lastPlayState.isActivePlayback || playState == PlayState.ERROR)) {
 						Timber.w("Network unavailable during playback; waiting for connectivity to return")
 						disconnectedEntry = entry
@@ -87,6 +102,28 @@ class NetworkPlaybackRecoveryService(
 					wasNetworkAvailable = false
 					lastPlayState = playState
 					continue
+				}
+
+				if (playState == PlayState.BUFFERING) {
+					if (bufferingEntry !== entry) {
+						bufferingEntry = entry
+						consecutiveBufferingChecks = 0
+					}
+					consecutiveBufferingChecks++
+					if (
+						shouldRecoverStalledBuffer(consecutiveBufferingChecks, BUFFERING_RECOVERY_CHECKS) &&
+						bufferingRecoveryAttemptedEntry !== entry
+					) {
+						bufferingRecoveryAttemptedEntry = entry
+						startRecovery(
+							entry = entry,
+							reason = "Playback buffering stalled",
+							playWhenReady = true,
+						)
+					}
+				} else {
+					bufferingEntry = null
+					consecutiveBufferingChecks = 0
 				}
 
 				if (!wasNetworkAvailable && disconnectedEntry === entry) {
@@ -186,8 +223,12 @@ class NetworkPlaybackRecoveryService(
 	private companion object {
 		private val NETWORK_RECOVERY_CHECK_INTERVAL = 3.seconds
 		private val PLAYBACK_RECOVERY_RETRY_INTERVAL = 3.seconds
+		private const val BUFFERING_RECOVERY_CHECKS = 5
 	}
 }
+
+internal fun shouldRecoverStalledBuffer(consecutiveChecks: Int, requiredChecks: Int) =
+	consecutiveChecks >= requiredChecks
 
 internal fun hasPlaybackRecovered(
 	playState: PlayState,
