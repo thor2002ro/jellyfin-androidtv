@@ -5,6 +5,8 @@ import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import `is`.xyz.mpv.BuildConfig as LibMPVBuildConfig
+import `is`.xyz.mpv.Utils
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Icon
@@ -65,6 +67,8 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 				"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
 				"libass ${BuildConfig.LIBASS_VERSION}",
 				"LibVLC ${BuildConfig.LIBVLC_VERSION}",
+				"mpv-android-lib ${LibMPVBuildConfig.VERSION}",
+				"libMPV ${Utils.VERSIONS.mpv}",
 			).joinToString("\n")
 			ListButton(
 				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },

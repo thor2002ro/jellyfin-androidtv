@@ -24,6 +24,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
@@ -55,6 +56,9 @@ internal fun PlayableMediaStream.mpvSourceTracks(type: TrackType): List<MediaStr
 	}
 }
 
+internal fun shouldReadLibMPVStatProperty(lastMissNanos: Long?, nowNanos: Long, retryNanos: Long) =
+	lastMissNanos == null || nowNanos - lastMissNanos >= retryNanos
+
 private data class LibMPVTrack(
 	val id: Int,
 	val type: TrackType,
@@ -71,9 +75,11 @@ class LibMPVBackend(
 	context: Context,
 	private val videoDecoderProvider: (() -> LibMPVVideoDecoder)? = null,
 	private val playbackOptionsProvider: (() -> LibMPVPlaybackOptions)? = null,
+	private val gpuApiVersionProvider: (String) -> String? = { null },
 ) : BasePlayerBackend(), TrackSelectionBackend, SurfaceHolder.Callback {
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
+		val FRAME_STAT_PROPERTY_RETRY_NANOS = 10.seconds.inWholeNanoseconds
 	}
 
 	override val reportsBufferedPosition = true
@@ -136,6 +142,7 @@ class LibMPVBackend(
 	private var tracks = emptyList<LibMPVTrack>()
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
 	private val appliedCustomOptions = mutableSetOf<String>()
+	private val frameStatPropertyMisses = mutableMapOf<String, Long>()
 
 	private val tick = object : Runnable {
 		override fun run() {
@@ -659,31 +666,111 @@ class LibMPVBackend(
 		val active = player.getPropertyDouble("time-pos").toDuration()
 		val duration = player.getPropertyDouble("duration").toDuration()
 		val cacheEnd = player.getPropertyDouble("demuxer-cache-time").toDuration()
-		val buffered = maxOf(active, cacheEnd).let { value ->
+		val cacheDuration = player.getPropertyDouble("demuxer-cache-duration").toDuration()
+		val buffered = maxOf(active, if (cacheDuration > Duration.ZERO) active + cacheDuration else cacheEnd).let { value ->
 			if (duration > Duration.ZERO) minOf(value, duration) else value
 		}
 		return PositionInfo(active, buffered, duration)
 	}
 
 	override fun getFrameStats(): PlaybackFrameStats {
-		val decoderDropped = player.getPropertyInt("decoder-frame-drop-count") ?: 0
-		val outputDropped = player.getPropertyInt("frame-drop-count") ?: 0
-		val hardwareDecoder = player.getPropertyString("hwdec-current")?.takeUnless { it.isBlank() || it == "no" }
+		fun <T> property(name: String, getter: () -> T?): T? {
+			val now = System.nanoTime()
+			if (!shouldReadLibMPVStatProperty(frameStatPropertyMisses[name], now, FRAME_STAT_PROPERTY_RETRY_NANOS)) return null
+			return getter().also { value ->
+				if (value == null) frameStatPropertyMisses[name] = now
+				else frameStatPropertyMisses.remove(name)
+			}
+		}
+		fun string(name: String) = property(name) { player.getPropertyString(name) }?.takeUnless(String::isBlank)
+		fun integer(name: String) = property(name) { player.getPropertyInt(name) }
+		fun double(name: String) = property(name) { player.getPropertyDouble(name) }?.takeIf(Double::isFinite)
+		fun number(name: String, suffix: String = "", multiplier: Double = 1.0) =
+			double(name)?.let { value -> String.format(Locale.US, "%.3f%s", value * multiplier, suffix) }
+		fun correction(name: String) =
+			double(name)?.let { value -> String.format(Locale.US, "%+.5f%%", (value - 1.0) * 100.0) }
+		fun count(name: String) = integer(name)?.toString()
+
+		val decoderDropped = integer("decoder-frame-drop-count") ?: 0
+		val outputDropped = integer("frame-drop-count") ?: 0
+		val hardwareDecoder = string("hwdec-current")?.takeUnless { it == "no" }
+		val videoGamma = string("video-params/gamma")
+		val dolbyVisionProfile = integer("current-tracks/video/dolby-vision-profile")
+		val videoOutput = string("current-vo")
+		val gpuApi = mpvGpuApi(string("current-gpu-context"))
+		val audioFormat = string("audio-params/format")
+		val hasHdr10Plus = double("video-params/scene-max-r") != null ||
+			double("video-params/scene-max-g") != null ||
+			double("video-params/scene-max-b") != null
+		val bufferedBytes = property("demuxer-cache-state") {
+			runCatching {
+				player.getPropertyNode("demuxer-cache-state")
+				?.asMap()
+				?.get("fw-bytes")
+				?.asInt()
+			}.getOrNull()
+		}
+		val bufferDetails = formatLibMPVBufferDetails(
+			bufferedBytes = bufferedBytes,
+			isPausedForCache = string("paused-for-cache").equals("yes", ignoreCase = true),
+			isCacheIdle = string("demuxer-cache-idle").equals("yes", ignoreCase = true),
+			cacheSpeed = double("cache-speed"),
+		)
+		val backendDetails = buildMap {
+			number("display-fps", " Hz")?.let { put("Display refresh", it) }
+			number("estimated-display-fps", " Hz")?.let { put("Measured refresh", it) }
+			string("display-sync-active")?.let { put("Display sync active", it) }
+			correction("video-speed-correction")?.let { put("Video speed correction", it) }
+			correction("audio-speed-correction")?.let { put("Audio speed correction", it) }
+			number("avsync", " ms", 1_000.0)?.let { put("A/V sync", it) }
+			number("total-avsync-change", " ms", 1_000.0)?.let { put("A/V sync correction", it) }
+			count("mistimed-frame-count")?.let { put("Mistimed frames", it) }
+			count("vo-delayed-frame-count")?.let { put("Delayed frames", it) }
+			string("video-frame-info/picture-type")?.let { put("Picture type", it) }
+			string("video-frame-info/tff")?.let { put("Top field first", it) }
+			string("video-frame-info/repeat")?.let { put("Repeated frame", it) }
+			string("deinterlace-active")?.let { put("Deinterlacing active", it) }
+			number("vsync-ratio")?.let { put("VSync ratio", it) }
+			number("vsync-jitter")?.let { put("VSync jitter", it) }
+			videoOutput?.let {
+				put("Video output", if (gpuApi == "opengl" || gpuApi == "vulkan") "$it ($gpuApi)" else it)
+			}
+			string("current-ao")?.let { put("Audio output", it) }
+			string("video-params/pixelformat")?.let { put("Output pixel format", it) }
+			string("video-params/colormatrix")?.let { put("Color matrix", it) }
+			string("video-params/primaries")?.let { put("Color primaries", it) }
+			number("video-params/max-luma", " nits")?.let { put("Mastering peak", it) }
+			number("video-params/max-cll", " nits")?.let { put("MaxCLL", it) }
+			number("video-params/max-fall", " nits")?.let { put("MaxFALL", it) }
+			string("audio-params/format")?.let { put("Audio format", it) }
+		}
 		return PlaybackFrameStats(
 			droppedFrames = (decoderDropped.toLong() + outputDropped.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
 			corruptedFrames = 0,
 			playerName = "libMPV",
-			videoDecoderName = player.getPropertyString("current-tracks/video/decoder-desc")
-				?: player.getPropertyString("current-tracks/video/decoder"),
+			videoDecoderFps = double("estimated-vf-fps")?.toFloat(),
+			videoDecoderName = string("current-tracks/video/decoder-desc")
+				?: string("current-tracks/video/decoder"),
 			videoDecoderType = hardwareDecoder?.let { "Hardware ($it)" } ?: "Software",
-			videoCodec = player.getPropertyString("current-tracks/video/codec"),
-			audioDecoderName = player.getPropertyString("current-tracks/audio/decoder-desc")
-				?: player.getPropertyString("current-tracks/audio/decoder"),
+			videoCodec = string("current-tracks/video/codec"),
+			videoHdrMode = mpvHdrPipeline(videoGamma, dolbyVisionProfile, hasHdr10Plus),
+			videoSourceFps = double("container-fps")?.toFloat(),
+			videoBitrate = double("video-bitrate")?.toInt(),
+			videoRange = string("video-params/colorlevels"),
+			audioDecoderName = string("current-tracks/audio/decoder-desc")
+				?: string("current-tracks/audio/decoder"),
 			audioDecoderType = "Software",
+			audioCodec = string("current-tracks/audio/codec"),
+			audioBitrate = double("audio-bitrate")?.toInt(),
+			audioChannels = string("audio-params/channels"),
+			audioSampleRate = integer("audio-params/samplerate"),
+			audioPassthroughSupported = audioFormat?.startsWith("spdif"),
+			bufferedBytes = bufferDetails,
 			subtitleExtractor = "libMPV",
 			subtitleRender = "libass",
-			subtitleParser = player.getPropertyString("current-tracks/sub/codec"),
-			subtitlePath = player.getPropertyString("current-tracks/sub/external-filename"),
+			subtitleParser = string("current-tracks/sub/codec"),
+			subtitlePath = string("current-tracks/sub/external-filename"),
+			backendDetails = backendDetails,
 		)
 	}
 
@@ -720,6 +807,7 @@ class LibMPVBackend(
 	private fun handleEvent(generation: Long, eventId: Int, data: MPVNode) = onPlayerEvent(generation) {
 		when (eventId) {
 			MPV.mpvEvent.MPV_EVENT_START_FILE -> {
+				frameStatPropertyMisses.clear()
 				loadRequested = false
 				activePlaylistEntryId = data["playlist_entry_id"]?.asInt()
 				fileLoaded = false
@@ -748,6 +836,7 @@ class LibMPVBackend(
 				publishPlayState()
 			}
 			MPV.mpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
+				frameStatPropertyMisses.clear()
 				playbackRestarted = true
 				seeking = false
 				setOption("cache-pause-wait", rebufferWaitSeconds.toLibMPVString())
@@ -1053,6 +1142,57 @@ private fun Double?.toDuration(): Duration {
 }
 
 private fun Double.toLibMPVString() = String.format(Locale.US, "%.3f", this)
+
+internal fun mpvHdrMode(gamma: String?, dolbyVisionProfile: Int?, hasHdr10Plus: Boolean): String? = when {
+	dolbyVisionProfile != null -> "Dolby Vision (Profile $dolbyVisionProfile)"
+	hasHdr10Plus -> "HDR10+"
+	gamma == "pq" -> "HDR10"
+	gamma == "hlg" -> "HLG"
+	gamma == "scrgb" -> "scRGB (HDR)"
+	gamma == "v-log" -> "Panasonic V-Log"
+	gamma == "s-log1" -> "Sony S-Log1"
+	gamma == "s-log2" -> "Sony S-Log2"
+	gamma == "st428" -> "DCI ST 428"
+	gamma == "bt.1886" -> "SDR (BT.1886)"
+	gamma == "srgb" -> "SDR (sRGB)"
+	gamma?.startsWith("gamma") == true -> "SDR ($gamma)"
+	gamma != null -> gamma
+	else -> null
+}
+
+internal fun mpvHdrPipeline(
+	gamma: String?,
+	dolbyVisionProfile: Int?,
+	hasHdr10Plus: Boolean,
+): String? {
+	val source = mpvHdrMode(gamma, dolbyVisionProfile, hasHdr10Plus) ?: return null
+	val decoded = mpvHdrMode(gamma, null, hasHdr10Plus)
+		?.let { if (gamma == "pq") "$it/PQ" else it }
+	return buildList {
+		add(source)
+		if (decoded != null && decoded != source) add(decoded)
+	}.joinToString(" \u2192 ")
+}
+
+internal fun mpvGpuApi(currentContext: String?): String? =
+	if (currentContext == "android") "opengl" else null
+
+internal fun formatLibMPVBufferDetails(
+	bufferedBytes: Long?,
+	isPausedForCache: Boolean,
+	isCacheIdle: Boolean,
+	cacheSpeed: Double?,
+) = buildList {
+	bufferedBytes?.formatBufferBytes()?.let(::add)
+	if (isPausedForCache) add("paused") else if (isCacheIdle) add("idle")
+	if (!isCacheIdle) {
+		cacheSpeed
+			?.takeIf { it.isFinite() && it > 0 }
+			?.toLong()
+			?.formatBufferBytes()
+			?.let { add("$it/s") }
+	}
+}.joinToString(", ").takeIf(String::isNotEmpty)
 
 private fun Int.mpvColor() = String.format(Locale.US, "#%08X", toLong() and 0xFFFF_FFFFL)
 
