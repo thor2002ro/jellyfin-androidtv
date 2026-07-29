@@ -28,7 +28,7 @@ typealias RouteComposable = @Composable ((context: RouteContext) -> Unit)
 @Serializable
 data class RouteContext(
 	val route: String,
-	val parameters: RouteParameters,
+	val parameters: RouteParameters = emptyMap(),
 )
 
 class Router(
