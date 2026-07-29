@@ -5,6 +5,7 @@ import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.mpvAudioChannels
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
+import org.jellyfin.androidtv.preference.mpvAudioPreset
 import org.jellyfin.androidtv.preference.mpvAudioSpdif
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
@@ -23,9 +24,12 @@ import org.jellyfin.androidtv.preference.mpvSubtitleAssOverride
 import org.jellyfin.androidtv.preference.mpvSubtitleUseMargins
 import org.jellyfin.androidtv.preference.mpvToneMapping
 import org.jellyfin.androidtv.preference.mpvVideoOutput
+import org.jellyfin.androidtv.preference.mpvVideoPreset
 import org.jellyfin.androidtv.preference.mpvVideoSync
+import org.jellyfin.playback.mpv.LibMPVAudioPreset
 import org.jellyfin.playback.mpv.LibMPVPlaybackOptions
 import org.jellyfin.playback.mpv.LibMPVVideoDecoder
+import org.jellyfin.playback.mpv.LibMPVVideoPreset
 import org.jellyfin.playback.mpv.isLibMPVOptionManagedByJellyfin
 import org.jellyfin.playback.mpv.parseLibMPVOptionOverrides
 import org.jellyfin.preference.PreferenceEnum
@@ -87,6 +91,59 @@ enum class LibMPVDeinterlace(override val nameRes: Int, override val description
 	DISABLED(R.string.preference_mpv_value_disabled, R.string.preference_mpv_deinterlace_disabled_description, "no"),
 }
 
+enum class LibMPVVideoPresetOption(
+	override val nameRes: Int,
+	override val descriptionRes: Int,
+	override val mpvValue: String,
+	val preset: LibMPVVideoPreset,
+) : LibMPVPreferenceOption {
+	OFF(R.string.preference_mpv_anime_preset_off, R.string.preference_mpv_anime_preset_off_description, "off", LibMPVVideoPreset.OFF),
+	FAST(R.string.preference_mpv_anime_preset_fast, R.string.preference_mpv_anime_preset_fast_description, "anime-fast", LibMPVVideoPreset.ANIME_FAST),
+	BALANCED(
+		R.string.preference_mpv_anime_preset_balanced,
+		R.string.preference_mpv_anime_preset_balanced_description,
+		"anime-balanced",
+		LibMPVVideoPreset.ANIME_BALANCED,
+	),
+	HQ(R.string.preference_mpv_anime_preset_hq, R.string.preference_mpv_anime_preset_hq_description, "anime-hq", LibMPVVideoPreset.ANIME_HQ),
+	LIVE_ACTION_FAST(
+		R.string.preference_mpv_live_action_preset_fast,
+		R.string.preference_mpv_live_action_preset_fast_description,
+		"live-action-fast",
+		LibMPVVideoPreset.LIVE_ACTION_FAST,
+	),
+	LIVE_ACTION_BALANCED(
+		R.string.preference_mpv_live_action_preset_balanced,
+		R.string.preference_mpv_live_action_preset_balanced_description,
+		"live-action-balanced",
+		LibMPVVideoPreset.LIVE_ACTION_BALANCED,
+	),
+	LIVE_ACTION_HQ(
+		R.string.preference_mpv_live_action_preset_hq,
+		R.string.preference_mpv_live_action_preset_hq_description,
+		"live-action-hq",
+		LibMPVVideoPreset.LIVE_ACTION_HQ,
+	),
+	BATTERY_SAVER(
+		R.string.preference_mpv_preset_battery_saver,
+		R.string.preference_mpv_preset_battery_saver_description,
+		"battery-saver",
+		LibMPVVideoPreset.BATTERY_SAVER,
+	),
+	HDR_HIGH_QUALITY(
+		R.string.preference_mpv_preset_hdr_hq,
+		R.string.preference_mpv_preset_hdr_hq_description,
+		"hdr-high-quality",
+		LibMPVVideoPreset.HDR_HIGH_QUALITY,
+	),
+	OPTIMIZED_8K(
+		R.string.preference_mpv_preset_8k,
+		R.string.preference_mpv_preset_8k_description,
+		"8k-optimized",
+		LibMPVVideoPreset.OPTIMIZED_8K,
+	),
+}
+
 enum class LibMPVScaler(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
 	BILINEAR(R.string.preference_mpv_scaler_bilinear, R.string.preference_mpv_scaler_bilinear_description, "bilinear"),
 	BICUBIC_FAST(R.string.preference_mpv_scaler_bicubic_fast, R.string.preference_mpv_scaler_bicubic_fast_description, "bicubic_fast"),
@@ -111,6 +168,27 @@ enum class LibMPVAudioOutput(override val nameRes: Int, override val description
 	AUDIOTRACK(R.string.preference_mpv_audio_output_audiotrack, R.string.preference_mpv_audio_output_audiotrack_description, "audiotrack"),
 	OPENSLES(R.string.preference_mpv_audio_output_opensles, R.string.preference_mpv_audio_output_opensles_description, "opensles"),
 	NULL(R.string.preference_mpv_audio_output_null, R.string.preference_mpv_audio_output_null_description, "null"),
+}
+
+enum class LibMPVAudioPresetOption(
+	override val nameRes: Int,
+	override val descriptionRes: Int,
+	override val mpvValue: String,
+	val preset: LibMPVAudioPreset,
+) : LibMPVPreferenceOption {
+	OFF(R.string.preference_mpv_audio_preset_off, R.string.preference_mpv_audio_preset_off_description, "off", LibMPVAudioPreset.OFF),
+	STANDARD(
+		R.string.preference_mpv_audio_preset_standard,
+		R.string.preference_mpv_audio_preset_standard_description,
+		"standard",
+		LibMPVAudioPreset.STANDARD,
+	),
+	CINEMA_SPATIAL(
+		R.string.preference_mpv_audio_preset_cinema_spatial,
+		R.string.preference_mpv_audio_preset_cinema_spatial_description,
+		"cinema-spatial",
+		LibMPVAudioPreset.CINEMA_SPATIAL,
+	),
 }
 
 enum class LibMPVAudioChannels(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
@@ -165,9 +243,25 @@ enum class LibMPVChoiceSetting(
 	VIDEO_SYNC("video-sync", R.string.preference_mpv_video_sync, R.string.preference_mpv_video_sync_description, setOf("video-sync")),
 	FRAME_DROP("framedrop", R.string.preference_mpv_framedrop, R.string.preference_mpv_framedrop_description, setOf("framedrop")),
 	DEINTERLACE("deinterlace", R.string.preference_mpv_deinterlace, R.string.preference_mpv_deinterlace_description, setOf("deinterlace")),
+	VIDEO_PRESET(
+		"video-preset",
+		R.string.preference_mpv_video_preset,
+		R.string.preference_mpv_video_preset_description,
+		setOf(
+			"scale", "cscale", "dscale", "deband", "deband-iterations", "deband-threshold", "deband-range", "deband-grain",
+			"glsl-shaders", "dither", "correct-downscaling", "interpolation", "gamma", "contrast", "saturation", "brightness",
+			"tone-mapping", "gpu-api", "gpu-context", "hwdec", "vd-lavc-dr", "vd-queue-enable", "profile", "vf",
+		),
+	),
 	SCALER("scaler", R.string.preference_mpv_scaler, R.string.preference_mpv_scaler_description, setOf("scale", "cscale", "dscale")),
 	TONE_MAPPING("tone-mapping", R.string.preference_mpv_tone_mapping, R.string.preference_mpv_tone_mapping_description, setOf("tone-mapping")),
 	AUDIO_OUTPUT("audio-output", R.string.preference_mpv_audio_output, R.string.preference_mpv_audio_output_description, setOf("ao")),
+	AUDIO_PRESET(
+		"audio-preset",
+		R.string.preference_mpv_audio_preset,
+		R.string.preference_mpv_audio_preset_description,
+		setOf("audio-channels", "audio-spdif", "af"),
+	),
 	AUDIO_CHANNELS("audio-channels", R.string.preference_mpv_audio_channels, R.string.preference_mpv_audio_channels_description, setOf("audio-channels")),
 	AUDIO_SPDIF("audio-spdif", R.string.preference_mpv_audio_spdif, R.string.preference_mpv_audio_spdif_description, setOf("audio-spdif")),
 	REPLAY_GAIN("replay-gain", R.string.preference_mpv_replay_gain, R.string.preference_mpv_replay_gain_description, setOf("replaygain")),
@@ -183,9 +277,11 @@ enum class LibMPVChoiceSetting(
 		VIDEO_SYNC -> LibMPVVideoSync.entries
 		FRAME_DROP -> LibMPVFrameDrop.entries
 		DEINTERLACE -> LibMPVDeinterlace.entries
+		VIDEO_PRESET -> LibMPVVideoPresetOption.entries
 		SCALER -> LibMPVScaler.entries
 		TONE_MAPPING -> LibMPVToneMapping.entries
 		AUDIO_OUTPUT -> LibMPVAudioOutput.entries
+		AUDIO_PRESET -> LibMPVAudioPresetOption.entries
 		AUDIO_CHANNELS -> LibMPVAudioChannels.entries
 		AUDIO_SPDIF -> LibMPVAudioSpdif.entries
 		REPLAY_GAIN -> LibMPVReplayGain.entries
@@ -201,9 +297,11 @@ enum class LibMPVChoiceSetting(
 		VIDEO_SYNC -> LibMPVVideoSync.AUDIO
 		FRAME_DROP -> LibMPVFrameDrop.VIDEO_OUTPUT
 		DEINTERLACE -> LibMPVDeinterlace.DISABLED
+		VIDEO_PRESET -> LibMPVVideoPresetOption.OFF
 		SCALER -> LibMPVScaler.BILINEAR
 		TONE_MAPPING -> LibMPVToneMapping.AUTO
 		AUDIO_OUTPUT -> LibMPVAudioOutput.AUTO
+		AUDIO_PRESET -> LibMPVAudioPresetOption.OFF
 		AUDIO_CHANNELS -> LibMPVAudioChannels.AUTO_SAFE
 		AUDIO_SPDIF -> LibMPVAudioSpdif.NONE
 		REPLAY_GAIN -> LibMPVReplayGain.DISABLED
@@ -219,9 +317,11 @@ enum class LibMPVChoiceSetting(
 		VIDEO_SYNC -> preferences[UserPreferences.mpvVideoSync]
 		FRAME_DROP -> preferences[UserPreferences.mpvFrameDrop]
 		DEINTERLACE -> preferences[UserPreferences.mpvDeinterlace]
+		VIDEO_PRESET -> preferences[UserPreferences.mpvVideoPreset]
 		SCALER -> preferences[UserPreferences.mpvScaler]
 		TONE_MAPPING -> preferences[UserPreferences.mpvToneMapping]
 		AUDIO_OUTPUT -> preferences[UserPreferences.mpvAudioOutput]
+		AUDIO_PRESET -> preferences[UserPreferences.mpvAudioPreset]
 		AUDIO_CHANNELS -> preferences[UserPreferences.mpvAudioChannels]
 		AUDIO_SPDIF -> preferences[UserPreferences.mpvAudioSpdif]
 		REPLAY_GAIN -> preferences[UserPreferences.mpvReplayGain]
@@ -238,9 +338,11 @@ enum class LibMPVChoiceSetting(
 		VIDEO_SYNC -> preferences[UserPreferences.mpvVideoSync] = option as LibMPVVideoSync
 		FRAME_DROP -> preferences[UserPreferences.mpvFrameDrop] = option as LibMPVFrameDrop
 		DEINTERLACE -> preferences[UserPreferences.mpvDeinterlace] = option as LibMPVDeinterlace
+		VIDEO_PRESET -> preferences[UserPreferences.mpvVideoPreset] = option as LibMPVVideoPresetOption
 		SCALER -> preferences[UserPreferences.mpvScaler] = option as LibMPVScaler
 		TONE_MAPPING -> preferences[UserPreferences.mpvToneMapping] = option as LibMPVToneMapping
 		AUDIO_OUTPUT -> preferences[UserPreferences.mpvAudioOutput] = option as LibMPVAudioOutput
+		AUDIO_PRESET -> preferences[UserPreferences.mpvAudioPreset] = option as LibMPVAudioPresetOption
 		AUDIO_CHANNELS -> preferences[UserPreferences.mpvAudioChannels] = option as LibMPVAudioChannels
 		AUDIO_SPDIF -> preferences[UserPreferences.mpvAudioSpdif] = option as LibMPVAudioSpdif
 		REPLAY_GAIN -> preferences[UserPreferences.mpvReplayGain] = option as LibMPVReplayGain
@@ -274,6 +376,8 @@ fun UserPreferences.mpvPlaybackOptions() = LibMPVPlaybackOptions(
 	subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,
 	subtitleUseMargins = this[UserPreferences.mpvSubtitleUseMargins],
 	softwareDecodingForLiveTv = this[UserPreferences.mpvSoftwareDecodingForLiveTv],
+	videoPreset = this[UserPreferences.mpvVideoPreset].preset,
+	audioPreset = this[UserPreferences.mpvAudioPreset].preset,
 	customOptions = parseLibMPVOptionOverrides(this[UserPreferences.mpvOptionOverrides]).values
 		.filterKeys { name -> !isLibMPVOptionManagedByJellyfin(name) },
 )
@@ -299,6 +403,8 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvAudioPitchCorrection] = true
 	this[UserPreferences.mpvSubtitleUseMargins] = true
 	this[UserPreferences.mpvSoftwareDecodingForLiveTv] = false
+	this[UserPreferences.mpvVideoPreset] = LibMPVVideoPresetOption.OFF
+	this[UserPreferences.mpvAudioPreset] = LibMPVAudioPresetOption.OFF
 	this[UserPreferences.mpvDecoderThreads] = 0
 	this[UserPreferences.mpvOptionOverrides] = ""
 }
