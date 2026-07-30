@@ -86,6 +86,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
 	private var backgroundUpdateJob: Job? = null
+	private var homeRowsDebounceJob: Job? = null
 	private var homeRowsRefreshJob: Job? = null
 	private var currentBackgroundItemId: String? = null
 	private val homeRowAdapters = linkedSetOf<ItemRowAdapter>()
@@ -227,7 +228,11 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	private fun refreshHomeRows() {
-		scheduleHomeRowsRefresh(HOME_ROWS_REFRESH_DEBOUNCE_MS)
+		homeRowsDebounceJob?.cancel()
+		homeRowsDebounceJob = lifecycleScope.launch {
+			delay(HOME_ROWS_REFRESH_DEBOUNCE_MS)
+			retrieveHomeRows()
+		}
 	}
 
 	private fun retrieveHomeRows() {
@@ -262,6 +267,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		super.onDestroy()
 
 		backgroundUpdateJob?.cancel()
+		homeRowsDebounceJob?.cancel()
 		homeRowsRefreshJob?.cancel()
 		mediaManager.removeAudioEventListener(this)
 	}
