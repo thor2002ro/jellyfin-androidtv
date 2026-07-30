@@ -98,6 +98,7 @@ object Routes {
 	const val LIVETV_GUIDE_CHANNEL_ORDER = "/livetv/guide/channel-order"
 	const val PLAYBACK = "/playback"
 	const val PLAYBACK_PLAYER = "/playback/player"
+	const val PLAYBACK_HDR_PLAYER = "/playback/hdr-player"
 	const val PLAYBACK_AUDIO_LANGUAGE = "/playback/audio-language"
 	const val PLAYBACK_SUBTITLE_LANGUAGE = "/playback/subtitle-language"
 	const val PLAYBACK_NEXT_UP = "/playback/next-up"
@@ -231,6 +232,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.PLAYBACK_PLAYER to {
 		SettingsPlaybackPlayerScreen()
+	},
+	Routes.PLAYBACK_HDR_PLAYER to {
+		SettingsPlaybackPlayerScreen(hdr = true)
 	},
 	Routes.PLAYBACK_AUDIO_LANGUAGE to {
 		SettingsPlaybackPreferredLanguageScreen(PreferredLanguageType.AUDIO)
