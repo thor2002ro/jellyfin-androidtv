@@ -80,7 +80,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 			ListButton(
 				leadingContent = {
 					Image(
-						painter = rememberAsyncImagePainter(R.drawable.ic_flask),
+						painter = rememberAsyncImagePainter(R.drawable.ic_exoplayer),
 						contentDescription = null,
 						modifier = Modifier
 							.size(32.dp)
@@ -105,7 +105,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 			ListButton(
 				leadingContent = {
 					Image(
-						painter = rememberAsyncImagePainter(R.drawable.ic_flask),
+						painter = rememberAsyncImagePainter(R.drawable.ic_libvlc),
 						contentDescription = null,
 						modifier = Modifier
 							.size(32.dp)
@@ -131,7 +131,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 			ListButton(
 				leadingContent = {
 					Image(
-						painter = rememberAsyncImagePainter(R.drawable.ic_flask),
+						painter = rememberAsyncImagePainter(R.drawable.ic_mpv),
 						contentDescription = null,
 						modifier = Modifier
 							.size(32.dp)
