@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.composable.item
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import org.jellyfin.androidtv.util.sdk.isHdrVideo
 import org.jellyfin.androidtv.util.sdk.videoResolutionName
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -12,6 +13,7 @@ import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.UserItemDataDto
+import org.jellyfin.sdk.model.api.VideoRangeType
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 
@@ -208,6 +210,29 @@ class ItemCardBaseItemOverlayTests : FunSpec({
 		)
 
 		item.videoBadges() shouldBe null
+	}
+
+	test("HDR playback detection uses video range metadata") {
+		item(source(stream(MediaStreamType.VIDEO, 0, "").copy(videoRangeType = VideoRangeType.HDR10))).isHdrVideo shouldBe true
+		item(source(stream(MediaStreamType.VIDEO, 0, "").copy(videoRangeType = VideoRangeType.SDR))).isHdrVideo shouldBe false
+		item(source(stream(MediaStreamType.VIDEO, 0, "").copy(videoRangeType = VideoRangeType.UNKNOWN))).isHdrVideo shouldBe false
+		item(source(stream(MediaStreamType.VIDEO, 0, ""))).isHdrVideo shouldBe false
+	}
+
+	test("HDR playback detection uses the selected media source") {
+		val itemId = UUID.randomUUID()
+		val item = BaseItemDto(
+			id = itemId,
+			type = BaseItemKind.MOVIE,
+			mediaSources = listOf(
+				source(stream(MediaStreamType.VIDEO, 0, "").copy(videoRangeType = VideoRangeType.SDR))
+					.copy(id = itemId.toString()),
+				source(stream(MediaStreamType.VIDEO, 0, "").copy(videoRangeType = VideoRangeType.HDR10))
+					.copy(id = UUID.randomUUID().toString()),
+			),
+		)
+
+		item.isHdrVideo shouldBe false
 	}
 
 	test("stored progress is formatted from played percentage") {

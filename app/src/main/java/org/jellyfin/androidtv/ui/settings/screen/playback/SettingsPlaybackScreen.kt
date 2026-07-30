@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.settings.screen.playback
 
+import android.content.pm.ActivityInfo
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -64,24 +65,22 @@ fun SettingsPlaybackScreen() {
 		}
 
 		item {
-			ListButton(
-				leadingContent = { Icon(painterResource(R.drawable.ic_tv_play), contentDescription = null) },
-				headingContent = { Text(stringResource(R.string.playback_video_player)) },
-				trailingContent = {
-					val iconDrawable = remember(context) {
-						externalAppRepository.getCurrentExternalPlayerApp(context)?.loadIcon(context.packageManager)
-					}
-					Image(
-						painter = if (iconDrawable == null) rememberAsyncImagePainter(R.mipmap.app_icon)
-						else rememberAsyncImagePainter(iconDrawable),
-						contentDescription = null,
-						modifier = Modifier
-							.size(24.dp)
-							.clip(LocalShapes.current.small)
-					)
-				},
+			PlayerButton(
+				heading = stringResource(R.string.playback_video_player),
+				externalPlayer = remember(context) { externalAppRepository.getCurrentExternalPlayerApp(context) },
 				onClick = { router.push(Routes.PLAYBACK_PLAYER) },
 				modifier = Modifier.focusKey(Routes.PLAYBACK_PLAYER)
+			)
+		}
+
+		item {
+			PlayerButton(
+				heading = stringResource(R.string.playback_hdr_player),
+				externalPlayer = remember(context) {
+					externalAppRepository.getCurrentExternalPlayerApp(context, hdr = true)
+				},
+				onClick = { router.push(Routes.PLAYBACK_HDR_PLAYER) },
+				modifier = Modifier.focusKey(Routes.PLAYBACK_HDR_PLAYER)
 			)
 		}
 
@@ -183,6 +182,32 @@ fun SettingsPlaybackScreen() {
 			)
 		}
 	}
+}
+
+@Composable
+private fun PlayerButton(
+	heading: String,
+	externalPlayer: ActivityInfo?,
+	onClick: () -> Unit,
+	modifier: Modifier,
+) {
+	val context = LocalContext.current
+	val iconDrawable = remember(context, externalPlayer) { externalPlayer?.loadIcon(context.packageManager) }
+	ListButton(
+		leadingContent = { Icon(painterResource(R.drawable.ic_tv_play), contentDescription = null) },
+		headingContent = { Text(heading) },
+		trailingContent = {
+			Image(
+				painter = rememberAsyncImagePainter(iconDrawable ?: R.mipmap.app_icon),
+				contentDescription = null,
+				modifier = Modifier
+					.size(24.dp)
+					.clip(LocalShapes.current.small)
+			)
+		},
+		onClick = onClick,
+		modifier = modifier,
+	)
 }
 
 @Composable
