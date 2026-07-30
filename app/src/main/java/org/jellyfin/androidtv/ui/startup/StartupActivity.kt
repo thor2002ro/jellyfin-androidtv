@@ -1,11 +1,8 @@
 package org.jellyfin.androidtv.ui.startup
 
-import android.Manifest
 import android.app.SearchManager
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.add
@@ -77,20 +74,6 @@ class StartupActivity : FragmentActivity() {
 
 	private lateinit var binding: ActivityStartupBinding
 
-	private val networkPermissionsRequester = registerForActivityResult(
-		ActivityResultContracts.RequestMultiplePermissions()
-	) { grants ->
-		val anyRejected = grants.any { !it.value }
-
-		if (anyRejected) {
-			// Permission denied, exit the app.
-			Toast.makeText(this, R.string.no_network_permissions, Toast.LENGTH_LONG).show()
-			finish()
-		} else {
-			onPermissionsGranted()
-		}
-	}
-
 	override fun onCreate(savedInstanceState: Bundle?) {
 		applyTheme()
 
@@ -103,8 +86,7 @@ class StartupActivity : FragmentActivity() {
 
 		if (!intent.getBooleanExtra(EXTRA_HIDE_SPLASH, false)) showSplash()
 
-		// Ensure basic permissions
-		networkPermissionsRequester.launch(arrayOf(Manifest.permission.INTERNET, Manifest.permission.ACCESS_NETWORK_STATE))
+		startSessionRouting()
 	}
 
 	override fun onResume() {
@@ -113,7 +95,7 @@ class StartupActivity : FragmentActivity() {
 		applyTheme()
 	}
 
-	private fun onPermissionsGranted() = sessionRepository.state
+	private fun startSessionRouting() = sessionRepository.state
 		.flowWithLifecycle(lifecycle, Lifecycle.State.RESUMED)
 		.filter { it == SessionRepositoryState.READY }
 		.map { sessionRepository.currentSession.value }
