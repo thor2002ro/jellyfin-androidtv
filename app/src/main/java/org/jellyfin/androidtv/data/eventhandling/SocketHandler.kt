@@ -12,11 +12,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.ui.itemhandling.DirectStreamBadgeCache
-import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
+import org.jellyfin.androidtv.ui.itemhandling.ItemLauncherHelper
 import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
@@ -56,7 +55,6 @@ class SocketHandler(
 	private val playbackControllerContainer: PlaybackControllerContainer,
 	private val navigationRepository: NavigationRepository,
 	private val audioManager: AudioManager,
-	private val itemLauncher: ItemLauncher,
 	private val playbackHelper: PlaybackHelper,
 	private val lifecycle: Lifecycle,
 ) {
@@ -264,20 +262,20 @@ class SocketHandler(
 			BaseItemKind.USER_VIEW,
 			BaseItemKind.COLLECTION_FOLDER -> {
 				val item by api.userLibraryApi.getItem(itemId = itemId)
-				itemLauncher.launchUserView(item)
+				navigationRepository.navigate(ItemLauncherHelper.getUserViewDestination(item))
 			}
 
 			else -> navigationRepository.navigate(Destinations.itemDetails(itemId))
 		}
 	}
 
-	private fun onDisplayMessage(header: String?, text: String?) {
+	private suspend fun onDisplayMessage(header: String?, text: String?) {
 		val toastMessage = buildString {
 			if (!header.isNullOrBlank()) append(header, ": ")
 			append(text)
 		}
 
-		runBlocking(Dispatchers.Main) {
+		withContext(Dispatchers.Main) {
 			Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show()
 		}
 	}

@@ -12,6 +12,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.timedevent.TimedEvent
+import org.jellyfin.playback.core.timedevent.TimedEventTracker
 import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
 import org.videolan.libvlc.util.VLCUtil
 import kotlin.time.Duration.Companion.seconds
