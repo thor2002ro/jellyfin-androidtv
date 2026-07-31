@@ -305,7 +305,7 @@ object BrowsingUtils {
 	@JvmStatic
 	fun createBrowseGridItemsRequest(parent: BaseItemDto): GetItemsRequest {
 		val baseRequest = GetItemsRequest(
-			fields = ItemRepository.itemFields,
+			fields = ItemRepository.browseFields,
 			parentId = parent.id,
 		)
 
