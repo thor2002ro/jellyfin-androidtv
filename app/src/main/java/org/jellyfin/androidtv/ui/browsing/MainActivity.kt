@@ -25,6 +25,7 @@ import org.jellyfin.androidtv.ui.background.AppBackground
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.ProvideLocalInteractionTracker
 import org.jellyfin.androidtv.ui.composable.compat.AppNavigationHost
+import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.screensaver.InAppScreensaver
 import org.jellyfin.androidtv.ui.settings.compat.MainActivitySettings
@@ -126,6 +127,10 @@ class MainActivity : FragmentActivity() {
 
 	override fun onStop() {
 		super.onStop()
+
+		if (Destinations.isPlayback(navigationRepository.currentDestination.value) && !navigationRepository.goBack()) {
+			navigationRepository.reset(Destinations.home)
+		}
 
 		workManager.enqueue(OneTimeWorkRequestBuilder<LeanbackChannelWorker>().build())
 
