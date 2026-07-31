@@ -1,6 +1,5 @@
 package org.jellyfin.androidtv.preference
 
-import kotlinx.coroutines.runBlocking
 import org.jellyfin.sdk.api.client.ApiClient
 import kotlin.collections.set
 
@@ -23,13 +22,6 @@ class PreferencesRepository(
 	suspend fun getLibraryPreferencesAsync(preferencesId: String): LibraryPreferences {
 		val store = getOrCreateLibraryPreferences(preferencesId)
 		if (store.shouldUpdate) store.update()
-		return store
-	}
-
-	fun getLibraryPreferences(preferencesId: String): LibraryPreferences {
-		val store = getOrCreateLibraryPreferences(preferencesId)
-		if (store.shouldUpdate) runBlocking { store.update() }
-
 		return store
 	}
 

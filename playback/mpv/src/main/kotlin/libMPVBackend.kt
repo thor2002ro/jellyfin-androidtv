@@ -32,6 +32,7 @@ import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.support.PlaySupportReport
 import org.jellyfin.playback.core.timedevent.TimedEvent
+import org.jellyfin.playback.core.timedevent.TimedEventTracker
 import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
