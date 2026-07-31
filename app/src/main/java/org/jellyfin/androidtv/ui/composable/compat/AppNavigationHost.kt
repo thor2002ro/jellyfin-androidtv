@@ -53,7 +53,7 @@ fun AppNavigationHost(
 		val now = SystemClock.elapsedRealtime()
 		if (now <= backToExitDeadline) {
 			backToExitDeadline = 0L
-			activity?.finishAfterTransition()
+			activity?.finishAndRemoveTask()
 			return@BackHandler
 		}
 
