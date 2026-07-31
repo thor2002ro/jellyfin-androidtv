@@ -170,6 +170,7 @@ val appModule = module {
 				artifactPrefix = "jellyfin-androidtv-thor-",
 				currentVersionName = BuildConfig.VERSION_NAME,
 				buildType = BuildConfig.BUILD_TYPE,
+				supportedAbis = BuildConfig.UPDATE_ABIS.split(','),
 			)
 		)
 	}

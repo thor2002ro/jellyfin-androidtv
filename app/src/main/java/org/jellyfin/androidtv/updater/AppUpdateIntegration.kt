@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +43,8 @@ import org.jellyfin.androidtv.ui.base.button.ProgressButton
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
+import org.jellyfin.androidtv.ui.navigation.Destinations
+import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.ui.settings.composable.SettingsDialog
 import org.jellyfin.design.Tokens
@@ -68,9 +71,12 @@ fun startAppUpdateCheck(
 fun AppUpdatePrompt(
 	notificationsRepository: NotificationsRepository = koinInject(),
 	appUpdater: AppUpdater = koinInject(),
+	navigationRepository: NavigationRepository = koinInject(),
 ) {
 	val update by notificationsRepository.appUpdatePrompt.collectAsState()
-	val availableUpdate = update ?: return
+	val destination by navigationRepository.currentDestination.collectAsState()
+	val windowInfo = LocalWindowInfo.current
+	val availableUpdate = update?.takeIf { windowInfo.isWindowFocused && !Destinations.isPlayback(destination) } ?: return
 	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
 	var downloading by remember(availableUpdate) { mutableStateOf(false) }
 	var downloadProgress by remember(availableUpdate) { mutableStateOf<Int?>(null) }
@@ -137,6 +143,7 @@ fun AppUpdateSettings(
 	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
 	val availableAppUpdate by notificationsRepository.appUpdate.collectAsState()
 	var includePrereleases by remember { mutableStateOf(appUpdater.includePrereleases) }
+	var useUniversalApk by remember { mutableStateOf<Boolean?>(null) }
 	var checking by remember { mutableStateOf(false) }
 	var downloading by remember { mutableStateOf(false) }
 	var downloadProgress by remember { mutableStateOf<Int?>(null) }
@@ -147,6 +154,35 @@ fun AppUpdateSettings(
 		availableAppUpdate?.let {
 			update = it
 			updateMessage = "Update ${it.versionName} is available"
+		}
+	}
+	LaunchedEffect(Unit) {
+		useUniversalApk = appUpdater.initializeUseUniversalApk()
+	}
+
+	val checkForUpdates: () -> Unit = {
+		checking = true
+		lifecycleScope.launch {
+			try {
+				when (val result = appUpdater.checkForUpdate(force = true)) {
+					is UpdateCheckResult.Available -> {
+						update = result.update
+						notificationsRepository.updateAppUpdateNotification(result.update, prompt = false)
+						updateMessage = "Update ${result.update.versionName} is available"
+					}
+
+					UpdateCheckResult.NoUpdate -> {
+						update = null
+						notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+						updateMessage = "No compatible update found"
+					}
+
+					UpdateCheckResult.Skipped -> updateMessage = "Checked recently"
+					is UpdateCheckResult.Failed -> updateMessage = result.message
+				}
+			} finally {
+				checking = false
+			}
 		}
 	}
 
@@ -165,35 +201,36 @@ fun AppUpdateSettings(
 		)
 
 		ListButton(
-			enabled = !checking,
+			enabled = !checking && !downloading && appUpdater.deviceAbi != null && useUniversalApk != null,
+			headingContent = { Text("Update package") },
+			captionContent = {
+				Text(when (useUniversalApk) {
+					null -> "Detecting installed APK"
+					true -> "Universal APK"
+					false -> "${appUpdater.deviceAbi} APK"
+				})
+			},
+			onClick = {
+				useUniversalApk?.let { current ->
+					useUniversalApk = !current
+					appUpdater.useUniversalApk = !current
+					update = null
+					updateMessage = null
+					notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+					checkForUpdates()
+				}
+			},
+		)
+
+		ListButton(
+			enabled = !checking && !downloading,
 			leadingContent = {
 				if (checking) CircularProgressIndicator(Modifier.size(20.dp))
 				else Icon(painterResource(R.drawable.ic_upload), contentDescription = null)
 			},
 			headingContent = { Text("Check for updates") },
 			captionContent = { updateMessage?.let { Text(it) } },
-			onClick = {
-				checking = true
-				lifecycleScope.launch {
-					when (val result = appUpdater.checkForUpdate(force = true)) {
-						is UpdateCheckResult.Available -> {
-							update = result.update
-							notificationsRepository.updateAppUpdateNotification(result.update, prompt = false)
-							updateMessage = "Update ${result.update.versionName} is available"
-						}
-
-						UpdateCheckResult.NoUpdate -> {
-							update = null
-							notificationsRepository.updateAppUpdateNotification(null, prompt = false)
-							updateMessage = "No compatible update found"
-						}
-
-						UpdateCheckResult.Skipped -> updateMessage = "Checked recently"
-						is UpdateCheckResult.Failed -> updateMessage = result.message
-					}
-					checking = false
-				}
-			},
+			onClick = checkForUpdates,
 		)
 
 		update?.let { availableUpdate ->
