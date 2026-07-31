@@ -363,21 +363,6 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 		DirectStreamBadgeCache.clear()
 	}
 
-	test("series season sampling is spread across large series") {
-		val seasons = List(10) {
-			BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.SEASON)
-		}
-
-		seasons.spreadSeriesStreamBadgeSampleIds(4) shouldBe setOf(
-			seasons[0].id,
-			seasons[3].id,
-			seasons[6].id,
-			seasons[9].id,
-		)
-		seasons.spreadSeriesStreamBadgeSampleIds(1) shouldBe setOf(seasons[0].id)
-		seasons.spreadSeriesStreamBadgeSampleIds(0) shouldBe emptySet()
-	}
-
 	test("season badges use episode samples") {
 		val seasonId = UUID.randomUUID()
 
@@ -521,6 +506,16 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 		SeriesStreamBadgeCache.save(seriesId, seasonId, listOf(sample))
 		SeriesStreamBadgeCache.remove(setOf(seriesId))
 		SeriesStreamBadgeCache.get(seasonId) shouldBe null
+	}
+
+	test("series badge cache supports a series-level sample") {
+		val seriesId = UUID.randomUUID()
+
+		SeriesStreamBadgeCache.clear()
+		SeriesStreamBadgeCache.save(seriesId, seriesId, listOf(completeBadgeEpisode(seriesId)))
+
+		SeriesStreamBadgeCache.get(seriesId)?.single()?.defaultAudioLanguage() shouldBe "eng"
+		SeriesStreamBadgeCache.clear()
 	}
 
 	test("season badge cache keeps language-only badge samples") {
