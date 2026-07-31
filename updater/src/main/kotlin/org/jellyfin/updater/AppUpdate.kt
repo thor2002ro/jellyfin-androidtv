@@ -8,6 +8,7 @@ data class AppUpdateConfig(
 	val artifactPrefix: String,
 	val currentVersionName: String,
 	val buildType: String,
+	val supportedAbis: List<String>,
 	val checkIntervalMillis: Long = 5L * 24 * 60 * 60 * 1000,
 )
 

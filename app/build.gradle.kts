@@ -9,6 +9,7 @@ plugins {
 
 val thorApplicationId = "org.jellyfin.androidtv.thor"
 val appVersionName = project.getVersionName()
+val apkAbis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 val libassAndroidVersion = run {
 	val properties = Properties()
 	rootProject.file("dependencies/libass-android/gradle.properties").inputStream().use {
@@ -47,6 +48,7 @@ android {
 		buildConfigField("String", "LIBASS_ANDROID_VERSION", "\"$libassAndroidVersion\"")
 		buildConfigField("String", "LIBASS_VERSION", "\"$libassVersion\"")
 		buildConfigField("String", "LIBVLC_VERSION", "\"${libs.versions.libvlc.get()}\"")
+		buildConfigField("String", "UPDATE_ABIS", "\"${apkAbis.joinToString(",")}\"")
 	}
 
 	buildFeatures {
@@ -62,6 +64,15 @@ android {
 
 	packaging {
 		jniLibs.pickFirsts += "**/libc++_shared.so"
+	}
+
+	splits {
+		abi {
+			isEnable = true
+			reset()
+			include(*apkAbis.toTypedArray())
+			isUniversalApk = true
+		}
 	}
 
 	signingConfigs {
@@ -107,6 +118,8 @@ android {
 		debug {
 			// Use different application id to run release and debug at the same time
 			applicationIdSuffix = ".debug"
+			// CI provides this config so published debug APKs keep a stable update signer
+			signingConfigs.findByName("release")?.let { signingConfig = it }
 
 			// Set package names used in various XML files
 			resValue("string", "app_id", thorApplicationId + applicationIdSuffix)

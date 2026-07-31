@@ -4,11 +4,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.net.Uri
+import android.content.pm.Signature
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.edit
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -23,6 +28,8 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 class AppUpdater(
 	context: Context,
@@ -30,20 +37,46 @@ class AppUpdater(
 ) {
 	private val appContext = context.applicationContext
 	private val prefs = appContext.getSharedPreferences("app_updater", Context.MODE_PRIVATE)
+	private val checkMutex = Mutex()
+	private val downloadMutex = Mutex()
+	val deviceAbi = selectDeviceAbi(Build.SUPPORTED_ABIS.asList(), config.supportedAbis)
+	private val selectedArtifactSuffix get() = artifactSuffixForSelection(useUniversalApk, deviceAbi, config.buildType)
 
 	var includePrereleases: Boolean
 		get() = prefs.getBoolean("include_prereleases", false)
-		set(value) = prefs.edit().putBoolean("include_prereleases", value).apply()
+		set(value) = prefs.edit { putBoolean("include_prereleases", value) }
 
-	suspend fun checkForUpdate(force: Boolean = false): UpdateCheckResult = withContext(Dispatchers.IO) {
-		if (!force && !shouldCheck()) return@withContext UpdateCheckResult.Skipped
+	var useUniversalApk: Boolean
+		get() = prefs.getBoolean(PREFERENCE_USE_UNIVERSAL_APK, true)
+		set(value) = prefs.edit { putBoolean(PREFERENCE_USE_UNIVERSAL_APK, value || deviceAbi == null) }
 
-		runCatching {
-			val releases = parseReleases(httpGet("https://api.github.com/repos/${config.owner}/${config.repo}/releases?per_page=20"))
-			prefs.edit().putLong("last_check_ms", System.currentTimeMillis()).apply()
-			findUpdate(releases)?.let(UpdateCheckResult::Available) ?: UpdateCheckResult.NoUpdate
-		}.getOrElse { error ->
-			UpdateCheckResult.Failed(error.message ?: "Update check failed")
+	suspend fun initializeUseUniversalApk(): Boolean = withContext(Dispatchers.IO) {
+		initializeUseUniversalApkBlocking()
+		useUniversalApk
+	}
+
+	suspend fun checkForUpdate(force: Boolean = false): UpdateCheckResult {
+		return withContext(Dispatchers.IO) {
+			initializeUseUniversalApkBlocking()
+			checkMutex.withLock {
+				runCatching {
+					if (!force && !shouldCheck()) return@runCatching UpdateCheckResult.Skipped
+
+					val releases = parseReleases(httpGet("https://api.github.com/repos/${config.owner}/${config.repo}/releases?per_page=20"))
+					prefs.edit { putLong("last_check_ms", System.currentTimeMillis()) }
+					findUpdate(releases)?.let(UpdateCheckResult::Available) ?: UpdateCheckResult.NoUpdate
+				}.getOrElse { error ->
+					if (error is CancellationException) throw error
+					UpdateCheckResult.Failed(error.message ?: "Update check failed")
+				}
+			}
+		}
+	}
+
+	private fun initializeUseUniversalApkBlocking() = synchronized(prefs) {
+		if (!prefs.contains(PREFERENCE_USE_UNIVERSAL_APK)) {
+			val installedAbis = runCatching { readInstalledAbis(File(appContext.applicationInfo.sourceDir)) }.getOrDefault(emptySet())
+			prefs.edit { putBoolean(PREFERENCE_USE_UNIVERSAL_APK, defaultUseUniversalApk(installedAbis, deviceAbi)) }
 		}
 	}
 
@@ -51,17 +84,32 @@ class AppUpdater(
 		update: AppUpdate,
 		onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> },
 	): DownloadResult = withContext(Dispatchers.IO) {
-		runCatching {
+		downloadMutex.withLock {
 			val file = File(appContext.cacheDir, "updater/${update.assetName}")
-			file.parentFile?.mkdirs()
-			downloadTo(update.assetUrl, file, update.assetSize, onProgress)
-			validateApk(file)?.let { error ->
-				file.delete()
-				return@withContext DownloadResult.Failed(error)
+			val partialFile = File(file.parentFile, "${file.name}.part")
+
+			try {
+				val directory = requireNotNull(file.parentFile)
+				if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Unable to create update cache")
+				pruneUpdateCache(directory, file, partialFile)
+
+				if (file.isFile && downloadSizeError(file.length(), update.assetSize) == null && validateApk(file) == null) {
+					return@withLock DownloadResult.Ready(file)
+				}
+				if (file.exists() && !file.delete()) throw IOException("Unable to replace cached update")
+				if (partialFile.exists() && !partialFile.delete()) throw IOException("Unable to clear partial update")
+
+				downloadTo(update.assetUrl, partialFile, update.assetSize, onProgress)
+				validateApk(partialFile)?.let { return@withLock DownloadResult.Failed(it) }
+				promoteDownload(partialFile, file)
+				DownloadResult.Ready(file)
+			} catch (error: CancellationException) {
+				throw error
+			} catch (error: Exception) {
+				DownloadResult.Failed(error.message ?: "Download failed")
+			} finally {
+				partialFile.delete()
 			}
-			DownloadResult.Ready(file)
-		}.getOrElse { error ->
-			DownloadResult.Failed(error.message ?: "Download failed")
 		}
 	}
 
@@ -88,7 +136,7 @@ class AppUpdater(
 	fun openInstallPermissionSettings() {
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
-		val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${appContext.packageName}"))
+		val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${appContext.packageName}".toUri())
 			.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 		appContext.startActivity(intent)
 	}
@@ -110,7 +158,7 @@ class AppUpdater(
 	}
 
 	private fun GitHubRelease.toUpdate(asset: GitHubAsset): UpdateCandidate? {
-		val suffix = "-${config.buildType}.apk"
+		val suffix = selectedArtifactSuffix
 		if (!asset.name.startsWith(config.artifactPrefix) || !asset.name.endsWith(suffix)) return null
 
 		val versionName = asset.name
@@ -172,7 +220,9 @@ class AppUpdater(
 		val connection = openConnection(url)
 		connection.use {
 			if (responseCode !in 200..299) throw IOException("Download failed: $responseCode")
-			val total = getHeaderField("Content-Length")?.toLongOrNull()?.takeIf { it > 0 } ?: assetSize
+			val total = assetSize.takeIf { it > 0 }
+				?: getHeaderField("Content-Length")?.toLongOrNull()?.takeIf { it > 0 }
+				?: 0L
 			var downloaded = 0L
 			inputStream.use { input ->
 				FileOutputStream(file).use { output ->
@@ -186,6 +236,7 @@ class AppUpdater(
 					}
 				}
 			}
+			downloadSizeError(downloaded, total)?.let { throw IOException(it) }
 		}
 	}
 
@@ -208,6 +259,10 @@ class AppUpdater(
 
 		if (archiveInfo.longVersionCodeCompat() <= installedInfo.longVersionCodeCompat()) {
 			return "Downloaded APK is not newer than the installed app"
+		}
+
+		if (!signerDigestsMatch(installedInfo.signerDigests(), archiveInfo.signerDigests())) {
+			return "Downloaded APK is not signed by the installed app"
 		}
 
 		return null
@@ -236,6 +291,50 @@ class AppUpdater(
 	)
 }
 
+internal fun selectDeviceAbi(deviceAbis: List<String>, artifactAbis: List<String>) =
+	deviceAbis.firstOrNull(artifactAbis::contains)
+
+internal fun readInstalledAbis(file: File) = ZipFile(file).use { apk ->
+	apk.entries().asSequence()
+		.map { it.name }
+		.filter { it.startsWith("lib/") }
+		.map { it.substringAfter("lib/").substringBefore('/') }
+		.filter { it.isNotEmpty() }
+		.toSet()
+}
+
+internal fun defaultUseUniversalApk(installedAbis: Set<String>, deviceAbi: String?) =
+	installedAbis.size != 1 || deviceAbi == null
+
+internal fun artifactSuffixForSelection(useUniversal: Boolean, deviceAbi: String?, buildType: String) =
+	"-${if (useUniversal || deviceAbi == null) "universal" else deviceAbi}-$buildType.apk"
+
+internal fun downloadSizeError(downloaded: Long, expected: Long): String? =
+	if (expected > 0 && downloaded != expected) "Downloaded $downloaded of $expected bytes" else null
+
+internal data class SignerDigests(
+	val current: Set<String>,
+	val history: Set<String> = current,
+	val hasMultipleSigners: Boolean = current.size > 1,
+)
+
+internal fun signerDigestsMatch(installed: SignerDigests, downloaded: SignerDigests): Boolean {
+	if (installed.current.isEmpty() || downloaded.current.isEmpty()) return false
+	if (installed.hasMultipleSigners || downloaded.hasMultipleSigners) return installed.current == downloaded.current
+	return downloaded.history.containsAll(installed.current)
+}
+
+internal fun pruneUpdateCache(directory: File, vararg keep: File) {
+	val retained = keep.toSet()
+	directory.listFiles()?.forEach { file ->
+		if (file.isFile && file !in retained && (file.name.endsWith(".apk") || file.name.endsWith(".apk.part"))) file.delete()
+	}
+}
+
+internal fun promoteDownload(partialFile: File, file: File) {
+	if (!partialFile.renameTo(file)) throw IOException("Unable to finalize downloaded APK")
+}
+
 private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.content.orEmpty()
 private fun JsonObject.boolean(key: String) = this[key]?.jsonPrimitive?.booleanOrNull == true
 private fun JsonObject.long(key: String) = this[key]?.jsonPrimitive?.longOrNull ?: 0L
@@ -258,19 +357,50 @@ private inline fun <T> HttpURLConnection.use(block: HttpURLConnection.() -> T): 
 @Suppress("DEPRECATION")
 private fun PackageManager.getArchivePackageInfo(file: File): PackageInfo? =
 	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-		getPackageArchiveInfo(file.absolutePath, PackageManager.PackageInfoFlags.of(0))
+		getPackageArchiveInfo(file.absolutePath, PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()))
 	} else {
-		getPackageArchiveInfo(file.absolutePath, 0)
+		getPackageArchiveInfo(file.absolutePath, signingInfoFlags())
 	}
 
 @Suppress("DEPRECATION")
 private fun PackageManager.getInstalledPackageInfo(packageName: String): PackageInfo =
 	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-		getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+		getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()))
 	} else {
-		getPackageInfo(packageName, 0)
+		getPackageInfo(packageName, signingInfoFlags())
 	}
+
+@Suppress("DEPRECATION")
+private fun signingInfoFlags() =
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+
+@Suppress("DEPRECATION")
+private fun PackageInfo.signerDigests(): SignerDigests {
+	if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+		val current = signatures.orEmpty().digests()
+		return SignerDigests(current = current)
+	}
+
+	val info = signingInfo ?: return SignerDigests(emptySet())
+	if (info.hasMultipleSigners()) {
+		val current = info.apkContentsSigners.orEmpty().digests()
+		return SignerDigests(current = current, hasMultipleSigners = true)
+	}
+
+	val history = info.signingCertificateHistory.orEmpty().digests()
+	return SignerDigests(
+		current = history.lastOrNull()?.let(::setOf).orEmpty(),
+		history = history,
+	)
+}
+
+private fun Array<out Signature>.digests() = mapTo(linkedSetOf()) { signature ->
+	MessageDigest.getInstance("SHA-256").digest(signature.toByteArray())
+		.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+}
 
 @Suppress("DEPRECATION")
 private fun PackageInfo.longVersionCodeCompat(): Long =
 	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) longVersionCode else versionCode.toLong()
+
+private const val PREFERENCE_USE_UNIVERSAL_APK = "use_universal_apk"
