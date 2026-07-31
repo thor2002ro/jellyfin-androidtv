@@ -1,10 +1,8 @@
-package org.jellyfin.playback.libvlc
+package org.jellyfin.playback.core.timedevent
 
-import org.jellyfin.playback.core.timedevent.BlockActivation
-import org.jellyfin.playback.core.timedevent.TimedEvent
 import kotlin.time.Duration
 
-internal class TimedEventTracker {
+class TimedEventTracker {
 	private var events = emptyList<TimedEvent>()
 	private val activeBlocks = mutableSetOf<TimedEvent.Block>()
 
