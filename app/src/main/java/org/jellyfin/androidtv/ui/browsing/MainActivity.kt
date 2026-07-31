@@ -11,7 +11,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
@@ -27,6 +26,7 @@ import org.jellyfin.androidtv.ui.base.ProvideLocalInteractionTracker
 import org.jellyfin.androidtv.ui.composable.compat.AppNavigationHost
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
+import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.screensaver.InAppScreensaver
 import org.jellyfin.androidtv.ui.settings.compat.MainActivitySettings
 import org.jellyfin.androidtv.ui.startup.StartupActivity
@@ -41,6 +41,7 @@ class MainActivity : FragmentActivity() {
 	private val sessionRepository by inject<SessionRepository>()
 	private val userRepository by inject<UserRepository>()
 	private val interactionTrackerViewModel by viewModel<InteractionTrackerViewModel>()
+	private val mediaManager by inject<MediaManager>()
 	private val workManager by inject<WorkManager>()
 	private var authenticationRedirectStarted = false
 
@@ -125,14 +126,21 @@ class MainActivity : FragmentActivity() {
 		interactionTrackerViewModel.activityPaused = true
 	}
 
+	override fun onUserLeaveHint() {
+		super.onUserLeaveHint()
+		val destination = navigationRepository.currentDestination.value
+		if (!Destinations.isPlayback(destination)) return
+
+		if (Destinations.isAudioPlayback(destination)) mediaManager.stopAudio(releasePlayer = true)
+		if (!navigationRepository.goBack()) {
+			navigationRepository.reset(Destinations.home)
+		}
+	}
+
 	override fun onStop() {
 		super.onStop()
 
-		if (Destinations.isPlayback(navigationRepository.currentDestination.value) && !navigationRepository.goBack()) {
-			navigationRepository.reset(Destinations.home)
-		}
-
-		workManager.enqueue(OneTimeWorkRequestBuilder<LeanbackChannelWorker>().build())
+		LeanbackChannelWorker.enqueueOneTime(workManager)
 
 		lifecycleScope.launch(Dispatchers.IO) {
 			Timber.i("MainActivity stopped")

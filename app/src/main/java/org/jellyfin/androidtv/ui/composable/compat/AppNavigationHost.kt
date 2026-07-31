@@ -65,8 +65,8 @@ fun AppNavigationHost(
 		)
 	}
 
-	LaunchedEffect(canGoBack) {
-		if (canGoBack) backToExitDeadline = 0L
+	LaunchedEffect(canGoBack, windowInfo.isWindowFocused) {
+		if (canGoBack || !windowInfo.isWindowFocused) backToExitDeadline = 0L
 	}
 
 	AndroidView(
