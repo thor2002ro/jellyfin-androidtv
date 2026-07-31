@@ -210,6 +210,7 @@ class LibMPVBackend(
 		"osd-level" to "0",
 		"sub-auto" to "no",
 		"audio-file-auto" to "no",
+		"gapless-audio" to "no",
 		"cover-art-auto" to "no",
 		"autoload-files" to "no",
 		"ytdl" to "no",
