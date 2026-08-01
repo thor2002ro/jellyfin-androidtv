@@ -63,6 +63,8 @@ internal fun PlayableMediaStream.mpvSourceTracks(type: TrackType): List<MediaStr
 internal fun shouldReadLibMPVStatProperty(lastMissNanos: Long?, nowNanos: Long, retryNanos: Long) =
 	lastMissNanos == null || nowNanos - lastMissNanos >= retryNanos
 
+internal fun libMPVCommandSucceeded(result: MPVNode?): Boolean = result != null
+
 private data class LibMPVTrack(
 	val id: Int,
 	val type: TrackType,
@@ -119,6 +121,7 @@ class LibMPVBackend(
 		get() = forcedVideoDecoder?.toOption()
 
 	private val appContext = context.applicationContext
+	private val isNvidiaDevice = isLibMPVNvidiaDevice()
 	private val presetDirectory = appContext.filesDir.resolve("mpv-presets")
 	private val handler = Handler(Looper.getMainLooper())
 	private val playerLock = Any()
@@ -171,6 +174,9 @@ class LibMPVBackend(
 	private var lastReportedState: PlayState? = null
 	private var videoWidth = 0
 	private var videoHeight = 0
+	private var shieldFallback: LibMPVShieldFallback? = null
+	private val nvidiaFallbackResync = LibMPVNvidiaFallbackResyncState()
+	private val appliedNvidiaFallbackOptions = mutableSetOf<String>()
 	private var tracks = emptyList<LibMPVTrack>()
 	private var notifiedTracks = emptyList<LibMPVTrack>()
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
@@ -438,6 +444,7 @@ class LibMPVBackend(
 	}
 
 	private fun setMedia(stream: PlayableMediaStream) {
+		cancelNvidiaFallbackResync(restorePlayback = false)
 		ensureInstanceOptions(currentStream?.queueEntry !== stream.queueEntry)
 		scrubbing.reset()
 		currentStream = stream
@@ -468,6 +475,7 @@ class LibMPVBackend(
 
 		applyPlaybackOptions()
 		applyVideoDecoder()
+		applyShieldFallbackBeforeLoad(stream)
 		applyBufferOptions(stream)
 		applySubtitleStyle(subtitleStyle)
 		applySubtitleTiming()
@@ -537,16 +545,18 @@ class LibMPVBackend(
 
 	override fun play() {
 		terminalState = null
-		setBooleanProperty("pause", false)
+		if (!nvidiaFallbackResync.updateResumeAfter(true)) setPaused(false)
 	}
 
 	override fun pause() {
-		setBooleanProperty("pause", true)
+		nvidiaFallbackResync.updateResumeAfter(false)
+		setPaused(true)
 	}
 
 	override fun stop() {
 		handler.removeCallbacks(tick)
 		scrubbing.reset()
+		cancelNvidiaFallbackResync(restorePlayback = false)
 		loadRequested = false
 		endReported = true
 		lastPositionInfo = getPositionInfo()
@@ -564,6 +574,7 @@ class LibMPVBackend(
 		pendingInitialTrackTypes.clear()
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
+		restoreNvidiaFallbackOptions()
 		ensureInstanceOptions()
 		listener?.onSubtitleTimingOffsetSupportChange(false)
 		publishPlayState(force = true)
@@ -584,6 +595,7 @@ class LibMPVBackend(
 	override fun release() {
 		synchronized(playerLock) {
 			if (released) return
+			cancelNvidiaFallbackResync(restorePlayback = false)
 			cleanup()
 			playerObserver?.let(player::removeObserver)
 			playerObserver = null
@@ -596,7 +608,10 @@ class LibMPVBackend(
 		}
 	}
 
-	override fun seekTo(position: Duration) = performSeek(scrubbing.seek(position))
+	override fun seekTo(position: Duration): Boolean {
+		cancelNvidiaFallbackResync(restorePlayback = true)
+		return performSeek(scrubbing.seek(position))
+	}
 
 	private fun performSeek(request: LibMPVSeekRequest): Boolean {
 		val previous = if (request.precision == LibMPVSeekPrecision.EXACT) getPositionInfo() else null
@@ -632,9 +647,31 @@ class LibMPVBackend(
 
 	fun setConfiguration(decoder: LibMPVVideoDecoder, options: LibMPVPlaybackOptions) {
 		if (videoDecoder == decoder && playbackOptions == options) return
+		cancelNvidiaFallbackResync(restorePlayback = true)
+		val shieldWorkaroundsChanged = playbackOptions.nvidiaShieldWorkarounds != options.nvidiaShieldWorkarounds
+		val activeShieldFallback = shieldFallback
 		videoDecoder = decoder
 		playbackOptions = options
-		applyConfigurationChange()
+		val hasCurrentItem = currentStream != null && terminalState == null
+		val fallbackChange = libMPVNvidiaFallbackConfigurationChange(activeShieldFallback, shieldFallbackAllowed)
+		if (
+			hasCurrentItem &&
+			fallbackChange == LibMPVNvidiaFallbackConfigurationChange.REMOVE &&
+			libMPVNvidiaFallbackRemovalNeedsResync(effectiveVideoDecoderValue)
+		) {
+			scheduleNvidiaFallbackResync()
+		}
+		val preservedFallback = activeShieldFallback.takeIf {
+			hasCurrentItem && fallbackChange == LibMPVNvidiaFallbackConfigurationChange.PRESERVE
+		}
+		applyConfigurationChange(preservedFallback)
+		if (
+			hasCurrentItem &&
+			fallbackChange == LibMPVNvidiaFallbackConfigurationChange.NONE &&
+			shieldWorkaroundsChanged && options.nvidiaShieldWorkarounds
+		) {
+			applyShieldFallbackIfNeeded()
+		}
 	}
 
 	fun setVideoDecoder(decoder: LibMPVVideoDecoder) {
@@ -642,14 +679,73 @@ class LibMPVBackend(
 	}
 
 	private fun applyVideoDecoder() {
+		if (appliedNvidiaFallbackOptions.isNotEmpty()) applyPlaybackOptions()
+		shieldFallback = null
 		setOption("hwdec", effectiveVideoDecoderValue)
+	}
+
+	private val shieldFallbackAllowed: Boolean
+		get() = playbackOptions.nvidiaShieldWorkarounds &&
+			forcedVideoDecoder == null &&
+			effectiveVideoDecoder != LibMPVVideoDecoder.SOFTWARE
+
+	private fun applyShieldFallbackBeforeLoad(stream: PlayableMediaStream) {
+		val fallback = stream.selectLibMPVShieldFallback(isNvidiaDevice, shieldFallbackAllowed) ?: return
+		activateShieldFallback(fallback, resyncAfterDecoderChange = false)
+	}
+
+	private fun applyShieldFallbackIfNeeded() {
+		// FILE_LOADED still has its startup restart pending; let the decoder change own the next restart.
+		if (shieldFallback != null || !playbackRestarted) return
+		val fallback = player.selectLibMPVShieldFallback(isNvidiaDevice, shieldFallbackAllowed) ?: return
+		activateShieldFallback(fallback, resyncAfterDecoderChange = true)
+	}
+
+	private fun activateShieldFallback(fallback: LibMPVShieldFallback, resyncAfterDecoderChange: Boolean) {
+		if (resyncAfterDecoderChange) scheduleNvidiaFallbackResync()
+		val options = libMPVNvidiaFallbackOptions(fallback)
+		options.forEach { (name, value) ->
+			if (setOption(name, value)) appliedNvidiaFallbackOptions += name
+		}
+		val software = options.getValue("hwdec")
+		if ("hwdec" !in appliedNvidiaFallbackOptions || !getOptionValue("hwdec").equals(software, ignoreCase = true)) {
+			restoreNvidiaFallbackOptions()
+			cancelNvidiaFallbackResync(restorePlayback = true)
+			return
+		}
+		shieldFallback = fallback
+		Timber.w("Selected NVIDIA Shield fallback: %s", fallback.metricValue)
+	}
+
+	private fun scheduleNvidiaFallbackResync() {
+		val resumeAfter = !isPaused
+		val position = getPositionInfo().active.takeUnless { currentStream?.queueEntry?.isLiveTv == true }
+		nvidiaFallbackResync.schedule(position, resumeAfter)
+		if (resumeAfter) setPaused(true)
+	}
+
+	private fun cancelNvidiaFallbackResync(restorePlayback: Boolean) {
+		val pending = nvidiaFallbackResync.consume() ?: return
+		if (restorePlayback && pending.resumeAfter) setPaused(false)
+	}
+
+	private fun setPaused(paused: Boolean) {
+		if (setBooleanProperty("pause", paused)) isPaused = paused
+	}
+
+	private fun restoreNvidiaFallbackOptions() {
+		if (appliedNvidiaFallbackOptions.isEmpty()) {
+			shieldFallback = null
+			return
+		}
+		applyVideoDecoder()
 	}
 
 	fun setPlaybackOptions(options: LibMPVPlaybackOptions) {
 		setConfiguration(videoDecoder, options)
 	}
 
-	private fun applyConfigurationChange() {
+	private fun applyConfigurationChange(preservedFallback: LibMPVShieldFallback? = null) {
 		val canRecreateImmediately = currentStream == null ||
 			terminalState == PlayState.STOPPED ||
 			terminalState == PlayState.ERROR
@@ -660,12 +756,17 @@ class LibMPVBackend(
 
 		// Apply runtime-capable values immediately. Recreate before the next item so
 		// startup-only and reload-required options use the selected values as well.
-		applyPlaybackOptions()
-		applyVideoDecoder()
+		applyPlaybackOptions(preservedFallback)
+		if (preservedFallback == null) applyVideoDecoder()
 		applySubtitleStyle(subtitleStyle)
 	}
 
-	private fun applyPlaybackOptions() {
+	private fun applyPlaybackOptions(preservedFallback: LibMPVShieldFallback? = null) {
+		val fallbackOptions = preservedFallback?.let(::libMPVNvidiaFallbackOptions).orEmpty()
+		if ("audio-buffer" in appliedNvidiaFallbackOptions && "audio-buffer" !in fallbackOptions) {
+			restoreOptionDefault("audio-buffer")
+		}
+		appliedNvidiaFallbackOptions.clear()
 		val presetOptions = currentPresetOptions()
 		val customOptions = currentCustomOptions()
 		val removedPresetOptions = appliedPresetOptions - presetOptions.keys
@@ -673,9 +774,15 @@ class LibMPVBackend(
 
 		removedPresetOptions.forEach(::restoreOptionDefault)
 		removedOptions.forEach(::restoreCustomOption)
-		playbackOptions.managedOptions(vulkanSupported).forEach(::setOption)
-		presetOptions.forEach(::setOption)
-		customOptions.forEach(::setOption)
+		val runtimeOptions = linkedMapOf<String, String>().apply {
+			putAll(playbackOptions.managedOptions(vulkanSupported))
+			putAll(presetOptions)
+			putAll(customOptions)
+			putAll(fallbackOptions)
+		}
+		runtimeOptions.forEach { (name, value) ->
+			if (setOption(name, value) && name in fallbackOptions) appliedNvidiaFallbackOptions += name
+		}
 
 		appliedPresetOptions.clear()
 		appliedPresetOptions += presetOptions.keys
@@ -864,6 +971,7 @@ class LibMPVBackend(
 			cacheSpeed = double("cache-speed"),
 		)
 		val backendDetails = buildMap {
+			shieldFallback?.let { put("Shield fallback", it.metricValue) }
 			number("display-fps", " Hz")?.let { put("Display refresh", it) }
 			number("estimated-display-fps", " Hz")?.let { put("Measured refresh", it) }
 			string("display-sync-active")?.let { put("Display sync active", it) }
@@ -952,6 +1060,7 @@ class LibMPVBackend(
 	private fun handleEvent(generation: Long, eventId: Int, data: MPVNode) = onPlayerEvent(generation) {
 		when (eventId) {
 			MPV.mpvEvent.MPV_EVENT_START_FILE -> {
+				cancelNvidiaFallbackResync(restorePlayback = false)
 				frameStatPropertyMisses.clear()
 				loadRequested = false
 				activePlaylistEntryId = data["playlist_entry_id"]?.asInt()
@@ -965,6 +1074,7 @@ class LibMPVBackend(
 			MPV.mpvEvent.MPV_EVENT_FILE_LOADED -> {
 				fileLoaded = true
 				terminalState = null
+				applyShieldFallbackIfNeeded()
 				addExternalSubtitles()
 				refreshTracks()
 				applyInitialTrackSelection()
@@ -974,18 +1084,44 @@ class LibMPVBackend(
 				refreshVideoSize()
 				publishPlayState(force = true)
 			}
-			MPV.mpvEvent.MPV_EVENT_VIDEO_RECONFIG -> refreshVideoSize()
+			MPV.mpvEvent.MPV_EVENT_VIDEO_RECONFIG -> {
+				applyShieldFallbackIfNeeded()
+				refreshVideoSize()
+			}
 			MPV.mpvEvent.MPV_EVENT_SEEK -> {
 				playbackRestarted = false
 				seeking = true
 				publishPlayState()
 			}
 			MPV.mpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
+				val fallbackResync = nvidiaFallbackResync.consume()
 				frameStatPropertyMisses.clear()
-				playbackRestarted = true
-				seeking = false
+				playbackRestarted = fallbackResync == null
+				seeking = fallbackResync != null
 				rebufferWaitSeconds?.let { setOption("cache-pause-wait", it.toLibMPVString()) }
-				lastTickPosition = getPositionInfo().active
+				if (fallbackResync == null) {
+					lastTickPosition = getPositionInfo().active
+					applyShieldFallbackIfNeeded()
+				} else {
+					val position = fallbackResync.position
+					if (position == null) {
+						playbackRestarted = true
+						seeking = false
+						lastTickPosition = getPositionInfo().active
+					} else {
+						val positionSeconds = position.inWholeMilliseconds.coerceAtLeast(0) / 1_000.0
+						val positionValue = positionSeconds.toLibMPVString()
+						val realigned = runCommand("seek", positionValue, LibMPVSeekPrecision.EXACT.argument)
+						if (!realigned) {
+							playbackRestarted = true
+							seeking = false
+						} else {
+							Timber.w("Realigning playback after NVIDIA fallback at %s seconds", positionValue)
+						}
+						lastTickPosition = position
+					}
+					if (fallbackResync.resumeAfter) setPaused(false)
+				}
 				publishPlayState(force = true)
 			}
 			MPV.mpvEvent.MPV_EVENT_END_FILE -> handleEndFile(data)
@@ -1011,8 +1147,10 @@ class LibMPVBackend(
 		if (loadRequested) return
 		if (reason == "stop" && currentStream != null && terminalState == null) return
 
+		cancelNvidiaFallbackResync(restorePlayback = false)
 		fileLoaded = false
 		scrubbing.reset()
+		if (reason != "redirect") shieldFallback = null
 		playbackRestarted = false
 		pausedForCache = false
 		seeking = false
@@ -1044,7 +1182,9 @@ class LibMPVBackend(
 		Timber.e("MPV playback error: %s", message)
 		handler.removeCallbacks(tick)
 		scrubbing.reset()
+		cancelNvidiaFallbackResync(restorePlayback = false)
 		playbackRestarted = false
+		shieldFallback = null
 		terminalState = PlayState.ERROR
 		listener?.onPlaybackError(PlaybackError("MPV_ERROR"))
 		publishPlayState(force = true)
@@ -1063,7 +1203,9 @@ class LibMPVBackend(
 	private fun resolvePlayState(): PlayState {
 		terminalState?.let { return it }
 		if (currentStream == null) return PlayState.STOPPED
-		if (!fileLoaded || !playbackRestarted || pausedForCache || seeking) return PlayState.BUFFERING
+		if (!fileLoaded || !playbackRestarted || pausedForCache || seeking || nvidiaFallbackResync.isPending) {
+			return PlayState.BUFFERING
+		}
 		return if (isPaused) PlayState.PAUSED else PlayState.PLAYING
 	}
 
@@ -1160,6 +1302,7 @@ class LibMPVBackend(
 			Timber.w("Could not find initial %s stream index %d", type.name.lowercase(), streamIndex)
 			return true
 		}
+		if (track.isSelected) return true
 		setProperty(type.selectionProperty, track.id.toString())
 		Timber.i("Applied initial %s stream index %d as MPV track %d", type.name.lowercase(), streamIndex, track.id)
 		return true
@@ -1234,20 +1377,20 @@ class LibMPVBackend(
 		return sourceTracks.getOrNull(ordinal)
 	}
 
-	private fun setOption(name: String, value: String) {
+	private fun setOption(name: String, value: String): Boolean =
 		runCatching { player.setPropertyString("options/$name", value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV option %s=%s", name, value) }
-	}
+			.isSuccess
 
 	private fun setProperty(name: String, value: String) {
 		runCatching { player.setPropertyString(name, value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV property %s", name) }
 	}
 
-	private fun setBooleanProperty(name: String, value: Boolean) {
+	private fun setBooleanProperty(name: String, value: Boolean): Boolean =
 		runCatching { player.setPropertyBoolean(name, value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV property %s", name) }
-	}
+			.isSuccess
 
 	private fun setDoubleProperty(name: String, value: Double) {
 		runCatching { player.setPropertyDouble(name, value) }
@@ -1255,7 +1398,7 @@ class LibMPVBackend(
 	}
 
 	private fun runCommand(vararg command: String): Boolean = runCatching {
-		player.command(*command)
+		check(libMPVCommandSucceeded(player.commandNode(*command))) { "libMPV rejected command" }
 	}.onFailure { error ->
 		Timber.e(error, "MPV command failed: %s", command.firstOrNull())
 	}.isSuccess
