@@ -20,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,12 +32,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
+import org.jellyfin.androidtv.ui.base.shouldHandleHeldSeek
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
@@ -49,9 +50,11 @@ import org.jellyfin.androidtv.ui.player.base.toast.MediaToasts
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
@@ -67,13 +70,12 @@ import kotlin.time.Duration.Companion.seconds
 private val CenterLongPressDuration = 2.seconds
 private val SeekOverlayDuration = 2.seconds
 private val SeekPreviewDuration = 2500.milliseconds
-private val DpadSeekScrubDuration = 750.milliseconds
 private val DpadSeekCommitDelay = 1500.milliseconds
 private val DpadSeekToastDuration = 1500.milliseconds
 private val BackToStopTimeout = 2.seconds
 private val BackDuplicateGuardDuration = 250.milliseconds
 private val SeekAccelerationWindow = 1500.milliseconds
-private val SeekAccelerationMultipliers = intArrayOf(1, 2, 4, 8)
+private val SeekAccelerationMultipliers = intArrayOf(1, 1, 2, 3)
 
 @Composable
 fun VideoPlayerOverlay(
@@ -86,7 +88,7 @@ fun VideoPlayerOverlay(
 	onClosePlayer: () -> Unit = {},
 	openLiveTvGuideOnStart: Boolean = false,
 ) {
-	val playState by playbackManager.state.playState.collectAsState()
+	val playState by playbackManager.state.playState.collectAsStateWithLifecycle()
 	val videoQueueManager = koinInject<VideoQueueManager>()
 	val userPreferences = koinInject<UserPreferences>()
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
@@ -105,10 +107,10 @@ fun VideoPlayerOverlay(
 	var seekPreviewPosition by remember { mutableStateOf<Duration?>(null) }
 	var seekPreviewJob by remember { mutableStateOf<Job?>(null) }
 	var pendingSeekCommitJob by remember { mutableStateOf<Job?>(null) }
-	var seekScrubJob by remember { mutableStateOf<Job?>(null) }
 	var consecutiveSeekPresses by remember { mutableStateOf(0) }
 	var lastSeekTime by remember { mutableStateOf(0L) }
 	var lastSeekForward by remember { mutableStateOf(true) }
+	var lastHeldSeekAt by remember { mutableStateOf(0L) }
 	var backToStopDeadline by remember { mutableStateOf(0L) }
 	var backToStopKeyCode by remember { mutableStateOf<Int?>(null) }
 	var lastBackRequestAt by remember { mutableStateOf(0L) }
@@ -122,8 +124,8 @@ fun VideoPlayerOverlay(
 	val visibilityState = rememberPlayerOverlayVisibility(keepVisible = keepOverlayVisible)
 	val windowInfo = LocalWindowInfo.current
 	val entry by rememberQueueEntry(playbackManager)
-	val entryIndex by playbackManager.queue.entryIndex.collectAsState()
-	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val entryIndex by playbackManager.queue.entryIndex.collectAsStateWithLifecycle()
+	val item = entry?.run { baseItemFlow.collectAsStateWithLifecycle(baseItem) }?.value
 	val videoQueue = videoQueueManager.getCurrentVideoQueue()
 	val nextItem = videoQueue
 		.getOrNull(entryIndex + 1)
@@ -155,6 +157,23 @@ fun VideoPlayerOverlay(
 	fun hideOverlay() {
 		pausedOverlayDismissed = true
 		visibilityState.hide()
+	}
+
+	fun cancelPendingSeek() {
+		val hadPendingSeek = pendingSeekPosition != null
+		pendingSeekCommitJob?.cancel()
+		pendingSeekCommitJob = null
+		pendingSeekPosition = null
+		seekPreviewJob?.cancel()
+		seekPreviewJob = null
+		seekPreviewPosition = null
+		seekOverlayJob?.cancel()
+		seekOverlayJob = null
+		seekOverlayVisible = false
+		seekPauseOverlaySuppressed = false
+		if (hadPendingSeek || playbackManager.state.scrubbing.value) {
+			playbackManager.state.setScrubbing(false)
+		}
 	}
 
 	fun requestStopConfirmation() {
@@ -223,6 +242,8 @@ fun VideoPlayerOverlay(
 	}
 
 	LaunchedEffect(playState) {
+		if (playState == PlayState.STOPPED || playState == PlayState.ERROR) cancelPendingSeek()
+
 		if (previousPlayState == PlayState.PAUSED && playState.isActivePlayback) {
 			pausedOverlayDismissed = true
 			visibilityState.hide()
@@ -236,6 +257,10 @@ fun VideoPlayerOverlay(
 	LaunchedEffect(entryIndex) {
 		nextUpStartInProgress = false
 		consecutiveSeekPresses = 0
+	}
+
+	LaunchedEffect(entry) {
+		cancelPendingSeek()
 	}
 
 	LaunchedEffect(currentLiveTvItem?.id) {
@@ -311,33 +336,37 @@ fun VideoPlayerOverlay(
 		return position.coerceIn(Duration.ZERO, duration)
 	}
 
-	fun commitPendingSeek() {
+	fun commitPendingSeek(expectedEntry: QueueEntry?, expectedBackend: PlayerBackend) {
 		val target = pendingSeekPosition ?: return
 
 		pendingSeekCommitJob?.cancel()
 		pendingSeekCommitJob = null
 		pendingSeekPosition = null
-
-		seekPauseOverlaySuppressed = true
-		playbackManager.state.setScrubbing(true)
-		playbackManager.state.seek(target)
-
-		seekScrubJob?.cancel()
-		seekScrubJob = coroutineScope.launch {
-			delay(DpadSeekScrubDuration)
-			playbackManager.state.setScrubbing(false)
+		if (!isPendingSeekCurrent(
+				expectedEntry = expectedEntry,
+				expectedBackend = expectedBackend,
+				currentEntry = playbackManager.queue.entry.value,
+				currentBackend = playbackManager.backend,
+			)
+		) {
+			return
 		}
+
+		playbackManager.state.seek(target)
 	}
 
 	fun previewSeek(position: Duration) {
 		val positionInfo = playbackManager.state.positionInfo
 		val target = clampSeekPosition(position, positionInfo.duration)
 		pendingSeekPosition = target
+		seekPauseOverlaySuppressed = true
 		showSeekPreview(target)
 		pendingSeekCommitJob?.cancel()
+		val seekEntry = playbackManager.queue.entry.value
+		val seekBackend = playbackManager.backend
 		pendingSeekCommitJob = coroutineScope.launch {
 			delay(DpadSeekCommitDelay)
-			commitPendingSeek()
+			commitPendingSeek(seekEntry, seekBackend)
 		}
 	}
 
@@ -351,7 +380,7 @@ fun VideoPlayerOverlay(
 		lastSeekTime = now
 		lastSeekForward = forward
 
-		return SeekAccelerationMultipliers[consecutiveSeekPresses - 1]
+		return seekAccelerationMultiplier(consecutiveSeekPresses)
 	}
 
 	fun dpadSeek(forward: Boolean) {
@@ -374,6 +403,15 @@ fun VideoPlayerOverlay(
 				?.div(SeekAccelerationMultipliers.last()),
 			duration = DpadSeekToastDuration,
 		)
+	}
+
+	fun handleRemoteSeek(event: KeyEvent, forward: Boolean) {
+		if (!shouldHandleHeldSeek(event.repeatCount, event.eventTime, lastHeldSeekAt)) return
+		lastHeldSeekAt = event.eventTime
+		clearCenterLongPress()
+		overlayWakeKeyCode = event.keyCode
+		showSeekOverlay()
+		dpadSeek(forward)
 	}
 
 	SideEffect {
@@ -448,6 +486,7 @@ fun VideoPlayerOverlay(
 
 			if (keyEvent.action == KeyEvent.ACTION_UP && overlayWakeKeyCode == keyCode) {
 				overlayWakeKeyCode = null
+				lastHeldSeekAt = 0L
 				return@handler true
 			}
 
@@ -508,20 +547,14 @@ fun VideoPlayerOverlay(
 
 			if (seekEnabled && keyEvent.isSeekKey() && !visibilityState.visible) {
 				if (keyEvent.action == KeyEvent.ACTION_DOWN) {
-					clearCenterLongPress()
-					overlayWakeKeyCode = keyCode
-					showSeekOverlay()
-					dpadSeek(forward = keyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+					handleRemoteSeek(keyEvent, forward = keyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
 				}
 				return@handler true
 			}
 
 			if (seekEnabled && keyEvent.isMediaSeekKey()) {
 				if (keyEvent.action == KeyEvent.ACTION_DOWN) {
-					clearCenterLongPress()
-					overlayWakeKeyCode = keyCode
-					showSeekOverlay()
-					dpadSeek(forward = keyEvent.isForwardSeekKey())
+					handleRemoteSeek(keyEvent, forward = keyEvent.isForwardSeekKey())
 				}
 				return@handler true
 			}
@@ -540,11 +573,7 @@ fun VideoPlayerOverlay(
 	DisposableEffect(Unit) {
 		onDispose {
 			centerLongPressJob?.cancel()
-			seekOverlayJob?.cancel()
-			seekPreviewJob?.cancel()
-			pendingSeekCommitJob?.cancel()
-			seekScrubJob?.cancel()
-			playbackManager.state.setScrubbing(false)
+			cancelPendingSeek()
 			currentOnRemoteKeyEventHandlerChanged(null)
 		}
 	}
@@ -727,6 +756,16 @@ fun VideoPlayerOverlay(
 		MediaToasts(mediaToastRegistry)
 	}
 }
+
+internal fun isPendingSeekCurrent(
+	expectedEntry: QueueEntry?,
+	expectedBackend: PlayerBackend,
+	currentEntry: QueueEntry?,
+	currentBackend: PlayerBackend,
+) = expectedEntry != null && expectedEntry === currentEntry && expectedBackend === currentBackend
+
+internal fun seekAccelerationMultiplier(pressCount: Int): Int =
+	SeekAccelerationMultipliers[(pressCount - 1).coerceIn(SeekAccelerationMultipliers.indices)]
 
 private fun KeyEvent.isCenterKey() = when (keyCode) {
 	KeyEvent.KEYCODE_DPAD_CENTER,

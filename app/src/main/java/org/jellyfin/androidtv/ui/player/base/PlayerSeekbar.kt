@@ -1,10 +1,10 @@
 package org.jellyfin.androidtv.ui.player.base
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.jellyfin.androidtv.ui.base.Seekbar
 import org.jellyfin.androidtv.ui.base.SeekbarColors
 import org.jellyfin.androidtv.ui.base.SeekbarDefaults
@@ -26,12 +26,13 @@ fun PlayerSeekbar(
 	onSeek: ((progress: Duration) -> Unit)? = null,
 	enabled: Boolean = true,
 ) {
-	val playState by playbackManager.state.playState.collectAsState()
+	val playState by playbackManager.state.playState.collectAsStateWithLifecycle()
 	val positionInfo = playbackManager.state.positionInfo
 	val animatedProgress by rememberPlayerProgress(
 		playing = playState.isActivePlayback,
 		active = positionInfo.active,
 		duration = positionInfo.duration,
+		seekRequests = playbackManager.state.seekRequests,
 	)
 	val seekForwardAmount = remember { playbackManager.options.defaultFastForwardAmount() }
 	val seekRewindAmount = remember { playbackManager.options.defaultRewindAmount() }
@@ -42,7 +43,9 @@ fun PlayerSeekbar(
 		duration = positionInfo.duration,
 		seekForwardAmount = seekForwardAmount,
 		seekRewindAmount = seekRewindAmount,
-		onScrubbing = { scrubbing -> playbackManager.state.setScrubbing(scrubbing) },
+		onScrubbing = if (onSeek == null) {
+			{ scrubbing -> playbackManager.state.setScrubbing(scrubbing) }
+		} else null,
 		onSeek = onSeek ?: { progress -> playbackManager.state.seek(progress) },
 		onPreviewSeek = onPreviewSeek,
 		modifier = modifier,
