@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
@@ -92,7 +93,7 @@ fun VideoPlayerOverlay(
 	val videoQueueManager = koinInject<VideoQueueManager>()
 	val userPreferences = koinInject<UserPreferences>()
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
-	var showPlaybackInfo by remember { mutableStateOf(false) }
+	var showPlaybackInfo by remember { mutableStateOf(BuildConfig.DEBUG) }
 	var openLiveTvGuideOnStartConsumed by remember { mutableStateOf(false) }
 	var skipPromptTarget by remember { mutableStateOf<Duration?>(null) }
 	var endingSkipPromptVisible by remember { mutableStateOf(false) }
