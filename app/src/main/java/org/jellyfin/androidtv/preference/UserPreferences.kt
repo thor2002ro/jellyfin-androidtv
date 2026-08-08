@@ -14,6 +14,7 @@ import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.HEVCLevel
 import org.jellyfin.androidtv.preference.constant.LibassCacheSize
 import org.jellyfin.androidtv.preference.constant.LibassGlyphSize
+import org.jellyfin.androidtv.preference.constant.LibassMaxFps
 import org.jellyfin.androidtv.preference.constant.LibassMaxRenderPixels
 import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
@@ -316,6 +317,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Maximum libass render surface size in pixels.
 		 */
 		var libassMaxRenderPixels = enumPreference("libass_max_render_pixels", LibassMaxRenderPixels.FULL_SURFACE)
+
+		/**
+		 * Maximum libass subtitle render rate.
+		 */
+		var libassMaxFps = enumPreference("libass_max_fps", LibassMaxFps.FPS_35)
 
 		/**
 		 * Libass bitmap cache size.

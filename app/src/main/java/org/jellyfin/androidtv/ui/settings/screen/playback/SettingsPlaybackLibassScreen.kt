@@ -9,6 +9,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.LibassCacheSize
 import org.jellyfin.androidtv.preference.constant.LibassGlyphSize
+import org.jellyfin.androidtv.preference.constant.LibassMaxFps
 import org.jellyfin.androidtv.preference.constant.LibassMaxRenderPixels
 import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.ui.base.Text
@@ -28,6 +29,7 @@ fun SettingsPlaybackLibassScreen() {
 	var assDirectPlay by rememberPreference(userPreferences, UserPreferences.assDirectPlay)
 	var renderType by rememberPreference(userPreferences, UserPreferences.libassRenderType)
 	var maxRenderPixels by rememberPreference(userPreferences, UserPreferences.libassMaxRenderPixels)
+	var maxFps by rememberPreference(userPreferences, UserPreferences.libassMaxFps)
 	var cacheSize by rememberPreference(userPreferences, UserPreferences.libassCacheSize)
 	var glyphSize by rememberPreference(userPreferences, UserPreferences.libassGlyphSize)
 
@@ -70,6 +72,15 @@ fun SettingsPlaybackLibassScreen() {
 				headingContent = { Text(stringResource(R.string.preference_libass_max_render_pixels)) },
 				captionContent = { Text(description) },
 				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS_MAX_RENDER_PIXELS) },
+			)
+		}
+
+		item {
+			ListButton(
+				overlineContent = { Text(stringResource(maxFps.nameRes)) },
+				headingContent = { Text(stringResource(R.string.preference_libass_max_fps)) },
+				captionContent = { Text(stringResource(R.string.preference_libass_max_fps_description)) },
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS_MAX_FPS) },
 			)
 		}
 
@@ -127,6 +138,22 @@ fun SettingsPlaybackLibassMaxRenderPixelsScreen() {
 		nameRes = LibassMaxRenderPixels::nameRes,
 		descriptionResFor = LibassMaxRenderPixels::descriptionRes,
 		onSelected = { maxRenderPixels = it },
+	)
+}
+
+@Composable
+fun SettingsPlaybackLibassMaxFpsScreen() {
+	val userPreferences = koinInject<UserPreferences>()
+	var maxFps by rememberPreference(userPreferences, UserPreferences.libassMaxFps)
+
+	SettingsPlaybackLibassOptionScreen(
+		headingRes = R.string.preference_libass_max_fps,
+		descriptionRes = R.string.preference_libass_max_fps_description,
+		entries = LibassMaxFps.entries,
+		selected = maxFps,
+		nameRes = LibassMaxFps::nameRes,
+		descriptionResFor = LibassMaxFps::descriptionRes,
+		onSelected = { maxFps = it },
 	)
 }
 
