@@ -84,6 +84,7 @@ fun VideoPlayerOverlay(
 	playbackManager: PlaybackManager = koinInject(),
 	mediaToastRegistry: MediaToastRegistry,
 	zoomMode: ZoomMode,
+	zoomStatus: String,
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onRemoteKeyEventHandlerChanged: (((keyCode: Int, event: KeyEvent?) -> Boolean)?) -> Unit = {},
 	onClosePlayer: () -> Unit = {},
@@ -697,6 +698,7 @@ fun VideoPlayerOverlay(
 		if (showPlaybackInfo) {
 			PlaybackInfoOverlay(
 				playbackManager = playbackManager,
+				zoomStatus = zoomStatus,
 				modifier = Modifier
 					.align(Alignment.TopEnd)
 					.padding(top = 68.dp, end = 48.dp)

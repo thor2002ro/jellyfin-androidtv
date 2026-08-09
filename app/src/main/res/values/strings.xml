@@ -228,6 +228,8 @@
     <string name="playback_info_video_range">Video range: %1$s</string>
     <string name="playback_info_transcoding_note">Server is transcoding this file</string>
     <string name="lbl_auto_crop">Auto crop</string>
+    <string name="lbl_horizontal_stretch">Horizontal stretch</string>
+    <string name="lbl_vertical_stretch">Vertical stretch</string>
     <string name="lbl_stretch">Stretch</string>
     <string name="lbl_fit">Normal</string>
     <string name="lbl_audio_track">Select audio track</string>

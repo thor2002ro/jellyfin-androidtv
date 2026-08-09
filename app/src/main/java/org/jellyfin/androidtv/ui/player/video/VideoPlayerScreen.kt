@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +37,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.network.httpHeaders
@@ -64,6 +65,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -74,7 +76,6 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.compose.koinInject
 import timber.log.Timber
 
-private const val DefaultVideoAspectRatio = 16f / 9f
 private const val BufferingBlockCount = 5
 
 @Composable
@@ -86,6 +87,8 @@ fun VideoPlayerScreen(
 	val playbackManager = koinInject<PlaybackManager>()
 	val userPreferences = koinInject<UserPreferences>()
 	var zoomMode by remember { mutableStateOf(userPreferences[UserPreferences.playerZoomMode]) }
+	val initialZoomStatus = stringResource(zoomMode.nameRes)
+	var zoomStatus by remember { mutableStateOf(initialZoomStatus) }
 
 	val backgroundService = koinInject<BackgroundService>()
 	LaunchedEffect(backgroundService) {
@@ -103,35 +106,28 @@ fun VideoPlayerScreen(
 		enabled = playing,
 	)
 
-	val videoSize by playbackManager.state.videoSize.collectAsState()
-	val aspectRatio = videoSize.aspectRatio.takeIf { !it.isNaN() && it > 0f } ?: DefaultVideoAspectRatio
-
 	val coroutineScope = rememberCoroutineScope()
 	val mediaToastRegistry = remember { MediaToastRegistry(coroutineScope) }
 	rememberPlaybackManagerMediaToastEmitter(playbackManager, mediaToastRegistry)
 
-	BoxWithConstraints(
+	Box(
 		modifier = Modifier
 			.background(Color.Black)
 			.fillMaxSize()
 			.clipToBounds()
 	) {
-		val viewportSize = remember(maxWidth, maxHeight, aspectRatio, zoomMode) {
-			calculateVideoViewportSize(maxWidth, maxHeight, aspectRatio, zoomMode)
-		}
-		val videoModifier = Modifier
-			.requiredSize(viewportSize.width, viewportSize.height)
-			.align(Alignment.Center)
-
 		PlayerVideoOutput(
 			playbackManager = playbackManager,
-			modifier = videoModifier,
+			zoomMode = zoomMode,
+			onZoomStatusChanged = { zoomStatus = it },
+			modifier = Modifier.fillMaxSize(),
 		)
 
 		VideoPlayerOverlay(
 			playbackManager = playbackManager,
 			mediaToastRegistry = mediaToastRegistry,
 			zoomMode = zoomMode,
+			zoomStatus = zoomStatus,
 			onZoomModeSelected = { zoomMode = it },
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
@@ -143,22 +139,71 @@ fun VideoPlayerScreen(
 @Composable
 internal fun PlayerVideoOutput(
 	playbackManager: PlaybackManager,
+	zoomMode: ZoomMode,
+	onZoomStatusChanged: (String) -> Unit = {},
+	allowOutputTransform: Boolean = true,
 	modifier: Modifier = Modifier,
 	showBufferingIndicator: Boolean = true,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
+	val videoGeometry by playbackManager.state.videoGeometry.collectAsState()
+	val currentEntry by playbackManager.queue.entry.collectAsState()
 	val networkRecoveryService = remember(playbackManager) {
 		playbackManager.getService<NetworkPlaybackRecoveryService>()
 	}
 	val networkRecovering by networkRecoveryService?.recovering?.collectAsState()
 		?: remember { mutableStateOf(false) }
+	val currentOnZoomStatusChanged by rememberUpdatedState(onZoomStatusChanged)
+	val selectedZoomLabel = stringResource(zoomMode.nameRes)
+	val stretchZoomLabel = stringResource(ZoomMode.STRETCH.nameRes)
 
 	LiveTvTrackCacheUpdater(playbackManager)
 
-	Box(modifier = modifier) {
+	BoxWithConstraints(modifier = modifier.clipToBounds()) {
+		val density = LocalDensity.current
+		val container = with(density) {
+			IntSize(maxWidth.roundToPx(), maxHeight.roundToPx())
+		}
+		val sourceAspect = videoGeometry.aspectRatioFor(zoomMode)
+		val videoReady = allowOutputTransform &&
+			container.width > 0 && container.height > 0 &&
+			sourceAspect.isFinite() && sourceAspect > 0f
+		val viewportContainer = if (videoReady) container else IntSize.Zero
+		val viewport = remember(playbackManager, currentEntry, viewportContainer, sourceAspect, zoomMode) {
+			if (videoReady) calculateVideoViewport(container, videoGeometry, zoomMode) else null
+		}
+		LaunchedEffect(zoomMode, viewport, selectedZoomLabel, stretchZoomLabel) {
+			currentOnZoomStatusChanged(
+				videoZoomStatus(
+					zoomMode = zoomMode,
+					viewport = viewport,
+					selectedZoomLabel = selectedZoomLabel,
+					stretchZoomLabel = stretchZoomLabel,
+				)
+			)
+		}
+		val appliedViewport = viewport ?: VideoViewport(container.width, container.height, null)
+		val outputTransform = remember(videoReady, appliedViewport.aspectRatioOverride) {
+			if (videoReady) VideoOutputTransform(appliedViewport.aspectRatioOverride)
+			else VideoOutputTransform.NONE
+		}
+		val surfaceWidth = with(density) { appliedViewport.width.toDp() }
+		val surfaceHeight = with(density) { appliedViewport.height.toDp() }
+
+		LaunchedEffect(playbackManager, currentEntry, outputTransform) {
+			playbackManager.setVideoOutputTransform(outputTransform)
+		}
+		DisposableEffect(playbackManager) {
+			onDispose {
+				playbackManager.setVideoOutputTransform(VideoOutputTransform.NONE)
+			}
+		}
+
 		PlayerSurface(
 			playbackManager = playbackManager,
-			modifier = Modifier.fillMaxSize()
+			modifier = Modifier
+				.requiredSize(surfaceWidth, surfaceHeight)
+				.align(Alignment.Center)
 		)
 
 		PlayerSubtitles(
@@ -373,36 +418,4 @@ private fun VideoBufferingIndicator(
 			}
 		}
 	}
-}
-
-private data class VideoViewportSize(
-	val width: Dp,
-	val height: Dp,
-)
-
-private fun calculateVideoViewportSize(
-	containerWidth: Dp,
-	containerHeight: Dp,
-	videoAspectRatio: Float,
-	zoomMode: ZoomMode,
-): VideoViewportSize {
-	if (containerWidth <= 0.dp || containerHeight <= 0.dp || videoAspectRatio <= 0f) {
-		return VideoViewportSize(containerWidth, containerHeight)
-	}
-
-	if (zoomMode == ZoomMode.STRETCH) {
-		return VideoViewportSize(containerWidth, containerHeight)
-	}
-
-	val containerAspectRatio = containerWidth.value / containerHeight.value
-	val matchContainerWidth = when (zoomMode) {
-		ZoomMode.FIT -> videoAspectRatio >= containerAspectRatio
-		ZoomMode.AUTO_CROP -> videoAspectRatio < containerAspectRatio
-		ZoomMode.STRETCH -> true
-	}
-
-	val width = if (matchContainerWidth) containerWidth else (containerHeight.value * videoAspectRatio).dp
-	val height = if (matchContainerWidth) (containerWidth.value / videoAspectRatio).dp else containerHeight
-
-	return VideoViewportSize(width, height)
 }

@@ -6,7 +6,6 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player.Commands
 import androidx.media3.common.SimpleBasePlayer
-import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -56,7 +55,7 @@ internal class MediaSessionPlayer(
 			.flatMapLatest { entry -> entry?.mediaStreamFlow ?: flowOf(null) }
 			.invalidateStateOnEach(scope)
 		state.playState.invalidateStateOnEach(scope)
-		state.videoSize.invalidateStateOnEach(scope)
+		state.videoGeometry.invalidateStateOnEach(scope)
 		state.speed.invalidateStateOnEach(scope)
 		state.playbackOrder.invalidateStateOnEach(scope)
 	}
@@ -150,7 +149,7 @@ internal class MediaSessionPlayer(
 		setPlaybackParameters(PlaybackParameters(state.speed.value))
 		setShuffleModeEnabled(state.playbackOrder.value != PlaybackOrder.DEFAULT)
 		setRepeatMode(if (state.repeatMode.value == RepeatMode.NONE) REPEAT_MODE_OFF else REPEAT_MODE_ALL)
-		setVideoSize(state.videoSize.value.let { VideoSize(it.width, it.height) })
+		setVideoSize(state.videoGeometry.value.toMedia3VideoSize())
 		@Suppress("MagicNumber")
 		setDeviceVolume((state.volume.volume * 100).toInt())
 		setIsDeviceMuted(state.volume.muted)
