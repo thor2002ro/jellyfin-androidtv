@@ -31,6 +31,7 @@ val libassVersion = run {
 android {
 	namespace = "org.jellyfin.androidtv"
 	compileSdk = libs.versions.android.compileSdk.get().toInt()
+	ndkVersion = libs.versions.android.ndk.get()
 
 	defaultConfig {
 		minSdk = libs.versions.android.minSdk.get().toInt()
