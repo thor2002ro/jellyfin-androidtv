@@ -8,7 +8,7 @@
 
 [![Latest release](https://img.shields.io/github/release-date/thor2002ro/jellyfin-androidtv?label=latest%20release)](https://github.com/thor2002ro/jellyfin-androidtv/releases/latest)
 [![License](https://img.shields.io/github/license/thor2002ro/jellyfin-androidtv)](LICENSE)
-![Android 6.0+](https://img.shields.io/badge/Android%20TV-6.0%2B-3DDC84?logo=android&logoColor=white)
+![Android 7.0+](https://img.shields.io/badge/Android%20TV-7.0%2B-3DDC84?logo=android&logoColor=white)
 ![Unofficial fork](https://img.shields.io/badge/Jellyfin-unofficial%20community%20fork-orange)
 
 [Download APK](https://github.com/thor2002ro/jellyfin-androidtv/releases/latest)
@@ -24,12 +24,18 @@ Jellyfin Thor is a playback-focused fork of the Jellyfin Android TV client for A
 
 ## Features
 
-- First-class ASS/SSA subtitle rendering through a custom `libass` integration
-- Media3/ExoPlayer, libVLC, and external-player support
+- Media3/ExoPlayer, MPV, libVLC, and external-player support
+- Direct MPV MediaCodec output for compatible HDR and Dolby Vision playback
+- Native MPV subtitle overlays for direct HDR video
+- First-class ASS/SSA rendering through custom `libass`, including renderer prewarming and a configurable 24–60 FPS limit
+- Fast keyframe-aware scrubbing with held-button acceleration
 - Hardware, software, and FFmpeg decoder selection with fallback and recovery
+- NVIDIA Shield fallbacks for affected H.264 Hi10P and MPEG-2 streams
+- Reduced MPV output-buffer pressure for MediaTek-based Fire TV devices
+- Accurate DD+ Atmos, TrueHD Atmos, DTS:X, and DTS-HD media badges
 - Expanded in-player **Stats for Nerds**
 - Live TV startup, buffering, and stream-recovery improvements
-- Device-specific MPEG-TS and decoder workarounds
+- Music Shuffle All, improved library sorting, and focus restoration when returning to settings
 - Side-by-side installation with the official Jellyfin Android TV app
 
 The release package ID is:
@@ -38,11 +44,21 @@ The release package ID is:
 org.jellyfin.androidtv.thor
 ```
 
+## Bundled playback stack
+
+| Component | Current build | Notes |
+|-----------|---------------|-------|
+| Media3/ExoPlayer | `1.11.0` | Custom source snapshot `1.11.0-200-g835628b4c0ce` with selected HDR and Dolby Vision fixes |
+| Media3 FFmpeg decoder | FFmpeg `8.0.git` | Source revision `f944afd04097`; includes custom video-decoder and rendering patches |
+| MPV Android library | `0.2.1-thor` | Uses FFmpeg `release/8.1`, LibreSSL `4.3.2`, and native subtitle-overlay export |
+| libass Android | `0.5.0-thor` | Custom Media3 renderer with prewarming and configurable subtitle FPS |
+| Native toolchain | NDK r29 (`29.0.14206865`) | Pinned across the app and checked-in media projects |
+
 ## Installation
 
 Requirements:
 
-- Android TV 6.0 / API 23 or newer
+- Android TV 7.0 / API 24 or newer
 - A reachable Jellyfin server
 - Permission to sideload applications when installing outside an app store
 
@@ -63,6 +79,9 @@ Requirements:
 - Git with submodule support
 - JDK 21
 - Android Studio or a compatible Android SDK
+- Android NDK r29 (`29.0.14206865`)
+
+The current build uses Gradle 9.6.1, Android Gradle Plugin 9.3.1, and Kotlin 2.4.10.
 
 ```shell
 git clone --recurse-submodules https://github.com/thor2002ro/jellyfin-androidtv.git
@@ -82,18 +101,24 @@ Run tests with:
 ./gradlew test
 ```
 
-The build requires the custom Media3/FFmpeg decoder artifact:
+The application resolves its custom Media3 and MPV libraries from the checked-in Maven outputs:
 
 ```text
-dependencies/jellyfin-androidx-media/OUTPUT/media3-ffmpeg-decoder-latest-SNAPSHOT.aar
+dependencies/jellyfin-androidx-media/OUTPUT/maven/
+dependencies/mpv-android-lib/OUTPUT/maven/
 ```
 
-See [`dependencies/jellyfin-androidx-media/README.md`](dependencies/jellyfin-androidx-media/README.md) if the artifact must be rebuilt.
+The `libass-android` submodule is included as a Gradle build, so a recursive clone contains the sources and artifacts required for a normal application build. See the subproject documentation when rebuilding native media components:
+
+- [`jellyfin-androidx-media`](dependencies/jellyfin-androidx-media/README.md)
+- [`libass-android`](dependencies/libass-android/README.md)
+- [`mpv-android-lib`](dependencies/mpv-android-lib/README.md)
 
 ## Related projects
 
 - [`libass-android`](https://github.com/thor2002ro/libass-android) — Android libass build and Media3 ASS/SSA renderer
 - [`jellyfin-androidx-media`](https://github.com/thor2002ro/jellyfin-androidx-media) — Custom Media3 build with FFmpeg video decoding
+- [`mpv-android-lib`](https://github.com/thor2002ro/mpv-android-lib) — Custom Android MPV build with HDR and native subtitle-overlay support
 
 ## License
 
