@@ -61,6 +61,7 @@ import org.jellyfin.androidtv.util.LanguageUtils;
 import org.jellyfin.androidtv.util.PlaybackHelper;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse;
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage;
 import org.jellyfin.androidtv.util.apiclient.Response;
 import org.jellyfin.androidtv.util.sdk.BaseItemExtensionsKt;
 import org.jellyfin.sdk.model.api.MediaSourceInfo;
@@ -1334,12 +1335,12 @@ public class CustomPlaybackOverlayFragment extends Fragment implements View.OnKe
                 binding.itemTitle.setText(current.getName());
             }
             // Update the logo
-            String imageUrl = imageHelper.getValue().getLogoImageUrl(current, 440);
-            if (imageUrl != null) {
+            JellyfinImage image = imageHelper.getValue().getLogoImage(current);
+            if (image != null) {
                 binding.itemLogo.setVisibility(View.VISIBLE);
                 binding.itemTitle.setVisibility(View.GONE);
                 binding.itemLogo.setContentDescription(current.getName());
-                binding.itemLogo.load(imageUrl, null, null, 1.0, 0);
+                binding.itemLogo.load(image, null, 1.0, 32, 440, null, null, null);
             } else {
                 binding.itemLogo.setVisibility(View.GONE);
                 binding.itemTitle.setVisibility(View.VISIBLE);

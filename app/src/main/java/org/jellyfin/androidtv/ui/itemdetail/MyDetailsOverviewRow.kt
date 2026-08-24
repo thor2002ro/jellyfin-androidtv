@@ -4,11 +4,15 @@ import androidx.core.view.isVisible
 import androidx.leanback.widget.Row
 import org.jellyfin.androidtv.data.model.InfoItem
 import org.jellyfin.androidtv.ui.TextUnderButton
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage
 import org.jellyfin.sdk.model.api.BaseItemDto
 
 class MyDetailsOverviewRow @JvmOverloads constructor(
     val item: BaseItemDto,
-    var imageDrawable: String? = null,
+	var image: JellyfinImage? = null,
+	var imageMaxWidth: Int? = null,
+	var imageFillHeight: Int? = null,
+	var imageAspectRatio: Double = 1.0,
     var summary: String? = null,
     var infoItem1: InfoItem? = null,
     var infoItem2: InfoItem? = null,

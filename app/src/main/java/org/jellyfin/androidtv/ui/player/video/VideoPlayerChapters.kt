@@ -288,8 +288,9 @@ private fun ChapterThumbnail(
 				)
 			} else {
 				AsyncImage(
-					url = url,
-					blurHash = image.blurHash,
+					image = image,
+					fillWidth = fillWidth,
+					fillHeight = fillHeight,
 					aspectRatio = ChapterThumbnailAspectRatio,
 					scaleType = ImageView.ScaleType.CENTER_CROP,
 					modifier = Modifier.fillMaxSize(),

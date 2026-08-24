@@ -35,7 +35,12 @@ class MyDetailsOverviewRowPresenter(
 			binding.infoValue3.text = row.infoItem3?.value
 
 
-			binding.mainImage.load(row.imageDrawable, null, null, 1.0, 0)
+			binding.mainImage.load(
+				image = row.image,
+				aspectRatio = row.imageAspectRatio,
+				maxWidth = row.imageMaxWidth,
+				fillHeight = row.imageFillHeight,
+			)
 
 			setSummary(row.summary)
 
