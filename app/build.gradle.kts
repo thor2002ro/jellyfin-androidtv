@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -10,15 +11,24 @@ plugins {
 val thorApplicationId = "org.jellyfin.androidtv.thor"
 val appVersionName = project.getVersionName()
 val apkAbis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-val libassAndroidVersion = run {
+fun readVersionName(propertiesFile: File): String {
 	val properties = Properties()
-	rootProject.file("dependencies/libass-android/gradle.properties").inputStream().use {
+	propertiesFile.inputStream().use {
 		properties.load(it)
 	}
-	requireNotNull(properties.getProperty("VERSION_NAME")) {
-		"VERSION_NAME not found in dependencies/libass-android/gradle.properties"
+	return requireNotNull(properties.getProperty("VERSION_NAME")) {
+		"VERSION_NAME not found in $propertiesFile"
 	}
 }
+val libassAndroidVersion = readVersionName(rootProject.file("dependencies/libass-android/gradle.properties"))
+val libdoviAndroidVersion = readVersionName(rootProject.file("dependencies/libdovi-android/gradle.properties"))
+val libdoviVersions = apkAbis.map { abi ->
+	rootProject.file("dependencies/libdovi-android/OUTPUT/native/$abi/UPSTREAM_SHA").readText().trim()
+}.toSet()
+require(libdoviVersions.size == 1) {
+	"libdovi upstream revisions differ between ABI artifacts: $libdoviVersions"
+}
+val libdoviVersion = libdoviVersions.single().take(12)
 val libassVersion = run {
 	val header = rootProject.file("dependencies/libass-android/lib_ass/src/main/cpp/libass-cmake/src/ass/libass/ass.h").readText()
 	val (major, minor, patch) = requireNotNull(Regex("""(?m)^#define\s+LIBASS_VERSION\s+0x([0-9])([0-9]{2})([0-9]{2})[0-9A-Fa-f]{3}\s*$""").find(header)) {
@@ -47,6 +57,8 @@ android {
 		buildConfigField("String", "FFMPEG_VERSION", "\"${rootProject.extra["customFfmpegVersion"]}\"")
 		buildConfigField("String", "LIBYUV_VERSION", "\"${rootProject.extra["customLibyuvVersion"]}\"")
 		buildConfigField("String", "LIBASS_ANDROID_VERSION", "\"$libassAndroidVersion\"")
+		buildConfigField("String", "LIBDOVI_ANDROID_VERSION", "\"$libdoviAndroidVersion\"")
+		buildConfigField("String", "LIBDOVI_VERSION", "\"$libdoviVersion\"")
 		buildConfigField("String", "LIBASS_VERSION", "\"$libassVersion\"")
 		buildConfigField("String", "LIBVLC_VERSION", "\"${libs.versions.libvlc.get()}\"")
 		buildConfigField("String", "UPDATE_ABIS", "\"${apkAbis.joinToString(",")}\"")
