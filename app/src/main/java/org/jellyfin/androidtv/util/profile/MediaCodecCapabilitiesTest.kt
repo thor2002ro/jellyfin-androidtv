@@ -60,6 +60,8 @@ class MediaCodecCapabilitiesTest(
 
 	fun supportsHevcHDR10Plus(): Boolean = hevc.supportsHevcHDR10Plus()
 
+	fun supportsHevcHlg(): Boolean = hevc.supportsHevcHlg()
+
 	fun getHevcMainLevel(): Int = hevc.getMainLevel()
 
 	fun getHevcMain10Level(): Int = hevc.getMain10Level()

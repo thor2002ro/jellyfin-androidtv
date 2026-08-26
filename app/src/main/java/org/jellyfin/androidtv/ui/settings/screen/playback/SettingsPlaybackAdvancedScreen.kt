@@ -205,6 +205,17 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
+			var doviCompatibilityMode by rememberPreference(userPreferences, UserPreferences.doviCompatibilityMode)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.dovi_compatibility_title)) },
+				captionContent = { Text(stringResource(doviCompatibilityMode.nameRes)) },
+				onClick = { router.push(Routes.PLAYBACK_DOVI_COMPATIBILITY) },
+				modifier = Modifier.focusKey(Routes.PLAYBACK_DOVI_COMPATIBILITY),
+			)
+		}
+
+		item {
 			var videoStartDelay by rememberPreference(userPreferences, UserPreferences.videoStartDelay)
 			val interactionSource = remember { MutableInteractionSource() }
 

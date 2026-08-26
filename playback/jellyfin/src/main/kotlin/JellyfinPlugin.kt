@@ -12,16 +12,23 @@ import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamResolver
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionSocketService
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
+import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.dovi.DoviDecision
+import org.jellyfin.playback.core.mediastream.MediaConversionMethod
+import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.MediaSegmentType
 
 typealias JellyfinMediaStreamOptionsProvider = (BaseItemDto, String?) -> JellyfinMediaStreamOptions
+data class JellyfinDeviceProfileRequest(val profile: DeviceProfile, val requestToken: Long)
+typealias JellyfinDeviceProfileProvider = (QueueEntry) -> JellyfinDeviceProfileRequest
+typealias JellyfinDoviDecisionValidator = (QueueEntry, Long, MediaSourceInfo?, MediaConversionMethod?, DoviDecision?) -> Unit
 
 fun jellyfinPlugin(
 	api: ApiClient,
-	deviceProfileBuilder: () -> DeviceProfile,
+	deviceProfileBuilder: JellyfinDeviceProfileProvider,
 	mediaStreamOptionsProvider: JellyfinMediaStreamOptionsProvider = { _, _ ->
 		JellyfinMediaStreamOptions()
 	},
@@ -29,10 +36,11 @@ fun jellyfinPlugin(
 	lifecycle: Lifecycle? = null,
 	liveTvDirectPlayEnabled: () -> Boolean = { true },
 	networkAvailable: () -> Boolean = { true },
+	doviDecisionValidator: JellyfinDoviDecisionValidator = { _, _, _, _, _ -> },
 ) = playbackPlugin {
 	val liveTvPlaybackPolicy = LiveTvPlaybackPolicy(liveTvDirectPlayEnabled)
 
-	provide(JellyfinMediaStreamResolver(api, deviceProfileBuilder, mediaStreamOptionsProvider, liveTvPlaybackPolicy))
+	provide(JellyfinMediaStreamResolver(api, deviceProfileBuilder, mediaStreamOptionsProvider, liveTvPlaybackPolicy, doviDecisionValidator))
 	provide(NetworkPlaybackRecoveryService(liveTvPlaybackPolicy, networkAvailable))
 	provide(LiveTvPlaybackRecoveryService(liveTvPlaybackPolicy, networkAvailable))
 	provide(LiveTvPlaybackResetService(liveTvPlaybackPolicy))

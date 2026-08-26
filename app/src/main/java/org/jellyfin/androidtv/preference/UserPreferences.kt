@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.constant.BackdropBehavior
 import org.jellyfin.androidtv.preference.constant.BufferLength
 import org.jellyfin.androidtv.preference.constant.ClockBehavior
+import org.jellyfin.androidtv.preference.constant.DoviCompatibilityMode
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.HEVCLevel
 import org.jellyfin.androidtv.preference.constant.LibassCacheSize
@@ -174,6 +175,9 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Dolby Vision Profile 8 device profile override.
 		 */
 		var doviProfile8Override = enumPreference("pref_dovi_profile_8_mode", HdrOverrideMode.AUTO)
+
+		/** Select metadata-only Dolby Vision playback compatibility behavior. */
+		var doviCompatibilityMode = enumPreference("pref_dovi_profile_7_conversion", DoviCompatibilityMode.AUTO)
 
 		/**
 		 * Enable EAC3

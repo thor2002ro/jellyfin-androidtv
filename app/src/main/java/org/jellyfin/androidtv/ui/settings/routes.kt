@@ -36,6 +36,7 @@ import org.jellyfin.androidtv.ui.settings.screen.livetv.SettingsLiveTvGuideOptio
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackAVCLevelScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackAdvancedScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackAudioBehaviorScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackDoviCompatibilityScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackHdrOverrideScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackHdrOverridesScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackBufferLengthScreen
@@ -115,6 +116,7 @@ object Routes {
 	const val PLAYBACK_BUFFER_LENGTH = "/playback/buffer-length"
 	const val PLAYBACK_HDR_OVERRIDES = "/playback/hdr-overrides"
 	const val PLAYBACK_HDR_OVERRIDE = "/playback/hdr-overrides/{format}"
+	const val PLAYBACK_DOVI_COMPATIBILITY = "/playback/dolby-vision-compatibility"
 	const val PLAYBACK_AUDIO_BEHAVIOR = "/playback/audio-behavior"
 	const val PLAYBACK_CODEC = "/playback/codec"
 	const val PLAYBACK_AVC_LEVEL = "/playback/codec/avc-level"
@@ -282,6 +284,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.PLAYBACK_HDR_OVERRIDES to {
 		SettingsPlaybackHdrOverridesScreen()
+	},
+	Routes.PLAYBACK_DOVI_COMPATIBILITY to {
+		SettingsPlaybackDoviCompatibilityScreen()
 	},
 	Routes.PLAYBACK_HDR_OVERRIDE to { context ->
 		SettingsPlaybackHdrOverrideScreen(
