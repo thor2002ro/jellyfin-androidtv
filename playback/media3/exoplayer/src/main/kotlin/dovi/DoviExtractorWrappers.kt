@@ -99,7 +99,7 @@ private class DoviDualTrackDispatcher(
 			}
 			else -> output.pairingFailure("Dolby Vision sample came from an unselected track")
 		}
-		val retained = sample.bytes.size + (sample.supplementalRpu?.size ?: 0)
+		val retained = sample.bytesSize + (sample.supplementalRpu?.size ?: 0)
 		slot.byteCount += retained
 		pendingBytes += retained
 		if (pending.size > MAX_PENDING_TIMESTAMPS || pendingBytes > MAX_PENDING_BYTES) {
@@ -110,7 +110,7 @@ private class DoviDualTrackDispatcher(
 
 	private fun drain() {
 		while (pending.isNotEmpty()) {
-			val first = pending.firstEntry()
+			val first = pending.firstEntry() ?: return
 			val base = first.value.base ?: return
 			val dependent = first.value.dependent ?: return
 			if (base.second.bytes.h265Nals().any { nal -> nal.type == DOVI_RPU_NAL_TYPE }) {
@@ -215,7 +215,7 @@ private class DeferredVideoTrackOutput(
 internal class DoviExtractorOutput(
 	private val delegate: ExtractorOutput,
 	private val context: () -> DoviTransformContext?,
-	private val transformer: DoviSampleTransformer,
+	private val transformer: DoviSampleTransformer?,
 ) : ExtractorOutput {
 	private val trackOutputs = mutableMapOf<Int, TrackOutput>()
 	private val videoTracks = mutableListOf<DeferredVideoTrackOutput>()
@@ -329,7 +329,7 @@ internal class DoviExtractorOutput(
 internal class DoviExtractor(
 	private val delegate: Extractor,
 	private val context: () -> DoviTransformContext?,
-	private val transformer: DoviSampleTransformer = DoviSampleTransformer(::transformDoviSample),
+	private val transformer: DoviSampleTransformer? = null,
 ) : Extractor {
 	private var output: DoviExtractorOutput? = null
 
@@ -366,7 +366,7 @@ internal class DoviExtractor(
 internal class DoviHlsMediaChunkExtractor(
 	private val delegate: HlsMediaChunkExtractor,
 	private val context: () -> DoviTransformContext?,
-	private val transformer: DoviSampleTransformer = DoviSampleTransformer(::transformDoviSample),
+	private val transformer: DoviSampleTransformer? = null,
 ) : HlsMediaChunkExtractor {
 	private var output: DoviExtractorOutput? = null
 

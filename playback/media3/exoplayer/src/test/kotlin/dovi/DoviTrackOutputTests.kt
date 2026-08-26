@@ -289,6 +289,39 @@ class DoviTrackOutputTests : FunSpec({
 		transformed shouldBe listOf(listOf<Byte>(1, 2), listOf<Byte>(9, 10))
 	}
 
+	test("fragmented samples reuse their Dolby Vision assembly storage") {
+		val delegate = RecordingTrackOutput()
+		val transformedStorage = mutableListOf<ByteArray>()
+		val transformedBytes = mutableListOf<List<Byte>>()
+		val output = DoviTrackOutput(
+			delegate = delegate,
+			request = { DoviTransformRequest(DoviTarget.PROFILE_8_1) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformedStorage += sample.bytes
+				transformedBytes += sample.bytes.copyOfRange(
+					sample.bytesOffset,
+					sample.bytesOffset + sample.bytesSize,
+				).toList()
+				result(sample.bytes, DoviPresentation.PROFILE_8_1)
+			},
+		)
+		output.format(doviFormat(profile = 7))
+
+		output.sampleData(ParsableByteArray(byteArrayOf(1, 2)), 2, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		output.sampleData(ParsableByteArray(byteArrayOf(3, 4)), 2, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		output.sampleMetadata(10, 0, 4, 0, null)
+		output.sampleData(ParsableByteArray(byteArrayOf(5)), 1, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		output.sampleData(ParsableByteArray(byteArrayOf(6, 7, 8)), 3, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		output.sampleMetadata(20, 0, 4, 0, null)
+
+		transformedBytes shouldBe listOf(
+			listOf<Byte>(1, 2, 3, 4),
+			listOf<Byte>(5, 6, 7, 8),
+		)
+		(transformedStorage[0] === transformedStorage[1]) shouldBe true
+	}
+
 	test("transformation failure forwards neither advertised format nor sample") {
 		val delegate = RecordingTrackOutput()
 		val output = DoviTrackOutput(

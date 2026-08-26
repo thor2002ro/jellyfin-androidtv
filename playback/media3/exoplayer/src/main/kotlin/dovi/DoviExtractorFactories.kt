@@ -27,7 +27,7 @@ internal data class DoviTransformContext(
 internal class DoviExtractorsFactory(
 	private val delegate: ExtractorsFactory,
 	private val context: DoviTransformContext?,
-	private val transformer: DoviSampleTransformer = DoviSampleTransformer(::transformDoviSample),
+	private val transformer: DoviSampleTransformer? = null,
 ) : ExtractorsFactory {
 	override fun createExtractors(): Array<Extractor> = delegate.createExtractors().wrapped()
 
@@ -62,7 +62,7 @@ internal class DoviExtractorsFactory(
 internal class DoviHlsExtractorFactory(
 	private val delegate: HlsExtractorFactory,
 	private val context: DoviTransformContext?,
-	private val transformer: DoviSampleTransformer = DoviSampleTransformer(::transformDoviSample),
+	private val transformer: DoviSampleTransformer? = null,
 ) : HlsExtractorFactory {
 	override fun createExtractor(
 		uri: Uri,

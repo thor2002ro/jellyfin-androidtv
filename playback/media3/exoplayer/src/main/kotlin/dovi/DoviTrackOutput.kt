@@ -16,10 +16,10 @@ import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviSample
 import io.github.thor2002ro.libdovi.DoviStatus
 import io.github.thor2002ro.libdovi.DoviTarget
+import io.github.thor2002ro.libdovi.DoviTransformBuffer
 import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformResult
 import io.github.thor2002ro.libdovi.DoviTransformObservation
-import java.io.ByteArrayOutputStream
 import java.io.EOFException
 
 internal fun interface DoviSampleTransformer {
@@ -33,6 +33,7 @@ internal class DoviSampleTransformationException(
 
 internal data class DoviEncodedSample(
 	val bytes: ByteArray,
+	val bytesSize: Int,
 	val supplementalRpu: ByteArray?,
 	val timeUs: Long,
 	val flags: Int,
@@ -60,7 +61,7 @@ internal class DoviTrackOutput(
 	private val request: () -> DoviTransformRequest?,
 	private val sourceBasePresentation: () -> DoviPresentation = { DoviPresentation.UNKNOWN },
 	private val dvLevel: () -> Int? = { null },
-	private val transformer: DoviSampleTransformer = DoviSampleTransformer(::transformDoviSample),
+	private val transformer: DoviSampleTransformer? = null,
 	private val dispatcher: DoviSampleDispatcher? = null,
 	private val onTransformObserved: (DoviTransformObservation) -> Unit = {},
 ) : TrackOutput {
@@ -70,8 +71,66 @@ internal class DoviTrackOutput(
 		val part: Int,
 	)
 
-	private val pendingBytes = ByteArrayOutputStream()
+	private class ReusableByteBuffer {
+		var bytes = ByteArray(0)
+			private set
+		var size = 0
+			private set
+
+		fun prepareAppend(length: Int): Int {
+			val start = size
+			ensureCapacity(size + length)
+			return start
+		}
+
+		fun commitAppend(length: Int) {
+			size += length
+		}
+
+		fun append(source: ByteArray, offset: Int, length: Int) {
+			if (length <= 0) return
+			val start = prepareAppend(length)
+			System.arraycopy(source, offset, bytes, start, length)
+			commitAppend(length)
+		}
+
+		fun reset() {
+			size = 0
+		}
+
+		fun retainFrom(position: Int) {
+			val retained = size - position
+			if (retained > 0) System.arraycopy(bytes, position, bytes, 0, retained)
+			size = retained
+		}
+
+		fun extractRpu(mainSize: Int): ByteArray? {
+			if (size == 0) return null
+			if (size < 4) return bytes.copyOf(size)
+			val declaredMainSize =
+				((bytes[0].toInt() and 0xff) shl 24) or
+					((bytes[1].toInt() and 0xff) shl 16) or
+					((bytes[2].toInt() and 0xff) shl 8) or
+					(bytes[3].toInt() and 0xff)
+			val start = if (declaredMainSize == mainSize) 4 else 0
+			return bytes.copyOfRange(start, size).takeIf(ByteArray::isNotEmpty)
+		}
+
+		private fun ensureCapacity(required: Int) {
+			if (required <= bytes.size) return
+			var capacity = bytes.size.coerceAtLeast(1)
+			while (capacity < required) {
+				capacity = minOf(MAX_PARTIAL_SAMPLE_BYTES.toInt(), maxOf(required, capacity * 2))
+			}
+			bytes = bytes.copyOf(capacity)
+		}
+	}
+
+	private val pendingBytes = ReusableByteBuffer()
+	private val mainBytes = ReusableByteBuffer()
+	private val supplementalBytes = ReusableByteBuffer()
 	private val pendingParts = mutableListOf<PartRange>()
+	private val transformBuffer = DoviTransformBuffer()
 	private var sourceFormat: Format? = null
 	private var activeRequest: DoviTransformRequest? = null
 	private var signaledFormat: Format? = null
@@ -104,13 +163,16 @@ internal class DoviTrackOutput(
 		}
 
 		ensureCanAppend(length)
-		val bytes = ByteArray(length)
-		val read = input.read(bytes, 0, length)
+		val start = pendingBytes.prepareAppend(length)
+		val read = input.read(pendingBytes.bytes, start, length)
 		if (read == C.RESULT_END_OF_INPUT) {
 			if (allowEndOfInput) return C.RESULT_END_OF_INPUT
 			throw EOFException()
 		}
-		append(bytes, read, sampleDataPart)
+		if (read > 0) {
+			pendingBytes.commitAppend(read)
+			pendingParts += PartRange(start, start + read, sampleDataPart)
+		}
 		return read
 	}
 
@@ -121,10 +183,13 @@ internal class DoviTrackOutput(
 		}
 
 		ensureCanAppend(length)
-		val bytes = ByteArray(length)
-		System.arraycopy(data.data, data.position, bytes, 0, length)
+		val start = pendingBytes.prepareAppend(length)
+		System.arraycopy(data.data, data.position, pendingBytes.bytes, start, length)
 		data.position += length
-		append(bytes, length, sampleDataPart)
+		if (length > 0) {
+			pendingBytes.commitAppend(length)
+			pendingParts += PartRange(start, start + length, sampleDataPart)
+		}
 	}
 
 	override fun sampleMetadata(
@@ -146,48 +211,50 @@ internal class DoviTrackOutput(
 			throw failure(DoviStatus.REENCODE_REQUIRED, "Encrypted Dolby Vision samples cannot be transformed")
 		}
 
-		val buffered = pendingBytes.toByteArray()
-		val sampleEnd = buffered.size - offset
+		val sampleEnd = pendingBytes.size - offset
 		val sampleStart = sampleEnd - size
-		if (sampleStart != 0 || sampleEnd !in 0..buffered.size) {
+		if (sampleStart != 0 || sampleEnd !in 0..pendingBytes.size) {
 			throw failure(
 				DoviStatus.MALFORMED_SAMPLE,
-				"Inconsistent Dolby Vision sample metadata: buffered=${buffered.size}, size=$size, offset=$offset",
+				"Inconsistent Dolby Vision sample metadata: buffered=${pendingBytes.size}, size=$size, offset=$offset",
 			)
 		}
 
-		val main = ByteArrayOutputStream()
-		val supplemental = ByteArrayOutputStream()
+		mainBytes.reset()
+		supplementalBytes.reset()
 		for (range in pendingParts) {
 			val intersectionStart = maxOf(range.start, sampleStart)
 			val intersectionEnd = minOf(range.end, sampleEnd)
 			if (intersectionStart >= intersectionEnd) continue
 			val target = when (range.part) {
-				TrackOutput.SAMPLE_DATA_PART_MAIN -> main
-				TrackOutput.SAMPLE_DATA_PART_SUPPLEMENTAL -> supplemental
+				TrackOutput.SAMPLE_DATA_PART_MAIN -> mainBytes
+				TrackOutput.SAMPLE_DATA_PART_SUPPLEMENTAL -> supplementalBytes
 				else -> throw failure(
 					DoviStatus.INVALID_ARGUMENT,
 					"Unsupported Dolby Vision sample data part: ${range.part}",
 				)
 			}
-			target.write(buffered, intersectionStart, intersectionEnd - intersectionStart)
+			target.append(pendingBytes.bytes, intersectionStart, intersectionEnd - intersectionStart)
 		}
 
-		val mainBytes = main.toByteArray()
-		if (mainBytes.isEmpty()) throw failure(DoviStatus.MALFORMED_SAMPLE, "Dolby Vision sample has no main data")
+		if (mainBytes.size == 0) throw failure(DoviStatus.MALFORMED_SAMPLE, "Dolby Vision sample has no main data")
 		val encoded = DoviEncodedSample(
-			bytes = mainBytes,
-			supplementalRpu = supplemental.toByteArray().extractRpu(mainBytes.size),
+			bytes = mainBytes.bytes,
+			bytesSize = mainBytes.size,
+			supplementalRpu = supplementalBytes.extractRpu(mainBytes.size),
 			timeUs = timeUs,
 			flags = flags and C.BUFFER_FLAG_HAS_SUPPLEMENTAL_DATA.inv(),
 		)
 		if (dispatcher != null) {
-			dispatcher.onSample(this, encoded)
-			retainFrom(buffered, sampleEnd)
+			dispatcher.onSample(
+				this,
+				encoded.copy(bytes = encoded.bytes.copyOf(encoded.bytesSize)),
+			)
+			retainFrom(sampleEnd)
 			return
 		}
 		emitTransformed(encoded)
-		retainFrom(buffered, sampleEnd)
+		retainFrom(sampleEnd)
 	}
 
 	internal fun emitTransformed(
@@ -195,49 +262,57 @@ internal class DoviTrackOutput(
 		supplementalRpu: ByteArray? = sample.supplementalRpu,
 	) {
 		val transformRequest = requireNotNull(activeRequest) { "Dolby Vision request is not active" }
-		val result = transformer.transform(
-			DoviSample(
-				bytes = sample.bytes,
-				framing = DoviFraming.ANNEX_B,
-				sourceBasePresentation = sourceBasePresentation(),
-				supplementalRpu = supplementalRpu,
-			),
-			transformRequest,
+		val doviSample = DoviSample(
+			bytes = sample.bytes,
+			bytesSize = sample.bytesSize,
+			framing = DoviFraming.ANNEX_B,
+			sourceBasePresentation = sourceBasePresentation(),
+			supplementalRpu = supplementalRpu,
 		)
+		val injectedResult = transformer?.transform(doviSample, transformRequest)
+		val bufferedResult = if (injectedResult == null) {
+			DoviBridge.transform(doviSample, transformRequest, transformBuffer)
+		} else {
+			null
+		}
+		val resultBytes = injectedResult?.bytes ?: requireNotNull(bufferedResult).bytes
+		val resultSize = injectedResult?.bytes?.size ?: requireNotNull(bufferedResult).bytesSize
+		val resultInput = injectedResult?.input ?: requireNotNull(bufferedResult).input
+		val resultOutput = injectedResult?.output ?: requireNotNull(bufferedResult).output
 		val source = requireNotNull(sourceFormat) {
 			"Dolby Vision sample arrived before its format"
 		}
-		val expected = transformRequest.expectedOutput(result.input, sourceBasePresentation())
-		if (result.output != expected) {
+		val expected = transformRequest.expectedOutput(resultInput, sourceBasePresentation())
+		if (resultOutput != expected) {
 			throw failure(
 				DoviStatus.INTERNAL_ERROR,
-				"Native transformation returned ${result.output}, expected $expected",
+				"Native transformation returned $resultOutput, expected $expected",
 			)
 		}
 		val priorOutput = validatedOutput
-		if (priorOutput != null && priorOutput != result.output) {
+		if (priorOutput != null && priorOutput != resultOutput) {
 			throw failure(DoviStatus.INTERNAL_ERROR, "Native transformation output changed within the track")
 		}
-		validatedOutput = result.output
+		validatedOutput = resultOutput
 		if (!transformObserved) {
-			onTransformObserved(DoviTransformObservation(result.input, result.output))
+			onTransformObserved(DoviTransformObservation(resultInput, resultOutput))
 			transformObserved = true
 		}
-		val outputFormat = source.forDoviPresentation(result.output, dvLevel())
+		val outputFormat = source.forDoviPresentation(resultOutput, dvLevel())
 		if (signaledFormat != outputFormat) {
 			delegate.format(outputFormat)
 			signaledFormat = outputFormat
 		}
 
 		delegate.sampleData(
-			ParsableByteArray(result.bytes),
-			result.bytes.size,
+			ParsableByteArray(resultBytes, resultSize),
+			resultSize,
 			TrackOutput.SAMPLE_DATA_PART_MAIN,
 		)
 		delegate.sampleMetadata(
 			sample.timeUs,
 			sample.flags,
-			result.bytes.size,
+			resultSize,
 			0,
 			null,
 		)
@@ -257,22 +332,14 @@ internal class DoviTrackOutput(
 		pendingParts.clear()
 	}
 
-	private fun append(bytes: ByteArray, length: Int, part: Int) {
-		if (length <= 0) return
-		val start = pendingBytes.size()
-		pendingBytes.write(bytes, 0, length)
-		pendingParts += PartRange(start, start + length, part)
-	}
-
 	private fun ensureCanAppend(length: Int) {
-		if (length < 0 || pendingBytes.size().toLong() + length > MAX_PARTIAL_SAMPLE_BYTES) {
+		if (length < 0 || pendingBytes.size.toLong() + length > MAX_PARTIAL_SAMPLE_BYTES) {
 			resetSampleState()
 			throw failure(DoviStatus.MALFORMED_SAMPLE, "Dolby Vision partial sample exceeded its bounded buffer")
 		}
 	}
 
-	private fun retainFrom(buffered: ByteArray, position: Int) {
-		val retained = buffered.copyOfRange(position, buffered.size)
+	private fun retainFrom(position: Int) {
 		val retainedParts = pendingParts.mapNotNull { range ->
 			if (range.end <= position) null
 			else PartRange(
@@ -281,8 +348,7 @@ internal class DoviTrackOutput(
 				part = range.part,
 			)
 		}
-		pendingBytes.reset()
-		pendingBytes.write(retained)
+		pendingBytes.retainFrom(position)
 		pendingParts.clear()
 		pendingParts += retainedParts
 	}
@@ -384,17 +450,6 @@ private fun ByteArray.isDoviConfigurationRecord(): Boolean {
 	if (size !in 5..24 || this[0].toInt() != 1 || this[1].toInt() != 0) return false
 	val profile = (this[2].toInt() and 0xff) ushr 1
 	return profile in 1..10
-}
-
-private fun ByteArray.extractRpu(mainSize: Int): ByteArray? {
-	if (isEmpty()) return null
-	if (size < 4) return this
-	val declaredMainSize =
-		((this[0].toInt() and 0xff) shl 24) or
-			((this[1].toInt() and 0xff) shl 16) or
-			((this[2].toInt() and 0xff) shl 8) or
-			(this[3].toInt() and 0xff)
-	return if (declaredMainSize == mainSize) copyOfRange(4, size).takeIf(ByteArray::isNotEmpty) else this
 }
 
 private val DOVI_CODEC = Regex("(?i)(?:^|,)\\s*(dvhe|dvh1)\\.(\\d{2})\\.(\\d{2})(?:\\.[A-Za-z0-9]+)*\\s*(?=,|$)")
