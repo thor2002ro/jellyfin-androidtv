@@ -114,13 +114,14 @@ import org.jellyfin.playback.exoplayer.dovi.DoviHlsExtractorFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviMediaSourceFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviSampleTransformationException
 import org.jellyfin.playback.exoplayer.dovi.DoviTransformContext
+import org.jellyfin.playback.dovi.DOVI_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.dovi.doviDecision
 import org.jellyfin.playback.dovi.DoviSourceLayer
 import org.jellyfin.playback.dovi.DoviSourceProfile
+import org.jellyfin.playback.dovi.requiresHardwareVideoDecoder
 import org.jellyfin.playback.dovi.toPlaybackDoviTransformStats
 import timber.log.Timber
-import java.util.Collections
-import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -140,6 +141,14 @@ internal fun forcedVideoDecoderFallbacks(
 
 internal fun VideoDecoder?.prefersFfmpeg(defaultPreference: Boolean) =
 	this?.let { decoder -> decoder == VideoDecoder.FFMPEG } ?: defaultPreference
+
+internal fun VideoDecoder.forDoviPlayback(hasDoviDecision: Boolean): VideoDecoder =
+	if (hasDoviDecision) VideoDecoder.HARDWARE else this
+
+internal fun shouldRecoverDoviBeforeDecoderFallback(
+	hasDoviDecision: Boolean,
+	nextDecoder: VideoDecoder,
+): Boolean = hasDoviDecision && nextDecoder != VideoDecoder.HARDWARE
 
 internal fun shouldPreferFfmpeg(
 	globalPreference: Boolean,
@@ -269,16 +278,49 @@ internal fun Throwable.doviTransformationPlaybackErrorCode(): String? {
 	return null
 }
 
+internal fun doviVideoDecoderPlaybackErrorCode(
+	errorCode: Int,
+	isVideoRendererError: Boolean,
+	hasDoviDecision: Boolean,
+): String? {
+	if (!isVideoRendererError || !hasDoviDecision) return null
+	return when (errorCode) {
+		PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+		PlaybackException.ERROR_CODE_DECODING_FAILED,
+		PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+		PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+		-> DOVI_VIDEO_DECODER_ERROR_CODE
+		else -> null
+	}
+}
+
 internal data class PlaybackMediaItemTag(
 	val queueEntry: QueueEntry,
 	val errorOrigin: PlaybackErrorOrigin?,
+	val doviTransformStats: DoviTransformStatsHolder = DoviTransformStatsHolder(),
 )
 
+internal class DoviTransformStatsHolder {
+	private val observation = AtomicReference<PlaybackDoviTransformStats?>(null)
+
+	fun record(value: PlaybackDoviTransformStats) {
+		observation.compareAndSet(null, value)
+	}
+
+	fun get(): PlaybackDoviTransformStats? = observation.get()
+}
+
+internal val MediaItem.playbackMediaItemTag: PlaybackMediaItemTag?
+	get() = localConfiguration?.tag as? PlaybackMediaItemTag
+
 internal val MediaItem.queueEntryTag: QueueEntry?
-	get() = (localConfiguration?.tag as? PlaybackMediaItemTag)?.queueEntry
+	get() = playbackMediaItemTag?.queueEntry
 
 internal val MediaItem.errorOriginTag: PlaybackErrorOrigin?
-	get() = (localConfiguration?.tag as? PlaybackMediaItemTag)?.errorOrigin
+	get() = playbackMediaItemTag?.errorOrigin
+
+internal val MediaItem.doviTransformStatsTag: PlaybackDoviTransformStats?
+	get() = playbackMediaItemTag?.doviTransformStats?.get()
 
 private val currentDeviceIsAmlogic by lazy { isAmlogicDevice() }
 
@@ -356,9 +398,6 @@ class ExoPlayerBackend(
 	}
 
 	private var currentStream: PlayableMediaStream? = null
-	private val doviTransformStats = Collections.synchronizedMap(
-		WeakHashMap<QueueEntry, PlaybackDoviTransformStats>(),
-	)
 	private var playerSurfaceView: PlayerSurfaceView? = null
 	private var subtitleSurfaceView: PlayerSubtitleView? = null
 	private var subtitleView: SubtitleView? = null
@@ -407,13 +446,17 @@ class ExoPlayerBackend(
 		private set
 	private val activeForcedVideoDecoder: VideoDecoder?
 		get() = forcedVideoDecoderFallback ?: forcedVideoDecoder
+	private val hasActiveDoviDecision: Boolean
+		get() = currentStream?.queueEntry?.doviDecision?.requiresHardwareVideoDecoder == true
 	val activeVideoDecoder: VideoDecoder
-		get() = forcedVideoDecoder.effectiveVideoDecoder(
-			stage = videoDecoderStage,
-			preferFfmpeg = preferFfmpegVideo(),
-			decoderName = videoDecoderName,
-			fallback = forcedVideoDecoderFallback,
-		)
+		get() = forcedVideoDecoder
+			.effectiveVideoDecoder(
+				stage = videoDecoderStage,
+				preferFfmpeg = preferFfmpegVideo(),
+				decoderName = videoDecoderName,
+				fallback = forcedVideoDecoderFallback,
+			)
+			.forDoviPlayback(hasActiveDoviDecision)
 	override val videoDecoderOptions = VideoDecoder.entries.map { decoder ->
 		VideoDecoderOption(
 			id = decoder.name,
@@ -596,7 +639,7 @@ class ExoPlayerBackend(
 			liveTvPreference = exoPlayerOptions.preferFfmpegAudioForLiveTv(),
 			isLiveTv = currentStream?.queueEntry?.liveStreamTargetOffset != null,
 		),
-		video = shouldPreferFfmpeg(
+		video = !hasActiveDoviDecision && shouldPreferFfmpeg(
 			globalPreference = exoPlayerOptions.preferFfmpegVideo(),
 			liveTvPreference = exoPlayerOptions.preferFfmpegVideoForLiveTv(),
 			isLiveTv = currentStream?.queueEntry?.liveStreamTargetOffset != null,
@@ -605,10 +648,7 @@ class ExoPlayerBackend(
 
 	private fun preferFfmpegVideo() = rendererPreferences().video
 
-	private fun usesHardwareVideoDecoder() = (
-		activeForcedVideoDecoder
-			?: if (preferFfmpegVideo()) VideoDecoder.FFMPEG else videoDecoderStage
-		) == VideoDecoder.HARDWARE
+	private fun usesHardwareVideoDecoder() = activeVideoDecoder == VideoDecoder.HARDWARE
 
 	private fun ensureRendererPreferences() {
 		if (rendererPreferencesChanged(appliedRendererPreferences, rendererPreferences())) {
@@ -699,6 +739,10 @@ class ExoPlayerBackend(
 			videoDecoderStage == VideoDecoder.HARDWARE -> VideoDecoder.SOFTWARE
 			else -> VideoDecoder.FFMPEG
 		}
+		if (shouldRecoverDoviBeforeDecoderFallback(hasActiveDoviDecision, nextStage)) {
+			reportDoviVideoDecoderFailure(reason)
+			return true
+		}
 		if (forcedFallback != null) forcedVideoDecoderFallback = forcedFallback
 		if (retryHardware) hardwareVideoDecoderRetryCount++
 		videoDecoderStage = nextStage
@@ -737,6 +781,17 @@ class ExoPlayerBackend(
 		return true
 	}
 
+	private fun reportDoviVideoDecoderFailure(reason: String) {
+		val errorOrigin = exoPlayer.currentMediaItem?.errorOriginTag ?: currentStream?.errorOrigin
+		Timber.w("Dolby Vision hardware video decoder %s; requesting server fallback", reason)
+		videoFirstFrameHandler.removeCallbacksAndMessages(null)
+		videoBufferingHandler.removeCallbacksAndMessages(null)
+		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
+		listener?.onPlaybackError(PlaybackError(DOVI_VIDEO_DECODER_ERROR_CODE, origin = errorOrigin))
+		exoPlayer.stop()
+		listener?.onPlayStateChange(PlayState.ERROR)
+	}
+
 	private fun recreateCurrentLiveTvMediaSource(): Boolean {
 		val player = exoPlayer
 		val index = player.currentMediaItemIndex.takeIf { it in 0 until player.mediaItemCount } ?: return false
@@ -763,7 +818,7 @@ class ExoPlayerBackend(
 
 	private val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
 		val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
-		if (!mimeType.startsWith("video/")) decoders else when (activeForcedVideoDecoder ?: videoDecoderStage) {
+		if (!mimeType.startsWith("video/")) decoders else when (activeVideoDecoder) {
 			VideoDecoder.HARDWARE -> decoders.filterNot { it.softwareOnly }
 			VideoDecoder.SOFTWARE -> decoders.filter { it.softwareOnly }
 			else -> emptyList()
@@ -805,21 +860,18 @@ class ExoPlayerBackend(
 		}
 	}.build()
 
-	private fun QueueEntry.doviTransformContext(): DoviTransformContext? {
-		val decision = doviDecision ?: return null
+	private fun PlaybackMediaItemTag.doviTransformContext(): DoviTransformContext? {
+		val decision = queueEntry.doviDecision ?: return null
 		val request = decision.request ?: return null
 		val evidence = decision.transformEvidence ?: return null
 		return DoviTransformContext(
 			request = request,
-			inputPresentation = evidence.inputPresentation,
 			sourceBasePresentation = evidence.sourceBasePresentation,
 			dvLevel = evidence.dvLevel,
 			pairEnhancementTrack = evidence.sourceProfile == DoviSourceProfile.PROFILE_7 &&
 				evidence.sourceLayer != DoviSourceLayer.MEL,
 			onTransformObserved = { observation ->
-				synchronized(doviTransformStats) {
-					doviTransformStats.putIfAbsent(this, observation.toPlaybackDoviTransformStats())
-				}
+				doviTransformStats.record(observation.toPlaybackDoviTransformStats())
 			},
 		)
 	}
@@ -926,7 +978,7 @@ class ExoPlayerBackend(
 						}
 				},
 				context = { mediaItem ->
-					mediaItem.queueEntryTag?.doviTransformContext()
+					mediaItem.playbackMediaItemTag?.doviTransformContext()
 				},
 			)
 		}
@@ -1159,7 +1211,7 @@ class ExoPlayerBackend(
 			videoDecoderName = decoderName
 			videoDecoderType = when {
 				decoderName.startsWith("ffmpeg", ignoreCase = true) -> "ffmpeg"
-				(activeForcedVideoDecoder ?: videoDecoderStage) == VideoDecoder.SOFTWARE -> "sw"
+				activeVideoDecoder == VideoDecoder.SOFTWARE -> "sw"
 				else -> "hw"
 			}
 			if (
@@ -1329,9 +1381,14 @@ class ExoPlayerBackend(
 
 			val errorOrigin = exoPlayer.currentMediaItem?.errorOriginTag
 			val errorEntry = errorOrigin?.queueEntry
+			val doviVideoDecoderErrorCode = doviVideoDecoderPlaybackErrorCode(
+				errorCode = error.errorCode,
+				isVideoRendererError = isVideoRendererError,
+				hasDoviDecision = errorEntry?.doviDecision?.requiresHardwareVideoDecoder == true,
+			)
 			val isLiveTv = errorEntry?.liveStreamTargetOffset != null
 			val playbackError = PlaybackError(
-				codeName = doviErrorCode ?: error.errorCodeName,
+				codeName = doviErrorCode ?: doviVideoDecoderErrorCode ?: error.errorCodeName,
 				recoverWithIncreasedLiveTvOffset = isLiveTv && error.canRecoverLiveTvWithIncreasedOffset(),
 				origin = errorOrigin,
 			)
@@ -1765,9 +1822,7 @@ class ExoPlayerBackend(
 			isLoading = exoPlayer.isLoading,
 			estimatedBandwidthBytesPerSecond = estimatedBandwidthBytesPerSecond,
 		)
-		val doviTransform = exoPlayer.currentMediaItem?.queueEntryTag?.let { entry ->
-			synchronized(doviTransformStats) { doviTransformStats[entry] }
-		}
+		val doviTransform = exoPlayer.currentMediaItem?.doviTransformStatsTag
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,

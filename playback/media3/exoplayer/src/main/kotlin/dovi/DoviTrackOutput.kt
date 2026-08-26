@@ -58,7 +58,6 @@ internal fun transformDoviSample(
 internal class DoviTrackOutput(
 	private val delegate: TrackOutput,
 	private val request: () -> DoviTransformRequest?,
-	private val inputPresentation: () -> DoviPresentation = { DoviPresentation.UNKNOWN },
 	private val sourceBasePresentation: () -> DoviPresentation = { DoviPresentation.UNKNOWN },
 	private val dvLevel: () -> Int? = { null },
 	private val transformer: DoviSampleTransformer = DoviSampleTransformer(::transformDoviSample),
@@ -85,7 +84,6 @@ internal class DoviTrackOutput(
 		resetSampleState()
 		signaledFormat = null
 		validatedOutput = null
-		transformObserved = false
 		sourceFormat = format
 		activeRequest = request().takeIf { format.isHevcDolbyVision() }
 		if (activeRequest == null) {
@@ -209,7 +207,7 @@ internal class DoviTrackOutput(
 		val source = requireNotNull(sourceFormat) {
 			"Dolby Vision sample arrived before its format"
 		}
-		val expected = transformRequest.expectedOutput(inputPresentation(), sourceBasePresentation())
+		val expected = transformRequest.expectedOutput(result.input, sourceBasePresentation())
 		if (result.output != expected) {
 			throw failure(
 				DoviStatus.INTERNAL_ERROR,

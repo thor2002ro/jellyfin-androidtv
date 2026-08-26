@@ -5,8 +5,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
+import org.jellyfin.playback.media3.exoplayer.queueEntryTag
 
 /** Refreshes Media3's cached subtitle event index after live timing changes. */
 @UnstableApi
@@ -42,7 +42,7 @@ internal class SubtitleTimingRendererInvalidator(
 		}
 		val player = playerProvider() ?: return
 		val mediaItem = player.currentMediaItem ?: return
-		if ((mediaItem.localConfiguration?.tag as? QueueEntry)?.liveStreamTargetOffset != null) return
+		if (mediaItem.queueEntryTag?.liveStreamTargetOffset != null) return
 		val currentHandler = handler
 			?.takeIf { it.looper == player.applicationLooper }
 			?: Handler(player.applicationLooper).also { handler = it }

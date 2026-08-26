@@ -4,13 +4,31 @@ import io.github.thor2002ro.libdovi.DoviCapability
 import io.github.thor2002ro.libdovi.DoviFraming
 import io.github.thor2002ro.libdovi.DoviInspection
 import io.github.thor2002ro.libdovi.DoviPresentation
+import io.github.thor2002ro.libdovi.DoviTransformObservation
 import io.github.thor2002ro.libdovi.DoviRepair
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
 
 class DoviConversionPolicyTests : FunSpec({
+	test("server fallback is not guarded as local Dolby Vision playback") {
+		DoviDecision(DoviRoute.Native, DoviDecisionReason.NATIVE_SUPPORTED)
+			.requiresHardwareVideoDecoder shouldBe true
+		DoviDecision(DoviRoute.ServerFallback, DoviDecisionReason.RETRY_SUPPRESSED)
+			.requiresHardwareVideoDecoder shouldBe false
+	}
+
+	test("native transform observation maps to stable playback diagnostics") {
+		DoviTransformObservation(
+			input = DoviPresentation.PROFILE_7_FEL,
+			output = DoviPresentation.PROFILE_8_1,
+		).toPlaybackDoviTransformStats() shouldBe PlaybackDoviTransformStats(
+			inputPresentation = "DV P7 FEL",
+			outputPresentation = "DV P8.1",
+		)
+	}
 	val allNativeCapabilities = DoviCapability.entries.toSet()
 	val profile8Device = DoviDeviceCapabilities(
 		supportsProfile8 = true,
@@ -120,14 +138,14 @@ class DoviConversionPolicyTests : FunSpec({
 		decide(source = DoviSource(DoviPresentation.PROFILE_8_1)).route shouldBe DoviRoute.Native
 	}
 
-	test("Auto requires Profile 8 and the exact native target capability") {
+	test("Auto requires Profile 8 and its exact native target capability for Profile 8 conversion") {
 		decide(device = DoviDeviceCapabilities()).route shouldBe DoviRoute.ServerFallback
 		decide(
 			capabilities = allNativeCapabilities - DoviCapability.PROFILE_8_1,
-		).route shouldBe DoviRoute.ServerFallback
+		).request?.target shouldBe DoviTarget.SOURCE_BASE_PRESENTATION
 	}
 
-	test("Auto never applies compatibility repairs or source-base output") {
+	test("Auto never applies compatibility repairs") {
 		val decision = decide(
 			source = inspectedSource(
 				presentation = DoviPresentation.PROFILE_7_FEL,
@@ -144,7 +162,20 @@ class DoviConversionPolicyTests : FunSpec({
 
 		decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 		decision.request?.repairs shouldBe emptySet()
-		decide(device = DoviDeviceCapabilities(supportsHdr10 = true)).route shouldBe DoviRoute.ServerFallback
+	}
+
+	test("Auto exposes a supported encoded HDR base when no Dolby Vision route is playable") {
+		listOf(
+			DoviPresentation.HDR10 to DoviDeviceCapabilities(supportsHdr10 = true),
+			DoviPresentation.HDR10_PLUS to DoviDeviceCapabilities(supportsHdr10Plus = true),
+		).forEach { (base, device) ->
+			decide(
+				source = DoviSource(DoviPresentation.PROFILE_7_FEL, base),
+				device = device,
+			).route shouldBe DoviRoute.SourceBase(
+				io.github.thor2002ro.libdovi.DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
+			)
+		}
 	}
 
 	test("Always converts Profile 5 and Profile 7 even when their native profiles are reported") {
@@ -615,12 +646,14 @@ class DoviConversionPolicyTests : FunSpec({
 	}
 
 	test("retry suppression prevents every client transform mode") {
-		listOf(
-			DoviCompatibilityMode.AUTO,
-			DoviCompatibilityMode.ALWAYS,
-			DoviCompatibilityMode.COMPATIBILITY,
-		).forEach { mode ->
-			decide(mode = mode, retrySuppressed = true).route shouldBe DoviRoute.ServerFallback
+		DoviCompatibilityMode.entries.forEach { mode ->
+			val decision = decide(
+				mode = mode,
+				retrySuppressed = true,
+				device = DoviDeviceCapabilities(supportsProfile7 = true, supportsProfile8 = true),
+			)
+			decision.route shouldBe DoviRoute.ServerFallback
+			decision.reason shouldBe DoviDecisionReason.RETRY_SUPPRESSED
 		}
 	}
 

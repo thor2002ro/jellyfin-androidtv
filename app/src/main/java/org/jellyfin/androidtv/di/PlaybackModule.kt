@@ -47,10 +47,11 @@ import org.jellyfin.androidtv.util.profile.DoviWorkaroundRuleSource
 import org.jellyfin.androidtv.util.profile.DoviPlaybackNegotiationStore
 import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.softwareCodecsEnabledForProfile
 import org.jellyfin.playback.core.playbackManager
-import org.jellyfin.playback.core.queue.QueueEntry
-import org.jellyfin.playback.dovi.doviConversionSuppressed
 import org.jellyfin.playback.core.plugin.playbackPlugin
+import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.dovi.doviTransformationSuppressed
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
 import org.jellyfin.playback.jellyfin.JellyfinDeviceProfileRequest
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -69,6 +70,7 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
+import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import org.jellyfin.androidtv.ui.playback.PlaybackManager as LegacyPlaybackManager
@@ -166,7 +168,9 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	}
 
 	val userPreferences = get<UserPreferences>()
-	val backend = when (userPreferences[UserPreferences.playbackBackend]) {
+	val playbackBackend = userPreferences[UserPreferences.playbackBackend]
+	val mpvDecoder = userPreferences[UserPreferences.mpvDecoder]
+	val backend = when (playbackBackend) {
 		PlaybackBackend.EXOPLAYER -> get<ExoPlayerBackend>()
 		PlaybackBackend.LIBVLC -> get<LibVLCBackend>()
 		PlaybackBackend.MPV -> get<LibMPVBackend>()
@@ -181,7 +185,12 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	)
 	install(media3SessionPlugin(get(), mediaSessionOptions))
 
-	val doviMediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled])
+	val profileSoftwareCodecsEnabled = softwareCodecsEnabledForProfile(
+		backend = playbackBackend,
+		mpvDecoder = mpvDecoder,
+		softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled],
+	)
+	val doviMediaTest = MediaCodecCapabilitiesTest(profileSoftwareCodecsEnabled)
 	val doviWorkaroundProvider = get<DoviWorkaroundProvider>()
 	val doviNegotiations = get<DoviPlaybackNegotiationStore>()
 	val deviceProfileBuilder = { queueEntry: QueueEntry ->
@@ -191,13 +200,29 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				mediaSourceId = queueEntry.mediaSourceId,
 				userPreferences = userPreferences,
 				mediaTest = doviMediaTest,
-				retrySuppressed = queueEntry.doviConversionSuppressed == true,
+				retrySuppressed = queueEntry.doviTransformationSuppressed == true,
 				workarounds = doviWorkaroundProvider.resolve(),
 				displayHdrTypes = getSupportedDisplayHdrTypes(androidContext()),
 			)
 		}
+		if (doviPlan != null) {
+			Timber.i(
+				"Dolby Vision negotiation source=%s range=%s route=%s reason=%s",
+				doviPlan.mediaSourceId,
+				doviPlan.sourceRangeType,
+				doviPlan.decision.route,
+				doviPlan.decision.reason,
+			)
+		}
 		val (profile, token) = doviNegotiations.prepare(queueEntry, doviPlan) {
-			createDeviceProfile(androidContext(), userPreferences, get(), doviPlan)
+			createDeviceProfile(
+				context = androidContext(),
+				userPreferences = userPreferences,
+				serverVersion = get(),
+				doviPlaybackPlan = doviPlan,
+				softwareCodecsEnabled = profileSoftwareCodecsEnabled,
+				mediaTest = doviMediaTest,
+			)
 		}
 		JellyfinDeviceProfileRequest(profile, token)
 	}

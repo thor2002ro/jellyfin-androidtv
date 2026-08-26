@@ -70,7 +70,6 @@ class DoviTrackOutputTests : FunSpec({
 		val output = DoviTrackOutput(
 			delegate = RecordingTrackOutput(),
 			request = { DoviTransformRequest(DoviTarget.PROFILE_8_1) },
-			inputPresentation = { DoviPresentation.UNKNOWN },
 			onTransformObserved = { observation -> observations += observation.input to observation.output },
 			transformer = DoviSampleTransformer { sample, _ ->
 				result(
@@ -83,9 +82,30 @@ class DoviTrackOutputTests : FunSpec({
 		output.format(doviFormat(profile = 7))
 
 		output.emit(byteArrayOf(1))
+		output.format(doviFormat(profile = 7))
 		output.emit(byteArrayOf(2))
 
 		observations shouldBe listOf(DoviPresentation.PROFILE_7_FEL to DoviPresentation.PROFILE_8_1)
+	}
+
+	test("lossless rewrite validates against libdovi input instead of planned input") {
+		val delegate = RecordingTrackOutput()
+		val output = DoviTrackOutput(
+			delegate = delegate,
+			request = { DoviTransformRequest(DoviTarget.LOSSLESS_REWRITE) },
+			transformer = DoviSampleTransformer { sample, _ ->
+				result(
+					bytes = sample.bytes,
+					input = DoviPresentation.PROFILE_7_FEL,
+					output = DoviPresentation.PROFILE_7_FEL,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 7))
+
+		output.emit(byteArrayOf(1, 2))
+
+		delegate.format?.codecs shouldBe "dvhe.07.06"
 	}
 
 	test("source-base output signals plain HEVC and removes only DV initialization data") {
@@ -199,7 +219,7 @@ class DoviTrackOutputTests : FunSpec({
 		)
 		output.emit(byteArrayOf(1, 2))
 
-		delegate.format?.codecs shouldBe "hvc1.2.4.L153.B0"
+		delegate.format?.codecs shouldBe "hvc1.2.4.H153.B0"
 	}
 
 	test("native output that disagrees with the request fails before format or bytes") {
