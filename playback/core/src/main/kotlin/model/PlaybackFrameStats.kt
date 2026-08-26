@@ -23,6 +23,11 @@ data class PlaybackLibassStats(
 	val lastRenderMs: Double,
 )
 
+data class PlaybackDoviTransformStats(
+	val inputPresentation: String,
+	val outputPresentation: String,
+)
+
 data class PlaybackFrameStats(
 	val droppedFrames: Int,
 	val corruptedFrames: Int,
@@ -50,6 +55,7 @@ data class PlaybackFrameStats(
 	val subtitlePath: String? = null,
 	val extractorFlags: String? = null,
 	val libass: PlaybackLibassStats? = null,
+	val doviTransform: PlaybackDoviTransformStats? = null,
 	val backendDetails: Map<String, String> = emptyMap(),
 ) {
 	companion object {
