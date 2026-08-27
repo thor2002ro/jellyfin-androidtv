@@ -17,6 +17,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import org.jellyfin.playback.dovi.DoviSourceBaseStrategy
 import org.jellyfin.playback.media3.exoplayer.doviTransformationPlaybackErrorCode
 import java.io.ByteArrayOutputStream
 
@@ -142,6 +143,232 @@ class DoviTrackOutputTests : FunSpec({
 		delegate.format?.colorInfo?.colorTransfer shouldBe C.COLOR_TRANSFER_HLG
 		delegate.format?.colorInfo?.hdrStaticInfo shouldBe null
 		delegate.format?.initializationData?.map { data -> data.toList() } shouldBe listOf(hevcInitialization.toList())
+	}
+
+	test("validated Profile 8 HDR10 source-base samples use direct Annex-B removal") {
+		val delegate = RecordingTrackOutput()
+		var transformCalls = 0
+		val output = DoviTrackOutput(
+			delegate = delegate,
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformCalls++
+				result(
+					bytes = sample.bytes.copyOf(sample.bytesSize),
+					input = DoviPresentation.PROFILE_8_1,
+					output = DoviPresentation.HDR10,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		val validationSample = annexBNal(type = 1, payload = byteArrayOf(0x11))
+		val retainedVps = annexBNal(type = 32, payload = byteArrayOf(0x21), startCodeLength = 3)
+		val droppedRpu = annexBNal(type = 62, payload = byteArrayOf(0x3e))
+		val retainedVideo = annexBNal(type = 1, payload = byteArrayOf(0x01, 0x02))
+		val droppedEnhancement = annexBNal(type = 1, layer = 1, payload = byteArrayOf(0x31))
+		val droppedUnspecified = annexBNal(type = 63, payload = byteArrayOf(0x3f))
+
+		output.emit(validationSample, timeUs = 10)
+		output.emit(retainedVps + droppedRpu + retainedVideo + droppedEnhancement + droppedUnspecified, timeUs = 20)
+
+		transformCalls shouldBe 1
+		delegate.bytes.toByteArray().toList() shouldContainExactly
+			(validationSample + retainedVps + retainedVideo).toList()
+		delegate.metadata.map { metadata -> metadata.size } shouldBe
+			listOf(validationSample.size, retainedVps.size + retainedVideo.size)
+	}
+
+	test("validated Profile 8 HDR10+ direct removal preserves prefix and suffix SEI NALs") {
+		val delegate = RecordingTrackOutput()
+		var transformCalls = 0
+		val output = DoviTrackOutput(
+			delegate = delegate,
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10_PLUS },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformCalls++
+				result(
+					bytes = sample.bytes.copyOf(sample.bytesSize),
+					input = DoviPresentation.PROFILE_8_1,
+					output = DoviPresentation.HDR10_PLUS,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		val validationSample = annexBNal(type = 1, payload = byteArrayOf(0x11))
+		val prefixSei = annexBNal(type = 39, payload = byteArrayOf(0x4e, 0x01), startCodeLength = 3)
+		val suffixSei = annexBNal(type = 40, payload = byteArrayOf(0x4e, 0x02))
+		val droppedRpu = annexBNal(type = 62, payload = byteArrayOf(0x3e))
+		val retainedVideo = annexBNal(type = 1, payload = byteArrayOf(0x01, 0x02))
+
+		output.emit(validationSample, timeUs = 10)
+		output.emit(prefixSei + droppedRpu + suffixSei + retainedVideo, timeUs = 20)
+
+		transformCalls shouldBe 1
+		delegate.bytes.toByteArray().toList() shouldContainExactly
+			(validationSample + prefixSei + suffixSei + retainedVideo).toList()
+		delegate.metadata.map { metadata -> metadata.size } shouldBe listOf(
+			validationSample.size,
+			prefixSei.size + suffixSei.size + retainedVideo.size,
+		)
+	}
+
+	test("fast HDR base rejection survives later format updates for the playback item") {
+		val delegate = RecordingTrackOutput()
+		var transformCalls = 0
+		val output = DoviTrackOutput(
+			delegate = delegate,
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformCalls++
+				result(
+					bytes = sample.bytes.copyOf(sample.bytesSize),
+					input = DoviPresentation.PROFILE_8_1,
+					output = DoviPresentation.HDR10,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		val validation = annexBNal(type = 1, payload = byteArrayOf(0x10))
+		val fast = annexBNal(type = 1, payload = byteArrayOf(0x20))
+		val malformed = byteArrayOf(1, 2, 3)
+		val afterFallback = annexBNal(type = 1, payload = byteArrayOf(0x30))
+		val afterFormatUpdate = annexBNal(type = 1, payload = byteArrayOf(0x40))
+
+		output.emit(validation, timeUs = 10)
+		output.emit(fast, timeUs = 20)
+		output.emit(malformed, timeUs = 30)
+		output.emit(afterFallback, timeUs = 40)
+		output.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		output.emit(afterFormatUpdate, timeUs = 50)
+
+		transformCalls shouldBe 4
+		delegate.metadata.map { metadata -> metadata.size } shouldBe
+			listOf(validation.size, fast.size, malformed.size, afterFallback.size, afterFormatUpdate.size)
+	}
+
+	test("fast HDR base rejection is shared by recreated outputs for one playback item") {
+		val sharedState = DoviSourceBasePlaybackState()
+		var firstTransformCalls = 0
+		val first = DoviTrackOutput(
+			delegate = RecordingTrackOutput(),
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			sourceBasePlaybackState = sharedState,
+			transformer = DoviSampleTransformer { sample, _ ->
+				firstTransformCalls++
+				result(sample.bytes.copyOf(sample.bytesSize), DoviPresentation.HDR10, input = DoviPresentation.PROFILE_8_1)
+			},
+		)
+		first.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		first.emit(annexBNal(type = 1), timeUs = 10)
+		first.emit(byteArrayOf(1, 2, 3), timeUs = 20)
+
+		var replacementTransformCalls = 0
+		val replacement = DoviTrackOutput(
+			delegate = RecordingTrackOutput(),
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			sourceBasePlaybackState = sharedState,
+			transformer = DoviSampleTransformer { sample, _ ->
+				replacementTransformCalls++
+				result(sample.bytes.copyOf(sample.bytesSize), DoviPresentation.HDR10, input = DoviPresentation.PROFILE_8_1)
+			},
+		)
+		replacement.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		replacement.emit(annexBNal(type = 1), timeUs = 30)
+		replacement.emit(annexBNal(type = 1), timeUs = 40)
+
+		firstTransformCalls shouldBe 2
+		replacementTransformCalls shouldBe 2
+	}
+
+	test("fast HDR base validation requires observed Profile 8.1 input") {
+		var transformCalls = 0
+		val output = DoviTrackOutput(
+			delegate = RecordingTrackOutput(),
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformCalls++
+				result(
+					bytes = sample.bytes.copyOf(sample.bytesSize),
+					input = DoviPresentation.PROFILE_7_MEL,
+					output = DoviPresentation.HDR10,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 7).buildUpon().setCodecs("dvhe.07.06,hvc1.2.4.L153.B0").build())
+
+		output.emit(annexBNal(type = 1), timeUs = 10)
+		output.emit(annexBNal(type = 1), timeUs = 20)
+
+		transformCalls shouldBe 2
+	}
+
+	test("fast HDR base empty output retries through libdovi") {
+		val delegate = RecordingTrackOutput()
+		var transformCalls = 0
+		val output = DoviTrackOutput(
+			delegate = delegate,
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10_PLUS },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformCalls++
+				result(
+					bytes = sample.bytes.copyOf(sample.bytesSize),
+					input = DoviPresentation.PROFILE_8_1,
+					output = DoviPresentation.HDR10_PLUS,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		val validation = annexBNal(type = 1)
+		val onlyRpu = annexBNal(type = 62)
+
+		output.emit(validation, timeUs = 10)
+		output.emit(onlyRpu, timeUs = 20)
+
+		transformCalls shouldBe 2
+		delegate.metadata.map { metadata -> metadata.size } shouldBe listOf(validation.size, onlyRpu.size)
+	}
+
+	test("libdovi failure after fast HDR base rejection is propagated unchanged") {
+		val fallbackFailure = IllegalStateException("libdovi fallback failed")
+		var transformCalls = 0
+		val output = DoviTrackOutput(
+			delegate = RecordingTrackOutput(),
+			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
+			sourceBasePresentation = { DoviPresentation.HDR10 },
+			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			transformer = DoviSampleTransformer { sample, _ ->
+				transformCalls++
+				if (transformCalls > 1) throw fallbackFailure
+				result(
+					bytes = sample.bytes.copyOf(sample.bytesSize),
+					input = DoviPresentation.PROFILE_8_1,
+					output = DoviPresentation.HDR10,
+				)
+			},
+		)
+		output.format(doviFormat(profile = 8).buildUpon().setCodecs("dvhe.08.06,hvc1.2.4.L153.B0").build())
+		output.emit(annexBNal(type = 1), timeUs = 10)
+
+		val error = shouldThrow<IllegalStateException> {
+			output.emit(byteArrayOf(1, 2, 3), timeUs = 20)
+		}
+
+		error shouldBe fallbackFailure
+		transformCalls shouldBe 2
 	}
 
 	test("native Profile 8.4 result dynamically signals Dolby Vision Profile 8") {
@@ -400,6 +627,18 @@ private fun result(
 private fun DoviTrackOutput.emit(bytes: ByteArray, timeUs: Long = 0) {
 	sampleData(ParsableByteArray(bytes), bytes.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
 	sampleMetadata(timeUs, C.BUFFER_FLAG_KEY_FRAME, bytes.size, 0, null)
+}
+
+private fun annexBNal(
+	type: Int,
+	layer: Int = 0,
+	payload: ByteArray = byteArrayOf(0x55),
+	startCodeLength: Int = 4,
+): ByteArray {
+	val prefix = if (startCodeLength == 3) byteArrayOf(0, 0, 1) else byteArrayOf(0, 0, 0, 1)
+	val first = ((type shl 1) or ((layer ushr 5) and 1)).toByte()
+	val second = (((layer and 0x1f) shl 3) or 1).toByte()
+	return prefix + byteArrayOf(first, second) + payload
 }
 
 private fun doviFormat(profile: Int, prefix: String = "dvhe") = Format.Builder()

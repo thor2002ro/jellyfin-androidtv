@@ -20,7 +20,10 @@ import io.github.thor2002ro.libdovi.DoviTransformBuffer
 import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformResult
 import io.github.thor2002ro.libdovi.DoviTransformObservation
+import org.jellyfin.playback.dovi.DoviSourceBaseStrategy
+import timber.log.Timber
 import java.io.EOFException
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal fun interface DoviSampleTransformer {
 	fun transform(sample: DoviSample, request: DoviTransformRequest): DoviTransformResult
@@ -45,6 +48,25 @@ internal data class H265Nal(
 	val layer: Int,
 )
 
+private enum class DoviSourceBaseState {
+	VALIDATING,
+	FAST,
+	LIBDOVI,
+}
+
+internal class DoviSourceBasePlaybackState {
+	private val fastPathRejected = AtomicBoolean(false)
+
+	val isFastPathRejected: Boolean
+		get() = fastPathRejected.get()
+
+	fun rejectFastPath() {
+		fastPathRejected.set(true)
+	}
+}
+
+private class FastSourceBaseFilterException(message: String) : RuntimeException(message)
+
 internal interface DoviSampleDispatcher {
 	fun onFormat(output: DoviTrackOutput, format: Format)
 	fun onSample(output: DoviTrackOutput, sample: DoviEncodedSample)
@@ -61,6 +83,8 @@ internal class DoviTrackOutput(
 	private val request: () -> DoviTransformRequest?,
 	private val sourceBasePresentation: () -> DoviPresentation = { DoviPresentation.UNKNOWN },
 	private val dvLevel: () -> Int? = { null },
+	private val sourceBaseStrategy: () -> DoviSourceBaseStrategy = { DoviSourceBaseStrategy.LIBDOVI },
+	private val sourceBasePlaybackState: DoviSourceBasePlaybackState = DoviSourceBasePlaybackState(),
 	private val transformer: DoviSampleTransformer? = null,
 	private val dispatcher: DoviSampleDispatcher? = null,
 	private val onTransformObserved: (DoviTransformObservation) -> Unit = {},
@@ -129,6 +153,7 @@ internal class DoviTrackOutput(
 	private val pendingBytes = ReusableByteBuffer()
 	private val mainBytes = ReusableByteBuffer()
 	private val supplementalBytes = ReusableByteBuffer()
+	private val directOutputBytes = ReusableByteBuffer()
 	private val pendingParts = mutableListOf<PartRange>()
 	private val transformBuffer = DoviTransformBuffer()
 	private var sourceFormat: Format? = null
@@ -136,6 +161,7 @@ internal class DoviTrackOutput(
 	private var signaledFormat: Format? = null
 	private var validatedOutput: DoviPresentation? = null
 	private var transformObserved = false
+	private var sourceBaseState = DoviSourceBaseState.LIBDOVI
 
 	override fun durationUs(durationUs: Long) = delegate.durationUs(durationUs)
 
@@ -145,6 +171,15 @@ internal class DoviTrackOutput(
 		validatedOutput = null
 		sourceFormat = format
 		activeRequest = request().takeIf { format.isHevcDolbyVision() }
+		sourceBaseState = if (
+			activeRequest?.target == DoviTarget.SOURCE_BASE_PRESENTATION &&
+			sourceBaseStrategy() == DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK &&
+			!sourceBasePlaybackState.isFastPathRejected
+		) {
+			DoviSourceBaseState.VALIDATING
+		} else {
+			DoviSourceBaseState.LIBDOVI
+		}
 		if (activeRequest == null) {
 			delegate.format(format)
 		} else {
@@ -261,6 +296,21 @@ internal class DoviTrackOutput(
 		sample: DoviEncodedSample,
 		supplementalRpu: ByteArray? = sample.supplementalRpu,
 	) {
+		if (sourceBaseState == DoviSourceBaseState.FAST) {
+			try {
+				emitFastSourceBase(sample)
+				return
+			} catch (exception: FastSourceBaseFilterException) {
+				directOutputBytes.reset()
+				sourceBasePlaybackState.rejectFastPath()
+				sourceBaseState = DoviSourceBaseState.LIBDOVI
+				Timber.w(exception, "Fast HDR base fallback rejected a sample; using libdovi for this track")
+			}
+		}
+		emitWithLibdovi(sample, supplementalRpu)
+	}
+
+	private fun emitWithLibdovi(sample: DoviEncodedSample, supplementalRpu: ByteArray?) {
 		val transformRequest = requireNotNull(activeRequest) { "Dolby Vision request is not active" }
 		val doviSample = DoviSample(
 			bytes = sample.bytes,
@@ -294,6 +344,18 @@ internal class DoviTrackOutput(
 			throw failure(DoviStatus.INTERNAL_ERROR, "Native transformation output changed within the track")
 		}
 		validatedOutput = resultOutput
+		if (sourceBaseState == DoviSourceBaseState.VALIDATING) {
+			sourceBaseState = if (
+				resultInput == DoviPresentation.PROFILE_8_1 &&
+				resultOutput == sourceBasePresentation() &&
+				resultOutput in setOf(DoviPresentation.HDR10, DoviPresentation.HDR10_PLUS)
+			) {
+				Timber.i("Fast HDR base fallback enabled after libdovi validation output=%s", resultOutput)
+				DoviSourceBaseState.FAST
+			} else {
+				DoviSourceBaseState.LIBDOVI
+			}
+		}
 		if (!transformObserved) {
 			onTransformObserved(DoviTransformObservation(resultInput, resultOutput))
 			transformObserved = true
@@ -316,6 +378,67 @@ internal class DoviTrackOutput(
 			0,
 			null,
 		)
+	}
+
+	private fun emitFastSourceBase(sample: DoviEncodedSample) {
+		val outputPresentation = requireNotNull(validatedOutput) {
+			"Direct Dolby Vision source-base removal requires validated output"
+		}
+		val resultSize = filterSourceBaseAnnexB(sample.bytes, sample.bytesSize, directOutputBytes)
+		val source = requireNotNull(sourceFormat) {
+			"Dolby Vision sample arrived before its format"
+		}
+		val outputFormat = source.forDoviPresentation(outputPresentation, dvLevel())
+		if (signaledFormat != outputFormat) {
+			delegate.format(outputFormat)
+			signaledFormat = outputFormat
+		}
+		delegate.sampleData(
+			ParsableByteArray(directOutputBytes.bytes, resultSize),
+			resultSize,
+			TrackOutput.SAMPLE_DATA_PART_MAIN,
+		)
+		delegate.sampleMetadata(sample.timeUs, sample.flags, resultSize, 0, null)
+	}
+
+	private fun filterSourceBaseAnnexB(
+		input: ByteArray,
+		inputSize: Int,
+		output: ReusableByteBuffer,
+	): Int {
+		fun startCodeLength(index: Int): Int = when {
+			index + 3 < inputSize && input[index] == 0.toByte() && input[index + 1] == 0.toByte() &&
+				input[index + 2] == 0.toByte() && input[index + 3] == 1.toByte() -> 4
+			index + 2 < inputSize && input[index] == 0.toByte() && input[index + 1] == 0.toByte() &&
+				input[index + 2] == 1.toByte() -> 3
+			else -> 0
+		}
+
+		output.reset()
+		var position = 0
+		var nalCount = 0
+		while (position < inputSize) {
+			val prefixSize = startCodeLength(position)
+			if (prefixSize == 0) throw FastSourceBaseFilterException("Invalid Annex-B start code")
+			val nalStart = position + prefixSize
+			var nextPosition = nalStart
+			while (nextPosition < inputSize && startCodeLength(nextPosition) == 0) nextPosition++
+			if (nextPosition - nalStart < 2) {
+				throw FastSourceBaseFilterException("Dolby Vision Annex-B NAL is truncated")
+			}
+			val first = input[nalStart].toInt() and 0xff
+			val second = input[nalStart + 1].toInt() and 0xff
+			val type = (first ushr 1) and 0x3f
+			val layer = ((first and 1) shl 5) or ((second ushr 3) and 0x1f)
+			if (type != 62 && type != 63 && layer == 0) {
+				output.append(input, position, nextPosition - position)
+			}
+			nalCount++
+			position = nextPosition
+		}
+		if (nalCount == 0) throw FastSourceBaseFilterException("Dolby Vision Annex-B sample is empty")
+		if (output.size == 0) throw FastSourceBaseFilterException("Dolby Vision Annex-B sample has no HDR base data")
+		return output.size
 	}
 
 	/** Drops partial access-unit data while retaining the track format and exact request. */

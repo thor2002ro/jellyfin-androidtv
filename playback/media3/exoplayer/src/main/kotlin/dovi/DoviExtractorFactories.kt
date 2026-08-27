@@ -14,12 +14,15 @@ import androidx.media3.extractor.text.SubtitleParser
 import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformObservation
+import org.jellyfin.playback.dovi.DoviSourceBaseStrategy
 
 internal data class DoviTransformContext(
 	val request: DoviTransformRequest,
 	val sourceBasePresentation: DoviPresentation,
 	val dvLevel: Int? = null,
 	val pairEnhancementTrack: Boolean,
+	val sourceBaseStrategy: DoviSourceBaseStrategy = DoviSourceBaseStrategy.LIBDOVI,
+	val sourceBasePlaybackState: DoviSourceBasePlaybackState = DoviSourceBasePlaybackState(),
 	val onTransformObserved: (DoviTransformObservation) -> Unit = {},
 )
 

@@ -178,6 +178,60 @@ class DoviConversionPolicyTests : FunSpec({
 		}
 	}
 
+	test("Auto selects fast HDR base fallback only for Media3 Profile 8.1 PQ bases") {
+		listOf(
+			DoviPresentation.HDR10 to DoviDeviceCapabilities(supportsHdr10 = true),
+			DoviPresentation.HDR10_PLUS to DoviDeviceCapabilities(supportsHdr10Plus = true),
+		).forEach { (base, device) ->
+			val decision = decide(
+				source = DoviSource(DoviPresentation.PROFILE_8_1, base),
+				device = device,
+			)
+
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe
+				DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK
+		}
+	}
+
+	test("Auto keeps non-eligible source-base conversions on libdovi") {
+		val profile7 = decide(
+			source = DoviSource(DoviPresentation.PROFILE_7_FEL, DoviPresentation.HDR10),
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		)
+		val hlg = decide(
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HLG),
+			device = DoviDeviceCapabilities(supportsHlg = true),
+		)
+		val mpv = decide(
+			backend = DoviPlaybackBackend.MPV,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS),
+			device = DoviDeviceCapabilities(supportsHdr10Plus = true),
+		)
+
+		listOf(profile7, hlg, mpv).forEach { decision ->
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviSourceBaseStrategy.LIBDOVI
+		}
+	}
+
+	test("Always and Compatibility keep source-base conversions on libdovi") {
+		val always = decide(
+			mode = DoviCompatibilityMode.ALWAYS,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		)
+		val compatibility = decide(
+			mode = DoviCompatibilityMode.COMPATIBILITY,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS),
+			device = DoviDeviceCapabilities(supportsHdr10Plus = true),
+			workarounds = DoviWorkarounds(repairActiveArea = true),
+			capabilities = allNativeCapabilities - DoviCapability.REPAIR_ZERO_ACTIVE_AREA,
+		)
+
+		listOf(always, compatibility).forEach { decision ->
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviSourceBaseStrategy.LIBDOVI
+		}
+	}
+
 	test("Always converts Profile 5 and Profile 7 even when their native profiles are reported") {
 		listOf(
 			DoviPresentation.PROFILE_5 to profile8Device.copy(supportsProfile5 = true),
