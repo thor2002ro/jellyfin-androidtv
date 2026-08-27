@@ -21,6 +21,7 @@ import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformResult
 import io.github.thor2002ro.libdovi.DoviTransformObservation
 import org.jellyfin.playback.dovi.DoviSourceBaseStrategy
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import timber.log.Timber
 import java.io.EOFException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -88,6 +89,7 @@ internal class DoviTrackOutput(
 	private val transformer: DoviSampleTransformer? = null,
 	private val dispatcher: DoviSampleDispatcher? = null,
 	private val onTransformObserved: (DoviTransformObservation) -> Unit = {},
+	private val onProcessorChanged: (PlaybackDoviTransformProcessor) -> Unit = {},
 ) : TrackOutput {
 	private data class PartRange(
 		val start: Int,
@@ -161,6 +163,7 @@ internal class DoviTrackOutput(
 	private var signaledFormat: Format? = null
 	private var validatedOutput: DoviPresentation? = null
 	private var transformObserved = false
+	private var observedProcessor: PlaybackDoviTransformProcessor? = null
 	private var sourceBaseState = DoviSourceBaseState.LIBDOVI
 
 	override fun durationUs(durationUs: Long) = delegate.durationUs(durationUs)
@@ -304,6 +307,7 @@ internal class DoviTrackOutput(
 				directOutputBytes.reset()
 				sourceBasePlaybackState.rejectFastPath()
 				sourceBaseState = DoviSourceBaseState.LIBDOVI
+				updateProcessor(PlaybackDoviTransformProcessor.LIBDOVI)
 				Timber.w(exception, "Fast HDR base fallback rejected a sample; using libdovi for this track")
 			}
 		}
@@ -356,6 +360,13 @@ internal class DoviTrackOutput(
 				DoviSourceBaseState.LIBDOVI
 			}
 		}
+		updateProcessor(
+			if (sourceBaseState == DoviSourceBaseState.FAST) {
+				PlaybackDoviTransformProcessor.FAST_HDR_BASE
+			} else {
+				PlaybackDoviTransformProcessor.LIBDOVI
+			}
+		)
 		if (!transformObserved) {
 			onTransformObserved(DoviTransformObservation(resultInput, resultOutput))
 			transformObserved = true
@@ -378,6 +389,12 @@ internal class DoviTrackOutput(
 			0,
 			null,
 		)
+	}
+
+	private fun updateProcessor(processor: PlaybackDoviTransformProcessor) {
+		if (observedProcessor == processor) return
+		observedProcessor = processor
+		onProcessorChanged(processor)
 	}
 
 	private fun emitFastSourceBase(sample: DoviEncodedSample) {

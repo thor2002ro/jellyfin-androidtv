@@ -15,6 +15,7 @@ import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformObservation
 import org.jellyfin.playback.dovi.DoviSourceBaseStrategy
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 
 internal data class DoviTransformContext(
 	val request: DoviTransformRequest,
@@ -24,6 +25,7 @@ internal data class DoviTransformContext(
 	val sourceBaseStrategy: DoviSourceBaseStrategy = DoviSourceBaseStrategy.LIBDOVI,
 	val sourceBasePlaybackState: DoviSourceBasePlaybackState = DoviSourceBasePlaybackState(),
 	val onTransformObserved: (DoviTransformObservation) -> Unit = {},
+	val onProcessorChanged: (PlaybackDoviTransformProcessor) -> Unit = {},
 )
 
 @UnstableApi

@@ -7,6 +7,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.core.queue.QueueEntry
 
 class DoviTransformStatsTests : FunSpec({
@@ -50,5 +51,16 @@ class DoviTransformStatsTests : FunSpec({
 		replacementItem.doviTransformStatsTag shouldBe null
 		replacementTag.doviTransformStats.record(replacementObservation)
 		replacementItem.doviTransformStatsTag shouldBe replacementObservation
+	}
+
+	test("transform stats report the processor currently handling samples") {
+		val holder = DoviTransformStatsHolder()
+		holder.record(PlaybackDoviTransformStats("DV P8.1", "HDR10"))
+
+		holder.recordProcessor(PlaybackDoviTransformProcessor.FAST_HDR_BASE)
+		holder.get()?.processor shouldBe PlaybackDoviTransformProcessor.FAST_HDR_BASE
+
+		holder.recordProcessor(PlaybackDoviTransformProcessor.LIBDOVI)
+		holder.get()?.processor shouldBe PlaybackDoviTransformProcessor.LIBDOVI
 	}
 })

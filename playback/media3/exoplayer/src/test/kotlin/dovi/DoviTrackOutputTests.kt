@@ -18,6 +18,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.jellyfin.playback.dovi.DoviSourceBaseStrategy
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.media3.exoplayer.doviTransformationPlaybackErrorCode
 import java.io.ByteArrayOutputStream
 
@@ -219,11 +220,13 @@ class DoviTrackOutputTests : FunSpec({
 	test("fast HDR base rejection survives later format updates for the playback item") {
 		val delegate = RecordingTrackOutput()
 		var transformCalls = 0
+		val processors = mutableListOf<PlaybackDoviTransformProcessor>()
 		val output = DoviTrackOutput(
 			delegate = delegate,
 			request = { DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION) },
 			sourceBasePresentation = { DoviPresentation.HDR10 },
 			sourceBaseStrategy = { DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK },
+			onProcessorChanged = { processor -> processors += processor },
 			transformer = DoviSampleTransformer { sample, _ ->
 				transformCalls++
 				result(
@@ -248,6 +251,10 @@ class DoviTrackOutputTests : FunSpec({
 		output.emit(afterFormatUpdate, timeUs = 50)
 
 		transformCalls shouldBe 4
+		processors shouldContainExactly listOf(
+			PlaybackDoviTransformProcessor.FAST_HDR_BASE,
+			PlaybackDoviTransformProcessor.LIBDOVI,
+		)
 		delegate.metadata.map { metadata -> metadata.size } shouldBe
 			listOf(validation.size, fast.size, malformed.size, afterFallback.size, afterFormatUpdate.size)
 	}
