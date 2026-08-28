@@ -7,10 +7,12 @@ import io.github.thor2002ro.libdovi.DoviRepair
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.github.thor2002ro.libdovi.DoviTransformObservation
 import io.github.thor2002ro.libdovi.DoviTransformRequest
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
 
 enum class DoviCompatibilityMode {
 	AUTO,
+	FAST_HDR,
 	ALWAYS,
 	COMPATIBILITY,
 	OFF,
@@ -104,15 +106,10 @@ sealed interface DoviRoute {
 
 	data class SourceBase(
 		val request: DoviTransformRequest,
-		val strategy: DoviSourceBaseStrategy = DoviSourceBaseStrategy.LIBDOVI,
+		val strategy: DoviTransformStrategy = DoviTransformStrategy.LIBDOVI,
 	) : DoviRoute
 
 	data object ServerFallback : DoviRoute
-}
-
-enum class DoviSourceBaseStrategy {
-	LIBDOVI,
-	FAST_HDR_BASE_FALLBACK,
 }
 
 enum class DoviDecisionReason {
@@ -215,11 +212,19 @@ object DoviCompatibilityPolicy {
 
 		return when (input.mode) {
 			DoviCompatibilityMode.AUTO -> decideAuto(input)
+			DoviCompatibilityMode.FAST_HDR -> decideFastHdr(input)
 			DoviCompatibilityMode.ALWAYS -> decideAlways(input)
 			DoviCompatibilityMode.COMPATIBILITY -> decideCompatibility(input)
 			DoviCompatibilityMode.OFF -> error("Handled above")
 		}.withTransformEvidence(input.source)
 	}
+
+	private fun decideFastHdr(input: Input): DoviDecision =
+		if (input.isFastHdrEligible()) {
+			input.sourceBaseDecision(DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK)
+		} else {
+			decideAuto(input)
+		}
 
 	private fun DoviDecision.withTransformEvidence(source: DoviSource): DoviDecision =
 		if (request == null) this else copy(
@@ -249,17 +254,18 @@ object DoviCompatibilityPolicy {
 		}
 	}
 
-	private fun Input.autoSourceBaseStrategy(): DoviSourceBaseStrategy =
-		if (
-			backend == DoviPlaybackBackend.MEDIA3 &&
+	private fun Input.autoSourceBaseStrategy(): DoviTransformStrategy =
+		if (isFastHdrEligible()) {
+			DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+		} else {
+			DoviTransformStrategy.LIBDOVI
+		}
+
+	private fun Input.isFastHdrEligible(): Boolean =
+		backend == DoviPlaybackBackend.MEDIA3 &&
 			codec == DoviVideoCodec.HEVC &&
 			source.profile == DoviSourceProfile.PROFILE_8_1 &&
 			source.sourceBasePresentation in setOf(DoviPresentation.HDR10, DoviPresentation.HDR10_PLUS)
-		) {
-			DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK
-		} else {
-			DoviSourceBaseStrategy.LIBDOVI
-		}
 
 	private fun decideAlways(input: Input): DoviDecision {
 		if (!input.source.profile.isProfile5Or7()) {
@@ -378,7 +384,7 @@ object DoviCompatibilityPolicy {
 	}
 
 	private fun Input.sourceBaseDecision(
-		strategy: DoviSourceBaseStrategy = DoviSourceBaseStrategy.LIBDOVI,
+		strategy: DoviTransformStrategy = DoviTransformStrategy.LIBDOVI,
 	): DoviDecision {
 		val baseSupported = when (source.sourceBasePresentation) {
 			DoviPresentation.HDR10 -> device.supportsHdr10

@@ -5,6 +5,7 @@ import io.github.thor2002ro.libdovi.DoviFraming
 import io.github.thor2002ro.libdovi.DoviInspection
 import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTransformObservation
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import io.github.thor2002ro.libdovi.DoviRepair
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.kotest.core.spec.style.FunSpec
@@ -187,7 +188,40 @@ class DoviConversionPolicyTests : FunSpec({
 			)
 
 			(decision.route as DoviRoute.SourceBase).strategy shouldBe
-				DoviSourceBaseStrategy.FAST_HDR_BASE_FALLBACK
+				DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+		}
+	}
+
+	test("Fast HDR forces an eligible Media3 Profile 8.1 source base") {
+		val decision = decide(
+			mode = DoviCompatibilityMode.FAST_HDR,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+			device = DoviDeviceCapabilities(supportsProfile8 = true, supportsHdr10 = true),
+		)
+
+		(decision.route as DoviRoute.SourceBase).strategy shouldBe
+			DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+	}
+
+	test("Fast HDR behaves exactly like Auto with MPV") {
+		listOf(
+			DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10) to
+				DoviDeviceCapabilities(supportsProfile8 = true, supportsHdr10 = true),
+			DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS) to
+				DoviDeviceCapabilities(supportsHdr10Plus = true),
+			DoviSource(DoviPresentation.PROFILE_7_FEL, DoviPresentation.HDR10) to profile8Device,
+		).forEach { (source, device) ->
+			decide(
+				mode = DoviCompatibilityMode.FAST_HDR,
+				backend = DoviPlaybackBackend.MPV,
+				source = source,
+				device = device,
+			) shouldBe decide(
+				mode = DoviCompatibilityMode.AUTO,
+				backend = DoviPlaybackBackend.MPV,
+				source = source,
+				device = device,
+			)
 		}
 	}
 
@@ -207,7 +241,7 @@ class DoviConversionPolicyTests : FunSpec({
 		)
 
 		listOf(profile7, hlg, mpv).forEach { decision ->
-			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviSourceBaseStrategy.LIBDOVI
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviTransformStrategy.LIBDOVI
 		}
 	}
 
@@ -226,7 +260,7 @@ class DoviConversionPolicyTests : FunSpec({
 		)
 
 		listOf(always, compatibility).forEach { decision ->
-			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviSourceBaseStrategy.LIBDOVI
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviTransformStrategy.LIBDOVI
 		}
 	}
 
