@@ -40,9 +40,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import coil3.network.httpHeaders
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,6 +54,7 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
 import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
+import org.jellyfin.androidtv.util.apiclient.TrickplayTileSheet
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
@@ -236,7 +234,7 @@ private fun ChapterThumbnailPrefetcher(
 
 	DisposableEffect(thumbnailUrls) {
 		onDispose {
-			val stats = ChapterThumbnailMemoryCache.clear(thumbnailUrls)
+			val stats = PlayerThumbnailMemoryCache.clear(thumbnailUrls)
 			if (stats.count > 0) {
 				Timber.i("Cleared chapter thumbnail memory cache: ${stats.count} thumbnails, ${"%.1f".format(stats.mib)} MiB")
 			}
@@ -247,16 +245,12 @@ private fun ChapterThumbnailPrefetcher(
 		withContext(Dispatchers.IO) {
 			thumbnailUrls.forEach { url ->
 				val bitmap = imageLoader.execute(
-					ImageRequest.Builder(context)
-						.data(url)
-						.memoryCachePolicy(CachePolicy.DISABLED)
-						.diskCachePolicy(CachePolicy.DISABLED)
-						.build()
+					buildPlayerThumbnailRequest(context, url, thumbnailWidth, thumbnailHeight)
 				).image?.toBitmap()
-				if (bitmap != null) ChapterThumbnailMemoryCache.put(url, bitmap)
+				if (bitmap != null) PlayerThumbnailMemoryCache.put(url, bitmap)
 			}
 		}
-		val stats = ChapterThumbnailMemoryCache.stats(thumbnailUrls)
+		val stats = PlayerThumbnailMemoryCache.stats(thumbnailUrls)
 		if (stats.count > 0) {
 			Timber.i("Prefetched chapter thumbnail memory cache: ${stats.count}/${thumbnailUrls.size} thumbnails, ${"%.1f".format(stats.mib)} MiB")
 		}
@@ -281,7 +275,7 @@ private fun TrickplayTileSheetPrefetcher(
 
 	DisposableEffect(sheets) {
 		onDispose {
-			val stats = TrickplayTileSheetMemoryCache.clear(sheets.map { sheet -> sheet.url })
+			val stats = PlayerThumbnailMemoryCache.clear(sheets.map { sheet -> sheet.url })
 			if (stats.count > 0) {
 				Timber.i("Cleared trickplay memory cache: ${stats.count} sheets, ${"%.1f".format(stats.mib)} MiB")
 			}
@@ -290,21 +284,26 @@ private fun TrickplayTileSheetPrefetcher(
 
 	LaunchedEffect(sheets) {
 		withContext(Dispatchers.IO) {
-			sheets.forEach { sheet ->
-				val bitmap = imageLoader.execute(
-					ImageRequest.Builder(context)
-						.data(sheet.url)
-						.httpHeaders(sheet.headers)
-						.memoryCachePolicy(CachePolicy.DISABLED)
-						.diskCachePolicy(CachePolicy.DISABLED)
-						.build()
-				).image?.toBitmap()
-				if (bitmap != null) TrickplayTileSheetMemoryCache.put(sheet.url, bitmap)
+			selectTrickplaySheetsToPrefetch(sheets).forEach { sheet ->
+				val bitmap = imageLoader.execute(sheet.buildPlayerThumbnailRequest(context)).image?.toBitmap()
+				if (bitmap != null) PlayerThumbnailMemoryCache.put(sheet, bitmap)
 			}
 		}
-		val stats = TrickplayTileSheetMemoryCache.stats(sheets.map { sheet -> sheet.url })
+		val stats = PlayerThumbnailMemoryCache.stats(sheets.map { sheet -> sheet.url })
 		if (stats.count > 0) {
 			Timber.i("Prefetched trickplay memory cache: ${stats.count}/${sheets.size} sheets, ${"%.1f".format(stats.mib)} MiB")
+		}
+	}
+}
+
+internal fun selectTrickplaySheetsToPrefetch(
+	sheets: List<TrickplayTileSheet>,
+): List<TrickplayTileSheet> {
+	var remainingBytes = PLAYER_THUMBNAIL_CACHE_MAX_BYTES.toLong()
+	return sheets.takeWhile { sheet ->
+		val estimatedBytes = sheet.decodeWidth.toLong() * sheet.decodeHeight * 2
+		(estimatedBytes <= remainingBytes).also { fits ->
+			if (fits) remainingBytes -= estimatedBytes
 		}
 	}
 }

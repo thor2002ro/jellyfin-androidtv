@@ -7,15 +7,23 @@ import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.TrickplayInfoDto
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+import java.util.UUID
+
+const val TRICKPLAY_THUMBNAIL_PIXEL_WIDTH = 160
+const val TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT = 90
 
 data class TrickplayTileSheet(
 	val url: String,
 	val headers: NetworkHeaders,
-)
+	val columns: Int,
+	val rows: Int,
+) {
+	val decodeWidth get() = TRICKPLAY_THUMBNAIL_PIXEL_WIDTH * columns
+	val decodeHeight get() = TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT * rows
+}
 
 data class TrickplayImage(
-	val url: String,
-	val headers: NetworkHeaders,
+	val sheet: TrickplayTileSheet,
 	val offsetX: Int,
 	val offsetY: Int,
 	val width: Int,
@@ -38,13 +46,7 @@ fun BaseItemDto.getTrickplayImage(
 	val tileOffsetY = tileOffset / info.tileWidth
 
 	return TrickplayImage(
-		url = api.trickplayApi.getTrickplayTileImageUrl(
-			itemId = id,
-			width = info.width,
-			index = sheetIndex,
-			mediaSourceId = sourceUuid,
-		),
-		headers = api.trickplayHeaders(),
+		sheet = getTrickplayTileSheet(api, sourceUuid, info, sheetIndex, api.trickplayHeaders()),
 		offsetX = tileOffsetX * info.width,
 		offsetY = tileOffsetY * info.height,
 		width = info.width,
@@ -64,16 +66,28 @@ fun BaseItemDto.getTrickplayTileSheets(
 
 	val headers = api.trickplayHeaders()
 	return (0 until sheetCount).map { sheetIndex ->
-		TrickplayTileSheet(
-			url = api.trickplayApi.getTrickplayTileImageUrl(
-				itemId = id,
-				width = info.width,
-				index = sheetIndex,
-				mediaSourceId = sourceUuid,
-			),
-			headers = headers,
-		)
+		getTrickplayTileSheet(api, sourceUuid, info, sheetIndex, headers)
 	}
+}
+
+private fun BaseItemDto.getTrickplayTileSheet(
+	api: ApiClient,
+	sourceId: UUID,
+	info: TrickplayInfoDto,
+	sheetIndex: Int,
+	headers: NetworkHeaders,
+): TrickplayTileSheet {
+	return TrickplayTileSheet(
+		url = api.trickplayApi.getTrickplayTileImageUrl(
+			itemId = id,
+			width = info.width,
+			index = sheetIndex,
+			mediaSourceId = sourceId,
+		),
+		headers = headers,
+		columns = info.tileWidth,
+		rows = info.tileHeight,
+	)
 }
 
 private fun BaseItemDto.getTrickplaySource(mediaSourceId: String?): Pair<String?, TrickplayInfoDto>? {

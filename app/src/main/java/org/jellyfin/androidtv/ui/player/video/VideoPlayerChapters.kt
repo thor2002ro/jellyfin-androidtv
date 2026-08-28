@@ -1,7 +1,6 @@
 package org.jellyfin.androidtv.ui.player.video
 
 import android.view.KeyEvent
-import android.widget.ImageView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,7 +46,6 @@ import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.popover.Popover
-import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.apiclient.getTrickplayImage
@@ -278,24 +276,12 @@ private fun ChapterThumbnail(
 					fillHeight = fillHeight,
 				)
 			}
-			val cachedImage = ChapterThumbnailMemoryCache.get(url)
-			if (cachedImage != null) {
-				Image(
-					bitmap = cachedImage,
-					contentDescription = null,
-					contentScale = ContentScale.Crop,
-					modifier = Modifier.fillMaxSize(),
-				)
-			} else {
-				AsyncImage(
-					image = image,
-					fillWidth = fillWidth,
-					fillHeight = fillHeight,
-					aspectRatio = ChapterThumbnailAspectRatio,
-					scaleType = ImageView.ScaleType.CENTER_CROP,
-					modifier = Modifier.fillMaxSize(),
-				)
-			}
+			VideoPlayerThumbnailImage(
+				url = url,
+				width = fillWidth,
+				height = fillHeight,
+				modifier = Modifier.fillMaxSize(),
+			)
 		} else if (trickPlayEnabled && item != null) {
 			val timeMs = chapter.startPositionTicks.ticks.inWholeMilliseconds
 			val trickplayImage = remember(item.id, item.trickplay, mediaSourceId, timeMs, api.accessToken) {
@@ -303,7 +289,7 @@ private fun ChapterThumbnail(
 			}
 			if (trickplayImage != null) {
 				VideoPlayerTrickplayImage(
-					request = rememberVideoPlayerTrickplayImageRequest(trickplayImage),
+					trickplayImage = trickplayImage,
 					lastSuccessKey = item.id to mediaSourceId,
 					modifier = Modifier.fillMaxSize(),
 				)

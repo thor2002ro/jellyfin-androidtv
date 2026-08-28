@@ -5,17 +5,12 @@ import android.graphics.Bitmap
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.PlaybackSeekDataProvider
 import coil3.ImageLoader
-import coil3.network.httpHeaders
 import coil3.request.Disposable
-import coil3.request.ImageRequest
-import coil3.request.maxBitmapSize
-import coil3.request.transformations
-import coil3.size.Dimension
-import coil3.size.Size
 import coil3.toBitmap
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.ui.player.video.PlayerThumbnailMemoryCache
+import org.jellyfin.androidtv.ui.player.video.buildPlayerThumbnailRequest
 import org.jellyfin.androidtv.util.apiclient.getTrickplayImage
-import org.jellyfin.androidtv.util.coil.SubsetTransformation
 import org.jellyfin.sdk.api.client.ApiClient
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -78,30 +73,27 @@ class CustomSeekProvider(
 		if (imageRequest?.isDisposed == false) imageRequest?.dispose()
 		callback.onThumbnailLoaded(placeholderThumbnail, index)
 
-		imageRequest = imageLoader.enqueue(ImageRequest.Builder(context).apply {
-			data(trickplayImage.url)
-			size(Size.ORIGINAL)
-			maxBitmapSize(Size(Dimension.Undefined, Dimension.Undefined))
-			httpHeaders(trickplayImage.headers)
+		PlayerThumbnailMemoryCache.getThumbnailBitmap(trickplayImage)?.let { thumbnail ->
+			callback.onThumbnailLoaded(thumbnail, index)
+			return
+		}
 
-			transformations(
-				SubsetTransformation(
-					trickplayImage.offsetX,
-					trickplayImage.offsetY,
-					trickplayImage.width,
-					trickplayImage.height,
-				)
-			)
-
+		imageRequest = imageLoader.enqueue(
+			trickplayImage.sheet.buildPlayerThumbnailRequest(context).newBuilder().apply {
 			target(
 				onError = { _ ->
 					if (requestId == imageRequestId.get()) callback.onThumbnailLoaded(placeholderThumbnail, index)
 				},
 				onSuccess = { image ->
-					if (requestId == imageRequestId.get()) callback.onThumbnailLoaded(image.toBitmap(), index)
+					PlayerThumbnailMemoryCache.put(trickplayImage.sheet, image.toBitmap())
+					if (requestId == imageRequestId.get()) {
+						val thumbnail = PlayerThumbnailMemoryCache.getThumbnailBitmap(trickplayImage)
+						callback.onThumbnailLoaded(thumbnail ?: placeholderThumbnail, index)
+					}
 				}
 			)
-		}.build())
+			}.build()
+		)
 	}
 
 	fun prefetchTileSheet(timeMs: Long) {
@@ -110,10 +102,11 @@ class CustomSeekProvider(
 		val item = videoPlayerAdapter.currentlyPlayingItem ?: return
 		val trickplayImage = item.getTrickplayImage(api, videoPlayerAdapter.currentMediaSource?.id, timeMs) ?: return
 
-		imageLoader.enqueue(ImageRequest.Builder(context).apply {
-			data(trickplayImage.url)
-			httpHeaders(trickplayImage.headers)
-		}.build())
+		imageLoader.enqueue(
+			trickplayImage.sheet.buildPlayerThumbnailRequest(context).newBuilder()
+				.target { image -> PlayerThumbnailMemoryCache.put(trickplayImage.sheet, image.toBitmap()) }
+				.build()
+		)
 	}
 
 	override fun reset() {

@@ -26,12 +26,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import coil3.network.httpHeaders
-import coil3.request.ImageRequest
-import coil3.request.maxBitmapSize
-import coil3.request.transformations
-import coil3.size.Dimension
-import coil3.size.Size
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -42,7 +36,6 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.apiclient.TrickplayImage
 import org.jellyfin.androidtv.util.apiclient.getTrickplayImage
-import org.jellyfin.androidtv.util.coil.SubsetTransformation
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.compose.koinInject
@@ -76,9 +69,8 @@ fun VideoPlayerTrickplayThumbnail(
 			.background(Color.Black.copy(alpha = 0.45f))
 	) {
 		VideoPlayerTrickplayImage(
-			request = rememberVideoPlayerTrickplayImageRequest(trickplayImage),
+			trickplayImage = trickplayImage,
 			imageLoader = imageLoader,
-			requestKey = trickplayImage,
 			lastSuccessKey = item.id to mediaSourceId,
 			modifier = Modifier.fillMaxSize(),
 		)
@@ -97,61 +89,73 @@ fun VideoPlayerTrickplayThumbnail(
 }
 
 @Composable
-internal fun rememberVideoPlayerTrickplayImageRequest(trickplayImage: TrickplayImage): ImageRequest {
-	val context = LocalContext.current
-	return remember(context, trickplayImage) {
-		ImageRequest.Builder(context)
-			.data(trickplayImage.url)
-			.size(Size.ORIGINAL)
-			.maxBitmapSize(Size(Dimension.Undefined, Dimension.Undefined))
-			.httpHeaders(trickplayImage.headers)
-			.transformations(
-				SubsetTransformation(
-					trickplayImage.offsetX,
-					trickplayImage.offsetY,
-					trickplayImage.width,
-					trickplayImage.height,
-				)
-			)
-			.build()
-	}
-}
-
-@Composable
 internal fun VideoPlayerTrickplayImage(
-	request: ImageRequest,
+	trickplayImage: TrickplayImage,
 	modifier: Modifier = Modifier,
 	imageLoader: ImageLoader = koinInject(),
-	requestKey: Any = request,
 	lastSuccessKey: Any? = Unit,
 ) {
-	val latestRequest by rememberUpdatedState(request)
-	val latestRequestKey by rememberUpdatedState(requestKey)
+	val context = LocalContext.current
+	val latestTrickplayImage by rememberUpdatedState(trickplayImage)
 	var image by remember(lastSuccessKey) { mutableStateOf<ImageBitmap?>(null) }
 
 	LaunchedEffect(imageLoader, lastSuccessKey) {
 		var loadedKey: Any? = null
 		while (isActive) {
-			val nextKey = latestRequestKey
+			val nextImage = latestTrickplayImage
+			val nextKey = nextImage
 			if (nextKey == loadedKey) {
-				snapshotFlow { latestRequestKey }.first { it != loadedKey }
+				snapshotFlow { latestTrickplayImage }.first { it != loadedKey }
 				continue
 			}
 
-			val nextRequest = latestRequest
 			runCatching {
 				withContext(Dispatchers.IO) {
-					(latestRequestKey as? TrickplayImage)?.let(TrickplayTileSheetMemoryCache::getThumbnail)
-						?: imageLoader.execute(nextRequest).image?.toBitmap()?.asImageBitmap()
+					PlayerThumbnailMemoryCache.getThumbnail(nextImage) ?: run {
+						val bitmap = imageLoader.execute(
+							nextImage.sheet.buildPlayerThumbnailRequest(context)
+						).image?.toBitmap() ?: return@withContext null
+						PlayerThumbnailMemoryCache.put(nextImage.sheet, bitmap)
+						PlayerThumbnailMemoryCache.getThumbnail(nextImage)
+					}
 				}
 			}.getOrNull()?.let { image = it }
 			loadedKey = nextKey
 		}
 	}
 
-	image?.let {
+	PlayerThumbnail(image, modifier)
+}
+
+@Composable
+internal fun VideoPlayerThumbnailImage(
+	url: String,
+	width: Int,
+	height: Int,
+	modifier: Modifier = Modifier,
+	imageLoader: ImageLoader = koinInject(),
+) {
+	val context = LocalContext.current
+	var image by remember(url) { mutableStateOf(PlayerThumbnailMemoryCache.get(url)) }
+
+	LaunchedEffect(imageLoader, url, width, height) {
+		if (image != null) return@LaunchedEffect
+		withContext(Dispatchers.IO) {
+			imageLoader.execute(buildPlayerThumbnailRequest(context, url, width, height)).image?.toBitmap()
+		}?.let { bitmap ->
+			PlayerThumbnailMemoryCache.put(url, bitmap)
+			image = bitmap.asImageBitmap()
+		}
+	}
+
+	PlayerThumbnail(image, modifier)
+}
+
+@Composable
+private fun PlayerThumbnail(image: ImageBitmap?, modifier: Modifier) {
+	image?.let { bitmap ->
 		Image(
-			bitmap = it,
+			bitmap = bitmap,
 			contentDescription = null,
 			contentScale = ContentScale.Crop,
 			modifier = modifier,
