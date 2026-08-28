@@ -22,6 +22,7 @@ import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformResult
 import io.github.thor2002ro.libdovi.DoviTransformObservation
 import io.github.thor2002ro.libdovi.DoviTransformSession
+import io.github.thor2002ro.libdovi.DoviTransformSessionState
 import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import java.io.EOFException
@@ -61,6 +62,7 @@ internal class DoviTrackOutput(
 	private val sourceBasePresentation: () -> DoviPresentation = { DoviPresentation.UNKNOWN },
 	private val dvLevel: () -> Int? = { null },
 	private val transformStrategy: () -> DoviTransformStrategy = { DoviTransformStrategy.LIBDOVI },
+	private val transformState: DoviTransformSessionState = DoviTransformSessionState(),
 	private val transformer: DoviSampleTransformer? = null,
 	private val dispatcher: DoviSampleDispatcher? = null,
 	private val onTransformObserved: (DoviTransformObservation) -> Unit = {},
@@ -147,13 +149,10 @@ internal class DoviTrackOutput(
 		signaledFormat = null
 		validatedOutput = null
 		sourceFormat = format
-		val previousRequest = activeRequest
 		activeRequest = request().takeIf { format.isHevcDolbyVision() }
-		if (transformer == null && activeRequest != previousRequest) {
-			transformSession = activeRequest?.let { request ->
-				DoviBridge.openTransformSession(request, transformStrategy())
-			}
-		}
+		transformSession = if (transformer == null) activeRequest?.let { request ->
+			DoviBridge.openTransformSession(request, transformStrategy(), transformState)
+		} else null
 		if (activeRequest == null) {
 			delegate.format(format)
 		} else {
@@ -308,7 +307,7 @@ internal class DoviTrackOutput(
 			throw failure(DoviStatus.INTERNAL_ERROR, "Native transformation output changed within the track")
 		}
 		validatedOutput = resultOutput
-		updateProcessor(bufferedResult?.processor.toPlaybackProcessor())
+		updateProcessor(transformSession?.processor.toPlaybackProcessor())
 		if (!transformObserved) {
 			onTransformObserved(DoviTransformObservation(resultInput, resultOutput))
 			transformObserved = true

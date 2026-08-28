@@ -68,6 +68,7 @@ import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
 import io.github.peerless2012.ass.media.type.AssRenderType
 import io.github.peerless2012.ass.media.widget.AssSubtitleView
 import io.github.thor2002ro.libdovi.DoviException
+import io.github.thor2002ro.libdovi.DoviTransformSessionState
 import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
@@ -305,6 +306,7 @@ internal data class PlaybackMediaItemTag(
 	val queueEntry: QueueEntry,
 	val errorOrigin: PlaybackErrorOrigin?,
 	val doviTransformStats: DoviTransformStatsHolder = DoviTransformStatsHolder(),
+	val doviTransformState: DoviTransformSessionState = DoviTransformSessionState(),
 )
 
 internal class DoviTransformStatsHolder {
@@ -883,6 +885,7 @@ class ExoPlayerBackend(
 			pairEnhancementTrack = evidence.sourceProfile == DoviSourceProfile.PROFILE_7 &&
 				evidence.sourceLayer != DoviSourceLayer.MEL,
 			transformStrategy = media3TransformStrategy(decision),
+			transformState = doviTransformState,
 			onTransformObserved = { observation ->
 				doviTransformStats.record(observation.toPlaybackDoviTransformStats())
 			},
