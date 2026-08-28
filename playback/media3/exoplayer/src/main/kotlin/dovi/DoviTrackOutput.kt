@@ -538,8 +538,7 @@ private fun Format.asSourceBase(presentation: DoviPresentation): Format {
 		DoviPresentation.HLG -> C.COLOR_TRANSFER_HLG
 		else -> error("Not a source-base presentation: $presentation")
 	}
-	val baseColor = colorInfo
-	val color = (baseColor?.buildUpon() ?: ColorInfo.Builder())
+	val color = (colorInfo?.buildUpon() ?: ColorInfo.Builder())
 		.setColorTransfer(transfer)
 		.apply {
 			if (presentation == DoviPresentation.HLG) setHdrStaticInfo(null)
