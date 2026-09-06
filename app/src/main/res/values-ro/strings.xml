@@ -502,7 +502,6 @@
     <string name="random">Aleatoriu</string>
     <string name="pref_playback_advanced">Preferințe avansate de redare</string>
     <string name="unreleased">Nu a fost încă lansat</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="person_birthday_and_age">Născut %1$s (%2$d)</string>
     <string name="clear_image_cache_content">Folosit: %1$s</string>
     <string name="clear_image_cache">Golește cache imagini</string>
@@ -647,7 +646,6 @@
     <string name="codec_level_4_1">Nivel 4.1</string>
     <string name="codec_level_4_0">Nivel 4.0</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision cu EL (Enhancement Layer)</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
