@@ -6,9 +6,21 @@ fun latestLocalMavenVersion(moduleDirectory: String): String {
 	return directory.listFiles()
 		.orEmpty()
 		.filter(File::isDirectory)
+		.filter { versionDirectory ->
+			val version = versionDirectory.name
+			versionDirectory.resolve("mpv-android-lib-$version.aar").isFile ||
+				!moduleDirectory.endsWith("mpv-android-lib")
+		}
 		.map(File::getName)
 		.maxWithOrNull(compareBy(ModuleDescriptor.Version::parse))
-		?: error("No locally built artifact found in $directory")
+		?: error(
+			if (moduleDirectory.endsWith("mpv-android-lib")) {
+				"No compatible local MPV AAR found in $directory. " +
+					"Publish the standalone libdovi Android v3 SDK, then run dependencies/mpv-android-lib/build.sh."
+			} else {
+				"No locally built artifact found in $directory"
+			}
+		)
 }
 
 pluginManagement {
@@ -42,12 +54,19 @@ includeBuild("dependencies/libass-android") {
 	}
 }
 
+includeBuild("dependencies/libdovi-android") {
+	dependencySubstitution {
+		substitute(module("io.github.thor2002ro:libdovi-android")).using(project(":lib"))
+	}
+}
+
 // Application
 include(":app")
 
 // Modules
 include(":design")
 include(":playback:core")
+include(":playback:dovi")
 include(":playback:jellyfin")
 include(":playback:media3:exoplayer")
 include(":playback:media3:session")
@@ -61,6 +80,7 @@ dependencyResolutionManagement {
 	versionCatalogs {
 		create("libs") {
 			from(files("gradle/libs.versions.toml"))
+			library("libdovi-android", "io.github.thor2002ro", "libdovi-android").version("source")
 
 			val media3Version = latestLocalMavenVersion(
 				"dependencies/jellyfin-androidx-media/OUTPUT/maven/androidx/media3/media3-exoplayer"
