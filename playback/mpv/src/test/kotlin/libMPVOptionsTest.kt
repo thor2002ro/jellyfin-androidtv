@@ -4,11 +4,45 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.jellyfin.playback.core.PlaybackBufferOptions
+import org.jellyfin.playback.core.model.PositionInfo
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import `is`.xyz.mpv.MPVNode
 
 class LibMPVOptionsTest : StringSpec({
+	"last MPV position survives after the native property becomes unavailable" {
+		val last = PositionInfo(120.seconds, 130.seconds, 1_200.seconds)
+		mpvPositionInfo(null, null, null, null, last) shouldBe last
+		mpvPositionInfo(121.0, 1_200.0, null, 10.0, last) shouldBe
+			PositionInfo(121.seconds, 131.seconds, 1_200.seconds)
+	}
+
+	"automatic decoder modes expose unsafe as the default and safe separately" {
+		LibMPVVideoDecoder.AUTOMATIC.mpvValue shouldBe "auto-unsafe"
+		LibMPVVideoDecoder.AUTO_SAFE.mpvValue shouldBe "auto-safe"
+	}
+
+	"Live TV software decoding yields to an explicit player override" {
+		effectiveLibMPVVideoDecoder(
+			configured = LibMPVVideoDecoder.AUTOMATIC,
+			forced = null,
+			softwareForLiveTv = true,
+			isLiveTv = true,
+		) shouldBe LibMPVVideoDecoder.SOFTWARE
+		effectiveLibMPVVideoDecoder(
+			configured = LibMPVVideoDecoder.AUTOMATIC,
+			forced = LibMPVVideoDecoder.MEDIACODEC,
+			softwareForLiveTv = true,
+			isLiveTv = true,
+		) shouldBe LibMPVVideoDecoder.MEDIACODEC
+		effectiveLibMPVVideoDecoder(
+			configured = LibMPVVideoDecoder.AUTOMATIC,
+			forced = null,
+			softwareForLiveTv = true,
+			isLiveTv = false,
+		) shouldBe LibMPVVideoDecoder.AUTOMATIC
+	}
+
 	"mpv HDR mode reports dynamic metadata before transfer characteristics" {
 		mpvHdrMode("pq", 8, hasHdr10Plus = true) shouldBe "Dolby Vision (Profile 8)"
 		mpvHdrMode("pq", null, hasHdr10Plus = true) shouldBe "HDR10+"
@@ -28,9 +62,25 @@ class LibMPVOptionsTest : StringSpec({
 		mpvGpuApi(currentContext = null) shouldBe null
 	}
 
+	"resume position is passed to loadfile" {
+		728.seconds.mpvStartOption() shouldBe "start=728.0"
+	}
+
+	"plain subtitle padding maps to MPV 720p margins" {
+		mpvSubtitleMarginY(0.08f) shouldBe 58
+		mpvSubtitleMarginY(-1f) shouldBe 0
+		mpvSubtitleMarginY(1f) shouldBe 600
+	}
+
+	"app subtitle size maps its default to MPV default scale" {
+		mpvSubtitleFontSize(24f) shouldBe 38f
+		mpvSubtitleFontSize(4f) shouldBe 8f
+		mpvSubtitleFontSize(100f) shouldBe 96f
+	}
+
 	"Jellyfin MPV defaults produce the complete managed profile" {
 		LibMPVPlaybackOptions.DEFAULT.managedOptions() shouldBe linkedMapOf(
-			"vo" to "gpu",
+			"vo" to "gpu-next",
 			"gpu-context" to "android",
 			"gpu-api" to "auto",
 			"video-sync" to "audio",
@@ -48,7 +98,7 @@ class LibMPVOptionsTest : StringSpec({
 			"replaygain" to "no",
 			"vd-lavc-threads" to "0",
 			"vd-lavc-skiploopfilter" to "default",
-			"sub-ass-override" to "force",
+			"sub-ass-override" to "no",
 			"sub-use-margins" to "yes",
 		)
 	}
@@ -176,6 +226,7 @@ class LibMPVOptionsTest : StringSpec({
 	"typed profile and universal controls cannot be replaced by expert overrides" {
 		isLibMPVOptionManagedByJellyfin("speed") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-color") shouldBe true
+		isLibMPVOptionManagedByJellyfin("sub-margin-y") shouldBe true
 		isLibMPVOptionManagedByJellyfin("cache-pause-wait") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-readahead-secs") shouldBe true
 		isLibMPVOptionManagedByJellyfin("vo") shouldBe true

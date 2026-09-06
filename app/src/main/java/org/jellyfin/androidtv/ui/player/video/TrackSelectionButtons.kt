@@ -89,9 +89,9 @@ fun AudioTrackButton(
 	val coroutineScope = rememberCoroutineScope()
 
 	var expanded by remember { mutableStateOf(false) }
-	var refreshTick by remember { mutableStateOf(0) }
+	val trackRevision by playbackManager.state.trackRevision.collectAsState()
 
-	val availableTracks = remember(currentStream, refreshTick) {
+	val availableTracks = remember(currentStream, trackRevision) {
 		trackBackend.getAvailableTracks(TrackType.AUDIO)
 	}
 
@@ -102,7 +102,6 @@ fun AudioTrackButton(
 		val icon = ImageVector.vectorResource(R.drawable.ic_select_audio)
 		IconButton(
 			onClick = {
-				refreshTick++
 				expanded = true
 			},
 			tooltip = tooltip,
@@ -126,12 +125,8 @@ fun AudioTrackButton(
 					playbackManager.getService<PlaySessionService>()
 						?.setSelectedStreamIndexes(audioStreamIndex = streamIndex)
 
-					if (trackBackend.selectTrack(TrackType.AUDIO, it.index)) {
-						refreshTick++
-					} else {
-						reloadCurrentMediaStreamAfterTrackSelection(playbackManager, coroutineScope) {
-							refreshTick++
-						}
+					if (!trackBackend.selectTrack(TrackType.AUDIO, it.index)) {
+						reloadCurrentMediaStreamAfterTrackSelection(playbackManager, coroutineScope)
 					}
 				}
 				expanded = false
@@ -151,9 +146,9 @@ fun SubtitleTrackButton(
 
 	var expanded by remember { mutableStateOf(false) }
 	var offsetControlsExpanded by remember { mutableStateOf(false) }
-	var refreshTick by remember { mutableStateOf(0) }
+	val trackRevision by playbackManager.state.trackRevision.collectAsState()
 
-	val availableTracks = remember(currentStream, refreshTick) {
+	val availableTracks = remember(currentStream, trackRevision) {
 		trackBackend.getAvailableTracks(TrackType.SUBTITLE)
 	}
 	val hasOffsetCapableSubtitle = remember(availableTracks) {
@@ -172,7 +167,6 @@ fun SubtitleTrackButton(
 		val icon = ImageVector.vectorResource(R.drawable.ic_select_subtitle)
 		IconButton(
 			onClick = {
-				refreshTick++
 				offsetControlsExpanded = false
 				expanded = true
 			},
@@ -213,12 +207,8 @@ fun SubtitleTrackButton(
 				playbackManager.getService<PlaySessionService>()
 					?.setSelectedStreamIndexes(subtitleStreamIndex = streamIndex)
 
-				if (trackBackend.selectTrack(TrackType.SUBTITLE, trackIndex)) {
-					refreshTick++
-				} else {
-					reloadCurrentMediaStreamAfterTrackSelection(playbackManager, coroutineScope) {
-						refreshTick++
-					}
+				if (!trackBackend.selectTrack(TrackType.SUBTITLE, trackIndex)) {
+					reloadCurrentMediaStreamAfterTrackSelection(playbackManager, coroutineScope)
 				}
 				offsetControlsExpanded = false
 				expanded = false
@@ -265,7 +255,6 @@ private fun BaseItemDto.findMediaSource(mediaSourceId: String?) = mediaSources
 private fun reloadCurrentMediaStreamAfterTrackSelection(
 	playbackManager: PlaybackManager,
 	coroutineScope: CoroutineScope,
-	onFinished: () -> Unit,
 ) {
 	val isLiveTv = playbackManager.queue.entry.value?.baseItem?.isLiveTv() == true
 	val position = playbackManager.state.positionInfo.active.takeUnless { isLiveTv }
@@ -282,8 +271,6 @@ private fun reloadCurrentMediaStreamAfterTrackSelection(
 			throw error
 		} catch (error: Exception) {
 			Timber.e(error, "Failed to reload stream after track selection")
-		} finally {
-			onFinished()
 		}
 	}
 }
