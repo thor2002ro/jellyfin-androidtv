@@ -10,7 +10,7 @@ private val playbackBackendPreference = enumPreference("playback_backend", Playb
 private val hdrUseExternalPlayerPreference = booleanPreference("hdr_external_player", false)
 private val hdrExternalPlayerComponentNamePreference = stringPreference("hdr_external_player_component", "")
 private val hdrPlaybackRewriteVideoEnabledPreference = booleanPreference("hdr_playback_new", true)
-private val hdrPlaybackBackendPreference = enumPreference("hdr_playback_backend", PlaybackBackend.EXOPLAYER)
+private val hdrPlaybackBackendPreference = enumPreference("hdr_playback_backend", PlaybackBackend.SAME_VIDEO_PLAYER)
 
 /** Playback engine used by the new player. */
 val UserPreferences.Companion.playbackBackend get() = playbackBackendPreference
