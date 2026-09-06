@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <string name="app_name_release" translatable="false" tools:ignore="UnusedResources">Jellyfin</string>
-    <string name="app_name_debug" translatable="false" tools:ignore="UnusedResources">Jellyfin Debug</string>
+    <string name="app_name_release" translatable="false" tools:ignore="UnusedResources">Jellyfin Thor</string>
+    <string name="app_name_debug" translatable="false" tools:ignore="UnusedResources">Jellyfin Thor Debug</string>
     <string name="video_error_unknown_error">Failed to load video</string>
     <string name="loading">Loading…</string>
     <string name="btn_cancel">Cancel</string>
     <string name="byletter_letters">ABCDEFGHIJKLMNOPQRSTUVWXYZ</string>
     <string name="pref_playback">Playback</string>
     <string name="pref_max_bitrate_title">Max streaming bitrate</string>
+    <string name="lbl_chapter_number">Chapter %1$d</string>
     <string name="settings_title">Preferences</string>
     <string name="pref_authentication_cat">Authentication</string>
     <string name="chapters">Chapters</string>
@@ -32,6 +33,7 @@
     <string name="lbl_coming_up">Coming up</string>
     <string name="lbl_favorite_channels">Favorite channels</string>
     <string name="lbl_other_channels">Other channels</string>
+    <string name="lbl_recently_played_channels">Recently played channels</string>
     <string name="lbl_collections">Collections</string>
     <string name="lbl_movies">Movies</string>
     <string name="lbl_tv_series">TV series</string>
@@ -41,6 +43,9 @@
     <string name="lbl_shuffle_all">Shuffle all</string>
     <string name="lbl_play">Play</string>
     <string name="lbl_pause">Pause</string>
+    <string name="lbl_stop">Stop</string>
+    <string name="player_back_to_stop">Press Back again to stop playback</string>
+    <string name="app_back_to_exit">Press Back again to exit</string>
     <string name="lbl_exit">Exit</string>
     <string name="lbl_cancel">Cancel</string>
     <string name="lbl_cancel_recording">Cancel recording</string>
@@ -128,6 +133,8 @@
     <string name="lbl_audio_output">Audio output</string>
     <string name="lbl_goto_series">Go to series</string>
     <string name="lbl_enable_debug">Debug options</string>
+    <string name="lbl_verbose_logging">Verbose debug logging</string>
+    <string name="desc_verbose_logging">Include very detailed debug messages in logcat. Normal app logs stay enabled.</string>
     <string name="desc_debug">Provide extra information for debugging</string>
     <string name="lbl_showing">Showing</string>
     <string name="lbl_all_items">All items</string>
@@ -199,7 +206,7 @@
     <string name="dovi_profile_8_description">Single-layer with HDR10 fallback</string>
     <string name="desc_audio_night_mode">Levels out audio volume automatically</string>
     <string name="lbl_zoom">Zoom</string>
-    <string name="playback_info">Playback info</string>
+    <string name="playback_info">Stats for nerds</string>
     <string name="lbl_auto_crop">Auto crop</string>
     <string name="lbl_stretch">Stretch</string>
     <string name="lbl_fit">Normal</string>
@@ -207,6 +214,11 @@
     <string name="lbl_playback_speed">Playback speed</string>
     <string name="lbl_quality_profile">Quality profile</string>
     <string name="lbl_subtitle_track">Select subtitle track</string>
+    <string name="lbl_audio">Audio</string>
+    <string name="lbl_subtitles">Subtitles</string>
+    <string name="lbl_audio_track_off">Off</string>
+    <string name="lbl_seek_confirmation">Require confirmation before skipping</string>
+    <string name="sum_seek_confirmation">Pauses playback and shows where you\'ll skip to. Confirm to skip or cancel to stay</string>
     <string name="btn_got_it">Got it</string>
     <string name="lbl_clear_queue">Clear queue</string>
     <string name="lbl_play_next_up">Play next up</string>
@@ -314,6 +326,7 @@
     <string name="pref_clock_display_playback">During playback</string>
     <string name="server_connecting">Connecting to %1$s</string>
     <string name="server_connection_failed">Unable to connect to server</string>
+    <string name="server_connection_failed_with_reason">Unable to connect to server: %1$s</string>
     <string name="server_connection_failed_candidates">Unable to connect to server, tried the following addresses: %1$s</string>
     <string name="server_field_empty">The address cannot be empty</string>
     <string name="login_authenticating">Authenticating…</string>
@@ -342,6 +355,25 @@
     <string name="image_size_xlarge">Extra-Large</string>
     <string name="pref_developer_link">Developer options</string>
     <string name="pref_developer_link_description">Advanced and experimental features</string>
+    <string name="pref_debug_capabilities_title">Debug capabilities</string>
+    <string name="pref_debug_capabilities_summary">Supported HDR formats and media codecs</string>
+    <string name="pref_debug_capabilities_codec_scope">Codec query scope</string>
+    <string name="pref_debug_capabilities_codec_scope_software">Hardware and software decoders are included</string>
+    <string name="pref_debug_capabilities_codec_scope_hardware">Only hardware decoders are included</string>
+    <string name="pref_debug_capabilities_hdr_section">HDR</string>
+    <string name="pref_debug_capabilities_hdr_section_summary">Display modes and codec profile support</string>
+    <string name="pref_debug_capabilities_video_section">Video codecs</string>
+    <string name="pref_debug_capabilities_video_section_summary">Decoder availability and reported maximum resolution</string>
+    <string name="pref_debug_capabilities_audio_section">Audio codecs</string>
+    <string name="pref_debug_capabilities_audio_section_summary">Decoder availability reported by Android MediaCodec</string>
+    <string name="pref_debug_capabilities_ffmpeg_section">FFmpeg codecs</string>
+    <string name="pref_debug_capabilities_ffmpeg_section_summary_version">Bundled FFmpeg extension version: %1$s</string>
+    <string name="pref_debug_capabilities_ffmpeg_section_summary_available">Bundled FFmpeg extension is available</string>
+    <string name="pref_debug_capabilities_ffmpeg_section_summary_unavailable">Bundled FFmpeg extension is unavailable</string>
+    <string name="pref_debug_capabilities_max_resolution">Maximum resolution: %1$dx%2$d</string>
+    <string name="pref_debug_capabilities_codec_level">Reported level: %1$d</string>
+    <string name="pref_debug_capabilities_status_yes">YES</string>
+    <string name="pref_debug_capabilities_status_no">NO</string>
     <string name="lbl_hidden">Hidden</string>
     <string name="discovered_servers_title">Discovered servers</string>
     <string name="discovered_servers_empty">No servers found on local network.</string>
@@ -439,6 +471,15 @@
     <string name="server_issue_unsupported_version">Server uses version %1$s which is not supported</string>
     <string name="server_issue_outdated_version">Server uses unsupported version %1$s. Please update to %2$s or newer</string>
     <string name="server_issue_timeout">Connection timed out</string>
+    <string name="server_issue_tls_certificate_untrusted">Server certificate is not trusted by this device. Check the certificate chain or root CA.</string>
+    <string name="server_issue_tls_certificate_date_invalid">Server certificate is expired or not valid yet. Check the certificate dates and device clock.</string>
+    <string name="server_issue_tls_hostname_mismatch">Server certificate does not match this address. Check the hostname and certificate SAN.</string>
+    <string name="server_issue_tls_connection_failed">Secure connection failed. Check the server TLS certificate.</string>
+    <string name="server_issue_dns_failed">Could not find this server address. Check DNS or the hostname.</string>
+    <string name="server_issue_connection_refused">Connection refused. Check that Jellyfin is running and the port is open.</string>
+    <string name="server_issue_network_unreachable">Network is unreachable. Check the device network connection.</string>
+    <string name="server_issue_http_status">Server returned HTTP %1$d</string>
+    <string name="server_issue_invalid_response">Invalid server response</string>
     <string name="pref_customization">Customization</string>
     <string name="sort_accounts_by">Sort accounts by</string>
     <string name="pref_accounts">Accounts</string>
@@ -551,6 +592,7 @@
     <string name="segment_type_recap">Recaps</string>
     <string name="segment_type_unknown">Unknown segments</string>
     <string name="skip_forward_length">Skip forward length</string>
+    <string name="skip_back_length">Skip back length</string>
     <string name="preference_enable_trickplay">Enable trickplay in video player</string>
     <string name="pref_subtitles_background_opacity">Subtitle background opacity</string>
     <string name="pref_troubleshooting">Troubleshooting</string>
@@ -617,6 +659,51 @@
     <string name="codec_level_4_0">Level 4.0</string>
     <string name="preference_enable_ass">Direct play ASS subtitles</string>
     <string name="preference_enable_pgs_description">Requires transcoding when disabled</string>
+    <string name="preference_libass_options">LibASS options</string>
+    <string name="preference_libass_options_description">Renderer and cache switches for ASS/SSA direct play. Changes apply to newly started playback.</string>
+    <string name="preference_libass_enable_description">Advertise embedded and external ASS/SSA subtitle support for direct play. When disabled, the server may transcode or burn these subtitles.</string>
+    <string name="preference_libass_render_type">Renderer</string>
+    <string name="preference_libass_render_type_description">Choose how LibASS output is sent to Media3.</string>
+    <string name="preference_libass_render_type_opengl">OpenGL overlay</string>
+    <string name="preference_libass_render_type_opengl_description">Fast overlay renderer and the default choice. Use a fallback if subtitles disappear or the device GPU has issues.</string>
+    <string name="preference_libass_render_type_canvas">Canvas overlay</string>
+    <string name="preference_libass_render_type_canvas_description">CPU-backed overlay renderer. It can help devices where OpenGL subtitles fail, but may cost more CPU.</string>
+    <string name="preference_libass_render_type_cues">Media3 cues</string>
+    <string name="preference_libass_render_type_cues_description">Feeds rendered subtitle cues through Media3. Use as a compatibility fallback; advanced ASS styling may be less accurate.</string>
+    <string name="preference_libass_max_render_pixels">Maximum render pixels</string>
+    <string name="preference_libass_max_render_pixels_description">Limit the subtitle render surface to reduce memory and CPU cost on heavy ASS tracks.</string>
+    <string name="preference_libass_max_render_pixels_off">Full surface</string>
+    <string name="preference_libass_max_render_pixels_off_description">No render limit. Best quality, highest memory use on 4K screens.</string>
+    <string name="preference_libass_max_render_pixels_720">720p cap</string>
+    <string name="preference_libass_max_render_pixels_720_description">Cap rendering around 1280 x 720. Fastest fallback, but subtitles can look softer.</string>
+    <string name="preference_libass_max_render_pixels_1080">1080p cap</string>
+    <string name="preference_libass_max_render_pixels_1080_description">Cap rendering around 1920 x 1080. Good fallback for 4K TVs that struggle with complex ASS effects.</string>
+    <string name="preference_libass_max_render_pixels_1440">1440p cap</string>
+    <string name="preference_libass_max_render_pixels_1440_description">Cap rendering around 2560 x 1440. Balances sharpness and memory use on high-resolution screens.</string>
+    <string name="preference_libass_max_render_pixels_4k">4K cap</string>
+    <string name="preference_libass_max_render_pixels_4k_description">Cap rendering around 3840 x 2160. Keeps full 4K quality with a hard ceiling.</string>
+    <string name="preference_libass_cache_size">Bitmap cache</string>
+    <string name="preference_libass_cache_size_description">Controls LibASS bitmap cache memory. Larger values can reduce rerendering on complex signs and karaoke.</string>
+    <string name="preference_libass_cache_size_32">32 MB</string>
+    <string name="preference_libass_cache_size_32_description">Lowest memory use. Try this if playback is memory constrained.</string>
+    <string name="preference_libass_cache_size_64">64 MB</string>
+    <string name="preference_libass_cache_size_64_description">Moderate memory use for simpler ASS tracks.</string>
+    <string name="preference_libass_cache_size_128">128 MB</string>
+    <string name="preference_libass_cache_size_128_description">Balanced cache size for most ASS/SSA subtitles.</string>
+    <string name="preference_libass_cache_size_256">256 MB</string>
+    <string name="preference_libass_cache_size_256_description">Default cache size for heavy ASS tracks. Can smooth complex effects but uses more memory.</string>
+    <string name="preference_libass_glyph_cache_size">Glyph cache</string>
+    <string name="preference_libass_glyph_cache_size_description">Controls how many shaped glyphs LibASS keeps cached. Larger values help subtitle-heavy anime and styled signs.</string>
+    <string name="preference_libass_glyph_cache_2500">2,500 glyphs</string>
+    <string name="preference_libass_glyph_cache_2500_description">Lowest glyph cache. Use when memory is tight.</string>
+    <string name="preference_libass_glyph_cache_5000">5,000 glyphs</string>
+    <string name="preference_libass_glyph_cache_5000_description">Moderate glyph cache for lighter ASS/SSA subtitle tracks.</string>
+    <string name="preference_libass_glyph_cache_10000">10,000 glyphs</string>
+    <string name="preference_libass_glyph_cache_10000_description">Balanced glyph cache for most styled subtitles.</string>
+    <string name="preference_libass_glyph_cache_20000">20,000 glyphs</string>
+    <string name="preference_libass_glyph_cache_20000_description">Default glyph cache for heavy ASS tracks. Helps very complex subtitle tracks but uses more memory.</string>
+    <string name="preference_libass_parse_subtitles_during_extraction">Experimental subtitle extraction</string>
+    <string name="preference_libass_parse_subtitles_during_extraction_description">Keep Media3 parsing subtitles in the extractor path. Leave enabled for embedded ASS/MKV support; disable only when testing parser fallbacks.</string>
     <string name="auto">Auto</string>
     <plurals name="seconds">
         <item quantity="one">%1$s second</item>
@@ -671,6 +758,10 @@
     <string name="truehd">TrueHD</string>
     <string name="eac3_atmos">DD+ Atmos</string>
     <string name="truehd_atmos">TrueHD Atmos</string>
+    <string name="lbl_subtitle_offset">Subtitle offset</string>
+    <string name="lbl_subtitle_offset_current">Subtitle offset %1$s</string>
+    <string name="lbl_reset">Reset</string>
+    <string name="lbl_subtitle_offset_seconds">%1$s s</string>
     <string name="lbl_bitstream_eac3">Bitstream Dolby Digital Plus</string>
     <string name="lbl_bitstream_dts">Bitstream Digital Theater System</string>
     <string name="lbl_bitstream_truehd">Bitstream Dolby TrueHD</string>
