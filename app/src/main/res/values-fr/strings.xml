@@ -120,7 +120,6 @@
     <string name="lbl_display_preferences">Préférences d\'affichage</string>
     <string name="lbl__continuing">EN PRODUCTION</string>
     <string name="lbl_ended">TERMINÉ</string>
-    <string name="lbl_filters">Filtres TV Live</string>
     <string name="msg_subtitles_loading">Chargement des sous-titres…</string>
     <string name="msg_unable_load_subs">Impossible de charger les sous-titres</string>
     <string name="msg_burn_sub_warning">L\'incrustation des sous-titres peut prendre quelques minutes. Merci de patienter…</string>
@@ -182,7 +181,6 @@
     <string name="lbl_repeat">Répéter</string>
     <string name="lbl_resume_from">Reprendre à partir de %1$s</string>
     <string name="lbl_save">Sauvegarder</string>
-    <string name="lbl_select_date">Choisir la date</string>
     <string name="lbl_series_settings">Préférences des séries</string>
     <string name="lbl_show_indicators">Afficher les indicateurs pour</string>
     <string name="lbl_sort_by">Trié par</string>
@@ -245,14 +243,9 @@
     <string name="audio_error">Incapable de jouer l\'audio %1$s</string>
     <string name="player_error">Une erreur de lecture est survenue. Nous allons réessayer…</string>
     <string name="seek_error">Impossible de chercher</string>
-    <string name="msg_live_tv_prev">Charger les %1$d précédentes heures ?</string>
-    <string name="msg_live_tv_next">Charger les %1$d prochaines heures ?</string>
-    <string name="lbl_load_guide_data">Charger données du guide</string>
     <string name="mark_watched">Marquer comme lu</string>
     <string name="turn_off">Désactiver cette option</string>
     <string name="just_one">Celui-ci uniquement</string>
-    <string name="lbl_tv_filter_status">pour les %1$d prochaines heures</string>
-    <string name="lbl_tv_channel_status">%1$d sur %2$d canaux</string>
     <string name="lbl_subtitle_track">Choisir la piste de sous-titres</string>
     <string name="lbl_audio_track">Choisir la piste audio</string>
     <string name="lbl_pause">Pause</string>

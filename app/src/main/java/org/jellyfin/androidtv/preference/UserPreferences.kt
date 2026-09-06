@@ -305,7 +305,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Preferred behavior for player aspect ratio (zoom mode).
 		 */
-		var playerZoomMode = enumPreference("player_zoom_mode", ZoomMode.FIT)
+		var playerZoomMode = enumPreference("player_zoom_mode", ZoomMode.AUTO)
 
 		/**
 		 * Enable libass.
@@ -351,6 +351,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Enable PGS subtitle direct-play.
 		 */
 		var pgsDirectPlay = booleanPreference("pgs_enabled", true)
+
+		/**
+		 * Require confirmation before seeking. When disabled, D-pad left/right seeks immediately.
+		 */
+		var seekConfirmationRequired = booleanPreference("seek_confirmation", true)
 
 		/**
 		 * Enable the use of software-based codecs.

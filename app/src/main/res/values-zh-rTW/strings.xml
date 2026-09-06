@@ -93,7 +93,6 @@
     <string name="msg_playback_not_allowed">前無法播放</string>
     <string name="lbl_born">"生日 "</string>
     <string name="lbl_sports">體育</string>
-    <string name="lbl_select_date">選擇日期</string>
     <string name="lbl_open">打開</string>
     <string name="lbl_clear_queue">清除佇列</string>
     <string name="btn_got_it">得到</string>
@@ -124,7 +123,6 @@
     <string name="msg_burn_sub_warning">燒錄字幕中。這可能需要花幾秒鐘…</string>
     <string name="msg_unable_load_subs">無法讀取字幕</string>
     <string name="msg_subtitles_loading">載入字幕中……</string>
-    <string name="lbl_filters">直播電視過濾器</string>
     <string name="desc_debug">為除錯提供額外的訊息</string>
     <string name="lbl_enable_debug">除錯選項</string>
     <string name="lbl_goto_series">轉到系列</string>
@@ -285,9 +283,6 @@
     <string name="too_many_errors">出現過多錯誤，放棄重試</string>
     <string name="player_error">播放器發生錯誤。即將重試…</string>
     <string name="seek_error">無法預覽</string>
-    <string name="msg_live_tv_prev">要載入前 %1$d 小時的內容嗎？</string>
-    <string name="msg_live_tv_next">要載入下 %1$d 小時的內容嗎？</string>
-    <string name="lbl_load_guide_data">載入指南資料</string>
     <string name="episode_missing_message_2">您的媒體庫中沒有這一集。即將停止播放。</string>
     <string name="episode_missing_message">您的收藏庫中沒有這一集。您要跳過並繼續觀看下一集嗎？</string>
     <string name="episode_missing">缺少集數</string>
@@ -295,8 +290,6 @@
     <string name="no_player">無播放器</string>
     <string name="mark_watched_message">您似乎還沒看完這個項目。確定要標記為已觀看嗎？</string>
     <string name="mark_watched">標記為已觀看</string>
-    <string name="lbl_tv_filter_status">接下來的 %1$d 小時</string>
-    <string name="lbl_tv_channel_status">%2$d 個頻道中的第 %1$d 個</string>
     <string name="lbl_subtitle_track">選擇字幕軌</string>
     <string name="lbl_audio_track">選擇音軌</string>
     <string name="home_section_resume_book">繼續閱讀</string>

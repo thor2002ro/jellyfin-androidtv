@@ -120,7 +120,6 @@
     <string name="lbl_display_preferences">Beineleu teñşelımderı</string>
     <string name="lbl__continuing">JALĞASUDA</string>
     <string name="lbl_ended">AİAQTALĞAN</string>
-    <string name="lbl_filters">Efirlık TD süzgılerı</string>
     <string name="msg_subtitles_loading">Subtitrler jüktelude…</string>
     <string name="msg_unable_load_subs">Subtitrlerdı jükteu mümkın emes</string>
     <string name="msg_burn_sub_warning">Subtitrler oiyp berılude. Būl bırneşe sekunt aluy mümkın…</string>
@@ -212,7 +211,6 @@
     <string name="no_program_data">Berılım turaly aqparat joq</string>
     <string name="msg_record_entire_series">Bükıl telehikaiany jazamyz ba\?</string>
     <string name="lbl_just_this_once">Tek osy ret</string>
-    <string name="lbl_select_date">Kün tañdau</string>
     <string name="pref_authentication_cat">Tüpnūsqalyq rastama</string>
     <string name="watch_now">Qazır köru</string>
     <string name="pref_next_up_timeout_title">Kezektı taimerınıñ ūzaqtyğy</string>
@@ -222,12 +220,7 @@
     <string name="pref_theme_emerald">Klasikalyq kök-jasyl</string>
     <string name="pref_theme_dark">Küngırt (ädepkı)</string>
     <string name="lbl_pause">Üzu</string>
-    <string name="lbl_tv_filter_status">kelesı %1$d sağat üşın</string>
-    <string name="lbl_tv_channel_status">%1$d %2$d arnadan</string>
     <string name="seek_error">Izdeu mümkın emes</string>
-    <string name="msg_live_tv_prev">Aldyñğy %1$d sağat jüktelsın be?</string>
-    <string name="msg_live_tv_next">Kelesı %1$d sağat jüktelsın be?</string>
-    <string name="lbl_load_guide_data">Telegid derekterın jükteu</string>
     <string name="episode_missing">Telebölım joq</string>
     <string name="no_player">Oinatqyş joq</string>
     <string name="mark_watched">Qaralğan</string>

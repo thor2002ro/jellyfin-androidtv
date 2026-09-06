@@ -79,7 +79,6 @@
     <string name="chapters">Части</string>
     <string name="msg_unable_load_subs">Субтитрите не могат да се заредят</string>
     <string name="msg_subtitles_loading">Субтитрите се зареждат…</string>
-    <string name="lbl_filters">ТВ Филтри</string>
     <string name="lbl_ended">ПРИКЛЮЧИЛ</string>
     <string name="lbl__continuing">ПРОДЪЛЖАВА</string>
     <string name="lbl_display_preferences">Настройки на дисплея</string>
@@ -199,7 +198,6 @@
     <string name="lbl_on_schedule">По график</string>
     <string name="lbl_open">Отвори</string>
     <string name="lbl_show_premieres">Премиери на сезона на сериала</string>
-    <string name="lbl_select_date">Изберете дата</string>
     <string name="lbl_at_any_time">По всяко време</string>
     <string name="lbl_subtitle_text_color">Цвят на текста</string>
     <string name="lbl_subtitle_background_color">Цвят на фона</string>
@@ -227,7 +225,6 @@
     <string name="btn_got_it">Разбрах</string>
     <string name="lbl_from_beginning">Пусни от началото</string>
     <string name="lbl_premieres">Премиери</string>
-    <string name="lbl_tv_filter_status">за следващите %1$d часа</string>
     <string name="lbl_start_favorites">Постави любимите в началото</string>
     <string name="lbl_sign_in">Моля, влезте</string>
     <string name="server_connection_failed_candidates">Неуспешно свързване със сървъра, изпробвани са следните адреси: %1$s</string>
@@ -238,7 +235,6 @@
     <string name="login_help_description">Jellyfin се нуждае от сървър със който да се свърже.Посетете нашата документация на docs.jellyfin.org или сканирайте QR кода за да започнете със Jellyfin.</string>
     <string name="lbl_hide_watched_checkmark">Когато има оставащи епизоди</string>
     <string name="user_picker_disable_summary">Винаги показвай екрана за вписване</string>
-    <string name="msg_live_tv_prev">Зареждане на предишните %1$d часа?</string>
     <string name="pref_device_model">Модел на устройството</string>
     <string name="lbl_hd_programs">HD Програми</string>
     <string name="lbl_playback_control_ends">Приключва в %1$s</string>
@@ -284,7 +280,6 @@
     <string name="pref_button_remapping_description">Натисните бутон на дистанционното за да го назначите</string>
     <string name="mark_watched">Маркирай гледаните</string>
     <string name="episode_missing_message">Този епизод липсва от вашата библеотека.Искате ли да го пропуснете, и да продължите със следващия?</string>
-    <string name="msg_live_tv_next">Зареждане на следващите %1$d часа?</string>
     <string name="seek_error">Грешка при превъртане</string>
     <string name="too_many_errors">Твърде много грешки. Прекратяване</string>
     <string name="lbl_always">Винаги</string>
@@ -309,7 +304,6 @@
     <string name="lbl_Reset">Нулиране</string>
     <string name="mark_watched_message">Елементът изглежда не е изгледан докрай. Маркирайте като гледан?</string>
     <string name="audio_error">Неуспешно възпроизвеждане на аудио %1$s</string>
-    <string name="lbl_tv_channel_status">%1$d от %2$d канала</string>
     <string name="login_authenticating">Удостоверяване…</string>
     <string name="lbl_remove_users">Това ще премахне и всички свързани акаунти</string>
     <string name="image_type_thumbnail">Корица</string>
@@ -444,7 +438,6 @@
     <string name="video_player_external">Външно приложение</string>
     <string name="pref_audio_track_button">Бутон за избор на аудио</string>
     <string name="pref_subtitle_track_button">Бутон за избор на субтитри</string>
-    <string name="lbl_load_guide_data">Зареди данни за програмата</string>
     <string name="pref_watched_indicator">Покажи индикатори за изгледано съдържание</string>
     <string name="press_to_close">Натисни за затваряне</string>
     <string name="lbl_on_any_channel">На всеки канал</string>

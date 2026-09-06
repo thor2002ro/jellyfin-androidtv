@@ -43,7 +43,6 @@
     <string name="pref_max_bitrate_title">Maksimalus srautinės transliacijos bitų srautas</string>
     <string name="pref_playback">Atkūrimas</string>
     <string name="msg_subtitles_loading">Subtitrai įkeliami…</string>
-    <string name="lbl_filters">Tiesioginės TV filtrai</string>
     <string name="lbl_ended">PASIBAIGĖ</string>
     <string name="lbl_display_preferences">Ekrano nustatymai</string>
     <string name="lbl_rating">Įvertinimas</string>
@@ -182,8 +181,6 @@
     <string name="lbl_at_any_time">Bet kuriuo metu</string>
     <string name="lbl_show_indicators">Rodyti indikatorius</string>
     <string name="lbl_open_album">Atidaryti albumą</string>
-    <string name="lbl_tv_channel_status">%1$d iš %2$d kanalų</string>
-    <string name="lbl_tv_filter_status">kitom %1$d valandom</string>
     <string name="lbl_subtitle_delay">Subtitrų vėlinimas</string>
     <string name="lbl_hd_programs">HD programos</string>
     <string name="watch_now">Žiūrėti dabar</string>
@@ -199,7 +196,6 @@
     <string name="desc_audio_night_mode">Sulygina garso takelius automatiškai</string>
     <string name="lbl_show_premieres">Rodyti sezonų premjeras</string>
     <string name="lbl_in_x_days">Po %d dienų</string>
-    <string name="lbl_select_date">Pasirinkite datą</string>
     <string name="lbl_recent_recordings">Naujausi įrašai</string>
     <string name="lbl_series_settings">Serialų nustatymai</string>
     <string name="msg_settings_updated">Nustatymai atnaujinti</string>
@@ -264,7 +260,6 @@
     <string name="home_section_livetv">Tiesioginė TV</string>
     <string name="home_section_latest_media">Neseniai pridėta medija</string>
     <string name="episode_missing">Epizodas nerastas</string>
-    <string name="lbl_load_guide_data">Įkelti gido duomenis</string>
     <string name="pref_clock_display_playback">Atkūrimo metu</string>
     <string name="lbl_always">Visada</string>
     <string name="server_connection_failed">Nepavyko prisijungti prie serverio</string>
@@ -344,7 +339,6 @@
     <string name="no_player">Nėra grotuvo</string>
     <string name="episode_missing_message_2">Šio epizodo nėra jūsų bibliotekoje. Atkūrimas bus sustabdytas.</string>
     <string name="no_player_message">Atrodo, kad neįdiegėte vaizdo įrašų palaikančios programos. Šiai parinkčiai reikia įdiegti trečiosios šalies programą, skirtą vaizdo turiniui atkurti.</string>
-    <string name="msg_live_tv_next">Krauti kitas %1$d valandas?</string>
     <string name="too_many_errors">Per daug klaidų. Pasiduodu</string>
     <string name="just_one">Tik vieną</string>
     <string name="watch_count_overflow">99+</string>
@@ -424,7 +418,6 @@
     <string name="alphabetical">Abėcėlę</string>
     <string name="searchable_hint">Ieškoti Jellyfin</string>
     <string name="searchable_settings_description">Medija</string>
-    <string name="msg_live_tv_prev">Krauti buvusias %1$d valandas?</string>
     <string name="server_field_empty">Adresas negali būti tuščias</string>
     <string name="login_server_unavailable">Nepavyko priisjungti prie serverio</string>
     <string name="login_username_field_empty">Vartotojo vardas negali būti tuščias</string>

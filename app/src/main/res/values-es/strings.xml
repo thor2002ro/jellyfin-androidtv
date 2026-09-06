@@ -159,7 +159,6 @@
     <string name="no_program_data">No hay datos del programa disponibles</string>
     <string name="msg_record_entire_series">¿Grabar series completas\?</string>
     <string name="lbl_just_this_once">Solo esta vez</string>
-    <string name="lbl_select_date">Seleccionar fecha</string>
     <string name="lbl_in_x_days">En %d días</string>
     <string name="desc_premieres">Muestre una fila de nuevos episodios piloto para cualquier serie que vea</string>
     <string name="lbl_show_premieres">Mostrar estrenos de temporada</string>
@@ -190,7 +189,6 @@
     <string name="msg_burn_sub_warning">Grabando en subtítulos. Esto puede tardar unos pocos segundos…</string>
     <string name="msg_unable_load_subs">No se puede cargar el subtítulo</string>
     <string name="msg_subtitles_loading">Cargando subtítulos…</string>
-    <string name="lbl_filters">Filtros de TV en directo</string>
     <string name="lbl_display_preferences">Mostrar preferencias</string>
     <string name="lbl_starting_with">comenzando con aquellos cuyo nombre comienza con</string>
     <string name="lbl_rating">Calificación parental</string>
@@ -236,12 +234,9 @@
     <string name="just_one">Únicamente esto</string>
     <string name="turn_off">Desactivar esta opción</string>
     <string name="audio_error">No se puede reproducir audio %1$s</string>
-    <string name="lbl_tv_channel_status">%1$d de %2$d canales</string>
     <string name="msg_no_items">No hay elementos para reproducir</string>
     <string name="too_many_errors">Demasiados errores. Deteniendo la reproducción</string>
     <string name="player_error">Se ha encontrado un error en el reproductor. Re-intentando…</string>
-    <string name="msg_live_tv_prev">¿Desea cargar las %1$d horas anteriores?</string>
-    <string name="msg_live_tv_next">¿Cargar las próximas %1$d horas?</string>
     <string name="episode_missing_message_2">Este episodio no está presente en la biblioteca. La reproducción se detendrá.</string>
     <string name="episode_missing_message">Este episodio no está presente en la biblioteca. ¿Desea omitirlo\?</string>
     <string name="episode_missing">Episodio faltante</string>
@@ -249,10 +244,8 @@
     <string name="no_player">No hay reproductor de vídeo</string>
     <string name="mark_watched_message">Este elemento no parece haberse reproducido completo. ¿Desea marcarlo como visto de todas formas\?</string>
     <string name="mark_watched">Marcar como visto</string>
-    <string name="lbl_tv_filter_status">Las siguientes %1$d horas</string>
     <string name="subtitle_error">Incapaz de selecionar subtítulo</string>
     <string name="seek_error">Incapaz de retroceder o avanzar</string>
-    <string name="lbl_load_guide_data">Cargar programación de canales</string>
     <string name="lbl_subtitle_track">Selecciona track de subtitulos</string>
     <string name="lbl_audio_track">Selecciona un track de audio</string>
     <string name="lbl_pause">Pausar</string>

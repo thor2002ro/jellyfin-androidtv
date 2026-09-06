@@ -21,7 +21,6 @@
     <string name="video_error_unknown_error">Načítanie videa zlyhalo</string>
     <string name="msg_unable_load_subs">Titulky sa nedajú načítať</string>
     <string name="msg_subtitles_loading">Titulky sa načítajú…</string>
-    <string name="lbl_filters">Filtre pre živú TV</string>
     <string name="lbl_ended">UKONČENÝ</string>
     <string name="lbl__continuing">POKRAČUJÚCI</string>
     <string name="lbl_display_preferences">Predvoľby zobrazenia</string>
@@ -156,7 +155,6 @@
     <string name="no_program_data">Žiadne dostupné programové dáta</string>
     <string name="msg_record_entire_series">Nahrať celú sériu\?</string>
     <string name="lbl_just_this_once">Len tentokrát</string>
-    <string name="lbl_select_date">Vybrať dátum</string>
     <string name="lbl_in_x_days">Za %d dní</string>
     <string name="desc_premieres">Zobraziť riadok nových pilotných epizód pre každý seriál, ktorý pozeráte</string>
     <string name="lbl_show_premieres">Zobraziť premiéry sérií seriálov</string>
@@ -248,15 +246,10 @@
     <string name="too_many_errors">Príliš veľa chýb. Vzdávam sa</string>
     <string name="player_error">V prehrávači došlo k chybe. Prebehne ďalší pokus…</string>
     <string name="seek_error">Vyhľadávanie vo video nie je možné</string>
-    <string name="msg_live_tv_prev">Načítať predchádzajúcich %1$d hodín?</string>
-    <string name="msg_live_tv_next">Načítať ďalších %1$d hodín?</string>
-    <string name="lbl_load_guide_data">Načítať dáta programového sprievodcu</string>
     <string name="episode_missing_message_2">Táto epizóda chýba vo vašej knižnici. Prehrávanie bude zastavené.</string>
     <string name="episode_missing_message">Táto epizóda chýba vo vašej knižnici. Chcete ju preskočiť a pokračovať nasledujúcou epizódou\?</string>
     <string name="episode_missing">Chýbajúca epizóda</string>
     <string name="no_player_message">Zdá sa, že nemáte nainštalovaný požadovaný prehrávač videa. Táto možnosť vyžaduje inštaláciu aplikácie tretej strany pre prehrávanie video obsahu.</string>
-    <string name="lbl_tv_filter_status">ďalších %1$d hodín</string>
-    <string name="lbl_tv_channel_status">%1$d z %2$d kanálov</string>
     <string name="lbl_subtitle_track">Vybrať titulky</string>
     <string name="lbl_audio_track">Vybrať zvukovú stopu</string>
     <string name="pref_clock_display_playback">Počas prehrávania</string>
