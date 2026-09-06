@@ -9,6 +9,7 @@ import org.jellyfin.androidtv.preference.mpvAudioSpdif
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
+import org.jellyfin.androidtv.preference.mpvDeinterlace
 import org.jellyfin.androidtv.preference.mpvFrameDrop
 import org.jellyfin.androidtv.preference.mpvGpuApi
 import org.jellyfin.androidtv.preference.mpvGpuContext
@@ -78,6 +79,12 @@ enum class LibMPVFrameDrop(override val nameRes: Int, override val descriptionRe
 	DISABLED(R.string.preference_mpv_value_disabled, R.string.preference_mpv_framedrop_no_description, "no"),
 	DECODER(R.string.preference_mpv_framedrop_decoder, R.string.preference_mpv_framedrop_decoder_description, "decoder"),
 	DECODER_AND_VIDEO_OUTPUT(R.string.preference_mpv_framedrop_decoder_vo, R.string.preference_mpv_framedrop_decoder_vo_description, "decoder+vo"),
+}
+
+enum class LibMPVDeinterlace(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
+	AUTO(R.string.preference_mpv_value_auto, R.string.preference_mpv_deinterlace_auto_description, "auto"),
+	ENABLED(R.string.preference_mpv_value_enabled, R.string.preference_mpv_deinterlace_enabled_description, "yes"),
+	DISABLED(R.string.preference_mpv_value_disabled, R.string.preference_mpv_deinterlace_disabled_description, "no"),
 }
 
 enum class LibMPVScaler(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
@@ -157,6 +164,7 @@ enum class LibMPVChoiceSetting(
 	GPU_API("gpu-api", R.string.preference_mpv_gpu_api, R.string.preference_mpv_gpu_api_description, setOf("gpu-api")),
 	VIDEO_SYNC("video-sync", R.string.preference_mpv_video_sync, R.string.preference_mpv_video_sync_description, setOf("video-sync")),
 	FRAME_DROP("framedrop", R.string.preference_mpv_framedrop, R.string.preference_mpv_framedrop_description, setOf("framedrop")),
+	DEINTERLACE("deinterlace", R.string.preference_mpv_deinterlace, R.string.preference_mpv_deinterlace_description, setOf("deinterlace")),
 	SCALER("scaler", R.string.preference_mpv_scaler, R.string.preference_mpv_scaler_description, setOf("scale", "cscale", "dscale")),
 	TONE_MAPPING("tone-mapping", R.string.preference_mpv_tone_mapping, R.string.preference_mpv_tone_mapping_description, setOf("tone-mapping")),
 	AUDIO_OUTPUT("audio-output", R.string.preference_mpv_audio_output, R.string.preference_mpv_audio_output_description, setOf("ao")),
@@ -174,6 +182,7 @@ enum class LibMPVChoiceSetting(
 		GPU_API -> LibMPVGpuApi.entries
 		VIDEO_SYNC -> LibMPVVideoSync.entries
 		FRAME_DROP -> LibMPVFrameDrop.entries
+		DEINTERLACE -> LibMPVDeinterlace.entries
 		SCALER -> LibMPVScaler.entries
 		TONE_MAPPING -> LibMPVToneMapping.entries
 		AUDIO_OUTPUT -> LibMPVAudioOutput.entries
@@ -191,6 +200,7 @@ enum class LibMPVChoiceSetting(
 		GPU_API -> LibMPVGpuApi.AUTO
 		VIDEO_SYNC -> LibMPVVideoSync.AUDIO
 		FRAME_DROP -> LibMPVFrameDrop.VIDEO_OUTPUT
+		DEINTERLACE -> LibMPVDeinterlace.DISABLED
 		SCALER -> LibMPVScaler.BILINEAR
 		TONE_MAPPING -> LibMPVToneMapping.AUTO
 		AUDIO_OUTPUT -> LibMPVAudioOutput.AUTO
@@ -208,6 +218,7 @@ enum class LibMPVChoiceSetting(
 		GPU_API -> preferences[UserPreferences.mpvGpuApi]
 		VIDEO_SYNC -> preferences[UserPreferences.mpvVideoSync]
 		FRAME_DROP -> preferences[UserPreferences.mpvFrameDrop]
+		DEINTERLACE -> preferences[UserPreferences.mpvDeinterlace]
 		SCALER -> preferences[UserPreferences.mpvScaler]
 		TONE_MAPPING -> preferences[UserPreferences.mpvToneMapping]
 		AUDIO_OUTPUT -> preferences[UserPreferences.mpvAudioOutput]
@@ -226,6 +237,7 @@ enum class LibMPVChoiceSetting(
 		GPU_API -> preferences[UserPreferences.mpvGpuApi] = option as LibMPVGpuApi
 		VIDEO_SYNC -> preferences[UserPreferences.mpvVideoSync] = option as LibMPVVideoSync
 		FRAME_DROP -> preferences[UserPreferences.mpvFrameDrop] = option as LibMPVFrameDrop
+		DEINTERLACE -> preferences[UserPreferences.mpvDeinterlace] = option as LibMPVDeinterlace
 		SCALER -> preferences[UserPreferences.mpvScaler] = option as LibMPVScaler
 		TONE_MAPPING -> preferences[UserPreferences.mpvToneMapping] = option as LibMPVToneMapping
 		AUDIO_OUTPUT -> preferences[UserPreferences.mpvAudioOutput] = option as LibMPVAudioOutput
@@ -247,6 +259,7 @@ fun UserPreferences.mpvPlaybackOptions() = LibMPVPlaybackOptions(
 	gpuApi = this[UserPreferences.mpvGpuApi].mpvValue,
 	videoSync = this[UserPreferences.mpvVideoSync].mpvValue,
 	frameDrop = this[UserPreferences.mpvFrameDrop].mpvValue,
+	deinterlace = this[UserPreferences.mpvDeinterlace].mpvValue,
 	interpolation = this[UserPreferences.mpvInterpolation],
 	scaler = this[UserPreferences.mpvScaler].mpvValue,
 	deband = this[UserPreferences.mpvDeband],
@@ -272,6 +285,7 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvGpuApi] = LibMPVGpuApi.AUTO
 	this[UserPreferences.mpvVideoSync] = LibMPVVideoSync.AUDIO
 	this[UserPreferences.mpvFrameDrop] = LibMPVFrameDrop.VIDEO_OUTPUT
+	this[UserPreferences.mpvDeinterlace] = LibMPVDeinterlace.DISABLED
 	this[UserPreferences.mpvScaler] = LibMPVScaler.BILINEAR
 	this[UserPreferences.mpvToneMapping] = LibMPVToneMapping.AUTO
 	this[UserPreferences.mpvAudioOutput] = LibMPVAudioOutput.AUTO

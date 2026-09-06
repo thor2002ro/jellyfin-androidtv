@@ -4,6 +4,7 @@ import org.jellyfin.androidtv.preference.constant.LibMPVAudioChannels
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioOutput
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioSpdif
 import org.jellyfin.androidtv.preference.constant.LibMPVDecoder
+import org.jellyfin.androidtv.preference.constant.LibMPVDeinterlace
 import org.jellyfin.androidtv.preference.constant.LibMPVFrameDrop
 import org.jellyfin.androidtv.preference.constant.LibMPVGpuApi
 import org.jellyfin.androidtv.preference.constant.LibMPVGpuContext
@@ -25,6 +26,7 @@ private val mpvGpuContextPreference = enumPreference("mpv_gpu_context", LibMPVGp
 private val mpvGpuApiPreference = enumPreference("mpv_gpu_api", LibMPVGpuApi.AUTO)
 private val mpvVideoSyncPreference = enumPreference("mpv_video_sync", LibMPVVideoSync.AUDIO)
 private val mpvFrameDropPreference = enumPreference("mpv_framedrop", LibMPVFrameDrop.VIDEO_OUTPUT)
+private val mpvDeinterlacePreference = enumPreference("mpv_deinterlace", LibMPVDeinterlace.DISABLED)
 private val mpvScalerPreference = enumPreference("mpv_scaler", LibMPVScaler.BILINEAR)
 private val mpvToneMappingPreference = enumPreference("mpv_tone_mapping", LibMPVToneMapping.AUTO)
 private val mpvAudioOutputPreference = enumPreference("mpv_audio_output", LibMPVAudioOutput.AUTO)
@@ -47,6 +49,7 @@ val UserPreferences.Companion.mpvGpuContext get() = mpvGpuContextPreference
 val UserPreferences.Companion.mpvGpuApi get() = mpvGpuApiPreference
 val UserPreferences.Companion.mpvVideoSync get() = mpvVideoSyncPreference
 val UserPreferences.Companion.mpvFrameDrop get() = mpvFrameDropPreference
+val UserPreferences.Companion.mpvDeinterlace get() = mpvDeinterlacePreference
 val UserPreferences.Companion.mpvScaler get() = mpvScalerPreference
 val UserPreferences.Companion.mpvToneMapping get() = mpvToneMappingPreference
 val UserPreferences.Companion.mpvAudioOutput get() = mpvAudioOutputPreference
