@@ -53,7 +53,8 @@ class PlayerStateTests : FunSpec({
 		manager.isBackendActive(replacement) shouldBe true
 		verify { initial.setBufferOptions(bufferOptions) }
 		verify { initial.onActivated() }
-		verify { initial.stop() }
+		verify { initial.reset() }
+		verify { initial.cleanup() }
 		verify { replacement.setBufferOptions(bufferOptions) }
 		verify { replacement.onActivated() }
 		verify { replacement.setSpeed(1.5f) }
@@ -161,6 +162,18 @@ class PlayerStateTests : FunSpec({
 		backendService.BackendEventListener().onTracksChanged()
 
 		state.trackRevision.value shouldBe 1L
+	}
+
+	test("backend service ignores switching to the active backend") {
+		val backend = backend()
+		val backendService = BackendService()
+
+		backendService.switchBackend(backend)
+		backendService.switchBackend(backend)
+
+		verify(exactly = 0) { backend.reset() }
+		verify(exactly = 0) { backend.cleanup() }
+		verify(exactly = 1) { backend.onActivated() }
 	}
 })
 
