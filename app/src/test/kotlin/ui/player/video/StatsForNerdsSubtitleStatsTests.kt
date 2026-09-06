@@ -10,28 +10,71 @@ import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.core.model.VideoGeometry
 
 class StatsForNerdsSubtitleStatsTests : StringSpec({
-	"subtitle diagnostics are shown for every renderer" {
+	"Media3 non ASS diagnostics describe the cue path" {
 		subtitleDiagnosticValues(
 			PlaybackFrameStats(
 				droppedFrames = 0,
 				corruptedFrames = 0,
-				subtitleExtractor = "Media3 subtitle companion",
-				subtitleRender = "Media3 cues",
-				subtitleParser = "DefaultSubtitleParserFactory",
-				subtitlePath = "Jellyfin internal stream",
-			)
+				playerName = "ExoPlayer",
+				subtitleExtractor = "AssMatroskaExtractor (MKV)",
+				subtitleRender = "libass OpenGL overlay",
+				subtitleParser = "AssSubtitleParserFactory",
+			),
+			isAssSubtitle = false,
 		) shouldContainExactly listOf(
-			"Provider" to "Media3 subtitle companion",
+			"Provider" to "Media3 default",
 			"Renderer" to "Media3 cues",
 			"Parser" to "DefaultSubtitleParserFactory",
-			"Path" to "Jellyfin internal stream",
 		)
 	}
 
-	"blank subtitle diagnostics are omitted" {
+	"ASS diagnostics preserve the backend values" {
 		subtitleDiagnosticValues(
-			PlaybackFrameStats(droppedFrames = 0, corruptedFrames = 0, subtitleExtractor = ""),
-		) shouldContainExactly emptyList()
+			PlaybackFrameStats(
+				droppedFrames = 0,
+				corruptedFrames = 0,
+				playerName = "ExoPlayer",
+				subtitleExtractor = "AssMatroskaExtractor (MKV)",
+				subtitleRender = "libass OpenGL overlay",
+				subtitleParser = "AssSubtitleParserFactory",
+			),
+			isAssSubtitle = true,
+		) shouldContainExactly listOf(
+			"Provider" to "AssMatroskaExtractor (MKV)",
+			"Renderer" to "libass OpenGL overlay",
+			"Parser" to "AssSubtitleParserFactory",
+		)
+	}
+
+	"MPV and libVLC diagnostics use the values each backend provides" {
+		subtitleDiagnosticValues(
+			PlaybackFrameStats(
+				droppedFrames = 0,
+				corruptedFrames = 0,
+				playerName = "libMPV",
+				subtitleExtractor = "libMPV",
+				subtitleRender = "libass",
+				subtitleParser = "subrip",
+			),
+			isAssSubtitle = false,
+		) shouldContainExactly listOf(
+			"Provider" to "libMPV",
+			"Renderer" to "libass",
+			"Parser" to "subrip",
+		)
+		subtitleDiagnosticValues(
+			PlaybackFrameStats(
+				droppedFrames = 0,
+				corruptedFrames = 0,
+				playerName = "libVLC",
+				subtitleExtractor = "libVLC",
+				subtitleRender = "libVLC",
+			),
+			isAssSubtitle = false,
+		) shouldContainExactly listOf(
+			"Provider" to "libVLC",
+			"Renderer" to "libVLC",
+		)
 	}
 
 	"video diagnostics show frame resolution and video aspect" {

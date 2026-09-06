@@ -58,7 +58,6 @@ data class PlaybackFrameStats(
 	val subtitleExtractor: String? = null,
 	val subtitleRender: String? = null,
 	val subtitleParser: String? = null,
-	val subtitlePath: String? = null,
 	val extractorFlags: String? = null,
 	val libass: PlaybackLibassStats? = null,
 	val doviTransform: PlaybackDoviTransformStats? = null,

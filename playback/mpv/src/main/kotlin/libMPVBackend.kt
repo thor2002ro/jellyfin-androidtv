@@ -1277,7 +1277,6 @@ class LibMPVBackend(
 			subtitleExtractor = "libMPV",
 			subtitleRender = "libass",
 			subtitleParser = string("current-tracks/sub/codec"),
-			subtitlePath = string("current-tracks/sub/external-filename"),
 			backendDetails = backendDetails,
 			doviTransform = doviRequestSession.transformObservation()?.toPlaybackDoviTransformStats(),
 		)
