@@ -99,9 +99,6 @@
     <string name="desc_bitstream_ac3">Krevur virkisføran tólbúnað</string>
     <string name="desc_audio_night_mode">Javnar ljóðstyrki sjálvvirkandi</string>
     <string name="lbl_zoom">Surra</string>
-    <string name="playback_info_audio_title">Ljóð</string>
-    <string name="playback_info_resolution">Loysni: %1$dx%2$d</string>
-    <string name="playback_info_channels">Ræsir: %1$d</string>
     <string name="lbl_audio_track">Vel ljóðspor</string>
     <string name="lbl_subtitle_track">Vel undirtekstir</string>
     <string name="btn_got_it">Eg skilji</string>
@@ -328,7 +325,6 @@
     <string name="lbl_play_all">Spæl allar</string>
     <string name="msg_recording_cancelled">Upptøkan er avlýst</string>
     <string name="lbl_specials">Eykapartar</string>
-    <string name="playback_info_play_method">Spæliháttalag: %1$s</string>
     <string name="lbl_resume_from">Tak uppaftur frá %1$s</string>
     <string name="lbl_items">Miðlar</string>
     <string name="lbl_item">Miðil</string>
@@ -357,8 +353,6 @@
     <string name="lbl_views">Sýnir</string>
     <string name="lbl_pause">Pausa</string>
     <string name="pref_audio_direct">Beinleiðis</string>
-    <string name="playback_info_transcoding">Umkotar</string>
-    <string name="playback_info_transcoding_note">Ambætarin umkotar fíluna</string>
     <string name="lbl_episode_not_record">Hendan sýningin verður IKKI upptikin</string>
     <string name="seek_error">Ikki møguligt at spola</string>
     <string name="msg_no_items">Eingir miðlar at spæla</string>
@@ -402,7 +396,6 @@
     <string name="home_section_resume">Hald áfram at hyggja</string>
     <string name="msg_items_added">" miðlar innlagdir"</string>
     <string name="lbl_videos">Kykmyndir</string>
-    <string name="playback_info_video_title">Kykmynd</string>
     <string name="pref_video">Kykmyndir</string>
     <string name="msg_video_playback_error">"Kykmyndaspælivilla - "</string>
     <string name="segment_type_unknown">Ókend brot</string>
@@ -423,7 +416,6 @@
     <string name="subtitle_preview_text">Undirtekstir koma at síggja soleiðis út</string>
     <string name="preference_enable_ass_description">Royndarfunka ið kann vera óálítandi</string>
     <string name="preference_enable_pgs_description">Um frávalt er kykmyndaumkoting neyðug</string>
-    <string name="playback_info_bitrate">Bitferð: %1$s</string>
     <string name="lbl_refresh_switching">Afturkomuferðskifti</string>
     <string name="lbl_instant_mix">Løtubland</string>
     <string name="pref_developer_link_description">Víðkaðar og royndarfunkur</string>
@@ -496,8 +488,6 @@
     <string name="clear_image_cache_content">Fyllir: %1$s</string>
     <string name="pref_crash_reports_disabled">Sorúrrit verða ikki send</string>
     <string name="pref_subtitles_position">Frástøða frá botninum</string>
-    <string name="playback_info_direct_play">Beinleiðis spæling</string>
-    <string name="playback_info_direct_stream">Beinleiðis stroyming</string>
     <string name="color_cyan">Blágrønur</string>
     <string name="server_issue_ssl_handshake">SSL-sambinding miseydnaðist</string>
     <string name="server_issue_timeout">Sambindingin eydnaðist ikki innan svarfreistina</string>
@@ -544,7 +534,6 @@
     <string name="lbl_showing">Vísur</string>
     <string name="server_setup_incomplete">Uppsetanin av hesum ambætaranum er ikki liðug. Lat Jellyfin-vevsíðuna upp í einum vevkaga til tess at avgreiða uppsetanina áðrenn tú ritar inn.</string>
     <string name="lbl_remove_users">Sum ein avleiðing av hesum verða allar tilhoyrandi kontur strikaðar</string>
-    <string name="playback_info_container">Pakkasnið: %1$s</string>
     <string name="lbl_date_show_added">Innleggingardegi raðanna</string>
     <string name="lbl_date_episode_added">Innleggingardegi partanna</string>
     <string name="lbl_sd">SD</string>
@@ -584,7 +573,6 @@
     <string name="codec_level_6_2">Støði 6,2</string>
     <string name="mark_watched_message">Miðilin tykist ikki at verða spældur liðugt. Skal hann merkjast sæddur kortini?</string>
     <string name="desc_debug">Útvega fleiri upplýsingar til villukemban</string>
-    <string name="playback_info_video_range">Kykmyndaspenni: %1$s</string>
     <string name="pref_subtitles_weight">Teksttjúkd</string>
     <string name="codec_level_manual">Brúkaraásett</string>
     <string name="lbl_sign_out_content">Innritan verður kravd við næstu koyring</string>
@@ -637,7 +625,6 @@
     <string name="lbl_shuffle_queue">Blanda/Óblanda</string>
     <string name="prefer_exoplayer_ffmpeg">Nýt FFmpeg til ljóðspæling</string>
     <string name="prefer_exoplayer_ffmpeg_content">Nýt FFmpeg at avkota ljóð sjálvt um stýrikerviveitt kodek eru tøk.</string>
-    <string name="playback_info_codec">Kodek: %1$s</string>
     <string name="preference_enable_trickplay">Virkja TrickPlay í kykmyndaspælaranum</string>
     <string name="preference_codecs">Miðla-kodek</string>
     <string name="pref_refresh_rate_scale_on_tv">Skift á sjónvarpi</string>

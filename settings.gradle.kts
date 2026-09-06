@@ -1,3 +1,15 @@
+pluginManagement {
+	repositories {
+		gradlePluginPortal()
+		mavenCentral()
+		google()
+	}
+}
+
+plugins {
+	id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "jellyfin-androidtv"
@@ -13,18 +25,15 @@ include(":playback:media3:exoplayer")
 include(":playback:media3:session")
 include(":preference")
 
-pluginManagement {
-	repositories {
-		gradlePluginPortal()
-		mavenCentral()
-		google()
-	}
-}
-
 dependencyResolutionManagement {
 	repositories {
 		mavenCentral()
 		google()
+		maven("https://androidx.dev/snapshots/builds/15645525/artifacts/repository") {
+			content {
+				includeGroup("androidx.media3")
+			}
+		}
 
 		// Jellyfin SDK
 		mavenLocal {
