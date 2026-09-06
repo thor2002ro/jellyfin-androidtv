@@ -9,13 +9,13 @@
                     <corners android:radius="?attr/cardRounding" />
                     <gradient
                         android:angle="315"
-                        android:centerColor="@color/lb_basic_card_info_bg_color"
-                        android:endColor="@color/jellyfin_purple"
-                        android:startColor="@color/jellyfin_blue"
+                        android:centerColor="@color/card_focus_gradient_center"
+                        android:endColor="@color/card_focus_gradient_end"
+                        android:startColor="@color/card_focus_gradient_start"
                         android:type="linear" />
                     <stroke
-                        android:width="1dp"
-                        android:color="@color/jellyfin_blue" />
+                        android:width="@dimen/card_focus_stroke_width"
+                        android:color="@color/card_focus_stroke" />
                 </shape>
             </item>
             <item android:bottom="52dp">
@@ -24,7 +24,7 @@
                     <gradient
                         android:angle="270"
                         android:endColor="@color/transparent"
-                        android:startColor="#66FFFFFF"
+                        android:startColor="@color/card_focus_sheen"
                         android:type="linear" />
                 </shape>
             </item>
@@ -37,9 +37,9 @@
                     <corners android:radius="?attr/cardRounding" />
                     <gradient
                         android:angle="315"
-                        android:centerColor="@color/lb_basic_card_info_bg_color"
-                        android:endColor="@color/grey"
-                        android:startColor="@color/grey_light"
+                        android:centerColor="@color/card_neutral_gradient_center"
+                        android:endColor="@color/card_neutral_gradient_end"
+                        android:startColor="@color/card_neutral_gradient_start"
                         android:type="linear" />
                 </shape>
             </item>
@@ -49,7 +49,7 @@
                     <gradient
                         android:angle="270"
                         android:endColor="@color/transparent"
-                        android:startColor="#26FFFFFF"
+                        android:startColor="@color/card_neutral_sheen"
                         android:type="linear" />
                 </shape>
             </item>

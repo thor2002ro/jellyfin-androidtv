@@ -17,40 +17,62 @@ class TrackSelectionServerSync(
 ) {
 	private val configurationMutex = Mutex()
 
-	suspend fun saveAudioSelection(stream: MediaStream?) {
-		val language = stream?.language?.takeIf { it.isNotBlank() } ?: return
-		updateConfiguration { configuration ->
-			configuration.copy(
-				audioLanguagePreference = language,
-				playDefaultAudioTrack = false,
-				rememberAudioSelections = true,
-			)
-		}
+	suspend fun saveAudioSelection(stream: MediaStream?): Boolean {
+		val language = stream?.language.toIso2LanguageCodeOrNull() ?: return false
+		return savePreferredAudioLanguage(language, playDefaultAudioTrack = false)
 	}
 
-	suspend fun saveSubtitleSelection(stream: MediaStream?) {
+	suspend fun saveSubtitleSelection(stream: MediaStream?): Boolean =
 		updateConfiguration { configuration ->
-			if (stream?.language.isNullOrBlank()) {
+			val language = stream?.language.toIso2LanguageCodeOrNull()
+			if (language == null) {
 				configuration.copy(
 					rememberSubtitleSelections = true,
 				)
 			} else {
 				configuration.copy(
-					subtitleLanguagePreference = stream.language,
+					subtitleLanguagePreference = language,
 					rememberSubtitleSelections = true,
 				)
 			}
 		}
-	}
+
+	suspend fun savePreferredAudioLanguage(
+		language: String?,
+		playDefaultAudioTrack: Boolean? = null,
+	): Boolean =
+		updateConfiguration { configuration ->
+			configuration.copy(
+				audioLanguagePreference = language.toIso2LanguageCodeOrNull(),
+				playDefaultAudioTrack = playDefaultAudioTrack ?: configuration.playDefaultAudioTrack,
+				rememberAudioSelections = true,
+			)
+		}
+
+	suspend fun savePlayDefaultAudioTrack(enabled: Boolean): Boolean =
+		updateConfiguration { configuration ->
+			configuration.copy(
+				playDefaultAudioTrack = enabled,
+				rememberAudioSelections = true,
+			)
+		}
+
+	suspend fun savePreferredSubtitleLanguage(language: String?): Boolean =
+		updateConfiguration { configuration ->
+			configuration.copy(
+				subtitleLanguagePreference = language.toIso2LanguageCodeOrNull(),
+				rememberSubtitleSelections = true,
+			)
+		}
 
 	private suspend fun updateConfiguration(
 		body: (UserConfiguration) -> UserConfiguration,
-	) = configurationMutex.withLock {
-		val user = loadCurrentUser() ?: return@withLock
+	): Boolean = configurationMutex.withLock {
+		val user = loadCurrentUser() ?: return@withLock false
 
-		val configuration = user.configuration ?: return@withLock
+		val configuration = user.configuration ?: return@withLock false
 		val updatedConfiguration = body(configuration)
-		if (updatedConfiguration == configuration) return@withLock
+		if (updatedConfiguration == configuration) return@withLock true
 
 		runCatching {
 			withContext(Dispatchers.IO) {
@@ -60,7 +82,7 @@ class TrackSelectionServerSync(
 			userRepository.setCurrentUser(user.copy(configuration = updatedConfiguration))
 		}.onFailure { error ->
 			Timber.w(error, "Unable to save track selection to server user configuration")
-		}
+		}.isSuccess
 	}
 
 	private suspend fun loadCurrentUser() = runCatching {
