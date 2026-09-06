@@ -530,7 +530,6 @@
     <string name="past_24_hours">Viimased 24 tundi</string>
     <string name="pref_screensaver_ageratingrequired_title">Nõua vanusepiirangut</string>
     <string name="person_birthday_and_age">Sündinud %1$s (%2$d)</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="random">Juhuslik</string>
     <string name="pref_playback_advanced">Täpsemad taasesituse eelistused</string>
     <string name="pref_screensaver_ageratingrequired_disabled">Kuvatakse kõik üksused</string>

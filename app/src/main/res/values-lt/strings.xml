@@ -472,7 +472,6 @@
     <string name="unreleased">Neišleista</string>
     <string name="segment_action_ask_to_skip">Prašyti praleisti</string>
     <string name="not_set">Nenustatyta</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="indicator_subtitles">CC</string>
     <string name="pref_screensaver_inapp_timeout">Įjungti ekrano užsklandą po</string>
     <string name="photo_albums">Nuotraukų albumai</string>
@@ -654,7 +653,6 @@
     <string name="preference_enable_pgs_description">Reikalingas transkodavimas, kai išjungta</string>
     <string name="auto">Auto</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision su EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>

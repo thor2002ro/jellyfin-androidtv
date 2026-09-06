@@ -582,7 +582,6 @@
     <string name="codec_level_5_0">ระดับ 5.0</string>
     <string name="codec_level_4_1">ระดับ 4.1</string>
     <string name="codec_level_4_0">ระดับ 4.0</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="indicator_subtitles">CC</string>
     <string name="indicator_subtitles_hearing_impaired">SDH</string>
     <string name="dolby_atmos">Dolby Atmos</string>
@@ -630,7 +629,6 @@
     <plurals name="albums">
         <item quantity="other">%1$s อัลบั้ม</item>
     </plurals>
-    <string name="dolby_vision_with_el">Dolby Vision พร้อม EL</string>
     <string name="pref_software_codecs_enabled">ใช้โคเดกซอฟต์แวร์</string>
     <string name="pref_software_codecs_enabled_description">การประมวลผลด้วยซอฟต์แวร์บางส่วนอาจลดประสิทธิภาพ การปิดตัวเลือกนี้จะเพิ่มโอกาสในการแปลงรหัส</string>
     <string name="photo_player">เครื่องเล่นรูปภาพ</string>

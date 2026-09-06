@@ -513,7 +513,6 @@
     <string name="unreleased">لم يُصدر بعد</string>
     <string name="lbl_home">الرئيسية</string>
     <string name="indicator_subtitles">CC</string>
-    <string name="dolby_vision">تقنية Dolby Vision</string>
     <string name="dolby_atmos">تفنية Dolby Atmos</string>
     <string name="dts_x">DTS:X</string>
     <string name="dts_hd">DTS-HD</string>
@@ -658,7 +657,6 @@
     <string name="hlg">HLG</string>
     <string name="hdr10">HDR10</string>
     <string name="sdr">SDR</string>
-    <string name="dolby_vision_with_el">Dolby Vision مع EL</string>
     <string name="hdr10_plus">HDR10+</string>
     <string name="auto">تلقائي</string>
     <string name="codec_level_4_0">المستوى 4.0</string>

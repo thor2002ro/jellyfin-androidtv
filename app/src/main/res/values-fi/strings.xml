@@ -509,7 +509,6 @@
     <string name="pref_screensaver_ageratingrequired_title">Vaadi ikäraja</string>
     <string name="past_24_hours">Edelliset 24 tuntia</string>
     <string name="scheduled_in_next_24_hours">Ajastukset seuraavalta 24 tunnilta</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="lbl_runtime">Toistoaika</string>
     <string name="indicator_subtitles">Tekstitys</string>
     <string name="clear_image_cache_content">Käytetty: %1$s</string>

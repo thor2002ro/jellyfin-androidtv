@@ -484,7 +484,6 @@
     <string name="photo_albums">相簿</string>
     <string name="photos">相片</string>
     <string name="person_birthday_and_age">生於 %1$s (%2$d 歲)</string>
-    <string name="dolby_vision">杜比視界 (Dolby Vision)</string>
     <string name="indicator_subtitles">CC 字幕</string>
     <string name="indicator_subtitles_hearing_impaired">SDH 字幕</string>
     <string name="dolby_atmos">杜比全景聲 (Dolby Atmos)</string>
@@ -620,7 +619,6 @@
     <string name="codec_level_4_0">層級 4.0</string>
     <string name="auto">自動</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision (連同 EL)</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>

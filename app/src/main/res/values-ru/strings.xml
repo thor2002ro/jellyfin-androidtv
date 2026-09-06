@@ -525,7 +525,6 @@
         <item quantity="many">%1$s фильмов</item>
         <item quantity="other">%1$s фильмов</item>
     </plurals>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="ac3">DD</string>
     <string name="dts_hd">DTS-HD</string>
     <string name="past_week">Прошлая неделя</string>
@@ -638,7 +637,6 @@
     <string name="hlg">HLG</string>
     <string name="hdr10">HDR10</string>
     <string name="sdr">SDR</string>
-    <string name="dolby_vision_with_el">Dolby Vision с EL</string>
     <string name="hdr10_plus">HDR10+</string>
     <string name="auto">Авто</string>
     <string name="codec_level_6_2">Уровень 6.2</string>

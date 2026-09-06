@@ -510,7 +510,6 @@
     <string name="ac3">DD</string>
     <string name="dts_hd">DTS-HD</string>
     <string name="dca">DTS</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="eac3">DD+</string>
     <string name="dolby_atmos">Dolby Atmos</string>
     <string name="lbl_runtime">Duración</string>
@@ -649,7 +648,6 @@
     <string name="playback_buffer_large">Grande</string>
     <string name="playback_buffer_extra_large">Extragrande</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision con capa de mejora</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
