@@ -654,13 +654,14 @@ private fun ChannelIcon(
 	channel: BaseItemDto,
 	imageHelper: ImageHelper,
 ) {
-	val imageUrl = remember(channel.id, channel.imageTags) {
-		imageHelper.getPrimaryImageUrl(channel, height = ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
+	val image = remember(channel.id, channel.imageTags, channel.imageBlurHashes) {
+		imageHelper.getPrimaryImage(channel)
 	}
 
-	if (imageUrl != null) {
+	if (image != null) {
 		AsyncImage(
-			url = imageUrl,
+			image = image,
+			maxHeight = ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT,
 			aspectRatio = 16f / 9f,
 			scaleType = ImageView.ScaleType.FIT_CENTER,
 			modifier = Modifier.size(ChannelIconWidth, ChannelIconHeight),
