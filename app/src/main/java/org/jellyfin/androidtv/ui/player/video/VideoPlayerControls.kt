@@ -717,7 +717,8 @@ private fun VideoDecoderButton(playbackManager: PlaybackManager) {
 
 						coroutineScope.launch {
 							try {
-								if (!playbackManager.reloadCurrentMediaStream(position, playWhenReady)) {
+								val changedInPlace = backend.reloadVideoDecoder()
+								if (!changedInPlace && !playbackManager.reloadCurrentMediaStream(position, playWhenReady)) {
 									backend.setForcedVideoDecoderOption(previousDecoder)
 									Timber.w("Unable to reload stream after forcing video decoder")
 								}
