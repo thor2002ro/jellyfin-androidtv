@@ -189,7 +189,6 @@
     <string name="lbl_sports">Sports</string>
     <string name="no_program_data">Aucune donnée disponible pour ce programme</string>
     <string name="lbl_on_schedule">Programmée</string>
-    <string name="lbl_premiere">Première</string>
     <string name="msg_settings_updated">Préférences mises à jour</string>
     <string name="msg_record_entire_series">Enregistrer la série entière \?</string>
     <string name="lbl_schedule">Programmation</string>

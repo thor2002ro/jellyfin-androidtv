@@ -153,7 +153,6 @@
     <string name="lbl_album_name">Albumo pavadinimas</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
     <string name="pref_device_model">Įrenginio modelis</string>
-    <string name="lbl_premiere">Premjera</string>
     <string name="grid_direction_vertical">Vertikaliai</string>
     <string name="lbl_playback_speed">Atkūrimo greitis</string>
     <string name="mark_watched">Pažymėti kaip žiūrėtą</string>
