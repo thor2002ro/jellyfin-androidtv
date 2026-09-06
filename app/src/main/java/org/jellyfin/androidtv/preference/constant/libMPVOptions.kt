@@ -16,6 +16,7 @@ import org.jellyfin.androidtv.preference.mpvGpuApi
 import org.jellyfin.androidtv.preference.mpvGpuContext
 import org.jellyfin.androidtv.preference.mpvInterpolation
 import org.jellyfin.androidtv.preference.mpvLoopFilter
+import org.jellyfin.androidtv.preference.mpvNvidiaShieldWorkarounds
 import org.jellyfin.androidtv.preference.mpvOptionOverrides
 import org.jellyfin.androidtv.preference.mpvReplayGain
 import org.jellyfin.androidtv.preference.mpvScaler
@@ -376,6 +377,7 @@ fun UserPreferences.mpvPlaybackOptions() = LibMPVPlaybackOptions(
 	subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,
 	subtitleUseMargins = this[UserPreferences.mpvSubtitleUseMargins],
 	softwareDecodingForLiveTv = this[UserPreferences.mpvSoftwareDecodingForLiveTv],
+	nvidiaShieldWorkarounds = this[UserPreferences.mpvNvidiaShieldWorkarounds],
 	videoPreset = this[UserPreferences.mpvVideoPreset].preset,
 	audioPreset = this[UserPreferences.mpvAudioPreset].preset,
 	customOptions = parseLibMPVOptionOverrides(this[UserPreferences.mpvOptionOverrides]).values
@@ -403,6 +405,7 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvAudioPitchCorrection] = true
 	this[UserPreferences.mpvSubtitleUseMargins] = true
 	this[UserPreferences.mpvSoftwareDecodingForLiveTv] = false
+	this[UserPreferences.mpvNvidiaShieldWorkarounds] = true
 	this[UserPreferences.mpvVideoPreset] = LibMPVVideoPresetOption.OFF
 	this[UserPreferences.mpvAudioPreset] = LibMPVAudioPresetOption.OFF
 	this[UserPreferences.mpvDecoderThreads] = 0
