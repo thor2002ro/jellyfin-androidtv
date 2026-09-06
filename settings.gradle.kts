@@ -30,7 +30,7 @@ pluginManagement {
 		google()
 	}
 	plugins {
-		id("com.vanniktech.maven.publish") version "0.32.0"
+		id("com.vanniktech.maven.publish") version "0.37.0"
 	}
 }
 
