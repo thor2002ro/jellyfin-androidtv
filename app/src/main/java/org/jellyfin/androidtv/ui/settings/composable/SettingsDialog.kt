@@ -1,6 +1,8 @@
 package org.jellyfin.androidtv.ui.settings.composable
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -19,7 +21,6 @@ fun SettingsDialog(
 	modifier: Modifier = Modifier,
 	screen: @Composable BoxScope.() -> Unit,
 ) {
-	val duration = 400
 	DialogBase(
 		visible = visible,
 		onDismissRequest = onDismissRequest,
@@ -27,15 +28,18 @@ fun SettingsDialog(
 		contentAlignment = Alignment.TopEnd,
 		enterTransition = slideInHorizontally(
 			initialOffsetX = { it },
-			animationSpec = tween(duration, easing = FastOutSlowInEasing)
+			animationSpec = spring(
+				dampingRatio = Spring.DampingRatioNoBouncy,
+				stiffness = Spring.StiffnessMediumLow,
+			)
 		) + fadeIn(
-			animationSpec = tween(duration)
+			animationSpec = tween(240)
 		),
 		exitTransition = slideOutHorizontally(
 			targetOffsetX = { it },
-			animationSpec = tween(duration, easing = FastOutSlowInEasing)
+			animationSpec = tween(250, easing = FastOutSlowInEasing)
 		) + fadeOut(
-			animationSpec = tween(duration)
+			animationSpec = tween(200)
 		),
 	) {
 		SettingsLayout {
