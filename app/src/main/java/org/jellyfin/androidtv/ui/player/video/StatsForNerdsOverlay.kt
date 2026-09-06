@@ -21,8 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +35,12 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
+import org.jellyfin.androidtv.ui.playback.appendInline
+import org.jellyfin.androidtv.ui.playback.displayName
+import org.jellyfin.androidtv.ui.playback.formatCodec
+import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
+import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
@@ -58,9 +64,11 @@ import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.jellyfin.queue.baseItem
+import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
 import org.jellyfin.playback.jellyfin.queue.forceTranscodingSourceBitrate
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
+import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.TranscodingInfo
 import org.jellyfin.sdk.model.api.VideoRangeType
 import org.koin.compose.koinInject
@@ -74,10 +82,13 @@ fun PlaybackInfoOverlay(
 	val context = LocalContext.current
 	val transcodingStatusRepository = koinInject<TranscodingStatusRepository>()
 	val userPreferences = koinInject<UserPreferences>()
+	val api = koinInject<ApiClient>()
+	val density = LocalDensity.current
 	val entry by rememberQueueEntry(playbackManager)
 	val mediaStream by entry?.mediaStreamFlow?.collectAsState(null) ?: return
 	val stream = mediaStream ?: return
-	val itemId = entry?.baseItem?.id
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val itemId = item?.id ?: entry?.baseItem?.id
 	val mediaSourceId = entry?.mediaSourceId
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
 	val forceTranscodingSourceBitrate = entry?.forceTranscodingSourceBitrate
@@ -172,17 +183,66 @@ fun PlaybackInfoOverlay(
 		)
 	}
 
+	val chapterThumbnailWidth = with(density) { ChapterThumbnailWidth.roundToPx() }
+	val chapterThumbnailHeight = with(density) { ChapterThumbnailHeight.roundToPx() }
+	val trickplayCacheUrls = remember(item?.id, item?.trickplay, mediaSourceId, api.accessToken) {
+		item?.getTrickplayTileSheets(api, mediaSourceId).orEmpty().map { sheet -> sheet.url }
+	}
+	val chapterCacheUrls = remember(item?.id, item?.chapters, api.accessToken, chapterThumbnailWidth, chapterThumbnailHeight) {
+		item?.getChapterThumbnailUrls(api, chapterThumbnailWidth, chapterThumbnailHeight).orEmpty()
+	}
+	val thumbnailCacheRows = remember(trickplayCacheUrls, chapterCacheUrls, refreshTick) {
+		buildThumbnailCacheRows(
+			trickplayUrls = trickplayCacheUrls,
+			chapterUrls = chapterCacheUrls,
+		)
+	}
+
 	Row(
 		modifier = modifier,
 		horizontalArrangement = Arrangement.spacedBy(4.dp),
 		verticalAlignment = Alignment.Top,
 	) {
-		PlaybackPerformanceOverlay(
-			stream = stream,
-			frameStats = frameStats,
-		)
+		Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+			PlaybackPerformanceOverlay(
+				stream = stream,
+				frameStats = frameStats,
+			)
+			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
+		}
 
 		PlaybackInfoTextPanel(sections = sections)
+	}
+}
+
+@Composable
+private fun PlaybackThumbnailCachePanel(
+	rows: List<PlaybackInfoRowModel>,
+) {
+	Column(
+		modifier = Modifier
+			.width(146.dp)
+			.background(Color.Black.copy(alpha = 0.82f))
+			.padding(horizontal = 5.dp, vertical = 4.dp),
+		verticalArrangement = Arrangement.spacedBy(3.dp),
+	) {
+		Text(
+			text = "Thumbnail Cache",
+			style = TextStyle(
+				color = Color.White,
+				fontSize = 7.sp,
+				lineHeight = 8.sp,
+				fontFamily = FontFamily.Monospace,
+				fontWeight = FontWeight.W700,
+			),
+		)
+		Column(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(start = 4.dp),
+		) {
+			rows.forEach { row -> PlaybackInfoRow(row) }
+		}
 	}
 }
 
@@ -303,11 +363,13 @@ private object NewPlayerStreamStatusBuilder {
 				title = "Streaming Info",
 				rows = rows {
 					row("Player resolution", playerVideoSize.resolution())
+					row("Video decoder", frameStats.videoDecoderLabel())
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
-					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
+					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod) ?: frameStats.videoCodec)
 					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
-					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
+					row("Audio decoder", frameStats.audioDecoderLabel())
+					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
 					row("Audio language", audioLanguage(selectedAudio))
@@ -352,7 +414,7 @@ private object NewPlayerStreamStatusBuilder {
 				rows = rows {
 					row("Container", stream.container.format)
 					row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
-					row("Video codec", videoTrack?.codec.formatCodec())
+					row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate())
 					row("Video range", videoTrack?.videoRange)
@@ -368,6 +430,14 @@ private object NewPlayerStreamStatusBuilder {
 
 	private inline fun rows(build: MutableList<PlaybackInfoRowModel>.() -> Unit) = buildList(build)
 
+	private fun PlaybackFrameStats.videoDecoderLabel() = videoDecoderName?.let { name ->
+		videoDecoderType?.let { type -> "$name ($type)" } ?: name
+	}
+
+	private fun PlaybackFrameStats.audioDecoderLabel() = audioDecoderName?.let { name ->
+		audioDecoderType?.let { type -> "$name ($type)" } ?: name
+	}
+
 	private fun MutableList<PlaybackInfoRowModel>.row(label: String, value: String?) {
 		if (!value.isNullOrBlank()) add(PlaybackInfoRowModel(label, value))
 	}
@@ -375,16 +445,16 @@ private object NewPlayerStreamStatusBuilder {
 	private fun streamingVideoCodec(
 		track: MediaStreamVideoTrack?,
 		transcodingInfo: TranscodingInfo?,
-		decoderName: String?,
+		conversionMethod: MediaConversionMethod,
 	): String? {
 		val source = track?.codec.formatCodec()
 		val target = transcodingInfo?.videoCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.let { "$it (${decoderName.directCodecLabel()})" }
-			transcodingInfo.isVideoDirect && source != null -> "$source (${decoderName.directCodecLabel()})"
-			source != null && target != null -> "$source -> $target"
-			target != null -> "-> $target"
+			transcodingInfo == null -> source?.withKnownPath(conversionMethod)
+			transcodingInfo.isVideoDirect && source != null -> "$source (remux)"
+			source != null && target != null -> "$source -> $target (transcoding)"
+			target != null -> "-> $target (transcoding)"
 			else -> source
 		}
 	}
@@ -403,16 +473,16 @@ private object NewPlayerStreamStatusBuilder {
 		track: MediaStreamAudioTrack?,
 		selectedTrack: PlayerTrack?,
 		transcodingInfo: TranscodingInfo?,
-		decoderName: String?,
+		conversionMethod: MediaConversionMethod,
 	): String? {
 		val source = (selectedTrack?.codec ?: track?.codec).formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.let { "$it (${decoderName.directCodecLabel()})" }
-			transcodingInfo.isAudioDirect && source != null -> "$source (${decoderName.directCodecLabel()})"
-			source != null && target != null -> "$source -> $target"
-			target != null -> "-> $target"
+			transcodingInfo == null -> source?.withKnownPath(conversionMethod)
+			transcodingInfo.isAudioDirect && source != null -> "$source (remux)"
+			source != null && target != null -> "$source -> $target (transcoding)"
+			target != null -> "-> $target (transcoding)"
 			else -> source
 		}
 	}
@@ -442,11 +512,6 @@ private object NewPlayerStreamStatusBuilder {
 		stream: MediaStreamSubtitleTrack?,
 		externalSubtitle: ExternalSubtitle?,
 	): String? = track?.codec ?: stream?.codec ?: externalSubtitle?.mimeType
-
-	private fun String?.isAssSubtitleCodec(): Boolean = when (this?.lowercase()) {
-		"ass", "ssa", "text/x-ssa", "text/ssa", "text/ass", "application/x-ass" -> true
-		else -> false
-	}
 
 	private fun subtitleDeliveryLabel(
 		stream: MediaStreamSubtitleTrack?,
@@ -543,10 +608,15 @@ private object NewPlayerStreamStatusBuilder {
 		.filter(String::isNotBlank)
 		.joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 
-	private fun MediaConversionMethod.displayName() = when (this) {
-		MediaConversionMethod.None -> "Direct play"
-		MediaConversionMethod.Remux -> "Direct stream"
-		MediaConversionMethod.Transcode -> "Transcoding"
+	private fun MediaConversionMethod.codecPathLabel() = when (this) {
+		MediaConversionMethod.None -> "direct"
+		MediaConversionMethod.Remux -> "remux"
+		MediaConversionMethod.Transcode -> "transcoding"
+	}
+
+	private fun String.withKnownPath(conversionMethod: MediaConversionMethod) = when (conversionMethod) {
+		MediaConversionMethod.Transcode -> this
+		else -> "$this (${conversionMethod.codecPathLabel()})"
 	}
 
 	private fun resolution(width: Int?, height: Int?) = when {
@@ -579,22 +649,6 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
 
-	private fun String?.formatCodec(): String? = this
-		?.takeIf { it.isNotBlank() }
-		?.uppercase()
-
-	private fun String?.directCodecLabel() = when {
-		isFfmpegDecoderName() -> "ffmpeg direct"
-		else -> "direct"
-	}
-
-	private fun String?.isFfmpegDecoderName() = this?.contains("ffmpeg", ignoreCase = true) == true
-
-	private fun StringBuilder.appendInline(value: String?) {
-		if (value.isNullOrBlank()) return
-		if (isNotEmpty()) append(' ')
-		append(value)
-	}
 }
 
 internal fun List<MediaStreamAudioTrack>.selectedTrack(selectedTrack: PlayerTrack?): MediaStreamAudioTrack? =
@@ -801,3 +855,22 @@ private fun PositionInfo.formatBuffer(): String {
 	val ahead = (buffer - active).coerceAtLeast(Duration.ZERO)
 	return "${buffer.formatDuration()} +${ahead.formatDuration()}"
 }
+
+private fun buildThumbnailCacheRows(
+	trickplayUrls: List<String>,
+	chapterUrls: List<String>,
+) = listOf(
+	PlaybackInfoRowModel(
+		label = "Trickplay",
+		value = TrickplayTileSheetMemoryCache.stats(trickplayUrls).formatCacheStats(trickplayUrls.size),
+	),
+	PlaybackInfoRowModel(
+		label = "Chapters",
+		value = ChapterThumbnailMemoryCache.stats(chapterUrls).formatCacheStats(chapterUrls.size),
+	),
+)
+
+private fun TrickplayTileSheetMemoryStats.formatCacheStats(total: Int) =
+	"$count/$total ${bytes.formatCacheBytes()}"
+
+private fun Long.formatCacheBytes() = "%.1f MiB".format(this / 1024.0 / 1024.0)
