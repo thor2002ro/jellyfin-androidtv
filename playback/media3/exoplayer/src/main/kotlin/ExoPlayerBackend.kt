@@ -45,6 +45,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -84,6 +85,7 @@ import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PositionInfo
@@ -392,6 +394,8 @@ class ExoPlayerBackend(
 	private var reportedEndedStream: PlayableMediaStream? = null
 	private var rendererPreferencesDirty = false
 	private var loadControlDirty = false
+	private var bufferAllocator: DefaultAllocator? = null
+	private var estimatedBandwidthBytesPerSecond: Long? = null
 	private var appliedRendererPreferences: FfmpegRendererPreferences? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 	private val mediaSourceTsExtractorFlags = mutableMapOf<String, Int>()
@@ -511,6 +515,7 @@ class ExoPlayerBackend(
 		videoDecoderName = null
 		videoDecoderType = null
 		videoInputFormat = null
+		estimatedBandwidthBytesPerSecond = null
 		videoDecoderCounters = null
 		audioDecoderName = null
 		audioDecoderType = null
@@ -931,7 +936,9 @@ class ExoPlayerBackend(
 			}
 		}
 
+		val allocator = DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE).also { bufferAllocator = it }
 		val loadControl = DefaultLoadControl.Builder()
+			.setAllocator(allocator)
 			.setBufferDurationsMs(
 				bufferOptions.minBufferDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
 				bufferOptions.maxBufferDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
@@ -1024,6 +1031,15 @@ class ExoPlayerBackend(
 	}
 
 	inner class DecoderAnalyticsListener : AnalyticsListener {
+		override fun onBandwidthEstimate(
+			eventTime: AnalyticsListener.EventTime,
+			totalLoadTimeMs: Int,
+			totalBytesLoaded: Long,
+			bitrateEstimate: Long,
+		) {
+			estimatedBandwidthBytesPerSecond = (bitrateEstimate / 8).takeIf { it > 0 }
+		}
+
 		override fun onAudioEnabled(
 			eventTime: AnalyticsListener.EventTime,
 			decoderCounters: DecoderCounters,
@@ -1605,6 +1621,13 @@ class ExoPlayerBackend(
 		counters?.ensureUpdated()
 		refreshAudioPassthroughSupport(allowReceiverRegistration = true)
 		val tsExtractorFlags = currentTsExtractorFlags()
+		val allocatedBytes = bufferAllocator?.totalBytesAllocated?.toLong()
+		val bufferDetails = formatExoBufferDetails(
+			allocatedBytes = allocatedBytes,
+			isBuffering = exoPlayer.playbackState == Player.STATE_BUFFERING,
+			isLoading = exoPlayer.isLoading,
+			estimatedBandwidthBytesPerSecond = estimatedBandwidthBytesPerSecond,
+		)
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
@@ -1620,6 +1643,7 @@ class ExoPlayerBackend(
 			audioDecoderName = audioDecoderName,
 			audioDecoderType = audioDecoderType,
 			audioPassthroughSupported = audioPassthroughSupported,
+			bufferedBytes = bufferDetails,
 			subtitleExtractor = subtitleExtractorDebug(),
 			subtitleRender = subtitleRenderDebug(),
 			subtitleParser = subtitleParserDebug(),
@@ -2086,6 +2110,23 @@ internal fun Format?.hdrMode(): String? {
 		else -> null
 	}
 }
+
+internal fun formatExoBufferDetails(
+	allocatedBytes: Long?,
+	isBuffering: Boolean,
+	isLoading: Boolean,
+	estimatedBandwidthBytesPerSecond: Long?,
+) = buildList {
+	allocatedBytes?.formatBufferBytes()?.let(::add)
+	when {
+		isBuffering -> add("buffering")
+		isLoading -> add("loading")
+		allocatedBytes != null -> add("idle")
+	}
+	if (isBuffering || isLoading) {
+		estimatedBandwidthBytesPerSecond?.formatBufferBytes()?.let { add("~$it/s") }
+	}
+}.joinToString(", ").takeIf(String::isNotEmpty)
 
 private fun Format.dolbyVisionMode(): String = codecs
 	?.split(',')

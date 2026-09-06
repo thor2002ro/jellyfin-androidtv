@@ -7,6 +7,12 @@ import io.kotest.matchers.shouldBe
 import kotlin.time.Duration.Companion.seconds
 
 class VideoDecoderTests : FunSpec({
+	test("buffer details only show bandwidth while loading") {
+		formatExoBufferDetails(1_048_576, false, false, 2_097_152) shouldBe "1.00 MiB, idle"
+		formatExoBufferDetails(1_048_576, false, true, 2_097_152) shouldBe
+			"1.00 MiB, loading, ~2.00 MiB/s"
+	}
+
 	test("forced decoder falls back to the previous working decoder before software") {
 		forcedVideoDecoderFallbacks(VideoDecoder.FFMPEG, VideoDecoder.HARDWARE) shouldBe
 			listOf(VideoDecoder.HARDWARE, VideoDecoder.SOFTWARE)
