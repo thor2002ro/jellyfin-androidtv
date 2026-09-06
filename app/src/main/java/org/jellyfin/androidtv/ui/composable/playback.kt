@@ -32,20 +32,28 @@ fun rememberQueueEntry(
 @Composable
 fun rememberPlayerPositionInfo(
 	playbackManager: PlaybackManager = koinInject(),
-	precision: Duration = 1.seconds
+	precision: Duration = 1.seconds,
+	resetKey: Any? = Unit,
+	resetToEmpty: Boolean = false,
+	updateImmediately: Boolean = true,
 ): MutableState<PositionInfo> {
 	val playState by playbackManager.state.playState.collectAsState()
 	val playing = playState.isActivePlayback
 
-	val positionInfo = remember { mutableStateOf(playbackManager.state.positionInfo) }
+	val positionInfo = remember(playbackManager, resetKey, resetToEmpty) {
+		mutableStateOf(if (resetToEmpty) PositionInfo.EMPTY else playbackManager.state.positionInfo)
+	}
 
-	LaunchedEffect(playing, precision) {
+	LaunchedEffect(playbackManager, playing, precision, resetKey, updateImmediately) {
 		val precisionMs = precision.inWholeMilliseconds
 
-		while (playing) {
+		if (updateImmediately) {
 			positionInfo.value = playbackManager.state.positionInfo
+		}
 
+		while (playing) {
 			delay(precisionMs - (positionInfo.value.active.inWholeMilliseconds % precisionMs))
+			positionInfo.value = playbackManager.state.positionInfo
 		}
 	}
 
