@@ -35,7 +35,10 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 	private val liveTvActions by lazy { LiveTvCardActionHandler(this, api, playbackHelper) { _, _ -> refreshLiveTvChannelRows() } }
 
 	override fun onResume() {
+		val wasJustLoaded = justLoaded
 		super.onResume()
+		if (wasJustLoaded) return
+
 		Handler(Looper.getMainLooper()).postDelayed({ refreshLiveTvRows() }, LIVE_TV_ROWS_REFRESH_DELAY_MS)
 	}
 
@@ -84,8 +87,12 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 			BrowsingUtils.createLiveTVUpcomingRequest(),
 		))
 
+		rowLoader.loadRows(mRows)
+
 		getLiveTvRecordingsAndTimers(
 			callback = { recordings, timers ->
+				if (!isAdded || mRowsAdapter == null) return@getLiveTvRecordingsAndTimers
+
 				val nearTimers = timers.items
 					.filter { timer -> timer.startDate?.isBefore(LocalDateTime.now().plusDays(1)) == true }
 					.map(::getTimerProgramInfo)
@@ -104,24 +111,16 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 						}
 					}
 
-					mRows.add(BrowseRowDef(
-						getString(R.string.lbl_recent_recordings),
-						BrowsingUtils.createLiveTVRecordingsRequest(),
-						50,
-					))
-					rowLoader.loadRows(mRows)
-
 					addStaticRow(getString(R.string.past_week), weekItems)
 					addStaticRow(getString(R.string.scheduled_in_next_24_hours), nearTimers)
 					addStaticRow(getString(R.string.past_24_hours), dayItems)
+					addRecentRecordingsRow()
 				} else {
-					rowLoader.loadRows(mRows)
 					addStaticRow(getString(R.string.scheduled_in_next_24_hours), nearTimers)
 				}
 			},
 			errorCallback = { exception ->
 				Timber.e(exception, "Failed to get Live TV recordings / timers")
-				rowLoader.loadRows(mRows)
 			}
 		)
 	}
@@ -140,6 +139,20 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 		adapter.setRow(row, SMART_ROW_ORDER)
 		adapter.Retrieve()
 		mRowsAdapter.add(getSmartRowInsertIndex(), row)
+	}
+
+	private fun addRecentRecordingsRow() {
+		val adapter = ItemRowAdapter(
+			requireContext(),
+			BrowsingUtils.createLiveTVRecordingsRequest(RECENT_RECORDINGS_LIMIT),
+			RECENT_RECORDINGS_LIMIT,
+			mCardPresenter,
+			mRowsAdapter,
+		)
+		val row = ListRow(HeaderItem(getString(R.string.lbl_recent_recordings)), adapter)
+		adapter.setRow(row)
+		adapter.Retrieve()
+		mRowsAdapter.add(row)
 	}
 
 	override fun addAdditionalRows(rowAdapter: MutableObjectAdapter<Row>) {
@@ -166,5 +179,6 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 		const val SMART_ROW_INSERT_INDEX = 2
 		const val SMART_ROW_ORDER = 0.5
 		const val LIVE_TV_ROWS_REFRESH_DELAY_MS = 3_500L
+		const val RECENT_RECORDINGS_LIMIT = 50
 	}
 }
