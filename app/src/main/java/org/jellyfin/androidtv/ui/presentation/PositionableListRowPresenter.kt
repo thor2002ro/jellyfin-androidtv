@@ -1,13 +1,19 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.view.KeyEvent
+import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.RowPresenter
 import timber.log.Timber
 
 class PositionableListRowPresenter : CustomListRowPresenter {
 	private var viewHolder: ViewHolder? = null
+	private val trapFocus: Boolean
 
-	constructor() : super()
-	constructor(padding: Int?) : super(padding)
+	constructor() : this(padding = null, trapFocus = false)
+	constructor(padding: Int?) : this(padding, trapFocus = false)
+	constructor(padding: Int? = null, trapFocus: Boolean = false) : super(padding) {
+		this.trapFocus = trapFocus
+	}
 
 	init {
 		shadowEnabled = false
@@ -22,6 +28,20 @@ class PositionableListRowPresenter : CustomListRowPresenter {
 		if (holder !is ViewHolder) return
 
 		viewHolder = holder
+		val grid = holder.gridView
+		if (trapFocus) {
+			val adapter = (item as? ListRow)?.adapter
+			// Keep focus inside the row at either boundary.
+			grid.setOnKeyInterceptListener { event ->
+				val position = grid.selectedPosition
+				val adapterSize = adapter?.size() ?: 0
+				when (event.keyCode) {
+					KeyEvent.KEYCODE_DPAD_LEFT -> position <= 0
+					KeyEvent.KEYCODE_DPAD_RIGHT -> adapterSize > 0 && position >= adapterSize - 1
+					else -> false
+				}
+			}
+		}
 	}
 
 	var position: Int
