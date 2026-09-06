@@ -27,6 +27,12 @@ fun BaseItemDto.copyWithDates(
 )
 
 fun BaseItemDto.copyWithTimerId(
+	timerId: String?,
+) = copy(
+	timerId = timerId,
+)
+
+fun BaseItemDto.copyWithSeriesTimerId(
 	seriesTimerId: String?,
 ) = copy(
 	seriesTimerId = seriesTimerId,
