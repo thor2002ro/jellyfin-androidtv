@@ -40,6 +40,7 @@ class MainActivity : FragmentActivity() {
 	private val userRepository by inject<UserRepository>()
 	private val interactionTrackerViewModel by viewModel<InteractionTrackerViewModel>()
 	private val workManager by inject<WorkManager>()
+	private var authenticationRedirectStarted = false
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		applyTheme()
@@ -47,6 +48,8 @@ class MainActivity : FragmentActivity() {
 		super.onCreate(savedInstanceState)
 
 		if (!validateAuthentication()) return
+
+		observeAuthentication()
 
 		interactionTrackerViewModel.keepScreenOn.flowWithLifecycle(lifecycle, Lifecycle.State.RESUMED)
 			.onEach { keepScreenOn ->
@@ -88,8 +91,22 @@ class MainActivity : FragmentActivity() {
 		interactionTrackerViewModel.activityPaused = false
 	}
 
+	private fun observeAuthentication() {
+		sessionRepository.currentSession
+			.flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+			.onEach { session -> if (session == null) validateAuthentication() }
+			.launchIn(lifecycleScope)
+
+		userRepository.currentUser
+			.flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+			.onEach { user -> if (user == null) validateAuthentication() }
+			.launchIn(lifecycleScope)
+	}
+
 	private fun validateAuthentication(): Boolean {
 		if (sessionRepository.currentSession.value == null || userRepository.currentUser.value == null) {
+			if (authenticationRedirectStarted) return false
+			authenticationRedirectStarted = true
 			Timber.w("Activity ${this::class.qualifiedName} started without a session, bouncing to StartupActivity")
 			startActivity(Intent(this, StartupActivity::class.java))
 			finish()

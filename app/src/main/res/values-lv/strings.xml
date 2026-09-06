@@ -72,7 +72,6 @@
     <string name="pref_live_tv_cat">Tiešsaistes TV</string>
     <string name="lbl_recorded_tv">Ierakstītais TV</string>
     <string name="lbl_live_tv_guide">Tiešsaistes TV Ceļvedis</string>
-    <string name="lbl_no_recordings">Nav pieejami ieraksti</string>
     <string name="msg_unable_load_subs">Neizdevās ielādēt subtitrus</string>
     <string name="msg_subtitles_loading">Subtitri lādējas…</string>
     <string name="lbl_filters">Tiešraides TV filtri</string>
@@ -406,7 +405,6 @@
     <string name="pref_home_description">Konfigurēt parādītās sadaļas</string>
     <string name="pref_libraries_description">Mainīt, kā tiek rādītas bibliotēkas</string>
     <string name="pref_login">Pierakstīties</string>
-    <string name="server_issue_ssl_handshake">Neizdevās SSL rokasspiediens</string>
     <string name="pref_accounts">Konti</string>
     <string name="pref_customization_description">Motīvs, sākums, pārkartēšana</string>
     <string name="action_use_quickconnect">Izmantot Quick Connect</string>

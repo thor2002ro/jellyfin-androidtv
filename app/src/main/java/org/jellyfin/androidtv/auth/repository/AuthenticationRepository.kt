@@ -31,6 +31,7 @@ import org.jellyfin.androidtv.util.sdk.forUser
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
+import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.exception.TimeoutException
 import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
 import org.jellyfin.sdk.api.client.extensions.authenticateWithQuickConnect
@@ -86,11 +87,16 @@ class AuthenticationRepositoryImpl(
 			val response = api.userApi.authenticateUserByName(username, password)
 			response.content
 		} catch (err: TimeoutException) {
-			Timber.e(err, "Failed to connect to server trying to sign in $username")
-			emit(ServerUnavailableState)
+			Timber.e(err, "Failed to connect to server ${server.address} while signing in as $username")
+			emit(ServerUnavailableState(err))
 			return@flow
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to sign in as $username")
+			if (err.isAuthenticationFailure()) {
+				Timber.i("Server rejected credentials for user $username on ${server.address}")
+				emit(RequireSignInState)
+				return@flow
+			}
+			Timber.e(err, "Unable to sign in as $username on server ${server.address}")
 			emit(ApiClientErrorLoginState(err))
 			return@flow
 		}
@@ -104,11 +110,16 @@ class AuthenticationRepositoryImpl(
 			val response = api.userApi.authenticateWithQuickConnect(secret)
 			response.content
 		} catch (err: TimeoutException) {
-			Timber.e(err, "Failed to connect to server")
-			emit(ServerUnavailableState)
+			Timber.e(err, "Failed to connect to server ${server.address} while signing in with Quick Connect")
+			emit(ServerUnavailableState(err))
 			return@flow
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to sign in with Quick Connect secret")
+			if (err.isAuthenticationFailure()) {
+				Timber.i("Server rejected Quick Connect authentication on ${server.address}")
+				emit(RequireSignInState)
+				return@flow
+			}
+			Timber.e(err, "Unable to sign in with Quick Connect secret on server ${server.address}")
 			emit(ApiClientErrorLoginState(err))
 			return@flow
 		}
@@ -152,11 +163,16 @@ class AuthenticationRepositoryImpl(
 			authenticateFinish(server, userInfo, user.accessToken.orEmpty())
 			emit(AuthenticatedState)
 		} catch (err: TimeoutException) {
-			Timber.e(err, "Failed to connect to server")
-			emit(ServerUnavailableState)
+			Timber.e(err, "Failed to connect to server ${server.address} while authenticating with saved token")
+			emit(ServerUnavailableState(err))
 			return@flow
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to get current user data")
+			if (err.isAuthenticationFailure()) {
+				Timber.i("Saved token rejected by server ${server.address}")
+				emit(RequireSignInState)
+				return@flow
+			}
+			Timber.e(err, "Unable to get current user data from server ${server.address}")
 			emit(ApiClientErrorLoginState(err))
 		}
 	}.flowOn(Dispatchers.IO)
@@ -199,8 +215,12 @@ class AuthenticationRepositoryImpl(
 			.getUser(user.serverId, user.id)
 			?.copy(accessToken = null)
 
-		return if (authStoreUser != null) authenticationStore.putUser(user.serverId, user.id, authStoreUser)
-		else false
+		val success = authStoreUser?.let { authenticationStore.putUser(user.serverId, user.id, it) } == true
+		if (success && sessionRepository.currentSession.value?.let { it.serverId == user.serverId && it.userId == user.id } == true) {
+			sessionRepository.destroyCurrentSession()
+		}
+
+		return success
 	}
 
 	override fun getUserImageUrl(server: Server, user: User): String? = user.imageTag?.let { primaryImageTag ->
@@ -215,3 +235,14 @@ class AuthenticationRepositoryImpl(
 		)
 	}?.getUrl(jellyfin.createApi(server.address))
 }
+
+private fun ApiClientException.isAuthenticationFailure(): Boolean =
+	this is InvalidStatusException && status in AUTHENTICATION_FAILURE_STATUSES
+
+private val AUTHENTICATION_FAILURE_STATUSES = setOf(
+	HTTP_STATUS_UNAUTHORIZED,
+	HTTP_STATUS_FORBIDDEN,
+)
+
+private const val HTTP_STATUS_UNAUTHORIZED = 401
+private const val HTTP_STATUS_FORBIDDEN = 403

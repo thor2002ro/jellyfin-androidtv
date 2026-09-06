@@ -46,7 +46,7 @@ import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
 import org.jellyfin.playback.jellyfin.queue.forceTranscodingRecoveryAttempts
@@ -125,7 +125,7 @@ fun QualityProfileButton(
 					}
 				}
 				val position = playbackManager.state.positionInfo.active.takeUnless { isLiveTv }
-				val playWhenReady = playbackManager.state.playState.value == PlayState.PLAYING
+				val playWhenReady = playbackManager.state.playState.value.isActivePlayback
 				coroutineScope.launch {
 					refreshing = true
 					try {

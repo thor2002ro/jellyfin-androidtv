@@ -220,7 +220,6 @@
     <string name="pref_live_tv_cat">நேரடி தொலைக்காட்சி</string>
     <string name="lbl_recorded_tv">பதிவு செய்யப்பட்ட தொலைக்காட்சி</string>
     <string name="lbl_live_tv_guide">நேரடி தொலைக்காட்சி வழிகாட்டி</string>
-    <string name="lbl_no_recordings">பதிவுகள் எதுவும் கிடைக்கவில்லை</string>
     <string name="msg_burn_sub_warning">வசன வரிகள் பதிக்க சில நிமிடங்கள் ஆகலாம்…</string>
     <string name="msg_unable_load_subs">வசனத்தை ஏற்ற முடியவில்லை</string>
     <string name="msg_subtitles_loading">வசன வரிகள் ஏற்றுதல்…</string>
@@ -388,7 +387,6 @@
     <string name="pref_accounts">கணக்குகள்</string>
     <string name="sort_accounts_by">கணக்குகளை வரிசைப்படுத்தவும்</string>
     <string name="pref_customization">தனிப்பயனாக்கம்</string>
-    <string name="server_issue_ssl_handshake">SSL கைகுலுக்க முடியவில்லை</string>
     <string name="server_issue_timeout">இணைப்பின் நேரம் முடிந்தது</string>
     <string name="server_issue_outdated_version">சேவையகம் %1$s ஆதரிக்கப்படாத பதிப்பைப் பயன்படுத்துகிறது. தயவுசெய்து %2$s அல்லது புதியதாக புதுப்பிக்கவும்</string>
     <string name="server_issue_unsupported_version">சேவையகம் ஆதரிக்கப்படாத %1$s பதிப்பைப் பயன்படுத்துகிறது</string>

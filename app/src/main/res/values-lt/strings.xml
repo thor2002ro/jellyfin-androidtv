@@ -318,7 +318,6 @@
     <string name="license_version">Versija</string>
     <string name="btn_got_it">Supratau</string>
     <string name="no_program_data">Programos duomenų nėra</string>
-    <string name="lbl_no_recordings">Įrašų nėra</string>
     <string name="lbl_guest_stars">Kviestinės žvaigždės</string>
     <string name="image_type_banner">Reklamjuostė</string>
     <string name="help">Pagalba</string>
@@ -390,7 +389,6 @@
     <string name="pref_subtitles_background_title">Įjungti foną</string>
     <string name="server_issue_outdated_version">Serveris naudoja nepalaikomą %1$s versiją. Prašome atnaujinti į %2$s ar naujesnę</string>
     <string name="server_issue_unsupported_version">Serveris naudoja %1$s versiją, kuri nepalaikoma</string>
-    <string name="server_issue_ssl_handshake">SSL jungimasis nepavyko</string>
     <string name="pref_direct_stream_live_off">Transkodavimas naudojamas kai būtina</string>
     <string name="home_section_resume_book">Tęsti skaitymą</string>
     <string name="pref_playback_description">Vaizdo įrašai, Subtitrai, Tiesioginė TV, Toliau</string>

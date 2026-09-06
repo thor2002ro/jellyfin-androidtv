@@ -28,8 +28,6 @@ import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
-import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegAudioMimeTypes
-import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegVideoMimeTypes
 import org.koin.compose.koinInject
 
 // Values from Display.HdrCapabilities. Kept local to avoid minSdk inlined API warnings.
@@ -229,26 +227,36 @@ private fun buildFfmpegCapabilities(context: Context): CapabilityGroup {
 	return CapabilityGroup(
 		title = context.getString(R.string.pref_debug_capabilities_ffmpeg_section),
 		caption = caption,
-		items = buildFfmpegCodecItems("Video", ffmpegVideoMimeTypes) +
-			buildFfmpegCodecItems("Audio", ffmpegAudioMimeTypes),
+		items = buildFfmpegCodecItems(),
 	)
 }
 
-@androidx.annotation.OptIn(UnstableApi::class)
-private fun buildFfmpegCodecItems(
-	prefix: String,
-	codecs: Map<String, String>,
-) = codecs.entries
-	.filter { (_, mimeType) -> FfmpegLibrary.supportsFormat(mimeType) }
-	.sortedBy { (codec, _) -> codec }
-	.map { (codec, mimeType) ->
+private fun buildFfmpegCodecItems() = FfmpegCodecCapabilities.getCodecs()
+	.map { codec ->
 		CapabilityItem(
-			title = "$prefix: ${codec.displayFfmpegCodecName()}",
-			detail = mimeType,
+			title = "${codec.section}: ${codec.displayName}",
+			supported = codec.included,
+			detail = codec.detail,
+		)
+	}
+	.ifEmpty {
+		listOf(
+			CapabilityItem(
+				title = "No FFmpeg decoders detected",
+				detail = "The extension is unavailable or did not report any known decoders",
+			)
 		)
 	}
 
-private fun String.displayFfmpegCodecName() = replace('_', '-').uppercase()
+private val FfmpegCodecCapability.detail
+	get() = listOfNotNull(
+		matchedDecoderName?.let { decoder -> "Matched decoder: $decoder" },
+		decoderNames.takeIf { decoders -> decoders.isNotEmpty() }?.joinToString(
+			prefix = "Checked decoders: ",
+			separator = ", ",
+		),
+		mimeType,
+	).joinToString(" / ")
 
 private fun getSupportedHdrTypes(context: Context): Set<Int> {
 	if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return emptySet()

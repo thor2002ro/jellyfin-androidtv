@@ -143,7 +143,6 @@
     <string name="pref_live_tv_cat">Live TV</string>
     <string name="lbl_recorded_tv">Optaget TV</string>
     <string name="lbl_live_tv_guide">Live TV-guide</string>
-    <string name="lbl_no_recordings">Ingen optagelser tilgængelige</string>
     <string name="msg_burn_sub_warning">Indbrænding af undertekster. Dette kan tage nogle sekunder…</string>
     <string name="msg_unable_load_subs">Undertekst kunne ikke indlæses</string>
     <string name="msg_subtitles_loading">Undertekster indlæses…</string>
@@ -385,7 +384,6 @@
     <string name="pref_accounts">Brugere</string>
     <string name="sort_accounts_by">Sorter brugere efter</string>
     <string name="pref_customization">Brugerdefineret</string>
-    <string name="server_issue_ssl_handshake">SSL håndtryk fejlede</string>
     <string name="server_issue_timeout">Forbindelsen blev afbrudt</string>
     <string name="server_issue_outdated_version">Serveren bruger version %1$s opdater venligst til %2$s eller nyere</string>
     <string name="server_issue_unsupported_version">Serveren bruger version %1$s som ikke er understøttet</string>

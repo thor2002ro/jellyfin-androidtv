@@ -84,8 +84,8 @@ class UserLoginFragment : Fragment() {
 
 				// Disable QuickConnect when unavailable
 				userLoginViewModel.quickConnectState.onEach { state ->
-					binding.useQuickconnect.isEnabled = state != UnavailableQuickConnectState
-					if (state == UnavailableQuickConnectState) setLoginMethod<UserLoginCredentialsFragment>()
+					binding.useQuickconnect.isEnabled = state !is UnavailableQuickConnectState
+					if (state is UnavailableQuickConnectState) setLoginMethod<UserLoginCredentialsFragment>()
 				}.launchIn(this)
 			}
 		}

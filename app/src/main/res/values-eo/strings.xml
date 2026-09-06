@@ -223,7 +223,6 @@
     <string name="lbl_remove_from_queue">Forigi de Vico</string>
     <string name="lbl_play_from_here">Ludi de Ĉi tie</string>
     <string name="lbl_live_tv_guide">TV-etera Gvidilo</string>
-    <string name="lbl_no_recordings">Neniuj Rikordoj Disponeblaj</string>
     <string name="lbl_goto_series">Iru al Serio</string>
     <string name="pref_audio_compat">Subenmiksado al stereosono</string>
     <string name="lbl_only_new_episodes">Nur Novaj Epizodoj</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">Montri nigran fonon malantaŭ la subtekstoj</string>
     <string name="pref_subtitles_background_title">Ebligi fonon</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">SSL-kvitanco malsukcesis</string>
     <string name="server_issue_timeout">Konekta tempo estas elĉerpita</string>
     <string name="server_issue_outdated_version">Servilo uzas version %1$s sed devas esti %2$s aŭ pli nova</string>
     <string name="server_issue_unsupported_version">Servilo uzas version %1$s kiu ne subtenatas</string>

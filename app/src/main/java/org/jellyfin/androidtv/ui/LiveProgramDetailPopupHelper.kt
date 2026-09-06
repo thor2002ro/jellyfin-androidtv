@@ -142,22 +142,21 @@ fun LiveProgramDetailPopup.getSeriesTimer(
 	}
 }
 
-fun LiveProgramDetailPopup.toggleFavorite(
-	item: BaseItemDto,
-	callback: (item: BaseItemDto) -> Unit,
+fun LiveProgramDetailPopup.setFavorite(
+	itemId: UUID,
+	favorite: Boolean,
+	callback: () -> Unit,
 ) {
 	val itemMutationRepository by mContext.getActivity()!!.inject<ItemMutationRepository>()
 
 	lifecycle.coroutineScope.launch {
 		runCatching {
-			val userData = itemMutationRepository.setFavorite(
-				item = item.id,
-				favorite = !(item.userData?.isFavorite ?: false)
+			itemMutationRepository.setFavorite(
+				item = itemId,
+				favorite = favorite,
 			)
-
-			item.copy(userData = userData)
-		}.onSuccess { item ->
-			callback(item)
+		}.onSuccess {
+			callback()
 		}
 	}
 }

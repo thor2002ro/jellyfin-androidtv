@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.startup
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import org.jellyfin.androidtv.auth.model.AuthenticatingState
 import org.jellyfin.androidtv.auth.model.AutomaticAuthenticateMethod
 import org.jellyfin.androidtv.auth.model.ConnectedQuickConnectState
 import org.jellyfin.androidtv.auth.model.CredentialAuthenticateMethod
+import org.jellyfin.androidtv.auth.model.ErrorQuickConnectState
 import org.jellyfin.androidtv.auth.model.LoginState
 import org.jellyfin.androidtv.auth.model.PendingQuickConnectState
 import org.jellyfin.androidtv.auth.model.QuickConnectAuthenticateMethod
@@ -29,6 +31,7 @@ import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.util.sdk.forUser
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.exception.ApiClientException
+import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.extensions.quickConnectApi
 import org.jellyfin.sdk.model.DeviceInfo
 import timber.log.Timber
@@ -51,6 +54,7 @@ class UserLoginViewModel(
 
 	private val quickConnectApi = jellyfin.createApi()
 	private var quickConnectSecret: String? = null
+	private var quickConnectPollingJob: Job? = null
 	private val _quickConnectState = MutableStateFlow<QuickConnectState>(UnknownQuickConnectState)
 	val quickConnectState = _quickConnectState.asStateFlow()
 	fun authenticate(server: Server, user: User): Flow<LoginState> =
@@ -66,7 +70,18 @@ class UserLoginViewModel(
 
 	fun clearLoginState() {
 		_loginState.value = null
+		resetQuickConnect()
+	}
+
+	private fun resetQuickConnect() {
 		_quickConnectState.value = UnknownQuickConnectState
+		cancelQuickConnect()
+	}
+
+	fun cancelQuickConnect() {
+		quickConnectPollingJob?.cancel()
+		quickConnectPollingJob = null
+		quickConnectSecret = null
 	}
 
 	/**
@@ -74,9 +89,10 @@ class UserLoginViewModel(
 	 */
 	suspend fun initiateQuickconnect() {
 		// Already initialized
-		if (quickConnectState.value != UnknownQuickConnectState) return
+		if (quickConnectState.value !is UnknownQuickConnectState && quickConnectState.value !is ErrorQuickConnectState) return
 
 		val server = server.value ?: return
+		quickConnectPollingJob?.cancel()
 		_quickConnectState.emit(UnknownQuickConnectState)
 		quickConnectSecret = null
 
@@ -93,12 +109,14 @@ class UserLoginViewModel(
 			quickConnectSecret = response.secret
 			_quickConnectState.emit(PendingQuickConnectState(response.code))
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to initiate QuickConnect")
-			_quickConnectState.emit(UnavailableQuickConnectState)
+			Timber.e(err, "Unable to initiate QuickConnect for server ${server.address}")
+			if (err.isQuickConnectUnavailable()) _quickConnectState.emit(UnavailableQuickConnectState)
+			else _quickConnectState.emit(ErrorQuickConnectState(err))
+			return
 		}
 
 		// Update every 5 seconds until QuickConnect is inactive or the view model is cancelled
-		viewModelScope.launch {
+		quickConnectPollingJob = viewModelScope.launch {
 			while (isActive) {
 				delay(5.seconds)
 				if (!updateQuickConnectState()) break
@@ -127,14 +145,17 @@ class UserLoginViewModel(
 					_loginState.emit(it)
 				}
 
+				quickConnectPollingJob = null
 				return false
 			} else {
 				_quickConnectState.emit(PendingQuickConnectState(state.code))
 				return true
 			}
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to initiate QuickConnect")
-			_quickConnectState.emit(UnavailableQuickConnectState)
+			Timber.e(err, "Unable to update QuickConnect state for server ${server.address}")
+			if (err.isQuickConnectUnavailable()) _quickConnectState.emit(UnavailableQuickConnectState)
+			else _quickConnectState.emit(ErrorQuickConnectState(err))
+			quickConnectPollingJob = null
 			return false
 		}
 	}
@@ -144,3 +165,20 @@ class UserLoginViewModel(
 			.firstOrNull { it.id == id }
 	}
 }
+
+private fun ApiClientException.isQuickConnectUnavailable(): Boolean =
+	this is InvalidStatusException && status in QUICK_CONNECT_UNAVAILABLE_STATUSES
+
+private val QUICK_CONNECT_UNAVAILABLE_STATUSES = setOf(
+	HTTP_STATUS_BAD_REQUEST,
+	HTTP_STATUS_UNAUTHORIZED,
+	HTTP_STATUS_FORBIDDEN,
+	HTTP_STATUS_NOT_FOUND,
+	HTTP_STATUS_METHOD_NOT_ALLOWED,
+)
+
+private const val HTTP_STATUS_BAD_REQUEST = 400
+private const val HTTP_STATUS_UNAUTHORIZED = 401
+private const val HTTP_STATUS_FORBIDDEN = 403
+private const val HTTP_STATUS_NOT_FOUND = 404
+private const val HTTP_STATUS_METHOD_NOT_ALLOWED = 405

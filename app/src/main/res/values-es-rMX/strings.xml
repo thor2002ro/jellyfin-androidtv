@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Cargando subtítulos…</string>
     <string name="msg_unable_load_subs">No fue posible cargar el subtítulo</string>
     <string name="msg_burn_sub_warning">Quemando los subtítulos. Esto puede tomar algunos segundos…</string>
-    <string name="lbl_no_recordings">No hay grabaciones disponibles</string>
     <string name="lbl_live_tv_guide">Guía de TV en vivo</string>
     <string name="lbl_recorded_tv">Grabaciones de TV</string>
     <string name="pref_live_tv_cat">TV en vivo</string>
@@ -401,7 +400,6 @@
     <string name="pref_accounts">Cuentas</string>
     <string name="sort_accounts_by">Organizar cuentas por</string>
     <string name="pref_customization">Personalización</string>
-    <string name="server_issue_ssl_handshake">El protocolo de enlace SSL ha fallado</string>
     <string name="server_issue_timeout">Se agotó el tiempo de espera de la conexión</string>
     <string name="server_issue_outdated_version">La versión del servidor %1$s no tiene soporte, por favor actualizar a la versión %2$s o superior</string>
     <string name="server_issue_unsupported_version">El servidor utiliza la versión %1$s la cual no está soportada</string>

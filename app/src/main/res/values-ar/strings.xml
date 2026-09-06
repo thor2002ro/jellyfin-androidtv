@@ -10,7 +10,6 @@
     <string name="lbl_songs">الأغاني</string>
     <string name="lbl_song">أغنية</string>
     <string name="lbl_artists">الفنانون</string>
-    <string name="lbl_no_recordings">لا توجد تسجيلات متاحة</string>
     <string name="msg_unable_load_subs">تعذر تحميل الترجمة</string>
     <string name="lbl_filters">فلاتر التلفاز المباشر</string>
     <string name="lbl_ended">انتهى</string>
@@ -390,7 +389,6 @@
     <string name="pref_accounts">الحسابات</string>
     <string name="sort_accounts_by">ترتيب الحسابات حسب</string>
     <string name="pref_customization">التخصيص</string>
-    <string name="server_issue_ssl_handshake">فشلت مصادقة SSL</string>
     <string name="server_issue_timeout">انتهت مهلة الاتصال</string>
     <string name="server_issue_outdated_version">يستخدم الخادم إصدارًا غير مدعوم %1$s. يرجى التحديث إلى %2$s أو أحدث</string>
     <string name="server_issue_unsupported_version">يستخدم الخادم الإصدار %1$s وهو غير مدعوم</string>
