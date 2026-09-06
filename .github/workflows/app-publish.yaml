@@ -32,6 +32,12 @@ jobs:
       - name: Checkout repository
         if: ${{ steps.release-assets.outputs.has_assets == 'false' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Update submodules from tracked branches
+        if: ${{ steps.release-assets.outputs.has_assets == 'false' }}
+        run: git submodule update --remote --recursive
 
       - name: Setup Java
         if: ${{ steps.release-assets.outputs.has_assets == 'false' }}
