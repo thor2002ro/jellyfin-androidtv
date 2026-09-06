@@ -679,4 +679,7 @@
     <string name="truehd">TrueHD</string>
     <string name="eac3_atmos">DD+ Atmos</string>
     <string name="truehd_atmos">TrueHD Atmos</string>
+    <string name="lbl_bitstream_eac3">Flux audio Dolby Digital Plus</string>
+    <string name="lbl_bitstream_dts">Flux audio Digital Theater System</string>
+    <string name="lbl_bitstream_truehd">Flux audio Dolby TrueHD</string>
 </resources>

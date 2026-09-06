@@ -687,4 +687,7 @@
     <string name="truehd">TrueHD</string>
     <string name="eac3_atmos">DD+ Atmos</string>
     <string name="truehd_atmos">TrueHD Atmos</string>
+    <string name="lbl_bitstream_eac3">Bitstream Dolby Digital Plus</string>
+    <string name="lbl_bitstream_dts">Bitstream Digital Theater System</string>
+    <string name="lbl_bitstream_truehd">Bitstream Dolby TrueHD</string>
 </resources>

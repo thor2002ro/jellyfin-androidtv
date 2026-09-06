@@ -163,6 +163,21 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 */
 		var doviProfile8Override = enumPreference("dovi_profile_8_override", HdrOverrideMode.AUTO)
 
+		/**
+		 * Enable EAC3
+		 */
+		var eac3Enabled = booleanPreference("pref_bitstream_eac3", true)
+
+		/**
+		 * Enable DTS
+		 */
+		var dtsEnabled = booleanPreference("pref_bitstream_dts", true)
+
+		/**
+		 * Enable TrueHD
+		 */
+		var truehdEnabled = booleanPreference("pref_bitstream_truehd", true)
+
 		/* Live TV */
 		/**
 		 * Use direct play
