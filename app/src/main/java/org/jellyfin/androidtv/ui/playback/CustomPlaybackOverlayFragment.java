@@ -1306,7 +1306,9 @@ public class CustomPlaybackOverlayFragment extends Fragment implements LiveTvGui
     }
 
     public void closePlayer() {
-        if (navigating) return;
+        if (navigating || !Destinations.INSTANCE.isLegacyVideoPlayback(
+                navigationRepository.getValue().getCurrentDestination().getValue()
+        )) return;
         navigating = true;
 
         if (navigationRepository.getValue().getCanGoBack()) {
