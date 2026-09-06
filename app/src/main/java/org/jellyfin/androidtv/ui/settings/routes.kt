@@ -57,6 +57,7 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackResume
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackZoomModeScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.PreferredLanguageType
+import org.jellyfin.androidtv.ui.settings.screen.playback.libVLCSettingsRoutes
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentsScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.nextup.SettingsPlaybackNextUpBehaviorScreen
@@ -345,4 +346,4 @@ val routes = mapOf<String, RouteComposable>(
 			artifactId = context.parameters["artifactId"]!!
 		)
 	},
-)
+) + libVLCSettingsRoutes

@@ -76,6 +76,8 @@ import io.github.peerless2012.ass.media.type.AssRenderType;
 import io.github.peerless2012.ass.media.widget.AssSubtitleView;
 import timber.log.Timber;
 
+import static org.jellyfin.androidtv.preference.ExoPlayerUserPreferencesKt.getPreferExoPlayerFfmpeg;
+
 @OptIn(markerClass = UnstableApi.class)
 public class VideoManager {
     private static final int LIVE_TV_DEFAULT_BUFFER_MS = 3_000;
@@ -234,7 +236,7 @@ public class VideoManager {
     }
 
     private int determineExoPlayerExtensionRendererMode() {
-        if (userPreferences.get(UserPreferences.Companion.getPreferExoPlayerFfmpeg())) {
+        if (userPreferences.get(getPreferExoPlayerFfmpeg(UserPreferences.Companion))) {
             return DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
         }
 
