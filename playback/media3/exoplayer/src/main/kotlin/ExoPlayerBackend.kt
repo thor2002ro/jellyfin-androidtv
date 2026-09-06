@@ -778,6 +778,7 @@ class ExoPlayerBackend(
 				glyphSize = exoPlayerOptions.libassGlyphSize,
 				cacheSize = exoPlayerOptions.libassCacheSize,
 				maxRenderPixels = exoPlayerOptions.libassMaxRenderPixels,
+				maxSubtitleFps = exoPlayerOptions.libassMaxFps,
 				performanceStatsCollector = AssPerformanceStatsCollector(),
 			),
 		)
@@ -1640,6 +1641,7 @@ class ExoPlayerBackend(
 	override fun seekTo(position: Duration): Boolean {
 		if (!exoPlayer.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) || !exoPlayer.isCurrentMediaItemSeekable) {
 			Timber.w("Trying to seek but ExoPlayer doesn't support it for the current item")
+			return false
 		}
 
 		exoPlayer.seekTo(position.inWholeMilliseconds)

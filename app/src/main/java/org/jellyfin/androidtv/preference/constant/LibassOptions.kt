@@ -58,6 +58,18 @@ enum class LibassMaxRenderPixels(
 	),
 }
 
+enum class LibassMaxFps(
+	override val nameRes: Int,
+	val descriptionRes: Int,
+	val framesPerSecond: Float,
+) : PreferenceEnum {
+	FPS_24(R.string.preference_libass_max_fps_24, R.string.preference_libass_max_fps_24_description, 24f),
+	FPS_30(R.string.preference_libass_max_fps_30, R.string.preference_libass_max_fps_30_description, 30f),
+	FPS_35(R.string.preference_libass_max_fps_35, R.string.preference_libass_max_fps_35_description, 35f),
+	FPS_45(R.string.preference_libass_max_fps_45, R.string.preference_libass_max_fps_45_description, 45f),
+	FPS_60(R.string.preference_libass_max_fps_60, R.string.preference_libass_max_fps_60_description, 60f),
+}
+
 enum class LibassCacheSize(
 	override val nameRes: Int,
 	val descriptionRes: Int,
