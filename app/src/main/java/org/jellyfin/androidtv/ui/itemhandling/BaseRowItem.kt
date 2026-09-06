@@ -15,6 +15,7 @@ abstract class BaseRowItem protected constructor(
 ) {
 	open val itemId: UUID? = null
 	open val showCardInfoOverlay: Boolean = false
+	open val showRemainingTimeBadge: Boolean = false
 	open val isFavorite: Boolean = false
 	open val isPlayed: Boolean = false
 	open val detailBaseItem: BaseItemDto? get() = baseItem
