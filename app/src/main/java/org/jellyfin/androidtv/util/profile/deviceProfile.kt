@@ -12,7 +12,6 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
-import org.jellyfin.androidtv.preference.constant.HdrFormat
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.CodecType
@@ -84,10 +83,10 @@ private fun UserPreferences.getMaxBitrate(): Int {
 	return (maxBitrate * 1_000_000).roundToInt()
 }
 
-private fun UserPreferences.getHdrRangeTypesFor(mode: HdrOverrideMode): Set<VideoRangeType> =
-	HdrFormat.entries
-		.filter { this[it.preference] == mode }
-		.flatMapTo(mutableSetOf()) { it.videoRangeTypes }
+private fun isAudioCodecAvailable(codec: String, supportsOpus: Boolean): Boolean = when (codec) {
+	Codec.Audio.OPUS -> supportsOpus
+	else -> true
+}
 
 fun createDeviceProfile(
 	context: Context,
@@ -124,10 +123,11 @@ fun createDeviceProfile(
 	forceEnabledHdr: Set<VideoRangeType>,
 	forceDisabledHdr: Set<VideoRangeType>
 ) = buildDeviceProfile {
+	val supportsOpus = mediaTest.supportsOpus()
 	val allowedAudioCodecs = when {
 		downMixAudio -> downmixSupportedAudioCodecs
-		else -> supportedAudioCodecs.filterNot { supportedPassthroughAudioCodecs ->
-			when (supportedPassthroughAudioCodecs) {
+		else -> supportedAudioCodecs.filterNot { audioCodec ->
+			!isAudioCodecAvailable(audioCodec, supportsOpus) || when (audioCodec) {
 				// Remove codec if false.
 				Codec.Audio.AC3 -> !isAC3PrefEnabled
 				Codec.Audio.EAC3 -> !isEAC3PrefEnabled
@@ -161,12 +161,6 @@ fun createDeviceProfile(
 	val supportsAV1DolbyVision = mediaTest.supportsAV1DolbyVision()
 	val supportsAV1HDR10 = mediaTest.supportsAV1HDR10()
 	val supportsAV1HDR10Plus = mediaTest.supportsAV1HDR10Plus()
-
-	// HEVC
-	val supportsHevcDolbyVision = mediaTest.supportsHevcDolbyVision()
-	val supportsHevcDolbyVisionEL = mediaTest.supportsHevcDolbyVisionEL()
-	val supportsHevcHDR10 = mediaTest.supportsHevcHDR10()
-	val supportsHevcHDR10Plus = mediaTest.supportsHevcHDR10Plus()
 
 	name = "AndroidTV-Default"
 
@@ -477,40 +471,11 @@ fun createDeviceProfile(
 		}
 	} - forceEnabledHdr + forceDisabledHdr
 
-	val unsupportedRangeTypesHevc = buildSet {
-		add(VideoRangeType.DOVI_INVALID)
-
-		if (!supportsHevcDolbyVisionEL) {
-			if (
-				!KnownDefects.unreportedDoviProfile7Support ||
-				!supportsHevcDolbyVision ||
-				!supportsHevcMain10 ||
-				!supportsHevcHDR10
-			) {
-				add(VideoRangeType.DOVI_WITH_EL)
-
-				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) {
-					add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
-				}
-			}
-
-			if (!supportsHevcDolbyVision) {
-				add(VideoRangeType.DOVI)
-				if (!supportsHevcHDR10) add(VideoRangeType.DOVI_WITH_HDR10)
-				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
-			}
-		}
-
-		if (!supportsHevcHDR10Plus) {
-			add(VideoRangeType.HDR10_PLUS)
-			if (!supportsHevcHDR10) add(VideoRangeType.HDR10)
-		}
-
-		if (KnownDefects.hevcDoviHdr10PlusBug) {
-			add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
-			add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
-		}
-	} - forceEnabledHdr + forceDisabledHdr
+	val unsupportedRangeTypesHevc = getUnsupportedHevcVideoRangeWorkarounds(
+		mediaTest = mediaTest,
+		forceEnabledHdr = forceEnabledHdr,
+		forceDisabledHdr = forceDisabledHdr,
+	).keys
 
 	// Note: The codec profiles use a workaround to create correct behavior
 	// The notEquals condition will always fail the ConditionProcessor test in the server so we use applyConditions to only have the codec

@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import org.jellyfin.androidtv.ui.base.Icon
 
@@ -25,5 +26,6 @@ fun MediaToasts(mediaToastRegistry: MediaToastRegistry) {
 			}
 		},
 		progress = data?.progress,
+		text = data?.text?.let { stringResource(it) },
 	)
 }

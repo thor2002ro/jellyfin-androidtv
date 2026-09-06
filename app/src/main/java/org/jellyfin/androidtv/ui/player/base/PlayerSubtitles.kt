@@ -12,9 +12,16 @@ fun PlayerSubtitles(
 	modifier: Modifier = Modifier,
 	playbackManager: PlaybackManager = koinInject(),
 ) = AndroidView(
-	factory = { context -> PlayerSubtitleView(context) },
+	factory = { context ->
+		PlayerSubtitleView(context).apply {
+			isFocusable = false
+			isFocusableInTouchMode = false
+		}
+	},
 	modifier = modifier,
 	update = { view ->
+		view.isFocusable = false
+		view.isFocusableInTouchMode = false
 		view.playbackManager = playbackManager
 	}
 )

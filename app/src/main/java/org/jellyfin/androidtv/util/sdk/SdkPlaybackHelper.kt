@@ -201,24 +201,30 @@ class SdkPlaybackHelper(
 				response.items
 			}
 
-			BaseItemKind.PROGRAM -> {
-				val parentId = requireNotNull(mainItem.parentId)
-				val channel by api.userLibraryApi.getItem(parentId)
+			BaseItemKind.PROGRAM,
+			BaseItemKind.TV_PROGRAM,
+			BaseItemKind.LIVE_TV_PROGRAM -> {
+				val channelId = requireNotNull(mainItem.parentId ?: mainItem.channelId)
+				val channel by api.userLibraryApi.getItem(channelId)
 				val channelWithProgramMetadata = channel.copy(
+					startDate = mainItem.startDate,
 					premiereDate = mainItem.premiereDate,
 					endDate = mainItem.endDate,
 					officialRating = mainItem.officialRating,
 					runTimeTicks = mainItem.runTimeTicks,
+					currentProgram = mainItem.copy(currentProgram = null),
 				)
 
 				listOf(channelWithProgramMetadata)
 			}
 
-			BaseItemKind.TV_CHANNEL -> {
+			BaseItemKind.TV_CHANNEL,
+			BaseItemKind.LIVE_TV_CHANNEL -> {
 				val channel by api.liveTvApi.getChannel(mainItem.id)
 				val currentProgram = channel.currentProgram
 				if (currentProgram != null) {
 					val channelWithCurrentProgramMetadata = channel.copy(
+						startDate = currentProgram.startDate,
 						premiereDate = currentProgram.premiereDate,
 						endDate = currentProgram.endDate,
 						officialRating = currentProgram.officialRating,
@@ -231,6 +237,8 @@ class SdkPlaybackHelper(
 			}
 
 			else -> {
+				if (mainItem.isLiveTv()) return@withContext listOf(mainItem)
+
 				val parts = getParts(mainItem)
 				val addIntros = allowIntros && userPreferences[UserPreferences.cinemaModeEnabled]
 

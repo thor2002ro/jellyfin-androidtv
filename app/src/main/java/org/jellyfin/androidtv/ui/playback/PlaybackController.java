@@ -236,6 +236,10 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         return mCurrentStreamInfo == null || mCurrentStreamInfo.getPlayMethod() == PlayMethod.TRANSCODE;
     }
 
+    public boolean isBurningSubtitlesForStatus() {
+        return burningSubs;
+    }
+
     public boolean hasNextItem() {
         return mItems != null && mCurrentIndex < mItems.size() - 1;
     }
@@ -682,12 +686,13 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         if (mFragment != null) mFragment.updateDisplay();
 
         if (mVideoManager != null) {
-            mVideoManager.setMediaStreamInfo(api.getValue(), response);
+            mVideoManager.setMediaStreamInfo(api.getValue(), response, isLiveTv);
         }
 
         PlaybackControllerHelperKt.applyMediaSegments(this, item, () -> {
             // Set video start delay
             long videoStartDelay = userPreferences.getValue().get(UserPreferences.Companion.getVideoStartDelay());
+            if (isLiveTv && mVideoManager != null) videoStartDelay = Math.max(videoStartDelay, mVideoManager.getLiveTvBufferMs());
             if (videoStartDelay > 0) {
                 mHandler.postDelayed(new Runnable() {
                     @Override
@@ -856,6 +861,10 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     }
 
     public void playPause() {
+        if (mFragment != null && mFragment.consumeSkipOverlay()) {
+            return;
+        }
+
         switch (mPlaybackState) {
             case PLAYING:
                 pause();
@@ -1017,7 +1026,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
                     updateBurningSubs(response);
 
                     if (mVideoManager != null) {
-                        mVideoManager.setMediaStreamInfo(api.getValue(), response);
+                        mVideoManager.setMediaStreamInfo(api.getValue(), response, isLiveTv);
                         mVideoManager.start();
                     }
                 }

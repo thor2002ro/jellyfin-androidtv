@@ -352,6 +352,14 @@ fun SettingsPlaybackAdvancedScreen() {
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_troubleshooting)) }) }
 
 		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_debug_capabilities_title)) },
+				captionContent = { Text(stringResource(R.string.pref_debug_capabilities_summary)) },
+				onClick = { router.push(Routes.PLAYBACK_DEBUG_CAPABILITIES) },
+			)
+		}
+
+		item {
 			val api = koinInject<ApiClient>()
 			val serverVersion = koinInject<ServerVersion>()
 

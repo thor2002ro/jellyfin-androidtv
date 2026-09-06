@@ -105,7 +105,12 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Whether ExoPlayer should prefer FFmpeg renderers to core ones.
 		 */
-		var preferExoPlayerFfmpeg = booleanPreference("exoplayer_prefer_ffmpeg", defaultValue = false)
+		var preferExoPlayerFfmpeg = booleanPreference("exoplayer_prefer_ffmpeg", defaultValue = true)
+
+		/**
+		 * Enable trickplay thumbnails while seeking.
+		 */
+		var trickPlayEnabled = booleanPreference("pref_enable_trickplay", true)
 
 		/**
 		 * User defined AVC level override. AUTO uses device-reported capabilities.
@@ -131,7 +136,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Preferred behavior for audio streaming.
 		 */
-		var audioNightMode = enumPreference("audio_night_mode", false)
+		var audioNightMode = enumPreference("audio_night_mode", true)
 
 		/**
 		 * Enable AC3
@@ -191,9 +196,14 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var debuggingEnabled = booleanPreference("pref_enable_debug", false)
 
 		/**
+		 * Enable verbose app logging.
+		 */
+		var verboseLoggingEnabled = booleanPreference("pref_verbose_logging", false)
+
+		/**
 		 * Use playback rewrite module for video
 		 */
-		var playbackRewriteVideoEnabled = booleanPreference("playback_new", false)
+		var playbackRewriteVideoEnabled = booleanPreference("playback_new", true)
 
 		/**
 		 * When to show the clock.
@@ -284,7 +294,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Enable libass.
 		 */
-		var assDirectPlay = booleanPreference("libass_enabled", false)
+		var assDirectPlay = booleanPreference("libass_enabled", true)
 
 		/**
 		 * Always burn in subtitles when transcoding.

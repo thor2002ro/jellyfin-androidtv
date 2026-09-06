@@ -41,7 +41,12 @@ enum class HdrFormat(
 	DOVI_PROFILE_8(
 		nameRes = R.string.dovi_profile_8,
 		descriptionRes = R.string.dovi_profile_8_description,
-		videoRangeTypes = setOf(VideoRangeType.DOVI_WITH_HDR10, VideoRangeType.DOVI_WITH_HDR10_PLUS),
+		videoRangeTypes = setOf(
+			VideoRangeType.DOVI_WITH_HDR10,
+			VideoRangeType.DOVI_WITH_HDR10_PLUS,
+			VideoRangeType.DOVI_WITH_HLG,
+			VideoRangeType.DOVI_WITH_SDR,
+		),
 		preference = UserPreferences.doviProfile8Override,
 	),
 }
