@@ -135,6 +135,10 @@
     <string name="lbl_enable_debug">Debug options</string>
     <string name="lbl_verbose_logging">Verbose debug logging</string>
     <string name="desc_verbose_logging">Include very detailed debug messages in logcat. Normal app logs stay enabled.</string>
+    <string name="pref_upload_logs_title">Upload logs to server</string>
+    <string name="pref_upload_logs_summary">Upload the current app logs to your Jellyfin server for troubleshooting</string>
+    <string name="pref_upload_logs_success">Logs submitted as %1$s</string>
+    <string name="pref_upload_logs_failure">Failed to submit logs. Your Jellyfin server may prohibit client logs.</string>
     <string name="desc_debug">Provide extra information for debugging</string>
     <string name="lbl_showing">Showing</string>
     <string name="lbl_all_items">All items</string>
