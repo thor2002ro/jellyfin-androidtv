@@ -21,6 +21,7 @@ data class PlaybackLibassStats(
 	val minRenderMs: Double,
 	val maxRenderMs: Double,
 	val lastRenderMs: Double,
+	val openGlMode: String?,
 )
 
 data class PlaybackDoviTransformStats(
