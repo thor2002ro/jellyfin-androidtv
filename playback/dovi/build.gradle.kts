@@ -3,12 +3,12 @@ plugins {
 }
 
 android {
-	namespace = "org.jellyfin.playback.mpv"
+	namespace = "org.jellyfin.playback.dovi"
 	compileSdk = libs.versions.android.compileSdk.get().toInt()
+	ndkVersion = libs.versions.android.ndk.get()
 
 	defaultConfig {
 		minSdk = libs.versions.android.minSdk.get().toInt()
-		consumerProguardFiles("consumer-rules.pro")
 	}
 
 	compileOptions {
@@ -26,13 +26,8 @@ android {
 }
 
 dependencies {
+	api(libs.libdovi.android)
 	implementation(projects.playback.core)
-	implementation(projects.playback.dovi)
-	implementation(libs.libdovi.android)
-	implementation(libs.androidx.core)
-	implementation(libs.kotlinx.coroutines)
-	api(libs.mpv.android.lib)
-	implementation(libs.timber)
 	coreLibraryDesugaring(libs.android.desugar)
 
 	testImplementation(libs.kotest.runner.junit5)
