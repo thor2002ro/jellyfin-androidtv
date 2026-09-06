@@ -517,6 +517,13 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         row.Retrieve();
     }
 
+    protected void addDeferredItemRow(ItemRowAdapter row, int index, String headerText) {
+        HeaderItem header = new HeaderItem(index, headerText);
+        ListRow listRow = new ListRow(header, row);
+        row.setRow(listRow, index);
+        row.Retrieve();
+    }
+
     protected void addAdditionalRows(MutableObjectAdapter<Row> adapter) {
         Timber.d("Item type: %s", mBaseItem.getType().toString());
 
@@ -578,13 +585,13 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 break;
             case PERSON:
                 ItemRowAdapter personMoviesAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createPersonItemsRequest(mBaseItem.getId(), BaseItemKind.MOVIE), 100, false, new CardPresenter(), adapter);
-                addItemRow(adapter, personMoviesAdapter, 0, getString(R.string.lbl_movies));
+                addDeferredItemRow(personMoviesAdapter, 0, getString(R.string.lbl_movies));
 
                 ItemRowAdapter personSeriesAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createPersonItemsRequest(mBaseItem.getId(), BaseItemKind.SERIES), 100, false, new CardPresenter(), adapter);
-                addItemRow(adapter, personSeriesAdapter, 1, getString(R.string.lbl_tv_series));
+                addDeferredItemRow(personSeriesAdapter, 1, getString(R.string.lbl_tv_series));
 
                 ItemRowAdapter personEpisodesAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createPersonItemsRequest(mBaseItem.getId(), BaseItemKind.EPISODE), 100, false, new CardPresenter(), adapter);
-                addItemRow(adapter, personEpisodesAdapter, 2, getString(R.string.lbl_episodes));
+                addDeferredItemRow(personEpisodesAdapter, 2, getString(R.string.lbl_episodes));
 
                 break;
             case MUSIC_ARTIST:
