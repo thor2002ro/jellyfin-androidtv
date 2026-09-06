@@ -26,7 +26,6 @@ class LiveTvPlaybackResetService(
 			val item = entry.baseItem ?: return@onEach
 			if (!liveTvPlaybackPolicy.isLiveTv(item)) return@onEach
 
-			liveTvPlaybackPolicy.reset(item, reason = "fresh queue entry")
 			entry.liveStreamTargetOffset = LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
 		}.launchIn(coroutineScope)
 	}

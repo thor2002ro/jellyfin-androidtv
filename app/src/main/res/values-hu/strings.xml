@@ -142,7 +142,6 @@
     <string name="lbl_song_title">Zeneszám címe</string>
     <string name="lbl_album_name">Albumcím</string>
     <string name="lbl_next_episode">Következő epizód</string>
-    <string name="lbl_previous_episode">Előző epizód</string>
     <string name="lbl_resume_from">Lejátszás %1$s -tól</string>
     <string name="lbl_guide_option_number">Csatorna száma</string>
     <string name="lbl_guide_option_played">Legutóbb játszott</string>

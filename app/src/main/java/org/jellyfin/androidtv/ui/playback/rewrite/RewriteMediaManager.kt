@@ -15,6 +15,7 @@ import org.jellyfin.androidtv.ui.playback.AudioEventListener
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.RepeatMode
@@ -27,6 +28,7 @@ import org.jellyfin.playback.jellyfin.queue.createBaseItemQueueEntry
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.MediaType
+import kotlin.time.Duration
 
 @Suppress("TooManyFunctions")
 class RewriteMediaManager(
@@ -229,6 +231,8 @@ class RewriteMediaManager(
 		private val api: ApiClient,
 		val items: List<BaseItemDto>,
 		val visibleInScreensaver: Boolean,
+		private val initialStartPosition: Duration? = null,
+		private val initialStartIndex: Int = 0,
 	) : QueueSupplier {
 		override val size: Int
 			get() = items.size
@@ -237,6 +241,9 @@ class RewriteMediaManager(
 			val item = items.getOrNull(index) ?: return null
 			return createBaseItemQueueEntry(api, item).also {
 				it.visibleInScreensaver = visibleInScreensaver
+				if (index == initialStartIndex && initialStartPosition != null) {
+					it.startPosition = initialStartPosition
+				}
 			}
 		}
 	}

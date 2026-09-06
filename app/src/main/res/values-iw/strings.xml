@@ -175,7 +175,6 @@
     <string name="lbl_clear_queue">נקה תור</string>
     <string name="lbl_song_title">שם השיר</string>
     <string name="lbl_album_name">שם האלבום</string>
-    <string name="lbl_previous_episode">הפרק הקודם</string>
     <string name="lbl_next_episode">הפרק הבא</string>
     <string name="lbl_more_like_this">פריטים דומים</string>
     <string name="lbl_resume_from">המשך מ־%1$s</string>

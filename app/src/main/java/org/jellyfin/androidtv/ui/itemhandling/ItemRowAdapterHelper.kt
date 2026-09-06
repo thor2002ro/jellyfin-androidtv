@@ -15,6 +15,8 @@ import org.jellyfin.androidtv.data.querying.GetTrailersRequest
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment.SortOption
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
+import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.extensions.artistsApi
@@ -47,6 +49,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.min
 
 fun <T : Any> ItemRowAdapter.setItems(
@@ -381,6 +384,7 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 					)
 				}
 			)
+			prefetchLiveTvTracks(api, items)
 
 			if (items.isEmpty()) removeRow()
 			else addRowToParentIfResultsReceived()
@@ -396,6 +400,24 @@ private fun BaseItemDto.withChannelImage(channel: BaseItemDto?) = copy(
 	channelNumber = channelNumber ?: channel?.number,
 	channelPrimaryImageTag = channelPrimaryImageTag ?: channel?.imageTags?.get(ImageType.PRIMARY),
 )
+
+private fun ItemRowAdapter.prefetchLiveTvTracks(
+	api: ApiClient,
+	items: Collection<BaseItemDto>,
+) {
+	LiveTvTrackCache.prefetchMissingOnce(api, items) { channelId ->
+		refreshLiveTvTrackBadge(channelId)
+	}
+}
+
+private fun ItemRowAdapter.refreshLiveTvTrackBadge(channelId: UUID) {
+	for (index in 0 until size()) {
+		val rowItem = get(index) as? BaseItemDtoBaseRowItem ?: continue
+		if (rowItem.baseItem?.liveTvChannelId() == channelId) {
+			set(index, rowItem)
+		}
+	}
+}
 
 fun ItemRowAdapter.retrieveLiveTvRecordings(api: ApiClient, query: GetRecordingsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
@@ -522,6 +544,7 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 					)
 				},
 			)
+			prefetchLiveTvTracks(api, items)
 
 			if (itemsLoaded == 0) removeRow()
 			else addRowToParentIfResultsReceived()
@@ -637,6 +660,12 @@ fun ItemRowAdapter.retrieveItems(
 			}
 
 			totalItems = response.totalRecordCount
+			val initialSelectedPosition = getPendingInitialSelectedPosition()
+			if (initialSelectedPosition != null && totalItems <= initialSelectedPosition) {
+				removeRow()
+				return@runCatching
+			}
+
 			setItems(
 				items = response.items,
 				transform = { item, _ ->
