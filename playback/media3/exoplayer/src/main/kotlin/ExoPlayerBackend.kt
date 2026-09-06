@@ -1270,6 +1270,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onTracksChanged(tracks: Tracks) {
+			notifyTracksChanged()
 			applyPendingInitialTrackSelection()
 			schedulePendingInitialTrackSelectionRetry()
 
