@@ -436,7 +436,6 @@
     <string name="user_picker_disable_summary">Kuva alati sisselogimisaken</string>
     <string name="user_picker_last_user_summary">Kasuta viimast aktiivset kontot</string>
     <string name="lbl_switch_user">Vaheta kontot</string>
-    <string name="no_network_permissions">Jellyfin vajab töötamiseks võrgulubasid</string>
     <string name="press_to_close">Vajutage sulgemiseks</string>
     <string name="saved_servers">Salvestatud serverid</string>
     <string name="welcome_content">Alustamiseks looge oma serveriga ühendus.</string>

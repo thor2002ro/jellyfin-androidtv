@@ -368,7 +368,6 @@
     <string name="lbl_switch_user">Perjungti naudotoją</string>
     <string name="welcome_title">Sveiki prisijungę prie Jellyfin!</string>
     <string name="pref_theme_muted_purple">Prislopinta violetinė</string>
-    <string name="no_network_permissions">Kad Jellyfin veiktų, reikia tinklo leidimų</string>
     <string name="press_to_close">Paspauskite, kad uždarytumėte</string>
     <string name="lbl_start_end_on_schedule">Prasideda laiku ir baigiasi laiku</string>
     <string name="no_user_warning">Neradome jokių naudotojų! \nPridėkite naują naudotoją paspausdami mygtuką \"Pridėti naudotoją\".</string>

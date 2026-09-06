@@ -463,7 +463,6 @@
     <string name="connect_manually_by_address">Внесете адреса на серверот</string>
     <string name="login_help_title">Потребна ви е помош\?</string>
     <string name="lbl_switch_user">Промени сметка</string>
-    <string name="no_network_permissions">Jellyfin бара дозвола за пристап до мрежата за да функционира</string>
     <string name="license_artifact">Артефакт</string>
     <string name="license_author">Автор</string>
     <string name="always_authenticate">Секогаш прашувај за податоци</string>

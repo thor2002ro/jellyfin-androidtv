@@ -305,7 +305,6 @@
     <string name="user_picker_disable_title">Disabilita</string>
     <string name="auto_sign_in">Login automatico</string>
     <string name="lbl_switch_user">Cambia utente</string>
-    <string name="no_network_permissions">Jellyfin richiede i permessi di rete per funzionare</string>
     <string name="lbl_time_range">%1$s–%2$s</string>
     <string name="lbl_name_date">%1$s (%2$s)</string>
     <string name="lbl_on_channel">Su %1$s</string>

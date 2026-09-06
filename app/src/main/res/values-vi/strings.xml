@@ -301,7 +301,6 @@
     <string name="user_picker_disable_title">Tắt</string>
     <string name="auto_sign_in">Đăng nhập tự động</string>
     <string name="lbl_switch_user">‎Chuyển tài khoản</string>
-    <string name="no_network_permissions">Jellyfin yêu cầu quyền mạng để hoạt động</string>
     <string name="lbl_time_range">%1$s–%2$s</string>
     <string name="lbl_name_date">%1$s (%2$s)</string>
     <string name="lbl_episode_range">E%1$d–%2$d</string>

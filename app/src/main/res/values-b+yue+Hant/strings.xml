@@ -338,7 +338,6 @@
     <string name="user_picker_last_user_summary">用返上次用開嗰個帳戶</string>
     <string name="lbl_switch_user">轉換帳戶</string>
     <string name="pref_theme_muted_purple">暗紫</string>
-    <string name="no_network_permissions">Jellyfin 需要有網路權限先至行到</string>
     <string name="press_to_close">撳吓嚟閂咗佢</string>
     <string name="saved_servers">儲存咗嘅伺服器</string>
     <string name="welcome_title">歡迎嚟到 Jellyfin！</string>

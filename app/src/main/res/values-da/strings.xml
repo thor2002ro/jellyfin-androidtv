@@ -321,7 +321,6 @@
     <string name="welcome_title">Velkommen til Jellyfin!</string>
     <string name="saved_servers">Gemte servere</string>
     <string name="press_to_close">Tryk for at lukke</string>
-    <string name="no_network_permissions">Jellyfin skal have netværk rettigheder for at fungere</string>
     <string name="pref_theme_muted_purple">Afdæmpet lilla</string>
     <string name="lbl_switch_user">Skift bruger</string>
     <string name="image_size_xlarge">Ekstra stor</string>
