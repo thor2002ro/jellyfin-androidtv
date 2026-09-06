@@ -68,6 +68,8 @@ import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
 import io.github.peerless2012.ass.media.type.AssRenderType
 import io.github.peerless2012.ass.media.widget.AssSubtitleView
 import io.github.thor2002ro.libdovi.DoviException
+import io.github.thor2002ro.libdovi.DoviTransformSessionState
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
@@ -115,6 +117,8 @@ import org.jellyfin.playback.exoplayer.dovi.DoviMediaSourceFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviSampleTransformationException
 import org.jellyfin.playback.exoplayer.dovi.DoviTransformContext
 import org.jellyfin.playback.dovi.DOVI_VIDEO_DECODER_ERROR_CODE
+import org.jellyfin.playback.dovi.DoviDecision
+import org.jellyfin.playback.dovi.DoviRoute
 import org.jellyfin.playback.dovi.doviDecision
 import org.jellyfin.playback.dovi.DoviSourceLayer
 import org.jellyfin.playback.dovi.DoviSourceProfile
@@ -131,6 +135,9 @@ enum class VideoDecoder {
 	SOFTWARE,
 	FFMPEG,
 }
+
+internal fun media3TransformStrategy(decision: DoviDecision): DoviTransformStrategy =
+	(decision.route as? DoviRoute.SourceBase)?.strategy ?: DoviTransformStrategy.LIBDOVI
 
 internal fun forcedVideoDecoderFallbacks(
 	selected: VideoDecoder,
@@ -298,6 +305,7 @@ internal data class PlaybackMediaItemTag(
 	val queueEntry: QueueEntry,
 	val errorOrigin: PlaybackErrorOrigin?,
 	val doviTransformStats: DoviTransformStatsHolder = DoviTransformStatsHolder(),
+	val doviTransformState: DoviTransformSessionState = DoviTransformSessionState(),
 )
 
 internal class DoviTransformStatsHolder {
@@ -870,10 +878,18 @@ class ExoPlayerBackend(
 			dvLevel = evidence.dvLevel,
 			pairEnhancementTrack = evidence.sourceProfile == DoviSourceProfile.PROFILE_7 &&
 				evidence.sourceLayer != DoviSourceLayer.MEL,
+			transformStrategy = media3TransformStrategy(decision),
+			transformState = doviTransformState,
 			onTransformObserved = { observation ->
 				doviTransformStats.record(observation.toPlaybackDoviTransformStats())
 			},
-		)
+		).also { context ->
+			Timber.i(
+				"Media3 Dolby Vision transform target=%s strategy=%s",
+				context.request.target,
+				context.transformStrategy,
+			)
+		}
 	}
 
 	private fun QueueEntry.createMediaSource(stream: PlayableMediaStream): MediaSource {
