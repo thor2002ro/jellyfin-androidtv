@@ -112,6 +112,14 @@ object TvManager {
 
 	@JvmStatic
 	fun loadAllChannels(fragment: Fragment, outerResponse: Function<Int, Void?>) {
+		allChannels
+			?.takeUnless { forceReload }
+			?.takeIf { channels -> channels.isNotEmpty() }
+			?.let {
+				outerResponse.apply(fillChannelIds())
+				return
+			}
+
 		loadLiveTvChannels(fragment) { channels ->
 			if (channels != null) {
 				outerResponse.apply(setAllChannels(channels))
@@ -119,6 +127,11 @@ object TvManager {
 				outerResponse.apply(0)
 			}
 		}
+	}
+
+	@JvmStatic
+	fun preloadChannels(fragment: Fragment) {
+		loadAllChannels(fragment) { null }
 	}
 
 	private fun fillChannelIds(): Int {
