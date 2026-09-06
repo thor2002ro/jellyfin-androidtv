@@ -88,7 +88,6 @@
     <string name="lbl_name">Nombre</string>
     <string name="lbl__continuing">CONTINUANDO</string>
     <string name="lbl_ended">FINALIZADO</string>
-    <string name="lbl_filters">Filtros de TV en vivo</string>
     <string name="msg_subtitles_loading">Cargando subtítulos…</string>
     <string name="msg_unable_load_subs">No fue posible cargar el subtítulo</string>
     <string name="pref_playback">Reproducción</string>
@@ -96,7 +95,6 @@
     <string name="lbl_videos">Videos</string>
     <string name="loading">Cargando…</string>
     <string name="lbl_favorite">Favorito</string>
-    <string name="lbl_select_date">Seleccionar fecha</string>
     <string name="lbl_series_settings">Preferencias de series</string>
     <string name="lbl_schedule">Programar</string>
     <string name="lbl_recent_recordings">Grabaciones recientes</string>
@@ -237,8 +235,6 @@
     <string name="no_player">Reproductor no encontrado</string>
     <string name="mark_watched_message">Este elemento no parece haberse reproducido completo. ¿Desea marcarlo como visto de todas formas\?</string>
     <string name="mark_watched">Marcar como visto</string>
-    <string name="lbl_tv_filter_status">Durante las %1$d horas siguientes</string>
-    <string name="lbl_tv_channel_status">%1$d de %2$d canales</string>
     <string name="just_one">Únicamente esto</string>
     <string name="turn_off">Desactivar esta opción</string>
     <string name="audio_error">No se pudo reproducir audio %1$s</string>
@@ -246,9 +242,6 @@
     <string name="subtitle_error">No se pudo seleccionar el subtítulo</string>
     <string name="too_many_errors">Demasiados errores. Deteniéndose</string>
     <string name="player_error">Se ha encontrado un error en el reproductor. Rei-ntentando…</string>
-    <string name="msg_live_tv_prev">¿Desea cargar las %1$d horas anteriores?</string>
-    <string name="msg_live_tv_next">¿Desea cargar las %1$d horas siguientes?</string>
-    <string name="lbl_load_guide_data">Cargar Guía de programas</string>
     <string name="episode_missing_message_2">Este episodio no está presente en la biblioteca. La reproducción se detendrá.</string>
     <string name="episode_missing_message">Este episodio no está presente en la biblioteca. ¿Desea omitirlo y continuar con el que sigue\?</string>
     <string name="episode_missing">Episodio faltante</string>
