@@ -658,7 +658,6 @@
     <string name="playback_info">פרטי ניגון</string>
     <string name="preference_enable_ass">נגן כתוביות ASS</string>
     <string name="preference_enable_pgs_description">דורש המרת מדיה כאשר הוא מושבת</string>
-    <string name="preference_enable_ass_description">תכונה ניסיונית, ייתכן שלא תפעל בצורה אמינה</string>
     <string name="pref_software_codecs_enabled">תשתמש בcodec תוכנה</string>
     <string name="pref_software_codecs_enabled_description">חלק מהיישומים מבוססי התוכנה עלולים לפגוע בביצועים. השבתת אפשרות זו מגדילה את הסבירות להמרת קידוד.</string>
     <string name="lbl_date_show_added">תאריך הוספת הסדרה</string>

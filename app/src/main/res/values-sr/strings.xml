@@ -655,7 +655,6 @@
     <string name="playback_info">Информације о репродукцији</string>
     <string name="preference_enable_ass">Директна репродукција ASS титлова</string>
     <string name="preference_enable_pgs_description">Захтева транскодовање кад је онемогућено</string>
-    <string name="preference_enable_ass_description">Експериментална могућност, може бити непоуздана</string>
     <string name="pref_software_codecs_enabled">Користи софтверске кодеке</string>
     <string name="pref_software_codecs_enabled_description">Неке имплементације засноване на софтверу могу успорити рад. Онемогућавање ове опције чини транскодовање вероватнијим.</string>
 </resources>

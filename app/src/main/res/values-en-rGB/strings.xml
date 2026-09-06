@@ -648,7 +648,6 @@
     <string name="pref_software_codecs_enabled_description">Some software-based implementations may degrade performance. Disabling this option makes transcoding more likely.</string>
     <string name="preference_enable_ass">Direct play ASS subtitles</string>
     <string name="preference_enable_pgs_description">Requires transcoding when disabled</string>
-    <string name="preference_enable_ass_description">Experimental feature, may not work reliably</string>
     <string name="lbl_date_show_added">Date show added</string>
     <string name="lbl_date_episode_added">Date episode added</string>
     <string name="truehd">TrueHD</string>

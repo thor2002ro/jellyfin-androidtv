@@ -630,7 +630,6 @@
     <string name="playback_buffer_extra_large">Extra grande</string>
     <string name="codec_level_warning">Alterar de automático pode causar problemas de reprodução se o seu dispositivo não suportar realmente o nível selecionado.</string>
     <string name="preference_enable_pgs_description">Requer transcodificação quando desativado</string>
-    <string name="preference_enable_ass_description">Recurso experimental, pode não funcionar direito</string>
     <string name="auto">Automático</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
