@@ -36,7 +36,6 @@
     <string name="pref_live_tv_cat">טלוויזיה בשידור חי</string>
     <string name="lbl_recorded_tv">הקלטות טלוויזיה</string>
     <string name="lbl_live_tv_guide">לוח שידורים</string>
-    <string name="lbl_no_recordings">אין הקלטות</string>
     <string name="msg_burn_sub_warning">צורב כתוביות. פעולה זו עשויה להימשך מספר שניות…</string>
     <string name="msg_unable_load_subs">לא ניתן לטעון כתוביות</string>
     <string name="msg_subtitles_loading">כתוביות נטענות…</string>
@@ -352,7 +351,6 @@
     <string name="pref_accounts">משתמשים</string>
     <string name="sort_accounts_by">מיין משתמשים לפי</string>
     <string name="pref_customization">התאמה אישית</string>
-    <string name="server_issue_ssl_handshake">לחיצת היד של פרוטוקול SSL נכשלה</string>
     <string name="server_issue_timeout">תם הזמן הקצוב להתחברות</string>
     <string name="server_issue_outdated_version">השרת משתמש בגרסה %1$s שאינה נתמכת עוד, אנא עדכנו את השרת לגרסה %2$s ומעלה</string>
     <string name="server_issue_unsupported_version">השרת משתמש בגרסה %1$s שאינה נתמכת</string>

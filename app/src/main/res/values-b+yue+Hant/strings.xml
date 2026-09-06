@@ -145,7 +145,6 @@
     <string name="lbl_audio_output">音訊輸出</string>
     <string name="msg_unable_load_subs">載入唔到字幕</string>
     <string name="msg_burn_sub_warning">燒錄緊字幕，可能要等幾秒…</string>
-    <string name="lbl_no_recordings">冇錄製項目</string>
     <string name="lbl_live_tv_guide">直播電視節目表</string>
     <string name="lbl_recorded_tv">已錄製電視節目</string>
     <string name="pref_live_tv_cat">直播電視</string>
@@ -420,7 +419,6 @@
     <string name="server_issue_unsupported_version">伺服器用緊嘅版本 %1$s 唔支援</string>
     <string name="server_issue_outdated_version">伺服器版本 %1$s 太舊唔支援，唔該升級至 %2$s 或更新版本</string>
     <string name="server_issue_timeout">連線逾時</string>
-    <string name="server_issue_ssl_handshake">SSL 握手失敗</string>
     <string name="pref_customization">自訂</string>
     <string name="sort_accounts_by">帳戶排序依據</string>
     <string name="pref_accounts">帳戶</string>

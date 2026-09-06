@@ -76,7 +76,6 @@
     <string name="lbl_ended">LIÐUG</string>
     <string name="msg_subtitles_loading">Innlesur undirtekstir…</string>
     <string name="msg_unable_load_subs">Bar ikki til at innlesa undirtekst</string>
-    <string name="lbl_no_recordings">Ongar upptøkur eru tøkar</string>
     <string name="lbl_recorded_tv">Upptikið sjónvarp</string>
     <string name="pref_live_tv_cat">Beinleiðis sjónvarp</string>
     <string name="lbl_albums">Tónleikaútgávur</string>
@@ -489,7 +488,6 @@
     <string name="pref_crash_reports_disabled">Sorúrrit verða ikki send</string>
     <string name="pref_subtitles_position">Frástøða frá botninum</string>
     <string name="color_cyan">Blágrønur</string>
-    <string name="server_issue_ssl_handshake">SSL-sambinding miseydnaðist</string>
     <string name="server_issue_timeout">Sambindingin eydnaðist ikki innan svarfreistina</string>
     <string name="pref_telemetry_category">Sormeldingar</string>
     <string name="lbl_clear_queue">Reinsa spælirøðina</string>

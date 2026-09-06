@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Načítání titulků…</string>
     <string name="msg_unable_load_subs">Nelze načíst titulky</string>
     <string name="msg_burn_sub_warning">Vypalování titulků do obrazu. Může to chvíli trvat…</string>
-    <string name="lbl_no_recordings">Žádné nahrávky</string>
     <string name="lbl_live_tv_guide">Programový průvodce</string>
     <string name="lbl_recorded_tv">Nahrané pořady</string>
     <string name="pref_live_tv_cat">Živé vysílání</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">Zobrazit černé pozadí pod titulky</string>
     <string name="pref_subtitles_background_title">Povolit pozadí</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">Neúspěšné předání protokolu SSL</string>
     <string name="server_issue_timeout">Čas pro připojení vypršel</string>
     <string name="server_issue_outdated_version">Serveru používá nepodporovanou verzi %1$s. Aktualizujte na %2$s nebo novější</string>
     <string name="server_issue_unsupported_version">Server používá verzi %1$s, která není podporována</string>

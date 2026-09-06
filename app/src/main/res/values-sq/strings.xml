@@ -189,7 +189,6 @@
     <string name="msg_error_live_stream">Gabim gjatë transmetimit të TV live. Do të riprovohet…</string>
     <string name="desc_automatic_fav_songs">Lista automatike me këngë të preferuara</string>
     <string name="lbl_play_next_up">Luaj artikullin pasardhës</string>
-    <string name="lbl_no_recordings">Asnjë rregjistrim i disponueshëm</string>
     <string name="lbl_programs">Programet</string>
     <string name="lbl_enable_cinema_mode">Modaliteti kinema</string>
 </resources>

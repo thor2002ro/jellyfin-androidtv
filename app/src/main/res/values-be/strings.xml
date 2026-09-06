@@ -243,7 +243,6 @@
     <string name="lbl_open_artist">Адкрыць выканаўцу</string>
     <string name="lbl_starting_with">пачынаючы з тых, чыя назва пачынаецца з</string>
     <string name="msg_subtitles_loading">Загрузка субцітраў…</string>
-    <string name="lbl_no_recordings">Няма даступных запісаў</string>
     <string name="lbl_programs">Праграмы</string>
     <string name="lbl_songs">Песні</string>
     <string name="lbl_album">Альбом</string>
@@ -524,7 +523,6 @@
     <string name="item_delete_confirm_title">Выдаліць элемент</string>
     <string name="color_cyan">Блакітны</string>
     <string name="server_issue_timeout">Тэрмін падлучэння скончыўся</string>
-    <string name="server_issue_ssl_handshake">Не атрымалася ўсталяваць сувязь па пратаколе SSL</string>
     <string name="pref_libraries">Бібліятэкі</string>
     <string name="input_password">Пароль</string>
     <string name="login_other_options">Іншыя варыянты:</string>

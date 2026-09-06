@@ -125,7 +125,6 @@
     <string name="lbl_bitstream_ac3">Bitstream ήχου Dolby Digital</string>
     <string name="lbl_new_premieres">Νέες πρεμιέρες</string>
     <string name="lbl_live_tv_guide">Πρόγραμμα ζωντανής τηλεόρασης</string>
-    <string name="lbl_no_recordings">Δεν υπάρχουν εγγραφές</string>
     <string name="msg_burn_sub_warning">Η ενσωμάτωση υποτίτλων στο βίντεο μπορεί να κρατήσει μερικά λεπτά. Παρακαλώ περιμένετε…</string>
     <string name="msg_unable_load_subs">Δεν μπορεί να φορτωθεί ο υπότιτλος</string>
     <string name="msg_subtitles_loading">Φόρτωση υποτίτλων…</string>
@@ -263,7 +262,6 @@
     <string name="lbl_episode_not_record">Αυτή η εμφάνιση ΔΕΝ θα καταγραφεί</string>
     <string name="lbl_stretch">Τέντωμα</string>
     <string name="lbl_starting_early_ending_after">Ξεκινάει στις %1$s και τελειώνει στις %2$s έπειτα από προγραμματισμό</string>
-    <string name="server_issue_ssl_handshake">Η χειραψία μέσω SSL απέτυχε</string>
     <string name="server_issue_timeout">Το χρονικό όριο της σύνδεσης έληξε</string>
     <string name="server_issue_outdated_version">Ο διακομιστής χρησιμοποιεί μη υποστηριζόμενη έκδοση %1$s. Παρακαλούμε ενημερώστε σε %2$s ή νεότερη</string>
     <string name="server_issue_unsupported_version">Ο διακομιστής χρησιμοποιεί την έκδοση %1$s, η οποία δεν υποστηρίζεται</string>

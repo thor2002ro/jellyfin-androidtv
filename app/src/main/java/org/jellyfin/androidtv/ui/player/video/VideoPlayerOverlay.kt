@@ -44,6 +44,8 @@ import org.jellyfin.androidtv.ui.player.base.toast.MediaToasts
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.koin.compose.koinInject
@@ -94,6 +96,7 @@ fun VideoPlayerOverlay(
 	val entry by rememberQueueEntry(playbackManager)
 	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
+	val playPauseEnabled = entry?.isLiveTv != true
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
@@ -134,7 +137,7 @@ fun VideoPlayerOverlay(
 	}
 
 	LaunchedEffect(playState) {
-		if (previousPlayState == PlayState.PAUSED && playState == PlayState.PLAYING) {
+		if (previousPlayState == PlayState.PAUSED && playState.isActivePlayback) {
 			pausedOverlayDismissed = true
 			visibilityState.hide()
 			seekPauseOverlaySuppressed = false
@@ -145,11 +148,14 @@ fun VideoPlayerOverlay(
 	}
 
 	fun togglePlayback() {
+		if (!playPauseEnabled) return
+
 		when (playState) {
 			PlayState.STOPPED,
 			PlayState.ERROR -> playbackManager.state.play()
 
 			PlayState.PLAYING -> playbackManager.state.pause()
+			PlayState.BUFFERING -> playbackManager.state.pause()
 			PlayState.PAUSED -> playbackManager.state.unpause()
 		}
 	}
@@ -255,7 +261,10 @@ fun VideoPlayerOverlay(
 				val shouldTogglePlayback = !centerLongPressTriggered
 				centerShortcutKeyCode = null
 				clearCenterLongPress()
-				if (shouldTogglePlayback) togglePlayback()
+				if (shouldTogglePlayback) {
+					togglePlayback()
+					visibilityState.show()
+				}
 				return@handler true
 			}
 
@@ -285,7 +294,7 @@ fun VideoPlayerOverlay(
 				return@handler true
 			}
 
-			if (!showLiveTvGuide && keyEvent.isDpadDownKey() && currentLiveTvItem != null) {
+			if (!showLiveTvGuide && keyEvent.isDpadUpKey() && currentLiveTvItem != null && visibilityState.visible) {
 				if (keyEvent.action == KeyEvent.ACTION_DOWN && keyEvent.repeatCount == 0) {
 					clearCenterLongPress()
 					showLiveTvGuide = true
@@ -493,7 +502,7 @@ private fun KeyEvent.isSeekKey() = when (keyCode) {
 	else -> false
 }
 
-private fun KeyEvent.isDpadDownKey() = keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+private fun KeyEvent.isDpadUpKey() = keyCode == KeyEvent.KEYCODE_DPAD_UP
 
 private class KeyEventHandlerHolder {
 	var handler: ((KeyEvent) -> Boolean)? = null
