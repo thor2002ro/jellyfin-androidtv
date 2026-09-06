@@ -70,8 +70,9 @@ class LiveTvChannelNavigator(
 		playbackManager: PlaybackManager,
 		currentItem: BaseItemDto,
 		targetChannel: BaseItemDto,
+		currentChannelId: java.util.UUID? = currentItem.liveTvChannelId(),
 	): Boolean {
-		val currentChannelId = currentItem.liveTvChannelId() ?: return false
+		currentChannelId ?: return false
 		if (targetChannel.liveTvChannelId() == currentChannelId) return false
 
 		val channels = getChannels()
@@ -81,6 +82,22 @@ class LiveTvChannelNavigator(
 		if (targetIndex < 0) return false
 
 		return switchToChannel(playbackManager, channels, targetIndex, currentChannelId)
+	}
+
+	suspend fun startLastOrFirstChannel(
+		playbackManager: PlaybackManager,
+	): Boolean {
+		val channels = getChannels()
+		if (channels.isEmpty()) return false
+
+		val channelId = TvManager.getLastLiveTvChannel()
+		val targetIndex = channels
+			.indexOfFirst { channel -> channel.liveTvChannelId() == channelId }
+			.takeIf { index -> index >= 0 }
+			?: 0
+
+		playChannel(playbackManager, channels, targetIndex)
+		return true
 	}
 
 	suspend fun getChannels(): List<BaseItemDto> = runCatching {
@@ -98,17 +115,27 @@ class LiveTvChannelNavigator(
 		val targetChannel = channels[targetIndex]
 		if (targetChannel.liveTvChannelId() == currentChannelId) return false
 
+		playChannel(playbackManager, channels, targetIndex)
+		return true
+	}
+
+	private fun playChannel(
+		playbackManager: PlaybackManager,
+		channels: List<BaseItemDto>,
+		targetIndex: Int,
+	) {
+		val targetChannel = channels[targetIndex]
+		val targetItems = listOf(targetChannel)
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
-		videoQueueManager.setCurrentVideoQueue(channels)
-		videoQueueManager.setCurrentMediaPosition(targetIndex)
+		playbackManager.queue.clear()
+		videoQueueManager.setCurrentVideoQueue(targetItems)
+		targetChannel.liveTvChannelId()?.let(TvManager::setLastLiveTvChannel)
 		playbackManager.queue.addSupplier(
-			supplier = RewriteMediaManager.BaseItemQueueSupplier(api, channels, visibleInScreensaver = false),
-			startIndex = targetIndex,
+			supplier = RewriteMediaManager.BaseItemQueueSupplier(api, targetItems, visibleInScreensaver = false),
+			startIndex = 0,
 		)
 		playbackManager.state.play()
-
-		return true
 	}
 
 	private suspend fun loadChannels(): List<BaseItemDto> {
