@@ -130,6 +130,7 @@ dependencyResolutionManagement {
 			}
 			filter {
 				includeModule("io.github.abdallahmehiz", "mpv-android-lib")
+				includeModule("io.github.abdallahmehiz", "mpv-ffmpeg-android")
 			}
 		}
 		mavenCentral()
