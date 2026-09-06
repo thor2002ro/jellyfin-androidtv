@@ -382,7 +382,6 @@
     <string name="welcome_title">歡迎來到Jellyfin！</string>
     <string name="saved_servers">以儲存的伺服器</string>
     <string name="press_to_close">點擊以關閉</string>
-    <string name="no_network_permissions">Jellyfin需要網路權限才能運作</string>
     <string name="pref_theme_muted_purple">淡紫色</string>
     <string name="lbl_switch_user">切換帳號</string>
     <string name="user_picker_last_user_summary">使用最後一個活躍帳號</string>

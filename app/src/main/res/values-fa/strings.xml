@@ -289,7 +289,6 @@
     <string name="welcome_title">به Jellyfin خوش آمدید!</string>
     <string name="saved_servers">سرور های ذخیره شده</string>
     <string name="press_to_close">برای بستن فشار دهید</string>
-    <string name="no_network_permissions">Jellyfin برای عملکرد کامل نیازمند دسترسی شبکه است</string>
     <string name="pref_theme_muted_purple">بنفش بی صدا</string>
     <string name="lbl_switch_user">تعویض حساب</string>
     <string name="user_picker_last_user_summary">استفاده از آخرین حساب فعال</string>

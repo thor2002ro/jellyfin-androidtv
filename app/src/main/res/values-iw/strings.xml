@@ -270,7 +270,6 @@
     <string name="login_invalid_credentials">שם משתמש ו/או סיסמה שגויים</string>
     <string name="login_authenticating">מאמת…</string>
     <string name="server_field_empty">הכתובת אינה יכולה להיות ריקה</string>
-    <string name="no_network_permissions">Jellyfin צריכה הרשאות רשת כדי לפעול</string>
     <string name="pref_theme_muted_purple">סגול מעומעם</string>
     <string name="lbl_switch_user">החלף משתמש</string>
     <string name="user_picker_last_user_summary">השתמש במשתמש הפעיל האחרון</string>

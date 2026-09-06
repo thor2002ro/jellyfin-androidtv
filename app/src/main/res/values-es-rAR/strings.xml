@@ -305,7 +305,6 @@
     <string name="user_picker_disable_title">Inhabilitado</string>
     <string name="auto_sign_in">Registrarse automáticamente</string>
     <string name="lbl_switch_user">Cambiar cuenta</string>
-    <string name="no_network_permissions">Jellyfin necesita permisos de red para funcionar</string>
     <string name="pref_theme_muted_purple">Violeta silenciado</string>
     <string name="press_to_close">Toque para Cerrar</string>
     <string name="add_user">Añadir cuenta</string>

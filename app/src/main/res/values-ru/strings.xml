@@ -305,7 +305,6 @@
     <string name="user_picker_disable_title">Отключить</string>
     <string name="auto_sign_in">Автоматический вход</string>
     <string name="lbl_switch_user">Сменить учётную запись</string>
-    <string name="no_network_permissions">Jellyfin требуются сетевые разрешения для работы</string>
     <string name="pref_theme_muted_purple">Тускло-пурпурная</string>
     <string name="add_user">Добавить учётную запись</string>
     <string name="who_is_watching">Кто смотрит\?</string>

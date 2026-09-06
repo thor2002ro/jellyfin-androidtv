@@ -320,7 +320,6 @@
     <string name="welcome_title">Καλωσορίσατε στο Jellyfin!</string>
     <string name="saved_servers">Αποθηκευμένοι διακομιστές</string>
     <string name="press_to_close">Πιέστε για να κλείσετε</string>
-    <string name="no_network_permissions">Το Jellyfin απαιτεί δικαιώματα δικτύου για να λειτουργήσει</string>
     <string name="lbl_switch_user">Αλλαγή χρήστη</string>
     <string name="user_picker_last_user_summary">Χρήση του τελευταίου ενεργού χρήστη</string>
     <string name="user_picker_last_user_title">Πιο πρόσφατα χρησιμοποιημένα</string>
