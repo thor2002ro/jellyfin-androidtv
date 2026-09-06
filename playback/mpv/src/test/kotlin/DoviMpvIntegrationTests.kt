@@ -1,5 +1,6 @@
 package org.jellyfin.playback.mpv
 
+import `is`.xyz.mpv.MPV
 import io.github.thor2002ro.libdovi.DoviMpvSession
 import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTransformObservation
@@ -158,6 +159,45 @@ class DoviMpvIntegrationTests : FunSpec({
 			native.session().prepare(DoviTransformRequest(DoviTarget.PROFILE_8_1))
 		}
 		native.requests shouldBe emptyList()
+	}
+
+	test("active Dolby Vision hardware route rejects MPV software fallback after video load") {
+		shouldRejectDoviMpvSoftwareFallback(
+			hasActiveDoviDecision = true,
+			videoLoaded = true,
+			hardwareDecoder = "no",
+		) shouldBe true
+	}
+
+	test("Dolby Vision hardware guard ignores startup and unrelated playback") {
+		shouldRejectDoviMpvSoftwareFallback(true, false, "no") shouldBe false
+		shouldRejectDoviMpvSoftwareFallback(true, true, "mediacodec") shouldBe false
+		shouldRejectDoviMpvSoftwareFallback(false, true, "no") shouldBe false
+	}
+
+	test("active Dolby Vision hardware route reports concrete decoder initialization failure") {
+		isDoviMpvVideoDecoderErrorLog("vd", MPV.mpvLogLevel.MPV_LOG_LEVEL_ERROR) shouldBe true
+		shouldReportDoviMpvDecoderFailureOnEnd(
+			hasActiveDoviDecision = true,
+			reason = "error",
+			decoderFailureObserved = true,
+			hardwareDecoder = null,
+		) shouldBe true
+	}
+
+	test("confirmed MPV hardware decoder clears provisional decoder failure evidence") {
+		retainDoviMpvDecoderFailureObservation(true, "mediacodec") shouldBe false
+		retainDoviMpvDecoderFailureObservation(true, "no") shouldBe true
+		retainDoviMpvDecoderFailureObservation(true, null) shouldBe true
+	}
+
+	test("Dolby Vision end guard preserves ordinary MPV errors") {
+		isDoviMpvVideoDecoderErrorLog("demux", MPV.mpvLogLevel.MPV_LOG_LEVEL_ERROR) shouldBe false
+		isDoviMpvVideoDecoderErrorLog("vd", MPV.mpvLogLevel.MPV_LOG_LEVEL_WARN) shouldBe false
+		shouldReportDoviMpvDecoderFailureOnEnd(true, "error", false, null) shouldBe false
+		shouldReportDoviMpvDecoderFailureOnEnd(true, "error", false, "mediacodec") shouldBe false
+		shouldReportDoviMpvDecoderFailureOnEnd(false, "error", true, null) shouldBe false
+		shouldReportDoviMpvDecoderFailureOnEnd(true, "eof", true, null) shouldBe false
 	}
 })
 

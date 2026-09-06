@@ -1,5 +1,6 @@
 package org.jellyfin.playback.core.mediastream
 
+import org.jellyfin.playback.core.backend.PlaybackErrorOrigin
 import org.jellyfin.playback.core.queue.QueueEntry
 
 interface MediaStream {
@@ -44,6 +45,7 @@ data class PlayableMediaStream(
 	val externalSubtitles: List<ExternalSubtitle> = emptyList(),
 	val selectedAudioStreamIndex: Int? = null,
 	val selectedSubtitleStreamIndex: Int? = null,
+	val errorOrigin: PlaybackErrorOrigin? = null,
 ) : MediaStream
 
 data class ExternalSubtitle(

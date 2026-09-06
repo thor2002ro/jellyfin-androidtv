@@ -147,15 +147,6 @@ internal fun createDoviPlaybackPlan(
 			sourceRangeType = videoStream.videoRangeType,
 		)
 	}
-	if (videoStream.videoRangeType in userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)) {
-		return DoviPlaybackPlan(
-			decision = DoviDecision(DoviRoute.ServerFallback, DoviDecisionReason.DISABLED_BY_USER),
-			mediaSourceId = requireNotNull(mediaSource.id),
-			container = mediaSource.container,
-			codec = codec,
-			sourceRangeType = videoStream.videoRangeType,
-		)
-	}
 	val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr = true)
 	val externalPlayerSelected = userPreferences[playerPreferences.useExternalPlayer]
 	val builtInPlayerSelected = !externalPlayerSelected &&
@@ -220,23 +211,36 @@ internal fun effectiveDoviDeviceCapabilities(
 		mediaTest.supportsHevcMain10() &&
 		mediaTest.supportsHevcHDR10()
 	val supportsProfile7 = effective(profile7Ranges, reportedProfile7 || knownProfile7)
-	val supportsHlg = effective(setOf(VideoRangeType.HLG), mediaTest.supportsHevcHlg()) &&
+	val supportsHlgDecoder = effective(setOf(VideoRangeType.HLG), mediaTest.supportsHevcHlg()) &&
 		DISPLAY_HDR_TYPE_HLG in displayHdrTypes
+	// Main10 decoding is enough to attempt a base presentation: Android TV devices may
+	// tone-map it for an SDR display, and playback recovery handles decoder rejection.
+	val canAttemptHdrBase = mediaTest.supportsHevcMain10()
+	val supportsHdr10Base = effective(
+		setOf(VideoRangeType.HDR10),
+		canAttemptHdrBase || DISPLAY_HDR_TYPE_HDR10 in displayHdrTypes,
+	)
+	val supportsHdr10PlusBase = effective(
+		setOf(VideoRangeType.HDR10_PLUS),
+		canAttemptHdrBase || DISPLAY_HDR_TYPE_HDR10_PLUS in displayHdrTypes,
+	)
+	val supportsHlgBase = effective(
+		setOf(VideoRangeType.HLG),
+		canAttemptHdrBase || DISPLAY_HDR_TYPE_HLG in displayHdrTypes,
+	)
 	val supportsProfile8 = effective(profile8Ranges, mediaTest.supportsHevcDolbyVisionProfile8())
 
 	return DoviDeviceCapabilities(
 		supportsProfile5 = effective(profile5Ranges, mediaTest.supportsHevcDolbyVisionProfile5()),
 		supportsProfile7 = supportsProfile7,
 		supportsProfile8 = supportsProfile8,
-		supportsProfile84 = supportsProfile8 && supportsHlg,
+		supportsProfile84 = supportsProfile8 && supportsHlgDecoder,
 		// Android reports Profile 7 decoding, not MEL/FEL processing separately.
 		supportsMel = false,
 		supportsFel = false,
-		supportsHdr10 = effective(setOf(VideoRangeType.HDR10), mediaTest.supportsHevcHDR10()) &&
-			DISPLAY_HDR_TYPE_HDR10 in displayHdrTypes,
-		supportsHdr10Plus = effective(setOf(VideoRangeType.HDR10_PLUS), mediaTest.supportsHevcHDR10Plus()) &&
-			DISPLAY_HDR_TYPE_HDR10_PLUS in displayHdrTypes,
-		supportsHlg = supportsHlg,
+		supportsHdr10 = supportsHdr10Base,
+		supportsHdr10Plus = supportsHdr10PlusBase,
+		supportsHlg = supportsHlgBase,
 	)
 }
 
@@ -293,6 +297,7 @@ internal fun MediaStream.toDoviSource(): DoviSource {
 			dvBlSignalCompatibilityId == DOVI_BL_COMPATIBILITY_HLG -> DoviPresentation.HLG
 		videoRangeType == VideoRangeType.DOVI_WITH_HDR10 ||
 			dvBlSignalCompatibilityId == DOVI_BL_COMPATIBILITY_HDR10 -> DoviPresentation.HDR10
+		profile == DoviSourceProfile.PROFILE_7 -> DoviPresentation.HDR10
 		else -> DoviPresentation.UNKNOWN
 	}
 	return DoviSource(
