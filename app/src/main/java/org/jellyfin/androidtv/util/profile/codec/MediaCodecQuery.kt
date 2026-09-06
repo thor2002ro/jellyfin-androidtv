@@ -35,6 +35,10 @@ class MediaCodecQuery(
 	fun hasDecoder(mime: String, profile: Int, level: Int): Boolean =
 		decoderInfos().any { info -> supportsProfileLevel(info, mime, profile, level) }
 
+	fun hasDecoderForFormat(mime: String, format: MediaFormat): Boolean = decoderInfos().any { info ->
+		getCapabilitiesOrNull(info, mime)?.isFormatSupported(format) == true
+	}
+
 	fun getDecoderLevel(mime: String, profile: Int): Int {
 		var maxLevel = 0
 
