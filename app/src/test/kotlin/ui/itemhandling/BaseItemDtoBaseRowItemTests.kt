@@ -37,4 +37,64 @@ class BaseItemDtoBaseRowItemTests : FunSpec({
 			streamBadgeMediaSources = emptyList(),
 		)
 	}
+
+	test("only resume row items request remaining time badges") {
+		val item = BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.MOVIE,
+		)
+
+		BaseItemDtoBaseRowItem(item).showRemainingTimeBadge shouldBe false
+		ResumeItemBaseRowItem(item, preferParentThumb = false, staticHeight = true).showRemainingTimeBadge shouldBe true
+	}
+
+	test("remaining time badge changes row equality") {
+		val item = BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.MOVIE,
+		)
+
+		BaseItemDtoBaseRowItem(item) shouldNotBe ResumeItemBaseRowItem(item, preferParentThumb = false, staticHeight = true)
+	}
+
+	test("base item row factory can request remaining time badges") {
+		val item = BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.MOVIE,
+		)
+
+		item.toBaseItemRowItem(
+			preferParentThumb = false,
+			staticHeight = true,
+			showRemainingTimeBadge = true,
+		).showRemainingTimeBadge shouldBe true
+		item.toBaseItemRowItem(
+			preferParentThumb = false,
+			staticHeight = true,
+		).showRemainingTimeBadge shouldBe false
+	}
+
+	test("copy with item preserves resume row marker") {
+		val item = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE)
+		val updatedBadgeSources = emptyList<MediaSourceInfo>()
+		val rowItem = ResumeItemBaseRowItem(
+			item = item,
+			preferParentThumb = false,
+			staticHeight = true,
+			selectAction = BaseRowItemSelectAction.Play,
+			preferSeriesPoster = true,
+		)
+		val copiedRowItem = rowItem.copyWithItem(BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE))
+		val updatedStreamBadgeRowItem = rowItem.copyWithItem(
+			item = item,
+			streamBadgeMediaSources = updatedBadgeSources,
+		)
+
+		copiedRowItem.showRemainingTimeBadge shouldBe true
+		copiedRowItem.selectAction shouldBe BaseRowItemSelectAction.Play
+		copiedRowItem.preferSeriesPoster shouldBe true
+		copiedRowItem.streamBadgeMediaSources shouldBe null
+		updatedStreamBadgeRowItem.showRemainingTimeBadge shouldBe true
+		updatedStreamBadgeRowItem.streamBadgeMediaSources shouldBe updatedBadgeSources
+	}
 })
