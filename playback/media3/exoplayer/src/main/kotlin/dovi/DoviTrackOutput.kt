@@ -17,9 +17,14 @@ import io.github.thor2002ro.libdovi.DoviSample
 import io.github.thor2002ro.libdovi.DoviStatus
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.github.thor2002ro.libdovi.DoviTransformBuffer
+import io.github.thor2002ro.libdovi.DoviTransformProcessor
 import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.github.thor2002ro.libdovi.DoviTransformResult
 import io.github.thor2002ro.libdovi.DoviTransformObservation
+import io.github.thor2002ro.libdovi.DoviTransformSession
+import io.github.thor2002ro.libdovi.DoviTransformSessionState
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import java.io.EOFException
 
 internal fun interface DoviSampleTransformer {
@@ -50,20 +55,18 @@ internal interface DoviSampleDispatcher {
 	fun onSample(output: DoviTrackOutput, sample: DoviEncodedSample)
 }
 
-internal fun transformDoviSample(
-	sample: DoviSample,
-	request: DoviTransformRequest,
-): DoviTransformResult = DoviBridge.transform(sample, request)
-
 @UnstableApi
 internal class DoviTrackOutput(
 	private val delegate: TrackOutput,
 	private val request: () -> DoviTransformRequest?,
 	private val sourceBasePresentation: () -> DoviPresentation = { DoviPresentation.UNKNOWN },
 	private val dvLevel: () -> Int? = { null },
+	private val transformStrategy: () -> DoviTransformStrategy = { DoviTransformStrategy.LIBDOVI },
+	private val transformState: DoviTransformSessionState = DoviTransformSessionState(),
 	private val transformer: DoviSampleTransformer? = null,
 	private val dispatcher: DoviSampleDispatcher? = null,
 	private val onTransformObserved: (DoviTransformObservation) -> Unit = {},
+	private val onProcessorChanged: (PlaybackDoviTransformProcessor) -> Unit = {},
 ) : TrackOutput {
 	private data class PartRange(
 		val start: Int,
@@ -133,9 +136,11 @@ internal class DoviTrackOutput(
 	private val transformBuffer = DoviTransformBuffer()
 	private var sourceFormat: Format? = null
 	private var activeRequest: DoviTransformRequest? = null
+	private var transformSession: DoviTransformSession? = null
 	private var signaledFormat: Format? = null
 	private var validatedOutput: DoviPresentation? = null
 	private var transformObserved = false
+	private var observedProcessor: PlaybackDoviTransformProcessor? = null
 
 	override fun durationUs(durationUs: Long) = delegate.durationUs(durationUs)
 
@@ -145,6 +150,9 @@ internal class DoviTrackOutput(
 		validatedOutput = null
 		sourceFormat = format
 		activeRequest = request().takeIf { format.isHevcDolbyVision() }
+		transformSession = if (transformer == null) activeRequest?.let { request ->
+			DoviBridge.openTransformSession(request, transformStrategy(), transformState)
+		} else null
 		if (activeRequest == null) {
 			delegate.format(format)
 		} else {
@@ -261,6 +269,10 @@ internal class DoviTrackOutput(
 		sample: DoviEncodedSample,
 		supplementalRpu: ByteArray? = sample.supplementalRpu,
 	) {
+		emitWithLibdovi(sample, supplementalRpu)
+	}
+
+	private fun emitWithLibdovi(sample: DoviEncodedSample, supplementalRpu: ByteArray?) {
 		val transformRequest = requireNotNull(activeRequest) { "Dolby Vision request is not active" }
 		val doviSample = DoviSample(
 			bytes = sample.bytes,
@@ -271,7 +283,8 @@ internal class DoviTrackOutput(
 		)
 		val injectedResult = transformer?.transform(doviSample, transformRequest)
 		val bufferedResult = if (injectedResult == null) {
-			DoviBridge.transform(doviSample, transformRequest, transformBuffer)
+			requireNotNull(transformSession) { "Dolby Vision transform session is not active" }
+				.transform(doviSample, transformBuffer)
 		} else {
 			null
 		}
@@ -294,6 +307,7 @@ internal class DoviTrackOutput(
 			throw failure(DoviStatus.INTERNAL_ERROR, "Native transformation output changed within the track")
 		}
 		validatedOutput = resultOutput
+		updateProcessor(transformSession?.processor.toPlaybackProcessor())
 		if (!transformObserved) {
 			onTransformObserved(DoviTransformObservation(resultInput, resultOutput))
 			transformObserved = true
@@ -316,6 +330,12 @@ internal class DoviTrackOutput(
 			0,
 			null,
 		)
+	}
+
+	private fun updateProcessor(processor: PlaybackDoviTransformProcessor) {
+		if (observedProcessor == processor) return
+		observedProcessor = processor
+		onProcessorChanged(processor)
 	}
 
 	/** Drops partial access-unit data while retaining the track format and exact request. */
@@ -398,8 +418,7 @@ private fun Format.asSourceBase(presentation: DoviPresentation): Format {
 		DoviPresentation.HLG -> C.COLOR_TRANSFER_HLG
 		else -> error("Not a source-base presentation: $presentation")
 	}
-	val baseColor = colorInfo
-	val color = (baseColor?.buildUpon() ?: ColorInfo.Builder())
+	val color = (colorInfo?.buildUpon() ?: ColorInfo.Builder())
 		.setColorTransfer(transfer)
 		.apply {
 			if (presentation == DoviPresentation.HLG) setHdrStaticInfo(null)
@@ -456,6 +475,11 @@ private val DOVI_CODEC = Regex("(?i)(?:^|,)\\s*(dvhe|dvh1)\\.(\\d{2})\\.(\\d{2})
 private val HEVC_CODEC = Regex("(?i)(?:hvc1|hev1)\\.[A-Za-z0-9]+(?:\\.[A-Za-z0-9]+)+")
 private val AV1_DOVI_CODEC = Regex("(?i)(?:^|,)\\s*dav1\\.")
 private const val MAX_PARTIAL_SAMPLE_BYTES = 64L * 1024L * 1024L
+
+private fun DoviTransformProcessor?.toPlaybackProcessor() = when (this) {
+	DoviTransformProcessor.FAST_HDR_BASE -> PlaybackDoviTransformProcessor.FAST_HDR_BASE
+	DoviTransformProcessor.LIBDOVI, null -> PlaybackDoviTransformProcessor.LIBDOVI
+}
 
 private fun DoviTransformRequest.expectedOutput(
 	input: DoviPresentation,

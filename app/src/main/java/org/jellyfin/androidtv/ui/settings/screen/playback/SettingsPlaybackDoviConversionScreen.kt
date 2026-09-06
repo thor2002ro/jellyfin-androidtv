@@ -35,6 +35,9 @@ fun SettingsPlaybackDoviCompatibilityScreen() {
 		items(DoviCompatibilityMode.entries) { entry ->
 			ListButton(
 				headingContent = { Text(stringResource(entry.nameRes)) },
+				captionContent = if (entry == DoviCompatibilityMode.FAST_HDR) {
+					{ Text(stringResource(R.string.dovi_compatibility_fast_hdr_description)) }
+				} else null,
 				trailingContent = { RadioButton(checked = mode == entry) },
 				onClick = {
 					mode = entry
