@@ -83,7 +83,7 @@ class DoviExtractorWrappersTests : FunSpec({
 			context = { context() },
 			transformer = DoviSampleTransformer { sample, _ ->
 				transformed += sample.bytes.toList()
-				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet())
+				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet(), DoviPresentation.PROFILE_7_FEL)
 			},
 		)
 		wrapper.init(RecordingExtractorOutput())
@@ -153,7 +153,7 @@ class DoviExtractorWrappersTests : FunSpec({
 			context = { context() },
 			transformer = DoviSampleTransformer { sample, _ ->
 				transformed += sample.bytes.toList()
-				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet())
+				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet(), DoviPresentation.PROFILE_7_FEL)
 			},
 		)
 		wrapper.init(RecordingExtractorOutput())
@@ -203,7 +203,7 @@ class DoviExtractorWrappersTests : FunSpec({
 			transformer = DoviSampleTransformer { sample, _ ->
 				transformed = sample.bytes
 				supplementalRpu = sample.supplementalRpu
-				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet())
+				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet(), DoviPresentation.PROFILE_7_FEL)
 			},
 		)
 		val delegate = RecordingExtractorOutput()
@@ -426,7 +426,7 @@ class DoviExtractorWrappersTests : FunSpec({
 			hlsFactory = ::recordingFactory,
 			context = { item -> item.localConfiguration?.tag as? DoviTransformContext },
 		)
-		val uri = "https://example.invalid/same.mkv"
+		val uri = mockk<Uri>(relaxed = true)
 		factory.createMediaSource(MediaItem.Builder().setUri(uri).setTag(first).build())
 		factory.createMediaSource(MediaItem.Builder().setUri(uri).setTag(second).build())
 
@@ -442,10 +442,10 @@ class DoviExtractorWrappersTests : FunSpec({
 			fixedContext,
 			DoviSampleTransformer { sample, request ->
 				transformedRequest = request
-				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_7_MEL, emptySet())
+				DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_7_MEL, emptySet(), DoviPresentation.PROFILE_7_FEL)
 			},
 		)
-		val finalUri = Uri.parse("https://cdn.example.invalid/final/redirected.mkv")
+		val finalUri = mockk<Uri>(relaxed = true)
 
 		val extractor = factory.createExtractors(finalUri, mapOf("X-Final" to listOf("true"))).single()
 		val output = RecordingExtractorOutput()
@@ -466,7 +466,6 @@ private fun context(
 ) =
 	DoviTransformContext(
 		request = DoviTransformRequest(target),
-		inputPresentation = input,
 		sourceBasePresentation = DoviPresentation.HDR10,
 		dvLevel = 6,
 		pairEnhancementTrack = input == DoviPresentation.PROFILE_7_FEL,
@@ -485,7 +484,7 @@ private fun TrackOutput.emit(bytes: ByteArray, timeUs: Long) {
 }
 
 private fun passthroughTransformer() = DoviSampleTransformer { sample, _ ->
-	DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet())
+	DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet(), DoviPresentation.PROFILE_7_FEL)
 }
 
 private fun doviFormat(trackId: Int? = null, baseTrackId: Int = C.INDEX_UNSET) = Format.Builder()

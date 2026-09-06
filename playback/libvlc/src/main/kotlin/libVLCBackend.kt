@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
+import org.jellyfin.playback.core.backend.activate
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
@@ -338,6 +339,7 @@ class LibVLCBackend(
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		ensureInstanceOptions()
 		currentStream = stream
+		stream.errorOrigin?.activate()
 		endReported = false
 		pendingInitialTrackTypes.clear()
 		if (stream.conversionMethod == MediaConversionMethod.None) {
@@ -578,7 +580,7 @@ class LibVLCBackend(
 			}
 			MediaPlayer.Event.EncounteredError -> {
 				handler.removeCallbacks(tick)
-				listener?.onPlaybackError(PlaybackError("LIBVLC_ERROR"))
+				listener?.onPlaybackError(PlaybackError("LIBVLC_ERROR", origin = currentStream?.errorOrigin))
 				listener?.onPlayStateChange(PlayState.ERROR)
 			}
 		}
