@@ -286,6 +286,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		if (selection.player == PlaybackLauncher.VideoPlayer.NEW) {
 			selection.backend?.let { backend ->
 				playbackManager.switchBackend(when (backend) {
+					PlaybackBackend.SAME_VIDEO_PLAYER,
 					PlaybackBackend.EXOPLAYER -> exoPlayerBackend
 					PlaybackBackend.LIBVLC -> libVLCBackend
 					PlaybackBackend.MPV -> mpvBackend

@@ -167,6 +167,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val playbackBackend = userPreferences[UserPreferences.playbackBackend]
 	val mpvDecoder = userPreferences[UserPreferences.mpvDecoder]
 	val backend = when (playbackBackend) {
+		PlaybackBackend.SAME_VIDEO_PLAYER,
 		PlaybackBackend.EXOPLAYER -> get<ExoPlayerBackend>()
 		PlaybackBackend.LIBVLC -> get<LibVLCBackend>()
 		PlaybackBackend.MPV -> get<LibMPVBackend>()

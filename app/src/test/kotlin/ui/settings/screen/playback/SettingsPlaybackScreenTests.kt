@@ -13,4 +13,12 @@ class SettingsPlaybackScreenTests : FunSpec({
 			playbackBackend = PlaybackBackend.MPV,
 		) shouldBe (R.drawable.ic_tv_play to R.string.video_player_external)
 	}
+
+	test("same video player overrides stale HDR player preferences") {
+		playerResourceIds(
+			useExternalPlayer = true,
+			playbackRewriteVideoEnabled = false,
+			playbackBackend = PlaybackBackend.SAME_VIDEO_PLAYER,
+		) shouldBe (R.drawable.ic_tv_play to R.string.playback_hdr_follow_video_player)
+	}
 })
