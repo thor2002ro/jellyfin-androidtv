@@ -140,7 +140,6 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final float GRID_SCROLL_SPEED_FACTOR = 0.65f;
     private final int GRID_HELD_DPAD_SCROLL_INTERVAL_MS = 90;
     private final int SELECTION_RESTORE_WINDOW_MS = 1500;
-    private final int IMAGE_PREFETCH_MAX_ITEMS = 150;
 
     private boolean mDirty = true; // CardHeight, RowDef or GridSize changed
     private boolean mPreferencesLoaded = false;
@@ -427,8 +426,9 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
         int maxHeight = Utils.convertDpToPixel(requireContext(), mCardHeight);
         int maxWidth = Utils.convertDpToPixel(requireContext(), (int) getCardWidthBy(mCardHeight, mImageType, mFolder));
-        int end = Math.min(itemsLoaded, position + 1 + IMAGE_PREFETCH_MAX_ITEMS);
-        for (int i = position + 1; i < end; i++) {
+        int start = Math.min(itemsLoaded, position + 1 + Math.max(1, mCardsScreenEst));
+        int end = Math.min(itemsLoaded, start + Math.max(1, mCardsScreenStride));
+        for (int i = start; i < end; i++) {
             if (!(mAdapter.get(i) instanceof BaseRowItem)) continue;
 
             JellyfinImage image = ((BaseRowItem) mAdapter.get(i)).getImage(mImageType);
