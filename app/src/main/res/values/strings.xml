@@ -206,6 +206,12 @@
     <string name="dovi_profile_5_description">Single-layer Dolby Vision</string>
     <string name="dovi_profile_7">Dolby Vision Profile 7</string>
     <string name="dovi_profile_7_description">Dual-layer with Enhancement Layer</string>
+    <string name="dovi_compatibility_title">Dolby Vision compatibility</string>
+    <string name="dovi_compatibility_description">Choose metadata-only compatibility for built-in player playback</string>
+    <string name="dovi_compatibility_auto">Auto</string>
+    <string name="dovi_compatibility_always">Always</string>
+    <string name="dovi_compatibility_mode">Compatibility</string>
+    <string name="dovi_compatibility_off">Off</string>
     <string name="dovi_profile_8">Dolby Vision Profile 8</string>
     <string name="dovi_profile_8_description">Single-layer with HDR10 fallback</string>
     <string name="desc_audio_night_mode">Levels out audio volume automatically</string>
