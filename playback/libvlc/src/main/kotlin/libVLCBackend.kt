@@ -24,6 +24,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.totalBitrate
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.formatBufferBytes
@@ -46,6 +47,7 @@ import timber.log.Timber
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 enum class LibVLCVideoDecoder(val vlcValue: Int, val label: String) {
 	AUTOMATIC(-1, "Auto"),
@@ -83,6 +85,8 @@ internal fun libVLCMediaOptions(
 	isLiveTv: Boolean,
 	normalBufferDuration: Duration?,
 	liveTvBufferDuration: Duration?,
+	maxBufferBytes: Long?,
+	bitrate: Long,
 	options: LibVLCPlaybackOptions,
 ): List<String> = buildList {
 	add(if (options.audioTimeStretch) ":audio-time-stretch" else ":no-audio-time-stretch")
@@ -93,11 +97,20 @@ internal fun libVLCMediaOptions(
 	add(":audio-resampler=soxr")
 	if (options.dav1dThreadFrames >= 1) add(":dav1d-thread-frames=${options.dav1dThreadFrames}")
 
-	val networkCachingMs = (if (isLiveTv) liveTvBufferDuration else normalBufferDuration)
+	val networkCachingMs = cappedBufferDuration(
+		duration = if (isLiveTv) liveTvBufferDuration else normalBufferDuration,
+		maxBufferBytes = maxBufferBytes,
+		bitrate = bitrate,
+	)
 		?.inWholeMilliseconds
 	if (networkCachingMs != null) {
 		add(":network-caching=$networkCachingMs")
 	}
+}
+
+internal fun cappedBufferDuration(duration: Duration?, maxBufferBytes: Long?, bitrate: Long): Duration? {
+	if (duration == null || maxBufferBytes == null || maxBufferBytes <= 0 || bitrate <= 0) return duration
+	return minOf(duration, (maxBufferBytes * 8.0 / bitrate).seconds)
 }
 
 internal fun resolveDeblocking(
@@ -206,6 +219,7 @@ class LibVLCBackend(
 	private val timedEvents = TimedEventTracker()
 	private var normalBufferDuration: Duration? = null
 	private var liveTvBufferDuration: Duration? = null
+	private var maxBufferBytes: Long? = null
 	private var currentStream: PlayableMediaStream? = null
 	private var surfaceView: PlayerSurfaceView? = null
 	private var subtitleView: PlayerSubtitleView? = null
@@ -300,6 +314,7 @@ class LibVLCBackend(
 	override fun setBufferOptions(options: PlaybackBufferOptions) {
 		normalBufferDuration = options.bufferForPlaybackDuration
 		liveTvBufferDuration = options.liveTvBufferDuration
+		maxBufferBytes = options.maxBufferBytes
 	}
 
 	override fun onActivated() {
@@ -325,6 +340,8 @@ class LibVLCBackend(
 				isLiveTv = stream.queueEntry.isLiveTv,
 				normalBufferDuration = normalBufferDuration,
 				liveTvBufferDuration = liveTvBufferDuration,
+				maxBufferBytes = maxBufferBytes,
+				bitrate = stream.totalBitrate(),
 				options = playbackOptions,
 			).forEach(media::addOption)
 			player.media = media
