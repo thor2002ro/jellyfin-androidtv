@@ -79,7 +79,6 @@ import org.jellyfin.androidtv.ui.composable.modifier.overscan
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.livetv.liveTvChannelFields
 import org.jellyfin.androidtv.util.ImageHelper
-import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.design.Tokens
@@ -376,11 +375,7 @@ fun LiveTvGuideOverlay(
 			context = context,
 			lifecycleOwner = lifecycleOwner,
 			onFavoriteChanged = ::refreshChannelFavorite,
-			tuneAction = object : EmptyResponse(lifecycleOwner.lifecycle) {
-				override fun onResponse() {
-					if (isActive) switchPlayingChannel(channel)
-				}
-			},
+			tuneAction = { switchPlayingChannel(channel) },
 		).also { popup ->
 			popup.setContent(
 				program = popupProgram,
