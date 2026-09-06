@@ -63,12 +63,19 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 
 		item {
 			val heading = "Main library versions"
-			val caption = mainLibraryVersionsCaption(
-				libdoviAndroidVersion = BuildConfig.LIBDOVI_ANDROID_VERSION,
-				libdoviVersion = BuildConfig.LIBDOVI_VERSION,
-				libMpvAndroidVersion = LibMPVBuildConfig.VERSION,
-				libMpvVersion = Utils.VERSIONS.mpv,
-			)
+			val caption = listOf(
+				"Media3 ${BuildConfig.MEDIA3_VERSION}",
+				"Media3 FFmpeg decoder ${BuildConfig.MEDIA3_FFMPEG_DECODER_VERSION}",
+				"FFmpeg ${BuildConfig.FFMPEG_VERSION}",
+				"libyuv ${BuildConfig.LIBYUV_VERSION}",
+				"libdovi-android ${BuildConfig.LIBDOVI_ANDROID_VERSION}",
+				"libdovi ${BuildConfig.LIBDOVI_VERSION}",
+				"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
+				"libass ${BuildConfig.LIBASS_VERSION}",
+				"libVLC ${BuildConfig.LIBVLC_VERSION}",
+				"mpv-android-lib ${LibMPVBuildConfig.VERSION}",
+				"libMPV ${Utils.VERSIONS.mpv}",
+			).joinToString("\n")
 			ListButton(
 				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },
 				headingContent = { Text(heading) },
@@ -96,22 +103,3 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 		}
 	}
 }
-
-internal fun mainLibraryVersionsCaption(
-	libdoviAndroidVersion: String,
-	libdoviVersion: String,
-	libMpvAndroidVersion: String,
-	libMpvVersion: String,
-) = listOf(
-	"Media3 ${BuildConfig.MEDIA3_VERSION}",
-	"Media3 FFmpeg decoder ${BuildConfig.MEDIA3_FFMPEG_DECODER_VERSION}",
-	"FFmpeg ${BuildConfig.FFMPEG_VERSION}",
-	"libyuv ${BuildConfig.LIBYUV_VERSION}",
-	"libdovi-android $libdoviAndroidVersion",
-	"libdovi $libdoviVersion",
-	"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
-	"libass ${BuildConfig.LIBASS_VERSION}",
-	"libVLC ${BuildConfig.LIBVLC_VERSION}",
-	"mpv-android-lib $libMpvAndroidVersion",
-	"libMPV $libMpvVersion",
-).joinToString("\n")
