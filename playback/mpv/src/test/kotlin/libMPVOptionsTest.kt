@@ -57,13 +57,46 @@ class LibMPVOptionsTest : StringSpec({
 			"Dolby Vision (Profile 8) \u2192 HDR10/PQ"
 	}
 
-	"MPV GPU API uses the observed Android EGL context" {
+	"MPV GPU API uses the observed Android context" {
 		mpvGpuApi(currentContext = "android") shouldBe "opengl"
+		mpvGpuApi(currentContext = "androidvk") shouldBe "vulkan"
 		mpvGpuApi(currentContext = null) shouldBe null
 	}
 
 	"resume position is passed to loadfile" {
 		728.seconds.mpvStartOption() shouldBe "start=728.0"
+	}
+
+	"MPV GPU API display includes versions on both sides of a fallback" {
+		mpvGpuApiDisplay("vulkan", "opengl", "1.3.0", "ES 3.2") shouldBe
+			"vulkan 1.3.0 \u2192 opengl ES 3.2"
+		mpvGpuApiDisplay("vulkan", "vulkan", "1.3.0", "1.3.0") shouldBe "vulkan 1.3.0"
+		mpvGpuApiDisplay("auto", "vulkan", null, "1.3.0") shouldBe "auto \u2192 vulkan 1.3.0"
+		mpvGpuApiDisplay("vulkan", null, "1.3.0", null) shouldBe null
+	}
+
+	"MPV output display reports every selected renderer mismatch" {
+		mpvSelectionDisplay("gpu-next", "gpu") shouldBe "gpu-next \u2192 gpu"
+		mpvSelectionDisplay("gpu-next", "gpu-next") shouldBe "gpu-next"
+		mpvSelectionDisplay("gpu-next", null) shouldBe null
+	}
+
+	"Vulkan prefers Android Vulkan with an OpenGL fallback" {
+		LibMPVPlaybackOptions(gpuApi = "vulkan").managedOptions().let { options ->
+			options["gpu-context"] shouldBe "androidvk,android"
+			options["gpu-api"] shouldBe "vulkan,opengl"
+		}
+	}
+
+	"unsupported Vulkan falls back to the Android OpenGL context" {
+		LibMPVPlaybackOptions(gpuApi = "vulkan", gpuContext = "auto")
+			.managedOptions(vulkanSupported = false) shouldBe
+			LibMPVPlaybackOptions(gpuApi = "opengl").managedOptions()
+	}
+
+	"Vulkan requires API 1.2" {
+		isLibMPVVulkanSupported((1 shl 22) or (1 shl 12)) shouldBe false
+		isLibMPVVulkanSupported((1 shl 22) or (2 shl 12)) shouldBe true
 	}
 
 	"plain subtitle padding maps to MPV 720p margins" {
