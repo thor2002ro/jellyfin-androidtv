@@ -193,6 +193,10 @@ class LiveTvPlaybackRecoveryService(
 
 	private fun startStalledBufferRecovery() {
 		if (stalledBufferRecoveryJob?.isActive == true) return
+		if (!manager.backend.reportsBufferedPosition) {
+			Timber.i("Skipping Live TV stalled-buffer recovery; backend does not report buffered position")
+			return
+		}
 
 		val entry = manager.queue.entry.value ?: return
 		if (entry.mediaStream?.identifier == null) return
