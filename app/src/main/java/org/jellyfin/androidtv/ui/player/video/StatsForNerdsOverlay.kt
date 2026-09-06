@@ -61,6 +61,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -425,6 +426,12 @@ private object NewPlayerStreamStatusBuilder {
 				},
 			),
 			PlaybackInfoSection(
+				title = "libass Metrics",
+				rows = rows {
+					if (showAssStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
+				},
+			),
+			PlaybackInfoSection(
 				title = "Original Media Info",
 				rows = rows {
 					row("Container", stream.container.format)
@@ -455,6 +462,32 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun MutableList<PlaybackInfoRowModel>.row(label: String, value: String?) {
 		if (!value.isNullOrBlank()) add(PlaybackInfoRowModel(label, value))
+	}
+
+	private fun MutableList<PlaybackInfoRowModel>.addLibassStats(stats: PlaybackLibassStats) {
+		row("Samples", stats.renderCount.toString())
+		row("FPS", stats.fps.formatLibassRate())
+		row(
+			"Render ms",
+			"${stats.averageRenderMs.formatLibassMs()} avg, " +
+				"${stats.minRenderMs.formatLibassMs()} min, " +
+				"${stats.maxRenderMs.formatLibassMs()} max, " +
+				"${stats.lastRenderMs.formatLibassMs()} last",
+		)
+		row("Changed", "${stats.changedRenderCount}/${stats.renderCount} (${(stats.changedRatio * 100.0).formatLibassRate()}%)")
+		row("Empty", stats.emptyRenderCount.toString())
+		row("Slow", stats.slowRenderCount.toString())
+		row("Images", "${stats.imageCount} total, ${stats.maxImageCount} max")
+		row("Bitmap px", "${stats.totalBitmapPixels.formatPixelCount()} total, ${stats.maxBitmapPixels.formatPixelCount()} max")
+		row("Atlas pages", "${stats.atlasUploadPageCount} total, ${stats.maxAtlasUploadPageCount} max")
+		row(
+			"Atlas px",
+			"${stats.totalAtlasUploadPagePixels.formatPixelCount()} total, " +
+				"${stats.maxAtlasUploadPagePixels.formatPixelCount()} max",
+		)
+		if (stats.executorTimeoutCount > 0L || stats.supersededRequestCount > 0L) {
+			row("Executor", "${stats.executorTimeoutCount} timeouts, ${stats.supersededRequestCount} superseded")
+		}
 	}
 
 	private fun streamingVideoCodec(
@@ -657,6 +690,15 @@ private object NewPlayerStreamStatusBuilder {
 	}
 
 	private fun Float.formatFrameRate() = "%.3f fps".format(this)
+
+	private fun Double.formatLibassRate() = "%.1f".format(this)
+
+	private fun Double.formatLibassMs() = "%.2f".format(this)
+
+	private fun Long.formatPixelCount() = when {
+		this >= 1_000_000L -> "%.1f MP".format(this / 1_000_000.0)
+		else -> "$this px"
+	}
 
 	private fun Boolean?.formatPassthroughSupport() = when (this) {
 		true -> "Yes"
