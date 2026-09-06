@@ -1,7 +1,9 @@
 package org.jellyfin.androidtv.ui.base.list
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 
 @Composable
@@ -23,6 +25,6 @@ fun ListSection(
 		footerContent = footerContent,
 		headingStyle = JellyfinTheme.typography.listHeader
 			.copy(color = JellyfinTheme.colorScheme.listHeader),
-		modifier = modifier,
+		modifier = modifier.padding(top = 6.dp, bottom = 2.dp),
 	)
 }
