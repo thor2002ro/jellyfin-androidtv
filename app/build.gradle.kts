@@ -7,6 +7,7 @@ plugins {
 
 val thorApplicationId = "org.jellyfin.androidtv.thor"
 val appVersionName = project.getVersionName()
+val apkAbis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 
 android {
 	namespace = "org.jellyfin.androidtv"
@@ -20,6 +21,7 @@ android {
 		applicationId = thorApplicationId
 		versionName = appVersionName
 		versionCode = getVersionCode(appVersionName)
+		buildConfigField("String", "UPDATE_ABIS", "\"${apkAbis.joinToString(",")}\"")
 	}
 
 	buildFeatures {
@@ -31,6 +33,15 @@ android {
 
 	compileOptions {
 		isCoreLibraryDesugaringEnabled = true
+	}
+
+	splits {
+		abi {
+			isEnable = true
+			reset()
+			include(*apkAbis.toTypedArray())
+			isUniversalApk = true
+		}
 	}
 
 	signingConfigs {
@@ -76,6 +87,8 @@ android {
 		debug {
 			// Use different application id to run release and debug at the same time
 			applicationIdSuffix = ".debug"
+			// CI provides this config so published debug APKs keep a stable update signer
+			signingConfigs.findByName("release")?.let { signingConfig = it }
 
 			// Set package names used in various XML files
 			resValue("string", "app_id", thorApplicationId + applicationIdSuffix)
@@ -120,6 +133,7 @@ dependencies {
 	implementation(projects.playback.media3.exoplayer)
 	implementation(projects.playback.media3.session)
 	implementation(projects.preference)
+	implementation(projects.updater)
 	implementation(libs.jellyfin.sdk) {
 		// Change version if desired
 		val sdkVersion = findProperty("sdk.version")?.toString()

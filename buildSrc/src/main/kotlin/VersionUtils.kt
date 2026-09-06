@@ -1,5 +1,7 @@
 import java.time.LocalDateTime
+import java.time.Month
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import org.gradle.api.Project
 
 /**
@@ -42,6 +44,16 @@ private fun String.withVersionPrefix() =
 fun getVersionCode(versionName: String): Int {
 	val normalizedVersionName = versionName.removePrefix("v")
 
+	dateBuildVersionRegex.matchEntire(normalizedVersionName)?.let { match ->
+		val (year, month, day, time) = match.destructured
+		val hourMinute = time.toInt()
+		val dateTime = LocalDateTime.of(year.toInt(), month.toInt(), day.toInt(), hourMinute / 100, hourMinute % 100)
+		val minutes = ChronoUnit.MINUTES.between(dateVersionCodeBaseDate, dateTime)
+		require(minutes >= 0) { "Date build versions before 2026 are not supported" }
+		require(minutes <= Int.MAX_VALUE - dateVersionCodeBase) { "Date build version is too far in the future" }
+		return dateVersionCodeBase + minutes.toInt()
+	}
+
 	// Split to core and pre release parts with a default for pre release (null)
 	val (versionCore, versionPreRelease) =
 		when (val index = normalizedVersionName.indexOf('-')) {
@@ -73,3 +85,7 @@ fun getVersionCode(versionName: String): Int {
 
 	return code
 }
+
+private const val dateVersionCodeBase = 2_100_000_000
+private val dateVersionCodeBaseDate: LocalDateTime = LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0)
+private val dateBuildVersionRegex = Regex("""^(\d{4})\.(\d{2})\.(\d{2})\.(\d{4})(?:[-+].*)?$""")
