@@ -707,4 +707,7 @@
     <string name="bitstream_eac3">Flux binaire Dolby Digital Plus</string>
     <string name="bitstream_dts">Flux binaire Digital Theater System</string>
     <string name="bitstream_truehd">Flux binaire Dolby TrueHD</string>
+    <string name="lbl_bitstream_eac3">Flux audio Dolby Digital Plus</string>
+    <string name="lbl_bitstream_dts">Flux audio Digital Theater System</string>
+    <string name="lbl_bitstream_truehd">Flux audio Dolby TrueHD</string>
 </resources>
