@@ -17,6 +17,7 @@ import org.jellyfin.androidtv.preference.constant.LibassGlyphSize
 import org.jellyfin.androidtv.preference.constant.LibassMaxRenderPixels
 import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
+import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior
 import org.jellyfin.androidtv.preference.constant.WatchedIndicatorBehavior
@@ -59,6 +60,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Maximum bitrate in megabit for playback.
 		 */
 		var maxBitrate = stringPreference("pref_max_bitrate", "100")
+
+		/**
+		 * Maximum video resolution for playback.
+		 */
+		var maxResolution = enumPreference("pref_max_resolution", PlaybackResolution.NATIVE)
 
 		/**
 		 * Auto-play next item
