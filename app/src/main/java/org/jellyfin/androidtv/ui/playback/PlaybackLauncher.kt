@@ -2,9 +2,12 @@ package org.jellyfin.androidtv.ui.playback
 
 import android.content.Context
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.playbackPlayerPreferences
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.navigation.ActivityDestinations
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
+import org.jellyfin.androidtv.util.sdk.isHdrVideo
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaType
@@ -20,6 +23,17 @@ class PlaybackLauncher(
 	private val navigationRepository: NavigationRepository,
 	private val userPreferences: UserPreferences,
 ) {
+	enum class VideoPlayer {
+		EXTERNAL,
+		LEGACY,
+		NEW,
+	}
+
+	data class VideoPlayerSelection(
+		val player: VideoPlayer,
+		val backend: PlaybackBackend? = null,
+	)
+
 	private val BaseItemDto.supportsExternalPlayer
 		get() = when (type) {
 			BaseItemKind.MOVIE,
@@ -58,19 +72,59 @@ class PlaybackLauncher(
 			videoQueueManager.setCurrentVideoQueue(items.toList())
 			videoQueueManager.setCurrentMediaPosition(itemsPosition)
 
-			if (items.isEmpty()) return
-
-			if (userPreferences[UserPreferences.useExternalPlayer] && items.all { it.supportsExternalPlayer }) {
-				context.startActivity(ActivityDestinations.externalPlayer(context, position?.milliseconds ?: Duration.ZERO))
-				navigationRepository.goNowhere(true)
-			} else {
-				val destination = if (userPreferences[UserPreferences.playbackRewriteVideoEnabled]) {
-					Destinations.videoPlayerNew(position)
-				} else {
-					Destinations.videoPlayer(position)
+			when (getVideoPlayerSelection(items, itemsPosition)?.player) {
+				VideoPlayer.EXTERNAL -> {
+					context.startActivity(ActivityDestinations.externalPlayer(context, position?.milliseconds ?: Duration.ZERO))
+					if (!replace || !navigationRepository.goBack()) navigationRepository.goNowhere(true)
 				}
-				navigationRepository.navigate(destination, replace = replace)
+
+				VideoPlayer.NEW -> {
+					val destination = Destinations.videoPlayerNew(position)
+					navigationRepository.navigate(destination, replace = replace)
+				}
+
+				VideoPlayer.LEGACY -> {
+					val destination = Destinations.videoPlayer(position)
+					navigationRepository.navigate(destination, replace = replace)
+				}
+
+				null -> Unit
 			}
 		}
+	}
+
+	fun getVideoPlayerSelection(
+		items: List<BaseItemDto>,
+		itemsPosition: Int,
+	): VideoPlayerSelection? {
+		val item = items.getOrNull(itemsPosition) ?: items.firstOrNull() ?: return null
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(item.isHdrVideo)
+
+		return when {
+			userPreferences[playerPreferences.useExternalPlayer] && items.all { it.supportsExternalPlayer } ->
+				VideoPlayerSelection(VideoPlayer.EXTERNAL)
+
+			userPreferences[playerPreferences.playbackRewriteVideoEnabled] ->
+				VideoPlayerSelection(
+					player = VideoPlayer.NEW,
+					backend = userPreferences[playerPreferences.playbackBackend],
+				)
+
+			else -> VideoPlayerSelection(VideoPlayer.LEGACY)
+		}
+	}
+
+	@JvmOverloads
+	fun launchCurrentVideoQueue(
+		context: Context,
+		replace: Boolean = true,
+	) {
+		launch(
+			context = context,
+			items = videoQueueManager.getCurrentVideoQueue(),
+			position = 0,
+			replace = replace,
+			itemsPosition = videoQueueManager.getCurrentMediaPosition(),
+		)
 	}
 }

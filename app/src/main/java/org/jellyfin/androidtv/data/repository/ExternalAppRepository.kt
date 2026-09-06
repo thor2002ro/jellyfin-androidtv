@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.ResolveInfo
 import androidx.core.net.toUri
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.playbackPlayerPreferences
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.util.componentName
 
@@ -29,13 +30,15 @@ class ExternalAppRepository(
 		// Hide apps with priority below zero (system stubs)
 		.filter { it.priority >= 0 }
 
-	fun getCurrentExternalPlayerApp(context: Context): ActivityInfo? {
+	fun getCurrentExternalPlayerApp(context: Context, hdr: Boolean = false): ActivityInfo? {
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr)
+
 		// Validate if external app should be used at all
-		val useExternalPlayer = userPreferences[UserPreferences.useExternalPlayer]
+		val useExternalPlayer = userPreferences[playerPreferences.useExternalPlayer]
 		if (!useExternalPlayer) return null
 
 		// Resolve external app information
-		val resolvedInfo = userPreferences[UserPreferences.externalPlayerComponentName]
+		val resolvedInfo = userPreferences[playerPreferences.externalPlayerComponentName]
 			.takeIf { it.isNotEmpty() }
 			?.let(ComponentName::unflattenFromString)
 			?.runCatching { context.packageManager.getActivityInfo(this, 0) }
@@ -53,13 +56,14 @@ class ExternalAppRepository(
 		return externalApps.firstOrNull()?.activityInfo
 	}
 
-	fun setExternalPlayerapp(activityInfo: ActivityInfo?) {
+	fun setExternalPlayerapp(activityInfo: ActivityInfo?, hdr: Boolean = false) {
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr)
 		if (activityInfo == null) {
-			userPreferences[UserPreferences.useExternalPlayer] = false
-			userPreferences[UserPreferences.externalPlayerComponentName] = ""
+			userPreferences[playerPreferences.useExternalPlayer] = false
+			userPreferences[playerPreferences.externalPlayerComponentName] = ""
 		} else {
-			userPreferences[UserPreferences.useExternalPlayer] = true
-			userPreferences[UserPreferences.externalPlayerComponentName] = activityInfo.componentName.flattenToShortString()
+			userPreferences[playerPreferences.useExternalPlayer] = true
+			userPreferences[playerPreferences.externalPlayerComponentName] = activityInfo.componentName.flattenToShortString()
 		}
 	}
 

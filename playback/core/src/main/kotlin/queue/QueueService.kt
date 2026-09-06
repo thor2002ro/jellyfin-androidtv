@@ -29,6 +29,7 @@ class QueueService internal constructor() : PlayerService(), Queue {
 	private var defaultOrderIndexProvider = DefaultOrderIndexProvider()
 	private var orderIndexProvider: OrderIndexProvider = defaultOrderIndexProvider
 	private var currentQueueIndicesPlayed = mutableListOf<Int>()
+	private var entryChangePredicate: (suspend (QueueEntry) -> Boolean)? = null
 
 	override val estimatedSize get() = max(fetchedEntries.size, suppliers.sumOf { it.size } - removedEntries)
 
@@ -54,12 +55,22 @@ class QueueService internal constructor() : PlayerService(), Queue {
 		// Automatically advance when current stream ends
 		manager.backendService.addListener(object : PlayerBackendEventListener() {
 			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
+				if (mediaStream.queueEntry !== _entry.value) return
+
 				coroutineScope.launch {
 					val nextEntry = next(usePlaybackOrder = true, useRepeatMode = true)
 					if (nextEntry == null && _entryIndex.value != Queue.INDEX_NONE) setIndex(Queue.INDEX_NONE, true)
 				}
 			}
 		})
+	}
+
+	fun setEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
+		entryChangePredicate = predicate
+	}
+
+	fun clearEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
+		if (entryChangePredicate === predicate) entryChangePredicate = null
 	}
 
 	// Entry management
@@ -190,13 +201,15 @@ class QueueService internal constructor() : PlayerService(), Queue {
 	override suspend fun setIndex(index: Int, saveHistory: Boolean): QueueEntry? {
 		if (index < 0 && index != Queue.INDEX_NONE) return null
 
+		val currentEntry = getOrSupplyEntry(index)
+		if (currentEntry != null && entryChangePredicate?.invoke(currentEntry) == false) return null
+
 		// Save previous index
 		if (saveHistory && _entryIndex.value != Queue.INDEX_NONE) {
 			currentQueueIndicesPlayed.add(_entryIndex.value)
 		}
 
 		// Set new index
-		val currentEntry = getOrSupplyEntry(index)
 		_entryIndex.value = if (currentEntry == null) Queue.INDEX_NONE else index
 		_entry.value = currentEntry
 
