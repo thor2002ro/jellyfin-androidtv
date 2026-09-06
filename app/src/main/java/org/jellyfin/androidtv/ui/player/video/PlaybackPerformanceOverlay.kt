@@ -104,6 +104,7 @@ internal fun PlaybackPerformanceOverlay(
 				previous = previousDecoderSnapshot,
 				current = currentDecoderSnapshot,
 				expectedFrameRate = expectedDecoderFrameRate,
+				measuredFrameRate = currentFrameStats.videoDecoderFps,
 			)
 			renderFrameMetric = renderFrameSampler?.sample() ?: RenderFrameMetric()
 			previousDecoderSnapshot = currentDecoderSnapshot
@@ -444,14 +445,15 @@ private fun calculateDecoderActivity(
 	previous: DecoderFrameSnapshot?,
 	current: DecoderFrameSnapshot,
 	expectedFrameRate: Float?,
+	measuredFrameRate: Float? = null,
 ): DecoderActivityMetric {
-	if (previous == null) return DecoderActivityMetric()
-
-	val frameDelta = current.decodedFrames - previous.decodedFrames
-	val elapsedDeltaMs = current.elapsedRealtimeMs - previous.elapsedRealtimeMs
-	if (frameDelta < 0 || elapsedDeltaMs <= 0) return DecoderActivityMetric()
-
-	val fps = frameDelta.toFloat() * 1_000f / elapsedDeltaMs.toFloat()
+	val fps = measuredFrameRate?.takeIf { it.isFinite() && it >= 0f } ?: run {
+		if (previous == null) return DecoderActivityMetric()
+		val frameDelta = current.decodedFrames - previous.decodedFrames
+		val elapsedDeltaMs = current.elapsedRealtimeMs - previous.elapsedRealtimeMs
+		if (frameDelta < 0 || elapsedDeltaMs <= 0) return DecoderActivityMetric()
+		frameDelta.toFloat() * 1_000f / elapsedDeltaMs.toFloat()
+	}
 	val baseline = expectedFrameRate ?: DecoderGraphFallbackFrameRate
 	val percent = ((fps / baseline) * 100f).coerceIn(0f, 100f)
 
