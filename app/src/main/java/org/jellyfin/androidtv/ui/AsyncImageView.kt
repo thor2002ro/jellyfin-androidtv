@@ -79,20 +79,7 @@ class AsyncImageView @JvmOverloads constructor(
 			if (requestId != loadRequestId) return@doOnAttach
 
 			loadJob = lifeCycleOwner?.lifecycleScope?.launch {
-				var placeholderOrBlurHash = placeholder
-
-				// Only show blurhash if an image is going to be loaded from the network
 				val isLowRamDevice = context.getSystemService<ActivityManager>()?.isLowRamDevice == true
-				if (url != null && blurHash != null && !isLowRamDevice && aspectRatio > 0) withContext(Dispatchers.IO) {
-					val blurHashBitmap = BlurHashDecoder.decode(
-						blurHash,
-						if (aspectRatio > 1) round(blurHashResolution * aspectRatio).toInt() else blurHashResolution,
-						if (aspectRatio >= 1) blurHashResolution else round(blurHashResolution / aspectRatio).toInt(),
-					)
-					if (blurHashBitmap != null) placeholderOrBlurHash = blurHashBitmap.toDrawable(resources)
-				}
-
-				if (requestId != loadRequestId) return@launch
 
 				// Start loading image or placeholder
 				val request = if (url == null) {
@@ -109,13 +96,28 @@ class AsyncImageView @JvmOverloads constructor(
 
 						target(this@AsyncImageView)
 						data(url)
-						placeholder(placeholderOrBlurHash?.asImage())
+						placeholder(placeholder?.asImage())
 						if (circleCrop) transformations(CircleCropTransformation())
 						error(placeholder?.asImage())
 					}.build()
 				}
 
 				imageRequest = imageLoader.enqueue(request)
+
+				// Only show blurhash if an image is going to be loaded from the network.
+				// Start the real image request first so BlurHash decoding never delays it.
+				if (url != null && blurHash != null && !isLowRamDevice && aspectRatio > 0) {
+					val blurHashDrawable = withContext(Dispatchers.IO) {
+						BlurHashDecoder.decode(
+							blurHash,
+							if (aspectRatio > 1) round(blurHashResolution * aspectRatio).toInt() else blurHashResolution,
+							if (aspectRatio >= 1) blurHashResolution else round(blurHashResolution / aspectRatio).toInt(),
+						)?.toDrawable(resources)
+					}
+					if (requestId == loadRequestId && imageRequest?.job?.isCompleted == false && blurHashDrawable != null) {
+						setImageDrawable(blurHashDrawable)
+					}
+				}
 				imageRequest?.job?.await()
 			}
 		}
