@@ -502,6 +502,7 @@ private object NewPlayerStreamStatusBuilder {
 	}
 
 	private fun MutableList<PlaybackInfoRowModel>.addLibassStats(stats: PlaybackLibassStats) {
+		row("OpenGL", stats.openGlMode)
 		row("Samples", stats.renderCount.toString())
 		row("FPS", stats.fps.formatLibassRate())
 		row(
