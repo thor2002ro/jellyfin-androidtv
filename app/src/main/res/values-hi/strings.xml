@@ -150,7 +150,6 @@
     <string name="msg_record_entire_series">क्या पूरी सीरीज रिकॉर्ड करें?</string>
     <string name="lbl_show_indicators">इंडिकेटर दिखाएं</string>
     <string name="lbl_guide_option_number">चैनल नंबर</string>
-    <string name="lbl_premiere">प्रीमियर</string>
     <string name="lbl_resume_from">%1$s से शुरू करें</string>
     <string name="lbl_more_like_this">इसके जैसे</string>
     <string name="lbl_new_only">सिर्फ नए</string>
