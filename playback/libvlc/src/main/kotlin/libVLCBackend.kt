@@ -47,6 +47,7 @@ import org.videolan.libvlc.interfaces.IVLCVout
 import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCUtil
 import timber.log.Timber
+import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -245,6 +246,7 @@ class LibVLCBackend(
 	private var normalBufferDuration: Duration? = null
 	private var liveTvBufferDuration: Duration? = null
 	private var maxBufferBytes: Long? = null
+	private var previousStatsSample: LibVLCStatsSample? = null
 	private var currentStream: PlayableMediaStream? = null
 	private var surfaceView: PlayerSurfaceView? = null
 	private var subtitleView: PlayerSubtitleView? = null
@@ -372,6 +374,7 @@ class LibVLCBackend(
 		stream.errorOrigin?.activate()
 		endReported = false
 		playbackActive = false
+		previousStatsSample = null
 		pendingInitialTrackTypes.clear()
 		if (stream.conversionMethod == MediaConversionMethod.None) {
 			if (stream.selectedAudioStreamIndex != null) pendingInitialTrackTypes += TrackType.AUDIO
@@ -416,6 +419,7 @@ class LibVLCBackend(
 		currentStream = null
 		endReported = false
 		playbackActive = false
+		previousStatsSample = null
 		pendingInitialTrackTypes.clear()
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
@@ -540,6 +544,19 @@ class LibVLCBackend(
 				media.release()
 			}
 		}
+		val currentStatsSample = stats?.let {
+			LibVLCStatsSample(
+				decodedVideo = it.decodedVideo,
+				displayedPictures = it.displayedPictures,
+				elapsedRealtimeNanos = System.nanoTime(),
+			)
+		}
+		val rates = currentStatsSample?.let { calculateLibVLCRates(previousStatsSample, it) }
+		previousStatsSample = currentStatsSample
+		val trackDiagnostics = libVLCTrackDiagnostics(
+			video = player.getSelectedTrack(IMedia.Track.Type.Video) as? IMedia.VideoTrack,
+			audio = player.getSelectedTrack(IMedia.Track.Type.Audio) as? IMedia.AudioTrack,
+		)
 		val estimatedBytes = estimateBufferedBytes(
 			stats?.demuxBitrate,
 			if (currentStream?.queueEntry?.isLiveTv == true) liveTvBufferDuration else normalBufferDuration,
@@ -550,11 +567,23 @@ class LibVLCBackend(
 			corruptedFrames = stats?.demuxCorrupted?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
 			playerName = "libVLC",
 			videoDecodedFrames = stats?.decodedVideo?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
+			videoDecoderFps = rates?.decodedFps,
 			videoDecoderName = "libVLC ${effectiveVideoDecoder.label}",
+			videoCodec = trackDiagnostics.videoCodec,
+			videoSourceFps = trackDiagnostics.videoSourceFps,
+			videoBitrate = trackDiagnostics.videoBitrate,
 			audioDecoderName = "libVLC",
+			audioCodec = trackDiagnostics.audioCodec,
+			audioBitrate = trackDiagnostics.audioBitrate,
+			audioChannels = trackDiagnostics.audioChannels,
+			audioSampleRate = trackDiagnostics.audioSampleRate,
 			bufferedBytes = bufferDetails,
 			subtitleExtractor = "libVLC",
 			subtitleRender = "libVLC",
+			backendDetails = buildMap {
+				if (stats != null) putAll(libVLCBackendDetails(stats, rates))
+				putAll(trackDiagnostics.details)
+			},
 		)
 	}
 
@@ -765,3 +794,92 @@ internal fun formatLibVLCBufferDetails(estimatedBytes: Long?, bufferingPercent: 
 	estimatedBytes?.let { add("~${it.formatBufferBytes()}") }
 	if (bufferingPercent < 100f) add("buffering ${bufferingPercent.toInt()}%")
 }.joinToString(", ").takeIf(String::isNotEmpty)
+
+internal data class LibVLCStatsSample(
+	val decodedVideo: Long,
+	val displayedPictures: Long,
+	val elapsedRealtimeNanos: Long,
+)
+
+internal data class LibVLCRates(
+	val decodedFps: Float,
+	val displayedFps: Float,
+)
+
+internal fun calculateLibVLCRates(
+	previous: LibVLCStatsSample?,
+	current: LibVLCStatsSample,
+): LibVLCRates? {
+	previous ?: return null
+	val elapsedNanos = current.elapsedRealtimeNanos - previous.elapsedRealtimeNanos
+	val decoded = current.decodedVideo - previous.decodedVideo
+	val displayed = current.displayedPictures - previous.displayedPictures
+	if (elapsedNanos <= 0 || decoded < 0 || displayed < 0) return null
+
+	val elapsedSeconds = elapsedNanos / 1_000_000_000f
+	return LibVLCRates(
+		decodedFps = decoded / elapsedSeconds,
+		displayedFps = displayed / elapsedSeconds,
+	)
+}
+
+internal fun libVLCBackendDetails(
+	stats: IMedia.Stats,
+	rates: LibVLCRates?,
+): Map<String, String> = buildMap {
+	put("Input", "${stats.readBytes.nonNegativeBytes()} read, ${stats.inputBitrate.byteRate()}")
+	put("Demux", "${stats.demuxReadBytes.nonNegativeBytes()} read, ${stats.demuxBitrate.byteRate()}")
+	put("Video pictures", "${stats.decodedVideo} decoded, ${stats.displayedPictures} displayed")
+	rates?.let {
+		put("Video rate", "${it.decodedFps.rate()} decoded/s, ${it.displayedFps.rate()} displayed/s")
+	}
+	put("Audio buffers", "${stats.decodedAudio} decoded, ${stats.playedAbuffers} played, ${stats.lostAbuffers} lost")
+	put("Demux discontinuities", stats.demuxDiscontinuity.toString())
+	if (stats.sentPackets > 0 || stats.sendBitrate > 0f) {
+		put("Stream output", "${stats.sentPackets} packets, ${stats.sentBytes.nonNegativeBytes()}, ${stats.sendBitrate.byteRate()}")
+	}
+}
+
+internal data class LibVLCTrackDiagnostics(
+	val videoCodec: String? = null,
+	val videoBitrate: Int? = null,
+	val videoSourceFps: Float? = null,
+	val audioCodec: String? = null,
+	val audioBitrate: Int? = null,
+	val audioChannels: String? = null,
+	val audioSampleRate: Int? = null,
+	val details: Map<String, String> = emptyMap(),
+)
+
+internal fun libVLCTrackDiagnostics(
+	video: IMedia.VideoTrack?,
+	audio: IMedia.AudioTrack?,
+): LibVLCTrackDiagnostics {
+	val sourceFps = if (video != null && video.frameRateNum > 0 && video.frameRateDen > 0) {
+		video.frameRateNum.toFloat() / video.frameRateDen
+	} else null
+
+	return LibVLCTrackDiagnostics(
+		videoCodec = video?.codec?.takeUnless(String::isBlank),
+		videoBitrate = video?.bitrate?.takeIf { it > 0 },
+		videoSourceFps = sourceFps,
+		audioCodec = audio?.codec?.takeUnless(String::isBlank),
+		audioBitrate = audio?.bitrate?.takeIf { it > 0 },
+		audioChannels = audio?.channels?.takeIf { it > 0 }?.toString(),
+		audioSampleRate = audio?.rate?.takeIf { it > 0 },
+		details = buildMap {
+			video?.profile?.takeIf { it > 0 }?.let { put("Video profile", it.toString()) }
+			video?.level?.takeIf { it > 0 }?.let { put("Video level", it.toString()) }
+		},
+	)
+}
+
+private fun Long.nonNegativeBytes() = coerceAtLeast(0).formatBufferBytes()
+
+private fun Float.byteRate() = takeIf { it.isFinite() && it > 0f }
+	?.toLong()
+	?.formatBufferBytes()
+	?.let { "$it/s" }
+	?: "0 B/s"
+
+private fun Float.rate() = String.format(Locale.US, "%.3f", this)
