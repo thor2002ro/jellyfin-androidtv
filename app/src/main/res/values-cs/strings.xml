@@ -177,7 +177,6 @@
     <string name="lbl_song_title">Název skladby</string>
     <string name="lbl_album_name">Název alba</string>
     <string name="lbl_next_episode">Další epizoda</string>
-    <string name="lbl_previous_episode">Předchozí epizoda</string>
     <string name="lbl_more_like_this">Další podobné</string>
     <string name="lbl_resume_from">Pokračovat od %1$s</string>
     <string name="lbl_resume_preroll">Pokračovat v přehrávání upoutávek</string>

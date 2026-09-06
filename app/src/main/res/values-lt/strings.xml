@@ -149,7 +149,6 @@
     <string name="lbl_enable_cinema_mode">Kino teatro režimas</string>
     <string name="lbl_new">Nauja</string>
     <string name="lbl_more_like_this">Daugiau kaip šis</string>
-    <string name="lbl_previous_episode">Ankstesnis epizodas</string>
     <string name="lbl_shuffle_queue">Įjungti maišymą</string>
     <string name="lbl_album_name">Albumo pavadinimas</string>
     <string name="pref_next_up_timeout_disabled">∞</string>

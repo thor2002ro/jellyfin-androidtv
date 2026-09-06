@@ -36,7 +36,6 @@
     <string name="lbl_song_title">Judul lagu</string>
     <string name="lbl_album_name">Nama album</string>
     <string name="lbl_next_episode">Episode berikutnya</string>
-    <string name="lbl_previous_episode">Episode sebelumnya</string>
     <string name="lbl_resume_from">Lanjutkan dari %1$s</string>
     <string name="lbl_guest_stars">Bintang tamu</string>
     <string name="lbl_on_schedule">Sesuai jadwal</string>

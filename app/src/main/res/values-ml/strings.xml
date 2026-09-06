@@ -131,7 +131,6 @@
     <string name="lbl_song_title">പാട്ടിന്റെ പേര്</string>
     <string name="lbl_album_name">ആൽബത്തിന്റെ പേര്</string>
     <string name="lbl_next_episode">അടുത്ത എപ്പിസോഡ്</string>
-    <string name="lbl_previous_episode">മുമ്പത്തെ എപ്പിസോഡ്</string>
     <string name="lbl_more_like_this">ഇത് കൂടുതൽ ഇഷ്ടപ്പെടുന്നു</string>
     <string name="lbl_resume_preroll">പ്രീ-റോൾ പുനരാരംഭിക്കുക</string>
     <string name="lbl_guide_option_number">ചാനൽ നമ്പർ</string>

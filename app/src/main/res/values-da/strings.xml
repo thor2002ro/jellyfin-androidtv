@@ -178,7 +178,6 @@
     <string name="lbl_song_title">Sangtitel</string>
     <string name="lbl_album_name">Albumnavn</string>
     <string name="lbl_next_episode">Næste afsnit</string>
-    <string name="lbl_previous_episode">Forrige afsnit</string>
     <string name="lbl_more_like_this">Mere som dette</string>
     <string name="lbl_resume_from">Genoptag fra %1$s</string>
     <string name="lbl_guide_option_number">Kanalnummer</string>

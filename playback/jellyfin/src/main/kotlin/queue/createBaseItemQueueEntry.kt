@@ -2,6 +2,7 @@ package org.jellyfin.playback.jellyfin.queue
 
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueEntryMetadata
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
@@ -51,6 +52,9 @@ fun createBaseItemQueueEntry(api: ApiClient, baseItem: BaseItemDto): QueueEntry 
 		genre = baseItem.genres?.joinToString(", "),
 	)
 	entry.baseItem = baseItem
+	entry.startPosition = baseItem.userData?.playbackPositionTicks
+		?.takeIf { it > 0 }
+		?.ticks
 	entry.normalizationGain = baseItem.normalizationGain
 	entry.mediaType = when {
 		baseItem.isLiveTv -> PlayerMediaType.Video

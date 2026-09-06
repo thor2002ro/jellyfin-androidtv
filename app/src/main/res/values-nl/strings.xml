@@ -177,7 +177,6 @@
     <string name="lbl_news">Nieuws</string>
     <string name="lbl_album_name">Albumtitel</string>
     <string name="lbl_next_episode">Volgende aflevering</string>
-    <string name="lbl_previous_episode">Vorige aflevering</string>
     <string name="lbl_sort_by">Sorteren op</string>
     <string name="lbl_save">Opslaan</string>
     <string name="msg_settings_updated">Voorkeuren bijgewerkt</string>

@@ -181,7 +181,6 @@
     <string name="lbl_song_title">Nome da música</string>
     <string name="lbl_album_name">Nome Álbum</string>
     <string name="lbl_next_episode">Próximo episódio</string>
-    <string name="lbl_previous_episode">Episódio anterior</string>
     <string name="lbl_more_like_this">Títulos semelhantes</string>
     <string name="lbl_resume_from">Retomar desde %1$s</string>
     <string name="lbl_guide_option_number">Número do canal</string>

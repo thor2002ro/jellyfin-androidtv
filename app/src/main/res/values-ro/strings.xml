@@ -104,7 +104,6 @@
     <string name="lbl_song_title">Titlul melodiei</string>
     <string name="lbl_album_name">Numele albumului</string>
     <string name="lbl_next_episode">Episodul următor</string>
-    <string name="lbl_previous_episode">Episodul anterior</string>
     <string name="lbl_more_like_this">Mai multe ca acesta</string>
     <string name="lbl_resume_from">Reia de la %1$s</string>
     <string name="lbl_resume_preroll">Reia pre-rularea</string>
