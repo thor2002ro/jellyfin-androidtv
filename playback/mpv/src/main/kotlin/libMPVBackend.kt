@@ -39,6 +39,8 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoGeometry
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.support.PlaySupportReport
@@ -198,8 +200,6 @@ class LibMPVBackend(
 	private var rebufferWaitSeconds: Double? = null
 	private var terminalState: PlayState? = PlayState.STOPPED
 	private var lastReportedState: PlayState? = null
-	private var videoWidth = 0
-	private var videoHeight = 0
 	private var shieldFallback: LibMPVShieldFallback? = null
 	private val nvidiaFallbackResync = LibMPVNvidiaFallbackResyncState()
 	private val appliedNvidiaFallbackOptions = mutableSetOf<String>()
@@ -209,6 +209,9 @@ class LibMPVBackend(
 	private val appliedPresetOptions = mutableSetOf<String>()
 	private val appliedCustomOptions = mutableSetOf<String>()
 	private val frameStatPropertyMisses = mutableMapOf<String, Long>()
+	private val videoOutput = MPVVideoOutput { aspectRatio ->
+		setProperty("video-aspect-override", aspectRatio)
+	}
 
 	private val tick = object : Runnable {
 		override fun run() {
@@ -297,6 +300,7 @@ class LibMPVBackend(
 		applySubtitleStyle(subtitleStyle)
 		applySubtitleTiming()
 		applyPlaybackSpeed()
+		videoOutput.reapply()
 
 		surfaceHolder?.takeIf { holder -> holder.surface.isValid }?.let(::attachSurface)
 	}
@@ -338,8 +342,7 @@ class LibMPVBackend(
 	) : MPV.EventObserver {
 		override fun eventProperty(property: String) = Unit
 
-		override fun eventProperty(property: String, value: Long) =
-			handleEventProperty(generation, property, value)
+		override fun eventProperty(property: String, value: Long) = Unit
 
 		override fun eventProperty(property: String, value: Boolean) =
 			handleEventProperty(generation, property, value)
@@ -359,8 +362,7 @@ class LibMPVBackend(
 		target.observeProperty("paused-for-cache", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("seeking", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
-		target.observeProperty("video-params/w", MPV.mpvFormat.MPV_FORMAT_INT64)
-		target.observeProperty("video-params/h", MPV.mpvFormat.MPV_FORMAT_INT64)
+		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 	}
 
 	override fun supportsStream(stream: MediaStream): PlaySupportReport = object : PlaySupportReport {
@@ -453,6 +455,10 @@ class LibMPVBackend(
 		updateNativeSubtitleOverlayMode()
 	}
 
+	override fun setVideoOutputTransform(transform: VideoOutputTransform) {
+		videoOutput.apply(transform)
+	}
+
 	private fun applySubtitleStyle(style: PlayerSubtitleStyle?) {
 		if (style == null) return
 		subtitleStyle = style
@@ -539,6 +545,7 @@ class LibMPVBackend(
 	private fun setMedia(stream: PlayableMediaStream) {
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		stopNativeSubtitleOverlay()
+		clearVideoGeometry()
 		val forceRecreate = currentStream?.queueEntry !== stream.queueEntry
 		currentStream = stream
 		ensureInstanceOptions(forceRecreate)
@@ -555,8 +562,6 @@ class LibMPVBackend(
 		terminalState = null
 		tracks = emptyList()
 		notifiedTracks = emptyList()
-		videoWidth = 0
-		videoHeight = 0
 		pendingInitialTrackTypes.clear()
 		if (stream.conversionMethod == MediaConversionMethod.None) {
 			if (stream.selectedAudioStreamIndex != null) pendingInitialTrackTypes += TrackType.AUDIO
@@ -651,6 +656,7 @@ class LibMPVBackend(
 
 	override fun stop() {
 		handler.removeCallbacks(tick)
+		clearVideoGeometry()
 		scrubbing.reset()
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		loadRequested = false
@@ -1132,19 +1138,6 @@ class LibMPVBackend(
 		return stats
 	}
 
-	private fun handleEventProperty(generation: Long, property: String, value: Long) = onPlayerEvent(generation) {
-		when (property) {
-			"video-params/w" -> {
-				videoWidth = value.toInt().coerceAtLeast(0)
-				publishVideoSize()
-			}
-			"video-params/h" -> {
-				videoHeight = value.toInt().coerceAtLeast(0)
-				publishVideoSize()
-			}
-		}
-	}
-
 	private fun handleEventProperty(generation: Long, property: String, value: Boolean) = onPlayerEvent(generation) {
 		when (property) {
 			"pause" -> {
@@ -1158,15 +1151,19 @@ class LibMPVBackend(
 	}
 
 	private fun handleEventProperty(generation: Long, property: String, value: MPVNode) = onPlayerEvent(generation) {
-		if (property == "track-list") {
-			updateTracks(value)
-			applyInitialTrackSelection()
+		when (property) {
+			"track-list" -> {
+				updateTracks(value)
+				applyInitialTrackSelection()
+			}
+			"video-dec-params" -> listener?.onVideoGeometryChange(mpvVideoGeometry(value))
 		}
 	}
 
 	private fun handleEvent(generation: Long, eventId: Int, data: MPVNode) = onPlayerEvent(generation) {
 		when (eventId) {
 			MPV.mpvEvent.MPV_EVENT_START_FILE -> {
+				clearVideoGeometry()
 				cancelNvidiaFallbackResync(restorePlayback = false)
 				frameStatPropertyMisses.clear()
 				loadRequested = false
@@ -1189,12 +1186,12 @@ class LibMPVBackend(
 				applySubtitleTiming()
 				applyPlaybackSpeed()
 				updateNativeSubtitleOverlayMode()
-				refreshVideoSize()
+				refreshVideoGeometry()
 				publishPlayState(force = true)
 			}
 			MPV.mpvEvent.MPV_EVENT_VIDEO_RECONFIG -> {
 				applyShieldFallbackIfNeeded()
-				refreshVideoSize()
+				refreshVideoGeometry()
 				updateNativeSubtitleOverlayMode()
 			}
 			MPV.mpvEvent.MPV_EVENT_SEEK -> {
@@ -1303,15 +1300,14 @@ class LibMPVBackend(
 		publishPlayState(force = true)
 	}
 
-	private fun refreshVideoSize() {
-		videoWidth = player.getPropertyInt("video-params/w")?.coerceAtLeast(0) ?: videoWidth
-		videoHeight = player.getPropertyInt("video-params/h")?.coerceAtLeast(0) ?: videoHeight
-		publishVideoSize()
+	private fun clearVideoGeometry() {
+		videoOutput.apply(VideoOutputTransform.NONE)
+		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 	}
 
-	private fun publishVideoSize() {
-		if (videoWidth <= 0 || videoHeight <= 0) return
-		listener?.onVideoSizeChange(videoWidth, videoHeight)
+	private fun refreshVideoGeometry() {
+		val parameters = runCatching { player.getPropertyNode("video-dec-params") }.getOrNull() ?: return
+		listener?.onVideoGeometryChange(mpvVideoGeometry(parameters))
 	}
 
 	private fun resolvePlayState(): PlayState {
