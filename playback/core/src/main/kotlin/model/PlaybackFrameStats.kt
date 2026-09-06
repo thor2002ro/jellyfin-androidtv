@@ -22,6 +22,14 @@ data class PlaybackLibassStats(
 	val maxRenderMs: Double,
 	val lastRenderMs: Double,
 	val openGlMode: String?,
+	val metadataReuseCount: Long = 0,
+	val incrementalAtlasUpdateCount: Long = 0,
+	val completeAtlasReplacementCount: Long = 0,
+	val nativeCopiedMaskBytes: Long = 0,
+	val glUploadedMaskBytes: Long = 0,
+	val glUploadSubmissionMs: Double = 0.0,
+	val activeSurfacePixels: Long = 0,
+	val allocatedSurfacePixels: Long = 0,
 )
 
 data class PlaybackDoviTransformStats(
