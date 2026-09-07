@@ -5,7 +5,8 @@ acra = "5.13.1"
 android-compileSdk = "37"
 android-desugar = "2.1.5"
 android-gradle = "9.4.0"
-android-minSdk = "23"
+android-minSdk = "24"
+android-ndk = "29.0.14206865"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.8.0"
@@ -17,7 +18,6 @@ androidx-core = "1.19.0"
 androidx-fragment = "1.9.0"
 androidx-leanback = "1.2.0"
 androidx-lifecycle = "2.11.0"
-androidx-media3 = "1.11.0"
 androidx-navigation3 = "1.1.7"
 androidx-preference = "1.2.1"
 androidx-recyclerview = "1.4.0"
@@ -26,8 +26,9 @@ androidx-tvprovider = "1.1.0"
 androidx-window = "1.5.1"
 androidx-work = "2.11.2"
 coil = "3.6.2"
-detekt = "1.23.8"
+detekt = "2.0.0-alpha.6"
 java-jdk = "21"
+guava = "33.7.1-android"
 jellyfin-androidx-media = "1.9.0+1"
 jellyfin-sdk = "1.8.12"
 koin = "4.2.2"
@@ -36,17 +37,17 @@ kotest = "6.2.4"
 kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
-libass-android = "0.5.1"
+libvlc = "4.0.0-eap29"
 markwon = "4.6.2"
 mockk = "1.14.11"
-slf4j-timber = "0.0.4"
+slf4j-timber = "0.0.8"
 timber = "5.0.1"
 
 [plugins]
 aboutlibraries = { id = "com.mikepenz.aboutlibraries.plugin.android", version.ref = "aboutlibraries" }
 android-application = { id = "com.android.application", version.ref = "android-gradle" }
 android-library = { id = "com.android.library", version.ref = "android-gradle" }
-detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
@@ -95,13 +96,7 @@ koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose", versi
 koin-androidx-workmanager = { module = "io.insert-koin:koin-androidx-workmanager", version.ref = "koin" }
 
 # Media players
-androidx-media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "androidx-media3" }
-androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "androidx-media3" }
-androidx-media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "androidx-media3" }
-androidx-media3-session = { module = "androidx.media3:media3-session", version.ref = "androidx-media3" }
-androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3" }
-jellyfin-androidx-media3-ffmpeg-decoder = { module = "org.jellyfin.media3:media3-ffmpeg-decoder", version.ref = "jellyfin-androidx-media" }
-libass-media3 = { module = "io.github.peerless2012:ass-media", version.ref = "libass-android" }
+libvlc = { module = "org.videolan.android:libvlc-all", version.ref = "libvlc" }
 
 # Markwon
 markwon-core = { module = "io.noties.markwon:core", version.ref = "markwon" }
