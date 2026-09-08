@@ -25,13 +25,6 @@ internal sealed interface LibMPVSubtitleOverlayUpdate {
 	) : LibMPVSubtitleOverlayUpdate
 }
 
-internal fun nativeSubtitleOverlayCommand(previousChangeId: Long, canvasWidth: Int, canvasHeight: Int) = arrayOf(
-	"subtitle-overlay-raw",
-	previousChangeId.toString(),
-	canvasWidth.toString(),
-	canvasHeight.toString(),
-)
-
 internal fun parseLibMPVSubtitleOverlay(
 	node: MPVNode?,
 	previousChangeId: Long,

@@ -628,7 +628,12 @@ class LibMPVBackend(
 					continue
 				}
 				val node = runCatching {
-					target.commandNode(*nativeSubtitleOverlayCommand(previousChangeId, overlay.width, overlay.height))
+					target.commandNode(
+						"subtitle-overlay-raw",
+						previousChangeId.toString(),
+						overlay.width.toString(),
+						overlay.height.toString(),
+					)
 				}.onFailure { error ->
 					Timber.e(error, "Unable to read MPV subtitle overlay")
 				}.getOrNull()
