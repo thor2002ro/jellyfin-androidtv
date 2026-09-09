@@ -848,6 +848,8 @@ class LibMPVBackend(
 	override fun release() {
 		synchronized(playerLock) {
 			if (released) return
+			// Ignore native events already queued on the main thread before destroying the handle.
+			playerGeneration++
 			doviRequestSession.clear()
 			cancelNvidiaFallbackResync(restorePlayback = false)
 			cleanup()
