@@ -44,6 +44,7 @@ interface PlayerBackend {
 	// Mutation
 
 	fun prepareItem(item: QueueEntry)
+	/** Apply the queue entry's start position before starting playback, even before seeking is available. */
 	fun playItem(item: QueueEntry)
 	fun replaceItem(item: QueueEntry)
 
