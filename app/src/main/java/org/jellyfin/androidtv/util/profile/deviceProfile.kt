@@ -219,10 +219,16 @@ internal fun createDeviceProfile(
 
 	/// Transcoding profiles
 	// Video
-	val hlsVideoCodecs = listOfNotNull(
+	val hlsMpegTsVideoCodecs = listOfNotNull(
 		if (supportsHevc) Codec.Video.HEVC else null,
 		Codec.Video.H264
 	).toTypedArray()
+	// Server 12 also uses this list to match video stream-copy candidates. Keep the practical encoder
+	// codecs first, then append codecs that this device can decode from fMP4 segments.
+	val hlsFmp4VideoCodecs = hlsMpegTsVideoCodecs + listOfNotNull(
+		if (supportsAV1) Codec.Video.AV1 else null,
+		if (supportsVP9) Codec.Video.VP9 else null,
+	)
 
 	transcodingProfile {
 		type = DlnaProfileType.VIDEO
@@ -231,7 +237,7 @@ internal fun createDeviceProfile(
 		container = Codec.Container.TS
 		protocol = MediaStreamProtocol.HLS
 
-		videoCodec(*hlsVideoCodecs)
+		videoCodec(*hlsMpegTsVideoCodecs)
 		audioCodec(*hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray())
 
 		copyTimestamps = false
@@ -245,7 +251,7 @@ internal fun createDeviceProfile(
 		container = Codec.Container.MP4
 		protocol = MediaStreamProtocol.HLS
 
-		videoCodec(*hlsVideoCodecs)
+		videoCodec(*hlsFmp4VideoCodecs)
 		audioCodec(*hlsFmp4AudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray())
 
 		copyTimestamps = false
