@@ -687,16 +687,23 @@ private fun Size.capTo(resolution: PlaybackResolution) = Size(
 
 @OptIn(UnstableApi::class)
 fun isPassthroughAudioAvailable(context: Context, mimetype: String): Boolean {
-	val audioAttributes = passthroughAudioAttributes()
-	return getAudioCapabilities(context, audioAttributes).supportsPassthrough(mimetype, audioAttributes)
+	return mimetype in getSupportedPassthroughAudioMimes(context, setOf(mimetype))
 }
 
 @OptIn(UnstableApi::class)
 private fun getPassthroughAudioCodecs(context: Context): Set<String> {
+	val supportedMimes = getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
+	return passthroughAudioCodecMimes.entries.flatMapTo(mutableSetOf()) { (mime, codecs) ->
+		if (mime in supportedMimes) codecs else emptySet()
+	}
+}
+
+@OptIn(UnstableApi::class)
+fun getSupportedPassthroughAudioMimes(context: Context, mimeTypes: Collection<String>): Set<String> {
 	val audioAttributes = passthroughAudioAttributes()
 	val audioCapabilities = getAudioCapabilities(context, audioAttributes)
-	return passthroughAudioCodecMimes.entries.flatMapTo(mutableSetOf()) { (mime, codecs) ->
-		if (audioCapabilities.supportsPassthrough(mime, audioAttributes)) codecs else emptySet()
+	return mimeTypes.filterTo(mutableSetOf()) { mime ->
+		audioCapabilities.supportsPassthrough(mime, audioAttributes)
 	}
 }
 
