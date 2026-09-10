@@ -5,9 +5,11 @@ import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
-import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.authenticationApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
+import org.jellyfin.sdk.api.client.extensions.userDataApi
 import org.jellyfin.sdk.api.client.extensions.userApi
-import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.api.client.extensions.userViewApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CreateUserByName
@@ -60,7 +62,7 @@ class PlaybackServerSession private constructor(
 			val users = normalApi.userApi.getUsers().content
 			var testUser = users.firstOrNull { it.name.equals(testUsername, ignoreCase = true) }
 				?: normalApi.userApi.createUserByName(CreateUserByName(testUsername, "")).content
-			if (testUser.hasPassword || testUser.hasConfiguredPassword) {
+			if (testUser.hasPassword == true || testUser.hasConfiguredPassword == true) {
 				normalApi.userApi.updateUserPassword(testUser.id, UpdateUserPassword(resetPassword = true))
 			}
 			val currentPolicy = requireNotNull(normalApi.userApi.getUserById(testUser.id).content.policy) {
@@ -103,7 +105,7 @@ class PlaybackServerSession private constructor(
 				name = "${normalApi.deviceInfo.name} Playback Tests",
 			)
 			val loginApi = jellyfin.createApi(baseUrl = baseUrl, deviceInfo = testDevice, httpClientOptions = httpOptions)
-			val authentication = loginApi.userApi.authenticateUserByName(testUsername, "").content
+			val authentication = loginApi.authenticationApi.authenticateUserByName(testUsername, "").content
 			val token = requireNotNull(authentication.accessToken) { "Test user authentication returned no access token" }
 			testUser = requireNotNull(authentication.user) { "Test user authentication returned no user" }
 			val testApi = jellyfin.createApi(
@@ -117,9 +119,9 @@ class PlaybackServerSession private constructor(
 	}
 
 	suspend fun discoverMedia(folderName: String): List<ServerPlaybackFixture> {
-		val views = testApi.userViewsApi.getUserViews().content.items
+		val views = testApi.userViewApi.getUserViews().content.items
 		val folder = views.firstOrNull { it.name.equals(folderName, ignoreCase = true) }
-			?: testApi.itemsApi.getItems(
+			?: testApi.libraryApi.getItems(
 			userId = testUser.id,
 			recursive = true,
 			searchTerm = folderName,
@@ -130,7 +132,7 @@ class PlaybackServerSession private constructor(
 				"Jellyfin test folder '$folderName' was not found for user ${testUser.name}; " +
 					"available views=${views.mapNotNull(BaseItemDto::name).sorted()}"
 			)
-		return testApi.itemsApi.getItems(
+		return testApi.libraryApi.getItems(
 			userId = testUser.id,
 			parentId = folder.id,
 			recursive = true,
@@ -158,7 +160,7 @@ class PlaybackServerSession private constructor(
 	}
 
 	suspend fun watchState(userId: org.jellyfin.sdk.model.UUID, item: BaseItemDto): PlaybackWatchState {
-		val data = normalApi.itemsApi.getItemUserData(item.id, userId).content
+		val data = normalApi.userDataApi.getItemUserData(item.id, userId).content
 		return PlaybackWatchState(
 			played = data.played,
 			playCount = data.playCount,
