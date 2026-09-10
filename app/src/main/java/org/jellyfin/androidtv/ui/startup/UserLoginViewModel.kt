@@ -32,7 +32,7 @@ import org.jellyfin.androidtv.util.sdk.forUser
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.exception.InvalidStatusException
-import org.jellyfin.sdk.api.client.extensions.quickConnectApi
+import org.jellyfin.sdk.api.client.extensions.authenticationApi
 import org.jellyfin.sdk.model.DeviceInfo
 import timber.log.Timber
 import java.util.UUID
@@ -52,7 +52,7 @@ class UserLoginViewModel(
 	private val _server = MutableStateFlow<Server?>(null)
 	val server = _server.asStateFlow()
 
-	private val quickConnectApi = jellyfin.createApi()
+	private val authenticationApi = jellyfin.createApi()
 	private var quickConnectSecret: String? = null
 	private var quickConnectPollingJob: Job? = null
 	private val _quickConnectState = MutableStateFlow<QuickConnectState>(UnknownQuickConnectState)
@@ -98,12 +98,12 @@ class UserLoginViewModel(
 
 		try {
 			val response = withContext(Dispatchers.IO) {
-				quickConnectApi.update(
+				authenticationApi.update(
 					baseUrl = server.address,
 					deviceInfo = defaultDeviceInfo.forUser(UUID.randomUUID()),
 				)
 
-				quickConnectApi.quickConnectApi.initiateQuickConnect().content
+				authenticationApi.authenticationApi.initiateQuickConnect().content
 			}
 
 			quickConnectSecret = response.secret
@@ -135,7 +135,7 @@ class UserLoginViewModel(
 
 		try {
 			val state = withContext(Dispatchers.IO) {
-				quickConnectApi.quickConnectApi.getQuickConnectState(secret = secret).content
+				authenticationApi.authenticationApi.getQuickConnectState(secret = secret).content
 			}
 
 			if (state.authenticated) {
