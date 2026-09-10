@@ -35,6 +35,7 @@ import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButton
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.createDeviceProfileReport
+import org.jellyfin.androidtv.util.profile.getSupportedPassthroughAudioMimes
 import org.jellyfin.design.Tokens
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.systemApi
@@ -50,6 +51,9 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val supportedPassthroughMimes = remember(context) {
+		getSupportedPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+	}
 
 	var ac3Enabled by rememberPreference(userPreferences, UserPreferences.ac3Enabled)
 	var eac3Enabled by rememberPreference(userPreferences, UserPreferences.eac3Enabled)
@@ -365,6 +369,11 @@ fun SettingsPlaybackAdvancedScreen() {
 		item {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_bitstream_ac3)) },
+				captionContent = {
+					AudioPassthroughSupportCaption(
+						supportedPassthroughAudioFormats(AudioPassthroughFamily.AC3, supportedPassthroughMimes)
+					)
+				},
 				trailingContent = { Checkbox(checked = ac3Enabled) },
 				onClick = {
 					val newValue = !ac3Enabled
@@ -380,6 +389,11 @@ fun SettingsPlaybackAdvancedScreen() {
 		item {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_bitstream_eac3)) },
+				captionContent = {
+					AudioPassthroughSupportCaption(
+						supportedPassthroughAudioFormats(AudioPassthroughFamily.EAC3, supportedPassthroughMimes)
+					)
+				},
 				trailingContent = { Checkbox(checked = eac3Enabled) },
 				onClick = { eac3Enabled = !eac3Enabled },
 				enabled = ac3Enabled,
@@ -392,6 +406,11 @@ fun SettingsPlaybackAdvancedScreen() {
 
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_bitstream_dts)) },
+				captionContent = {
+					AudioPassthroughSupportCaption(
+						supportedPassthroughAudioFormats(AudioPassthroughFamily.DTS, supportedPassthroughMimes)
+					)
+				},
 				trailingContent = { Checkbox(checked = dtsEnabled) },
 				onClick = { dtsEnabled = !dtsEnabled },
 				modifier = Modifier.focusKey("dts_enabled")
@@ -403,6 +422,11 @@ fun SettingsPlaybackAdvancedScreen() {
 
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_bitstream_truehd)) },
+				captionContent = {
+					AudioPassthroughSupportCaption(
+						supportedPassthroughAudioFormats(AudioPassthroughFamily.TRUEHD, supportedPassthroughMimes)
+					)
+				},
 				trailingContent = { Checkbox(checked = truehdEnabled) },
 				onClick = { truehdEnabled = !truehdEnabled },
 				modifier = Modifier.focusKey("truehd_enabled")
@@ -446,4 +470,20 @@ fun SettingsPlaybackAdvancedScreen() {
 			)
 		}
 	}
+}
+
+@Composable
+private fun AudioPassthroughSupportCaption(supportedFormats: List<AudioPassthroughFormat>) {
+	val supported = supportedFormats.isNotEmpty()
+	Text(
+		text = if (supported) {
+			stringResource(
+				R.string.lbl_passthrough_supported_formats,
+				supportedFormats.joinToString { format -> format.label }
+			)
+		} else {
+			stringResource(R.string.lbl_passthrough_unsupported)
+		},
+		color = if (supported) Tokens.Color.colorGreen300 else Tokens.Color.colorRed300,
+	)
 }
