@@ -147,7 +147,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var audioNightMode = enumPreference("audio_night_mode", true)
 
 		/**
-		 * Enable AC3
+		 * Enable AC3 passthrough.
 		 */
 		var ac3Enabled = booleanPreference("pref_bitstream_ac3", true)
 
@@ -180,17 +180,17 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var doviCompatibilityMode = enumPreference("pref_dovi_profile_7_conversion", DoviCompatibilityMode.AUTO)
 
 		/**
-		 * Enable EAC3
+		 * Enable EAC3 passthrough.
 		 */
 		var eac3Enabled = booleanPreference("pref_bitstream_eac3", true)
 
 		/**
-		 * Enable DTS
+		 * Enable DTS passthrough.
 		 */
 		var dtsEnabled = booleanPreference("pref_bitstream_dts", true)
 
 		/**
-		 * Enable TrueHD
+		 * Enable TrueHD passthrough.
 		 */
 		var truehdEnabled = booleanPreference("pref_bitstream_truehd", true)
 

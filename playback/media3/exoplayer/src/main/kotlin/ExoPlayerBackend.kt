@@ -1082,6 +1082,7 @@ class ExoPlayerBackend(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
 				subtitleParserFactory = subtitleParserFactory,
+				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
 			).apply {
 				setEnableDecoderFallback(true)
 				setMediaCodecSelector(mediaCodecSelector)
@@ -1095,6 +1096,7 @@ class ExoPlayerBackend(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
 				subtitleParserFactory = defaultSubtitleParserFactory,
+				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
 			).apply {
 				setEnableDecoderFallback(true)
 				setMediaCodecSelector(mediaCodecSelector)
