@@ -71,14 +71,30 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		audioTranscode.audioCodec shouldBe Codec.Audio.AAC
 	}
 
-	test("video transcoding profiles only advertise practical encoder codecs") {
+	test("MPEG-TS video profile only advertises practical encoder codecs") {
 		val supportedProfile = deviceProfile(
 			supportsAv1 = true,
 			supportedVideoMimes = setOf(MimeTypes.VIDEO_VP9),
 		)
 
 		supportedProfile.videoTranscodeProfile(Codec.Container.TS).videoCodec.declarations() shouldBe listOf("h264")
-		supportedProfile.videoTranscodeProfile(Codec.Container.MP4).videoCodec.declarations() shouldBe listOf("h264")
+	}
+
+	test("fMP4 video profile advertises decoder-supported AV1 and VP9 for stream copy") {
+		val supportedProfile = deviceProfile(
+			supportsAv1 = true,
+			supportedVideoMimes = setOf(MimeTypes.VIDEO_VP9),
+		)
+
+		supportedProfile.videoTranscodeProfile(Codec.Container.MP4).videoCodec.declarations() shouldBe listOf(
+			"h264",
+			"av1",
+			"vp9",
+		)
+	}
+
+	test("fMP4 video profile omits AV1 and VP9 without device decoders") {
+		deviceProfile().videoTranscodeProfile(Codec.Container.MP4).videoCodec.declarations() shouldBe listOf("h264")
 	}
 
 	test("disabled passthrough codecs remain available when locally decodable") {
