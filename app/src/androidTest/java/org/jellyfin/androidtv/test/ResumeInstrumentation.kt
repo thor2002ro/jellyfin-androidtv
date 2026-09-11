@@ -147,7 +147,7 @@ class PlaybackTestInstrumentation : Instrumentation() {
 					}
 				}
 			}
-			if (arguments.suites.any { it in setOf("server", "transcode", "backend", "soak", "hdmi-audio") }) {
+			if (arguments.suites.any { it in setOf("server", "transcode", "backend", "player-flow", "soak", "hdmi-audio") }) {
 				runServerCatalog(results)
 			}
 			if ("server" in arguments.suites) {
@@ -177,6 +177,18 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				}
 				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment))
 					.run(arguments.backend, arguments.scenario)
+			}
+			if ("player-flow" in arguments.suites) {
+				if (!::activity.isInitialized) {
+					activity = startActivitySync(Intent(targetContext, PlaybackTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+				}
+				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment)).run(
+					backendFilter = arguments.backend,
+					scenarioFilter = arguments.scenario,
+					suiteName = "player-flow",
+					playerFlowOnly = true,
+				)
+				results += PlayerFlowLogicSuite.run(arguments.scenario)
 			}
 			if ("soak" in arguments.suites) {
 				if (!::activity.isInitialized) {
