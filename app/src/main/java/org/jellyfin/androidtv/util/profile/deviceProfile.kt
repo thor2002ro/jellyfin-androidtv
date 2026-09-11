@@ -30,6 +30,9 @@ import org.jellyfin.playback.dovi.DoviRoute
 import org.jellyfin.playback.dovi.DoviVideoCodec
 import kotlin.math.roundToInt
 
+private const val VIDEO_BIT_DEPTH_8 = 8
+private const val VIDEO_BIT_DEPTH_10 = 10
+
 private val downmixSupportedAudioCodecs = arrayOf(
 	Codec.Audio.AAC,
 	Codec.Audio.MP2,
@@ -138,6 +141,7 @@ internal fun createDeviceProfile(
 	)
 }
 
+@OptIn(UnstableApi::class)
 internal fun createDeviceProfile(
 	mediaTest: MediaCodecCapabilitiesTest,
 	maxBitrate: Int,
@@ -194,14 +198,20 @@ internal fun createDeviceProfile(
 	val supportsVC1 = mediaTest.supportsVc1()
 	val supportsMpeg2 = mediaTest.supportsMpeg2()
 	val supportsMpeg4Asp = mediaTest.supportsMpeg4Asp()
+	val supportsMpeg4Simple = mediaTest.supportsMpeg4Simple()
 	val supportsVP8 = mediaTest.supportsVp8()
 	val supportsVP9 = mediaTest.supportsVp9()
+	val supportsVP9Main8 = mediaTest.supportsVp9Main8()
+	val supportsVP9Main10 = mediaTest.supportsVp9Main10()
+	val supportsVP9HDR = mediaTest.supportsVp9HDR()
+	val supportsVP9HDR10Plus = mediaTest.supportsVp9HDR10Plus()
 	val maxResolutionAVC = mediaTest.getMaxResolution(MimeTypes.VIDEO_H264).capTo(maxResolution)
 	val maxResolutionHevc = mediaTest.getMaxResolution(MimeTypes.VIDEO_H265).capTo(maxResolution)
 	val maxHevcWidth = if (attemptSelectedHevcSource) maxResolution.maxWidth else maxResolutionHevc.width
 	val maxHevcHeight = if (attemptSelectedHevcSource) maxResolution.maxHeight else maxResolutionHevc.height
 	val maxResolutionAV1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_AV1).capTo(maxResolution)
 	val maxResolutionVC1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VC1).capTo(maxResolution)
+	val maxResolutionVP9 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VP9).capTo(maxResolution)
 
 	/// HDR capabilities
 
@@ -471,8 +481,14 @@ internal fun createDeviceProfile(
 		conditions {
 			when {
 				!supportsAV1 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
-				!supportsAV1Main10 -> ProfileConditionValue.VIDEO_PROFILE notEquals "main 10"
-				else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+				else -> ProfileConditionValue.VIDEO_PROFILE equals "main"
+			}
+			if (supportsAV1) {
+				ProfileConditionValue.VIDEO_BIT_DEPTH lowerThanOrEquals if (supportsAV1Main10) {
+					VIDEO_BIT_DEPTH_10
+				} else {
+					VIDEO_BIT_DEPTH_8
+				}
 			}
 		}
 	}
@@ -505,19 +521,49 @@ internal fun createDeviceProfile(
 		}
 	}
 
-	for ((videoCodec, supported) in arrayOf(
-		Codec.Video.MPEG4 to supportsMpeg4Asp,
-		Codec.Video.VP8 to supportsVP8,
-		Codec.Video.VP9 to supportsVP9,
-	)) {
-		codecProfile {
-			type = CodecType.VIDEO
-			codec = videoCodec
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.MPEG4
+		conditions {
+			val profiles = listOfNotNull(
+				if (supportsMpeg4Simple) "Simple Profile" else null,
+				if (supportsMpeg4Asp) "Advanced Simple Profile" else null,
+			)
+			if (profiles.isEmpty()) ProfileConditionValue.VIDEO_PROFILE equals "none"
+			else ProfileConditionValue.VIDEO_PROFILE inCollection profiles
+		}
+	}
 
-			conditions {
-				when {
-					!supported -> ProfileConditionValue.VIDEO_PROFILE equals "none"
-					else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.VP8
+		conditions {
+			when {
+				!supportsVP8 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+				else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+			}
+		}
+	}
+
+	// VP9 profiles 0 and 2 are the 4:2:0 profiles used by Android video decoders.
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.VP9
+
+		conditions {
+			when {
+				!supportsVP9 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+				supportsVP9Main10 -> ProfileConditionValue.VIDEO_PROFILE inCollection listOfNotNull(
+					if (supportsVP9Main8) "profile 0" else null,
+					"profile 2",
+				)
+				else -> ProfileConditionValue.VIDEO_PROFILE equals "profile 0"
+			}
+			if (supportsVP9) {
+				ProfileConditionValue.VIDEO_BIT_DEPTH lowerThanOrEquals if (supportsVP9Main10) {
+					VIDEO_BIT_DEPTH_10
+				} else {
+					VIDEO_BIT_DEPTH_8
 				}
 			}
 		}
@@ -570,6 +616,17 @@ internal fun createDeviceProfile(
 		}
 	}
 
+	// VP9
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.VP9
+
+		conditions {
+			ProfileConditionValue.WIDTH lowerThanOrEquals maxResolutionVP9.width
+			ProfileConditionValue.HEIGHT lowerThanOrEquals maxResolutionVP9.height
+		}
+	}
+
 	/// HDR exclude list
 
 	val unsupportedRangeTypesAv1 = buildSet {
@@ -581,11 +638,12 @@ internal fun createDeviceProfile(
 			if (!supportsAV1HDR10Plus) add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
 		}
 
-		if (!supportsAV1HDR10Plus) {
-			add(VideoRangeType.HDR10_PLUS)
-
-			if (!supportsAV1HDR10) add(VideoRangeType.HDR10)
-		}
+		if (!supportsAV1HDR10Plus) add(VideoRangeType.HDR10_PLUS)
+		if (!supportsAV1HDR10) add(VideoRangeType.HDR10)
+	} - forceEnabledHdr + forceDisabledHdr
+	val unsupportedRangeTypesVP9 = buildSet {
+		if (!supportsVP9HDR10Plus) add(VideoRangeType.HDR10_PLUS)
+		if (!supportsVP9HDR) add(VideoRangeType.HDR10)
 	} - forceEnabledHdr + forceDisabledHdr
 
 	val baselineUnsupportedRangeTypesHevc = getUnsupportedHevcVideoRangeWorkarounds(
@@ -607,38 +665,19 @@ internal fun createDeviceProfile(
 		}
 	}
 
-	// Note: The codec profiles use a workaround to create correct behavior
-	// The notEquals condition will always fail the ConditionProcessor test in the server so we use applyConditions to only have the codec
-	// profile be active when the media in question uses one of the unsupported range types. The server will then use the value of the
-	// notEquals in the StreamBuilder to create a correct transcode pipeline
-
-	// Codecs
-	// AV1
-	if (unsupportedRangeTypesAv1.isNotEmpty()) codecProfile {
-		type = CodecType.VIDEO
-		codec = Codec.Video.AV1
-
-		conditions {
-			ProfileConditionValue.VIDEO_RANGE_TYPE notEquals unsupportedRangeTypesAv1.joinToString("|") { it.serialName }
+	for ((videoCodec, unsupported) in listOf(
+		Codec.Video.AV1 to unsupportedRangeTypesAv1,
+		Codec.Video.VP9 to unsupportedRangeTypesVP9,
+		Codec.Video.HEVC to unsupportedRangeTypesHevc,
+	)) {
+		// HDR10Plus can play as HDR10 without dynamic metadata. Only an explicit
+		// user disable should prevent this fallback when HDR10 is supported.
+		val excludedRanges = if (VideoRangeType.HDR10 !in unsupported && VideoRangeType.HDR10_PLUS !in forceDisabledHdr) {
+			unsupported - VideoRangeType.HDR10_PLUS
+		} else {
+			unsupported
 		}
-
-		applyConditions {
-			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection unsupportedRangeTypesAv1.map { it.serialName }
-		}
-	}
-
-	// HEVC
-	if (unsupportedRangeTypesHevc.isNotEmpty()) codecProfile {
-		type = CodecType.VIDEO
-		codec = Codec.Video.HEVC
-
-		conditions {
-			ProfileConditionValue.VIDEO_RANGE_TYPE notEquals unsupportedRangeTypesHevc.joinToString("|") { it.serialName }
-		}
-
-		applyConditions {
-			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection unsupportedRangeTypesHevc.map { it.serialName }
-		}
+		addUnsupportedVideoRanges(videoCodec, excludedRanges)
 	}
 
 	// Audio channel profile
@@ -670,6 +709,34 @@ internal fun createDeviceProfile(
 	// ASS/SSA is supported via libass extension
 	subtitleProfile(Codec.Subtitle.ASS, encode = true, embedded = assDirectPlay, external = assDirectPlay)
 	subtitleProfile(Codec.Subtitle.SSA, encode = true, embedded = assDirectPlay, external = assDirectPlay)
+}
+
+private fun DeviceProfileBuilder.addUnsupportedVideoRanges(videoCodec: String, unsupported: Set<VideoRangeType>) {
+	// Server 12 also matches HDR10Plus against HDR10. Keep an HDR10-only exclusion
+	// separate so its NotEquals condition can still accept supported HDR10Plus.
+	val groups = if (VideoRangeType.HDR10 in unsupported && VideoRangeType.HDR10_PLUS !in unsupported) {
+		listOf(setOf(VideoRangeType.HDR10), unsupported - VideoRangeType.HDR10)
+	} else {
+		listOf(unsupported)
+	}
+	for (ranges in groups.filter { it.isNotEmpty() }) codecProfile {
+		type = CodecType.VIDEO
+		codec = videoCodec
+		conditions {
+			// Other sources (notably Dolby Vision) must still exclude unsupported HDR10
+			// from their transcode outputs, even though it has a separate input check.
+			val excludedOutputs = if (ranges == setOf(VideoRangeType.HDR10)) ranges else unsupported
+			// A pipe-delimited NotEquals fails ConditionProcessor, while StreamBuilder
+			// splits the same value to exclude output ranges. A trailing separator keeps
+			// singleton HDR10Plus from passing through the server's HDR10 fallback;
+			// StreamBuilder removes empty entries when constructing the transcode options.
+			val suffix = if (excludedOutputs == setOf(VideoRangeType.HDR10_PLUS)) "|" else ""
+			ProfileConditionValue.VIDEO_RANGE_TYPE notEquals excludedOutputs.joinToString("|", postfix = suffix) { it.serialName }
+		}
+		applyConditions {
+			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection ranges.map { it.serialName }
+		}
+	}
 }
 
 // Little helper function to more easily define subtitle profiles
