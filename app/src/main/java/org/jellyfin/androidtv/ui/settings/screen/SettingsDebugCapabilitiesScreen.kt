@@ -424,7 +424,7 @@ private fun buildHdrCapabilities(
 		CapabilityItem("AV1: Dolby Vision", mediaTest.supportsAV1DolbyVision()),
 		CapabilityItem("AV1: HDR10", mediaTest.supportsAV1HDR10()),
 		CapabilityItem("AV1: HDR10+", mediaTest.supportsAV1HDR10Plus()),
-		CapabilityItem("VP9: Profile 2/3 (10-bit)", mediaTest.supportsVp9Main10()),
+		CapabilityItem("VP9: Profile 2 (10-bit)", mediaTest.supportsVp9Main10()),
 	),
 )
 
