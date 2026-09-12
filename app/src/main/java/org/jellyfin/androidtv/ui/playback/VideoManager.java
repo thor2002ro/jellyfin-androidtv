@@ -281,7 +281,8 @@ public class VideoManager {
                     context,
                     subtitleTimingOffsetState,
                     subtitleParserFactory,
-                    mimeType -> isAudioPassthroughEnabled(userPreferences, mimeType)
+                    mimeType -> isAudioPassthroughEnabled(userPreferences, mimeType),
+                    () -> userPreferences.get(UserPreferences.Companion.getAudioBehaviour()) == org.jellyfin.androidtv.preference.constant.AudioBehavior.DOWNMIX_TO_STEREO
             );
             rendererFactory.setEnableDecoderFallback(true);
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
@@ -298,7 +299,8 @@ public class VideoManager {
                     context,
                     subtitleTimingOffsetState,
                     defaultSubtitleParserFactory,
-                    mimeType -> isAudioPassthroughEnabled(userPreferences, mimeType)
+                    mimeType -> isAudioPassthroughEnabled(userPreferences, mimeType),
+                    () -> userPreferences.get(UserPreferences.Companion.getAudioBehaviour()) == org.jellyfin.androidtv.preference.constant.AudioBehavior.DOWNMIX_TO_STEREO
             );
             rendererFactory.setEnableDecoderFallback(true);
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());

@@ -32,13 +32,14 @@ class MediaCodecQuery(
 	private val MediaCodecInfo.isSoftwareCodec: Boolean
 		get() = if (AndroidVersion.isAtLeastQ) isSoftwareOnly else isSoftwareVideoCodecName(name)
 
-	private fun decoderInfos(): Sequence<MediaCodecInfo> =
+	private fun decoderInfos(includeSoftwareAudio: Boolean = false): Sequence<MediaCodecInfo> =
 		mediaCodecList.codecInfos.asSequence()
 			.filter { !it.isEncoder }
-			.filter { softwareCodecsEnabled || !it.isSoftwareCodec }
+			.filter { includeSoftwareAudio || softwareCodecsEnabled || !it.isSoftwareCodec }
 
 	fun hasCodecForMime(mime: String): Boolean {
-		val info = decoderInfos().firstOrNull { info ->
+		// The software-codec preference controls video; Media3 always permits platform audio decoders.
+		val info = decoderInfos(includeSoftwareAudio = mime.startsWith("audio/", ignoreCase = true)).firstOrNull { info ->
 			info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
 		} ?: return false
 
