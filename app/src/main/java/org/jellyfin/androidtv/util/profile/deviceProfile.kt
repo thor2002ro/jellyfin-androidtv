@@ -9,12 +9,16 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
+import org.jellyfin.androidtv.preference.playbackBackend
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.CodecType
 import org.jellyfin.sdk.model.api.DlnaProfileType
@@ -117,6 +121,11 @@ internal fun createDeviceProfile(
 	context: Context,
 	userPreferences: UserPreferences,
 	serverVersion: ServerVersion,
+	enableFfmpegAudio: Boolean = when (userPreferences[UserPreferences.playbackBackend]) {
+		PlaybackBackend.EXOPLAYER, PlaybackBackend.SAME_VIDEO_PLAYER -> true
+		else -> false
+	},
+	enableFfmpegVideo: Boolean = enableFfmpegAudio && userPreferences[UserPreferences.preferExoPlayerFfmpegVideo],
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
 	softwareCodecsEnabled: Boolean = userPreferences[UserPreferences.softwareCodecsEnabled],
 	mediaTest: MediaCodecCapabilitiesTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled),
@@ -138,6 +147,8 @@ internal fun createDeviceProfile(
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
 		passthroughAudioCodecs = getPassthroughAudioCodecs(context),
+		enableFfmpegAudio = enableFfmpegAudio,
+		enableFfmpegVideo = enableFfmpegVideo,
 	)
 }
 
@@ -159,10 +170,13 @@ internal fun createDeviceProfile(
 	forceDisabledHdr: Set<VideoRangeType>,
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
 	passthroughAudioCodecs: Set<String> = allPassthroughAudioCodecs,
+	enableFfmpegAudio: Boolean = false,
+	enableFfmpegVideo: Boolean = false,
 ) = buildDeviceProfile {
-	val supportsOpus = mediaTest.supportsOpus()
+	val supportsOpus = mediaTest.supportsOpus() || (enableFfmpegAudio && FfmpegLibrary.supportsFormat(MimeTypes.AUDIO_OPUS))
+	// Media3 keeps FFmpeg audio decoding enabled even when passthrough or software video decoding is disabled.
 	val locallyDecodablePassthroughAudioCodecs = passthroughAudioCodecMimes.entries
-		.filter { (mime) -> mediaTest.supportsMimeType(mime) }
+		.filter { (mime) -> mediaTest.supportsMimeType(mime) || (enableFfmpegAudio && FfmpegLibrary.supportsFormat(mime)) }
 		.flatMapTo(mutableSetOf()) { (_, codecs) -> codecs }
 	val enabledPassthroughCodecs = enabledPassthroughAudioCodecs(
 		isAC3Enabled = isAC3PrefEnabled,
@@ -171,11 +185,12 @@ internal fun createDeviceProfile(
 		isTrueHDEnabled = isTrueHDPrefEnabled,
 	)
 	val allowedAudioCodecs = when {
-		downMixAudio -> downmixSupportedAudioCodecs
+		// Media3 mixes decoded PCM locally; other backends retain the server stereo policy.
+		downMixAudio && !enableFfmpegAudio -> downmixSupportedAudioCodecs
 		else -> supportedAudioCodecs.filterNot { audioCodec ->
 			val isPassthroughCodec = audioCodec in allPassthroughAudioCodecs
 			val canDecodeLocally = audioCodec in locallyDecodablePassthroughAudioCodecs
-			val canPassthrough = audioCodec in passthroughAudioCodecs && audioCodec in enabledPassthroughCodecs
+			val canPassthrough = !downMixAudio && audioCodec in passthroughAudioCodecs && audioCodec in enabledPassthroughCodecs
 			!isAudioCodecAvailable(audioCodec, supportsOpus) ||
 				(isPassthroughCodec && !canDecodeLocally && !canPassthrough)
 		}.toTypedArray()
@@ -681,11 +696,17 @@ internal fun createDeviceProfile(
 	}
 
 	// Audio channel profile
+	if (downMixAudio && enableFfmpegAudio) codecProfile {
+		type = CodecType.AUDIO
+		conditions {
+			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals 8
+		}
+	}
 	codecProfile {
 		type = CodecType.VIDEO_AUDIO
 
 		conditions {
-			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals if (downMixAudio) 2 else 8
+			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals if (downMixAudio && !enableFfmpegAudio) 2 else 8
 		}
 	}
 
@@ -709,9 +730,12 @@ internal fun createDeviceProfile(
 	// ASS/SSA is supported via libass extension
 	subtitleProfile(Codec.Subtitle.ASS, encode = true, embedded = assDirectPlay, external = assDirectPlay)
 	subtitleProfile(Codec.Subtitle.SSA, encode = true, embedded = assDirectPlay, external = assDirectPlay)
+}.let { profile ->
+	if (enableFfmpegVideo && doviPlaybackPlan == null) profile.withFfmpegVideo(mediaTest, maxResolution, userAVCLevel, userHEVCLevel)
+	else profile
 }
 
-private fun DeviceProfileBuilder.addUnsupportedVideoRanges(videoCodec: String, unsupported: Set<VideoRangeType>) {
+internal fun DeviceProfileBuilder.addUnsupportedVideoRanges(videoCodec: String, unsupported: Set<VideoRangeType>) {
 	// Server 12 also matches HDR10Plus against HDR10. Keep an HDR10-only exclusion
 	// separate so its NotEquals condition can still accept supported HDR10Plus.
 	val groups = if (VideoRangeType.HDR10 in unsupported && VideoRangeType.HDR10_PLUS !in unsupported) {
