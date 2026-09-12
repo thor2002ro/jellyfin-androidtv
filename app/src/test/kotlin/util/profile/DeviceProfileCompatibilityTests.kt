@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.util.profile
 
 import android.util.Size
 import androidx.media3.common.MimeTypes
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
@@ -9,12 +10,16 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkConstructor
+import io.mockk.mockkStatic
 import io.mockk.unmockkConstructor
+import io.mockk.unmockkStatic
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
+import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.sdk.model.api.DeviceProfile
+import org.jellyfin.sdk.model.api.CodecType
 import org.jellyfin.sdk.model.api.DlnaProfileType
 import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.ProfileConditionType
@@ -23,7 +28,14 @@ import org.jellyfin.sdk.model.api.ProfileConditionValue
 import org.jellyfin.sdk.model.api.VideoRangeType
 
 class DeviceProfileCompatibilityTests : FunSpec({
-	afterTest { unmockkConstructor(Size::class) }
+	beforeTest {
+		mockkStatic(FfmpegLibrary::class)
+		every { FfmpegLibrary.supportsFormat(any()) } returns false
+	}
+	afterTest {
+		unmockkConstructor(Size::class)
+		unmockkStatic(FfmpegLibrary::class)
+	}
 
 	test("server profile honors forced codec families without detected support or local decoders") {
 		val codecsByFormat = mapOf(
@@ -58,6 +70,72 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		preferences.profilePassthroughAudioCodecs(emptySet()) shouldBe emptySet()
 	}
 
+	test("preferred FFmpeg video permits missing platform codecs with bounded SDR claims") {
+		every { FfmpegLibrary.supportsFormat(any()) } answers { firstArg<String>().startsWith("video/") }
+		val profile = deviceProfile(enableFfmpegVideo = true)
+		for (codec in listOf("h264", "hevc", "av1", "vp8", "vp9", "mpeg1video", "mpeg2video", "mpeg4", "vc1")) withClue(codec) {
+			val conditions = profile.videoCodecConditions(codec)
+			conditions.any { it.property == ProfileConditionValue.VIDEO_PROFILE && it.value == "none" } shouldBe false
+			conditions.single { it.property == ProfileConditionValue.WIDTH }.value shouldBe "1920"
+			conditions.single { it.property == ProfileConditionValue.HEIGHT }.value shouldBe "1080"
+			conditions.single { it.property == ProfileConditionValue.VIDEO_BIT_DEPTH }.value shouldBe "8"
+			conditions.single { it.property == ProfileConditionValue.VIDEO_FRAMERATE }.value shouldBe "30"
+			profile.acceptsRange(codec, VideoRangeType.SDR) shouldBe true
+			profile.acceptsRange(codec, VideoRangeType.HDR10) shouldBe false
+			profile.acceptsRange(codec, VideoRangeType.DOVI) shouldBe false
+		}
+	}
+
+	test("FFmpeg video does not relax an existing platform video profile") {
+		every { FfmpegLibrary.supportsFormat(any()) } returns true
+		val baseline = deviceProfile(supportsAv1 = true, supportsAv1Main10 = true, supportsAv1Hdr10 = true)
+		val ffmpeg = deviceProfile(enableFfmpegVideo = true, supportsAv1 = true, supportsAv1Main10 = true, supportsAv1Hdr10 = true)
+		ffmpeg.codecProfiles.filter { it.codec == "av1" } shouldBe baseline.codecProfiles.filter { it.codec == "av1" }
+	}
+
+	test("FFmpeg video respects a lower user resolution limit") {
+		every { FfmpegLibrary.supportsFormat(MimeTypes.VIDEO_VC1) } returns true
+		val conditions = deviceProfile(enableFfmpegVideo = true, maxResolution = PlaybackResolution.HD_720).videoCodecConditions("vc1")
+		conditions.single { it.property == ProfileConditionValue.WIDTH }.value shouldBe "1280"
+		conditions.single { it.property == ProfileConditionValue.HEIGHT }.value shouldBe "720"
+	}
+
+	test("FFmpeg video requires both opt-in and a decoder in the loaded library") {
+		every { FfmpegLibrary.supportsFormat(MimeTypes.VIDEO_VC1) } returns true
+		val disabled = deviceProfile(enableFfmpegVideo = false)
+		val enabled = deviceProfile(enableFfmpegVideo = true)
+		disabled.videoCodecConditions("vc1").any { it.value == "none" } shouldBe true
+		enabled.videoCodecConditions("vc1").any { it.value == "none" } shouldBe false
+		enabled.videoCodecConditions("av1").any { it.value == "none" } shouldBe true
+	}
+
+	test("software-only video excludes HDR from Server 12 transcode outputs") {
+		every { FfmpegLibrary.supportsFormat(MimeTypes.VIDEO_H265) } returns true
+		val profile = deviceProfile(enableFfmpegVideo = true)
+		val excludedOutputs = profile.codecProfiles.filter { it.codec == "hevc" }
+			.flatMap { it.conditions }
+			.filter { it.property == ProfileConditionValue.VIDEO_RANGE_TYPE && it.condition == ProfileConditionType.NOT_EQUALS }
+			.flatMap { it.value.orEmpty().split('|') }.toSet()
+		(VideoRangeType.HDR10.serialName in excludedOutputs) shouldBe true
+		(VideoRangeType.HLG.serialName in excludedOutputs) shouldBe true
+		(VideoRangeType.DOVI.serialName in excludedOutputs) shouldBe true
+		(VideoRangeType.SDR.serialName in excludedOutputs) shouldBe false
+	}
+
+	test("FFmpeg decoding keeps compressed audio available without platform decoders or passthrough") {
+		val ffmpegMimes = setOf(MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_TRUEHD)
+		every { FfmpegLibrary.supportsFormat(any()) } answers { firstArg<String>() in ffmpegMimes }
+		val profile = deviceProfile(ac3 = false, eac3 = false, dts = false, truehd = false, passthroughAudioCodecs = emptySet())
+		val compressedCodecs = setOf("ac3", "eac3", "dca", "dts", "mlp", "truehd")
+
+		for (directPlay in profile.directPlayProfiles.filter { it.type == DlnaProfileType.VIDEO || ',' in it.audioCodec.orEmpty() }) {
+			directPlay.audioCodec.declarations().filter { it in compressedCodecs }.toSet() shouldBe compressedCodecs
+		}
+		profile.videoTranscodeProfile(Codec.Container.MP4).audioCodec.declarations()
+			.filter { it in compressedCodecs }.toSet() shouldBe setOf("ac3", "eac3", "dts")
+		(Codec.Audio.AC4 in profile.announcedAudioCodecs()) shouldBe false
+	}
+
 	test("audio direct play is limited to containers Media3 can demux") {
 		val profile = deviceProfile()
 
@@ -79,6 +157,43 @@ class DeviceProfileCompatibilityTests : FunSpec({
 			"wav",
 			"webm",
 		)
+	}
+
+	test("a backend without the Media3 FFmpeg renderer does not inherit its audio capabilities") {
+		every { FfmpegLibrary.supportsFormat(any()) } returns true
+		val profile = deviceProfile(enableFfmpegAudio = false, passthroughAudioCodecs = emptySet())
+
+		profile.announcedAudioCodecs().any { it in setOf("ac3", "eac3", "dca", "dts", "mlp", "truehd", "ac4") } shouldBe false
+	}
+
+	test("local stereo downmix retains FFmpeg decodable audio and multichannel input") {
+		every { FfmpegLibrary.supportsFormat(any()) } returns true
+		val profile = deviceProfile(downMixAudio = true, passthroughAudioCodecs = emptySet())
+
+		profile.announcedAudioCodecs().containsAll(listOf("ac3", "eac3", "dts", "truehd")) shouldBe true
+		profile.codecProfiles.filter { it.type == CodecType.VIDEO_AUDIO }.flatMap { it.conditions }
+			.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "8"
+	}
+	test("standalone audio downmix does not advertise channels beyond the local mixer limit") {
+		val profile = deviceProfile(downMixAudio = true)
+		profile.codecProfiles.filter { it.type == CodecType.AUDIO }.flatMap { it.conditions }
+			.any { it.property == ProfileConditionValue.AUDIO_CHANNELS && it.value == "8" } shouldBe true
+	}
+	test("FFmpeg Opus remains available without an Android Opus decoder") {
+		every { FfmpegLibrary.supportsFormat(MimeTypes.AUDIO_OPUS) } returns true
+		("opus" in deviceProfile(supportsOpus = false, downMixAudio = true).announcedAudioCodecs()) shouldBe true
+		("opus" in deviceProfile(supportsOpus = false, enableFfmpegAudio = false).announcedAudioCodecs()) shouldBe false
+	}
+
+	test("local stereo downmix accepts platform decoders but not passthrough-only codecs") {
+		val profile = deviceProfile(downMixAudio = true, supportedAudioMimes = setOf(MimeTypes.AUDIO_AC3))
+		("ac3" in profile.announcedAudioCodecs()) shouldBe true
+		("truehd" in profile.announcedAudioCodecs()) shouldBe false
+	}
+
+	test("backends without local mixing retain server stereo conversion") {
+		val profile = deviceProfile(downMixAudio = true, enableFfmpegAudio = false)
+		profile.announcedAudioCodecs().toSet() shouldBe setOf("aac", "mp2", "mp3")
 	}
 
 	test("fMP4 audio codecs have individual remux profiles") {
@@ -462,11 +577,16 @@ class DeviceProfileCompatibilityTests : FunSpec({
 })
 
 private fun deviceProfile(
+	enableFfmpegAudio: Boolean = true,
+	enableFfmpegVideo: Boolean = false,
+	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
+	downMixAudio: Boolean = false,
 	ac3: Boolean = true,
 	eac3: Boolean = true,
 	dts: Boolean = true,
 	truehd: Boolean = true,
 	supportsAv1: Boolean = false,
+	supportsOpus: Boolean = true,
 	supportsAv1Main10: Boolean = false,
 	supportsAv1Hdr10: Boolean = false,
 	supportsAv1Hdr10Plus: Boolean = false,
@@ -508,7 +628,7 @@ private fun deviceProfile(
 		every { supportsMpeg2() } returns (MimeTypes.VIDEO_MPEG2 in supportedVideoMimes)
 		every { supportsMpeg4Asp() } returns mpeg4AspSupported
 		every { supportsMpeg4Simple() } returns mpeg4SimpleSupported
-		every { supportsOpus() } returns true
+		every { supportsOpus() } returns supportsOpus
 		every { supportsVp8() } returns (MimeTypes.VIDEO_VP8 in supportedVideoMimes)
 		every { supportsVp9() } returns (MimeTypes.VIDEO_VP9 in supportedVideoMimes || supportsVp9Main10)
 		every { supportsVp9Main8() } returns (MimeTypes.VIDEO_VP9 in supportedVideoMimes)
@@ -524,11 +644,12 @@ private fun deviceProfile(
 	return createDeviceProfile(
 		mediaTest = mediaTest,
 		maxBitrate = 100_000_000,
+		maxResolution = maxResolution,
 		isAC3PrefEnabled = ac3,
 		isEAC3PrefEnabled = eac3,
 		isDTSPrefEnabled = dts,
 		isTrueHDPrefEnabled = truehd,
-		downMixAudio = false,
+		downMixAudio = downMixAudio,
 		assDirectPlay = true,
 		pgsDirectPlay = true,
 		userAVCLevel = null,
@@ -536,6 +657,8 @@ private fun deviceProfile(
 		forceEnabledHdr = forceEnabledHdr,
 		forceDisabledHdr = forceDisabledHdr,
 		passthroughAudioCodecs = passthroughAudioCodecs,
+		enableFfmpegAudio = enableFfmpegAudio,
+		enableFfmpegVideo = enableFfmpegVideo,
 	)
 }
 
@@ -569,7 +692,7 @@ private fun String?.declarations() = orEmpty().split(',').filter(String::isNotBl
 private fun DeviceProfile.acceptsRange(codec: String, range: VideoRangeType) = codecProfiles
 	.filter { it.codec == codec && it.conditions.any { condition -> condition.property == ProfileConditionValue.VIDEO_RANGE_TYPE } }
 	.filter { it.applyConditions.all { condition -> condition.matchesServer12Range(range) } }
-	.all { it.conditions.all { condition -> condition.matchesServer12Range(range) } }
+	.all { it.conditions.filter { condition -> condition.property == ProfileConditionValue.VIDEO_RANGE_TYPE }.all { condition -> condition.matchesServer12Range(range) } }
 
 // Characterizes Server 12 ConditionProcessor's HDR10Plus fallback, including NotEquals.
 // https://github.com/jellyfin/jellyfin/blob/v12.0/MediaBrowser.Model/Dlna/ConditionProcessor.cs
