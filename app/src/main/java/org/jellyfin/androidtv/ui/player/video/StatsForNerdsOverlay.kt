@@ -50,6 +50,9 @@ import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
+import org.jellyfin.androidtv.util.sdk.formatVideoRange
+import org.jellyfin.androidtv.util.sdk.primaryVideoRangeLabel
+import org.jellyfin.androidtv.util.sdk.toVideoRangeTypeOrNull
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -418,7 +421,7 @@ private object NewPlayerStreamStatusBuilder {
 						"HDR mode",
 						streamingHdrMode(
 							playerHdrMode = frameStats.videoHdrMode,
-							streamHdrMode = videoTrack?.videoRange?.toVideoRangeType()?.workaroundLabel(),
+							streamHdrMode = videoTrack?.videoRange.toVideoRangeTypeOrNull()?.primaryVideoRangeLabel(),
 							isVideoDirect = transcodingInfo?.isVideoDirect,
 						),
 					)
@@ -492,7 +495,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
 					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate() ?: frameStats.videoSourceFps?.formatFrameRate())
-					row("Video range", videoTrack?.videoRange ?: frameStats.videoRange)
+					row("Video range", videoTrack?.videoRange.formatVideoRange() ?: frameStats.videoRange)
 					if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
 					row("Audio codec", audioTrack?.codec.formatCodec() ?: frameStats.audioCodec.formatCodec())
 					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
@@ -905,43 +908,20 @@ private fun hevcVideoRangeWorkaroundInfo(
 	val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull() ?: return null
 	if (!videoTrack.isHevc()) return null
 
-	val rangeType = videoTrack.videoRange.toVideoRangeType() ?: return null
+	val rangeType = videoTrack.videoRange.toVideoRangeTypeOrNull() ?: return null
 	val reason = getUnsupportedHevcVideoRangeWorkarounds(
 		mediaTest = mediaTest,
 		forceEnabledHdr = forceEnabledHdr,
 		forceDisabledHdr = forceDisabledHdr,
 	)[rangeType] ?: return null
 
-	return "${rangeType.workaroundLabel()}: $reason"
+	return "${rangeType.primaryVideoRangeLabel()}: $reason"
 }
 
 private fun MediaStreamVideoTrack.isHevc(): Boolean =
 	codec.equals("hevc", ignoreCase = true) ||
 		codec.equals("h265", ignoreCase = true) ||
 		codec.equals("h.265", ignoreCase = true)
-
-private fun String?.toVideoRangeType(): VideoRangeType? {
-	if (isNullOrBlank()) return null
-
-	return enumValues<VideoRangeType>().firstOrNull { range ->
-		equals(range.name, ignoreCase = true) ||
-			equals(range.serialName, ignoreCase = true)
-	}
-}
-
-private fun VideoRangeType.workaroundLabel() = when (this) {
-	VideoRangeType.DOVI -> "DV P5"
-	VideoRangeType.DOVI_WITH_EL,
-	VideoRangeType.DOVI_WITH_ELHDR10_PLUS -> "DV P7"
-	VideoRangeType.DOVI_WITH_HDR10,
-	VideoRangeType.DOVI_WITH_HDR10_PLUS,
-	VideoRangeType.DOVI_WITH_HLG,
-	VideoRangeType.DOVI_WITH_SDR -> "DV P8"
-	VideoRangeType.HDR10_PLUS -> "HDR10+"
-	VideoRangeType.HDR10 -> "HDR10"
-	VideoRangeType.DOVI_INVALID -> "DV invalid"
-	else -> serialName
-}
 
 private fun Int.formatWorkaroundBitrate() = when {
 	this >= 1_000_000 -> "%.2f Mbps".format(this / 1_000_000.0)
