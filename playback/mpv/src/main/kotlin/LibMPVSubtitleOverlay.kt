@@ -18,6 +18,11 @@ internal fun readLibMPVSubtitleOverlay(
 	if (isActive()) read() else null
 }
 
+internal fun libMPVSubtitleOverlayModeChanged(
+	wasActive: Boolean,
+	isActive: Boolean,
+) = wasActive != isActive
+
 internal sealed interface LibMPVSubtitleOverlayUpdate {
 	data object Unchanged : LibMPVSubtitleOverlayUpdate
 	data class Clear(val changeId: Long) : LibMPVSubtitleOverlayUpdate
