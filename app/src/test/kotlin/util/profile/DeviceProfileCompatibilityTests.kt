@@ -174,6 +174,20 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		profile.codecProfiles.filter { it.type == CodecType.VIDEO_AUDIO }.flatMap { it.conditions }
 			.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "8"
 	}
+
+	test("MPV stereo downmix retains native audio codecs and multichannel input") {
+		val profile = deviceProfile(
+			downMixAudio = true,
+			enableFfmpegAudio = false,
+			enableMpvAudio = true,
+			passthroughAudioCodecs = emptySet(),
+		)
+
+		profile.announcedAudioCodecs().containsAll(listOf("ac3", "eac3", "dts", "truehd")) shouldBe true
+		profile.codecProfiles.filter { it.type == CodecType.VIDEO_AUDIO }.flatMap { it.conditions }
+			.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "8"
+	}
+
 	test("standalone audio downmix does not advertise channels beyond the local mixer limit") {
 		val profile = deviceProfile(downMixAudio = true)
 		profile.codecProfiles.filter { it.type == CodecType.AUDIO }.flatMap { it.conditions }
@@ -578,6 +592,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 
 private fun deviceProfile(
 	enableFfmpegAudio: Boolean = true,
+	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
 	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
 	downMixAudio: Boolean = false,
@@ -658,6 +673,7 @@ private fun deviceProfile(
 		forceDisabledHdr = forceDisabledHdr,
 		passthroughAudioCodecs = passthroughAudioCodecs,
 		enableFfmpegAudio = enableFfmpegAudio,
+		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
 	)
 }

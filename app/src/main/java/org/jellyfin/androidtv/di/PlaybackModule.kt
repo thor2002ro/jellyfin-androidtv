@@ -19,6 +19,7 @@ import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCDecoder
@@ -48,6 +49,7 @@ import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.DoviPlaybackNegotiationStore
 import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.getSupportedMPVPassthroughAudioMimes
 import org.jellyfin.androidtv.util.profile.softwareCodecsEnabledForProfile
 import org.jellyfin.playback.core.playbackManager
 import org.jellyfin.playback.core.PlaybackManager
@@ -101,7 +103,14 @@ val playbackModule = module {
 	single { createPlaybackManager() }
 	single { ExoPlayerBackendSettings(get(), get()) }
 	single { LibVLCBackendSettings(get(), get()) }
-	single { LibMPVBackendSettings(userPreferences = get<UserPreferences>(), backend = get<LibMPVBackend>()) }
+	single {
+		val userPreferences = get<UserPreferences>()
+		LibMPVBackendSettings(
+			userPreferences = userPreferences,
+			backend = get<LibMPVBackend>(),
+			playbackOptionsProvider = { userPreferences.detectedMPVPlaybackOptions(androidContext()) },
+		)
+	}
 }
 
 private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
@@ -149,10 +158,14 @@ private fun Scope.createLibMPVBackend(): LibMPVBackend {
 	return LibMPVBackend(
 		context = androidContext(),
 		videoDecoderProvider = { userPreferences[UserPreferences.mpvDecoder].decoder },
-		playbackOptionsProvider = { userPreferences.mpvPlaybackOptions() },
+		playbackOptionsProvider = { userPreferences.detectedMPVPlaybackOptions(androidContext()) },
 		gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
 	)
 }
+
+private fun UserPreferences.detectedMPVPlaybackOptions(context: Context) = mpvPlaybackOptions(
+	supportedPassthroughMimes = getSupportedMPVPassthroughAudioMimes(context, managedAudioPassthroughMimeTypes),
+)
 
 fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val activityIntent = Intent(get(), MainActivity::class.java)
@@ -224,6 +237,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				softwareCodecsEnabled = profileSoftwareCodecsEnabled,
 				mediaTest = doviMediaTest,
 				enableFfmpegAudio = get<PlaybackManager>().backend is ExoPlayerBackend,
+				enableMpvAudio = get<PlaybackManager>().backend is LibMPVBackend,
 				enableFfmpegVideo = get<PlaybackManager>().backend is ExoPlayerBackend && (
 					userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] ||
 						(queueEntry.baseItem?.isLiveTv() == true && userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv])
