@@ -403,7 +403,6 @@ fun UserPreferences.mpvPlaybackOptions(
 		audioOutput = audioPolicy.audioOutput,
 		audioChannels = audioPolicy.audioChannels,
 		audioSpdif = audioPolicy.audioSpdif,
-		audioTrackPcmFloat = audioPolicy.audioSpdif.isEmpty(),
 		audioPitchCorrection = this[UserPreferences.mpvAudioPitchCorrection],
 		replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
 		decoderThreads = this[UserPreferences.mpvDecoderThreads].coerceIn(0, 32),
