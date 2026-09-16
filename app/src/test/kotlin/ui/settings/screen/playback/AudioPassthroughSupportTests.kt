@@ -4,8 +4,13 @@ import androidx.media3.common.MimeTypes
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 
 class AudioPassthroughSupportTests : FunSpec({
+	test("every managed passthrough MIME has a UI descriptor") {
+		passthroughAudioFormatMimeTypes shouldBe managedAudioPassthroughMimeTypes
+	}
+
 	test("fully supported DTS family lists every variant in display order") {
 		val supportedMimes = setOf(
 			MimeTypes.AUDIO_DTS_UHD_P2,

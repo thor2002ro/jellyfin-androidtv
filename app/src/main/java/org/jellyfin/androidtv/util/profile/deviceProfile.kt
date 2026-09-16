@@ -125,6 +125,7 @@ internal fun createDeviceProfile(
 		PlaybackBackend.EXOPLAYER, PlaybackBackend.SAME_VIDEO_PLAYER -> true
 		else -> false
 	},
+	enableMpvAudio: Boolean = userPreferences[UserPreferences.playbackBackend] == PlaybackBackend.MPV,
 	enableFfmpegVideo: Boolean = enableFfmpegAudio && userPreferences[UserPreferences.preferExoPlayerFfmpegVideo],
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
 	softwareCodecsEnabled: Boolean = userPreferences[UserPreferences.softwareCodecsEnabled],
@@ -148,6 +149,7 @@ internal fun createDeviceProfile(
 		doviPlaybackPlan = doviPlaybackPlan,
 		passthroughAudioCodecs = getPassthroughAudioCodecs(context),
 		enableFfmpegAudio = enableFfmpegAudio,
+		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
 	)
 }
@@ -171,12 +173,18 @@ internal fun createDeviceProfile(
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
 	passthroughAudioCodecs: Set<String> = allPassthroughAudioCodecs,
 	enableFfmpegAudio: Boolean = false,
+	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
 ) = buildDeviceProfile {
-	val supportsOpus = mediaTest.supportsOpus() || (enableFfmpegAudio && FfmpegLibrary.supportsFormat(MimeTypes.AUDIO_OPUS))
+	val canMixAudioLocally = enableFfmpegAudio || enableMpvAudio
+	val supportsOpus = mediaTest.supportsOpus() || enableMpvAudio ||
+		(enableFfmpegAudio && FfmpegLibrary.supportsFormat(MimeTypes.AUDIO_OPUS))
 	// Media3 keeps FFmpeg audio decoding enabled even when passthrough or software video decoding is disabled.
 	val locallyDecodablePassthroughAudioCodecs = passthroughAudioCodecMimes.entries
-		.filter { (mime) -> mediaTest.supportsMimeType(mime) || (enableFfmpegAudio && FfmpegLibrary.supportsFormat(mime)) }
+		.filter { (mime) ->
+			enableMpvAudio || mediaTest.supportsMimeType(mime) ||
+				(enableFfmpegAudio && FfmpegLibrary.supportsFormat(mime))
+		}
 		.flatMapTo(mutableSetOf()) { (_, codecs) -> codecs }
 	val enabledPassthroughCodecs = enabledPassthroughAudioCodecs(
 		isAC3Enabled = isAC3PrefEnabled,
@@ -185,8 +193,8 @@ internal fun createDeviceProfile(
 		isTrueHDEnabled = isTrueHDPrefEnabled,
 	)
 	val allowedAudioCodecs = when {
-		// Media3 mixes decoded PCM locally; other backends retain the server stereo policy.
-		downMixAudio && !enableFfmpegAudio -> downmixSupportedAudioCodecs
+		// Media3 and MPV mix decoded PCM locally; other backends retain the server stereo policy.
+		downMixAudio && !canMixAudioLocally -> downmixSupportedAudioCodecs
 		else -> supportedAudioCodecs.filterNot { audioCodec ->
 			val isPassthroughCodec = audioCodec in allPassthroughAudioCodecs
 			val canDecodeLocally = audioCodec in locallyDecodablePassthroughAudioCodecs
@@ -696,7 +704,7 @@ internal fun createDeviceProfile(
 	}
 
 	// Audio channel profile
-	if (downMixAudio && enableFfmpegAudio) codecProfile {
+	if (downMixAudio && canMixAudioLocally) codecProfile {
 		type = CodecType.AUDIO
 		conditions {
 			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals 8
@@ -706,7 +714,7 @@ internal fun createDeviceProfile(
 		type = CodecType.VIDEO_AUDIO
 
 		conditions {
-			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals if (downMixAudio && !enableFfmpegAudio) 2 else 8
+			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals if (downMixAudio && !canMixAudioLocally) 2 else 8
 		}
 	}
 
