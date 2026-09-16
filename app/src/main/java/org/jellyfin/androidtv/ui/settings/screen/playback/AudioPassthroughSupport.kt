@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.settings.screen.playback
 import androidx.annotation.OptIn
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 
 internal enum class AudioPassthroughFamily {
 	AC3,
@@ -38,7 +39,9 @@ private fun createPassthroughAudioFormatsByFamily(): Map<AudioPassthroughFamily,
 	),
 )
 
-internal val passthroughAudioMimeTypes: Set<String> = passthroughAudioFormatsByFamily.values
+internal val passthroughAudioMimeTypes: Set<String> = managedAudioPassthroughMimeTypes
+
+internal val passthroughAudioFormatMimeTypes: Set<String> = passthroughAudioFormatsByFamily.values
 	.flatten()
 	.mapTo(linkedSetOf()) { format -> format.mimeType }
 

@@ -22,6 +22,8 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.getQualityProfiles
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
+import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.form.RangeControl
@@ -35,6 +37,7 @@ import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButton
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.createDeviceProfileReport
+import org.jellyfin.androidtv.util.profile.getSupportedMPVPassthroughAudioMimes
 import org.jellyfin.androidtv.util.profile.getSupportedPassthroughAudioMimes
 import org.jellyfin.design.Tokens
 import org.jellyfin.sdk.api.client.ApiClient
@@ -51,8 +54,13 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
-	val supportedPassthroughMimes = remember(context) {
-		getSupportedPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+	val playbackBackend = userPreferences[UserPreferences.playbackBackend]
+	val supportedPassthroughMimes = remember(context, playbackBackend) {
+		if (playbackBackend == PlaybackBackend.MPV) {
+			getSupportedMPVPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+		} else {
+			getSupportedPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+		}
 	}
 
 	var ac3Enabled by rememberPreference(userPreferences, UserPreferences.ac3Enabled)
