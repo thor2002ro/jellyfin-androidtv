@@ -38,11 +38,16 @@ class UpdaterUiSuite(private val instrumentation: Instrumentation) {
 			Intent(instrumentation.targetContext, UpdaterTestActivity::class.java)
 				.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 				.putExtra(UpdaterTestActivity.EXTRA_SCENARIO, test.scenario.name)
-				.putExtra(UpdaterTestActivity.EXTRA_INLINE_PROMPT, true)
+				.putExtra(UpdaterTestActivity.EXTRA_INLINE_PROMPT, test.inlinePrompt)
 		)
 		return try {
 			val missing = test.expectedText.firstOrNull { text -> !waitForText(text) }
-			if (missing == null) {
+			val unstable = missing == null &&
+				test.scenario == UpdaterTestScenario.POPUP_STABILITY &&
+				!staysVisible("Update now", 2_000)
+			SystemClock.sleep(500)
+			val unexpected = test.unexpectedText.firstOrNull(::isTextVisible)
+			if (missing == null && !unstable && unexpected == null) {
 				PlaybackTestResult(
 					PlaybackTestStatus.PASS,
 					"updater",
@@ -54,7 +59,7 @@ class UpdaterUiSuite(private val instrumentation: Instrumentation) {
 					PlaybackTestStatus.FAIL,
 					"updater",
 					scenario = test.scenario.name.lowercase(),
-					detail = "missing='$missing' visible='${visibleText()}'",
+					detail = "missing='$missing' unstable='$unstable' unexpected='$unexpected' visible='${visibleText()}'",
 				)
 			}
 		} finally {
@@ -67,14 +72,26 @@ class UpdaterUiSuite(private val instrumentation: Instrumentation) {
 		val deadline = SystemClock.uptimeMillis() + 10_000
 		do {
 			instrumentation.waitForIdleSync()
-			val automation = instrumentation.uiAutomation
-			if (
-				automation.rootInActiveWindow?.containsText(text) == true ||
-				automation.windows.any { window -> window.root?.containsText(text) == true }
-			) return true
+			if (isTextVisible(text)) return true
 			SystemClock.sleep(50)
 		} while (SystemClock.uptimeMillis() < deadline)
 		return false
+	}
+
+	private fun staysVisible(text: String, durationMillis: Long): Boolean {
+		val deadline = SystemClock.uptimeMillis() + durationMillis
+		do {
+			instrumentation.waitForIdleSync()
+			if (!isTextVisible(text)) return false
+			SystemClock.sleep(16)
+		} while (SystemClock.uptimeMillis() < deadline)
+		return true
+	}
+
+	private fun isTextVisible(text: String): Boolean {
+		val automation = instrumentation.uiAutomation
+		return automation.rootInActiveWindow?.containsText(text) == true ||
+			automation.windows.any { window -> window.root?.containsText(text) == true }
 	}
 
 	private fun visibleText(): String {
@@ -91,18 +108,29 @@ class UpdaterUiSuite(private val instrumentation: Instrumentation) {
 private data class UpdaterUiExpectation(
 	val scenario: UpdaterTestScenario,
 	val expectedText: List<String>,
+	val inlinePrompt: Boolean = true,
+	val unexpectedText: List<String> = emptyList(),
 )
 
 private val scenarios = listOf(
 	UpdaterUiExpectation(UpdaterTestScenario.NO_UPDATE, listOf("No compatible update found")),
 	UpdaterUiExpectation(UpdaterTestScenario.GITHUB_ERROR, listOf("GitHub update check failed (HTTP 503)")),
-	UpdaterUiExpectation(UpdaterTestScenario.STABLE_UPDATE, listOf("UPDATE AVAILABLE", "Update now")),
+	UpdaterUiExpectation(
+		UpdaterTestScenario.STABLE_UPDATE,
+		listOf("UPDATE AVAILABLE", "Update now"),
+		inlinePrompt = false,
+	),
 	UpdaterUiExpectation(UpdaterTestScenario.PRERELEASE_UPDATE, listOf("PRE-RELEASE UPDATE", "Update now")),
 	UpdaterUiExpectation(UpdaterTestScenario.DOWNLOADING, listOf("Updating 42%")),
 	UpdaterUiExpectation(UpdaterTestScenario.DOWNLOAD_FAILED, listOf("simulated connection failure", "Update now")),
 	UpdaterUiExpectation(UpdaterTestScenario.INSTALL_PERMISSION, listOf("Allow installs from this app", "Update now")),
 	UpdaterUiExpectation(UpdaterTestScenario.INSTALLER_OPENED, listOf("Installer opened", "Update now")),
-	UpdaterUiExpectation(UpdaterTestScenario.POPUP_STABILITY, listOf("PASS: Update now stayed mounted", "Update now")),
+	UpdaterUiExpectation(UpdaterTestScenario.POPUP_STABILITY, listOf("UPDATE AVAILABLE", "Update now")),
+	UpdaterUiExpectation(
+		UpdaterTestScenario.FOCUS_CONFLICT,
+		listOf("FOCUS OWNER", "UPDATE QUEUED"),
+		unexpectedText = listOf("Update now"),
+	),
 )
 
 private fun AccessibilityNodeInfo.containsText(expected: String): Boolean {
