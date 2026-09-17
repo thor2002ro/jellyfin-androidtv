@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.TypefaceCompat
 import androidx.core.graphics.alpha
 import androidx.media3.common.text.Cue
 import androidx.media3.common.util.UnstableApi
@@ -24,6 +23,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.design.Tokens
+import org.jellyfin.playback.core.font.SubtitleFontProvider
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -43,7 +43,7 @@ fun SubtitleStylePreview(
 		backgroundColor = subtitlesBackgroundColor.toInt(),
 		edgeType = if (subtitleTextStrokeColor.toInt().alpha > 0) CaptionStyleCompat.EDGE_TYPE_OUTLINE else CaptionStyleCompat.EDGE_TYPE_NONE,
 		edgeColor = subtitleTextStrokeColor.toInt(),
-		typeface = TypefaceCompat.create(context, Typeface.DEFAULT, subtitlesTextWeight, false),
+		typeface = SubtitleFontProvider.typeface(context, subtitlesTextWeight),
 		modifier = Modifier
 			.background(Tokens.Color.colorBluegrey800, JellyfinTheme.shapes.large)
 			.fillMaxWidth()

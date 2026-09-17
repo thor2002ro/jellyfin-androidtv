@@ -2,7 +2,6 @@ package org.jellyfin.playback.media3.exoplayer
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.media.MediaCodecList
 import android.os.Build
 import android.os.Handler
@@ -11,7 +10,6 @@ import android.os.SystemClock
 import android.util.TypedValue
 import android.view.ViewGroup
 import androidx.annotation.OptIn
-import androidx.core.graphics.TypefaceCompat
 import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -81,6 +79,7 @@ import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
 import org.jellyfin.playback.core.backend.VideoDecoderOption
+import org.jellyfin.playback.core.font.SubtitleFontProvider
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
@@ -1802,7 +1801,7 @@ class ExoPlayerBackend(
 				Color.TRANSPARENT,
 				edgeType,
 				subtitleStyle.edgeColor,
-				TypefaceCompat.create(context, Typeface.DEFAULT, subtitleStyle.textWeight, false),
+				SubtitleFontProvider.typeface(context, subtitleStyle.textWeight),
 			)
 		)
 	}
