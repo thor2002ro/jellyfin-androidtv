@@ -31,6 +31,33 @@ import org.jellyfin.androidtv.preference.mpvVideoSync
 import org.jellyfin.playback.mpv.LibMPVAudioPreset
 
 class LibMPVAudioPreferencesTests : FunSpec({
+	test("disabled passthrough never opens carrier probes") {
+		val configurations = listOf(
+			preferences(audioBehavior = AudioBehavior.DOWNMIX_TO_STEREO),
+			preferences(audioPreset = LibMPVAudioPresetOption.CINEMA_SPATIAL),
+			preferences(ac3 = false, eac3 = false, dts = false, truehd = false),
+		)
+		for (configuration in configurations) {
+			var probes = 0
+			val options = configuration.mpvPlaybackOptions {
+				probes++
+				setOf(MimeTypes.AUDIO_AC3)
+			}
+			options.audioSpdif shouldBe ""
+			probes shouldBe 0
+		}
+	}
+
+	test("enabled passthrough checks the current route once per options refresh") {
+		var probes = 0
+		val options = preferences().mpvPlaybackOptions {
+			probes++
+			setOf(MimeTypes.AUDIO_E_AC3)
+		}
+		options.audioSpdif shouldBe "eac3"
+		probes shouldBe 1
+	}
+
 	test("direct audio preserves source channels and enabled detected codecs") {
 		val policy = preferences().mpvAudioPolicy(
 			setOf(

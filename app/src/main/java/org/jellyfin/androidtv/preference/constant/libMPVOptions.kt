@@ -5,6 +5,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
@@ -385,6 +386,16 @@ internal fun UserPreferences.mpvAudioPolicy(supportedPassthroughMimes: Set<Strin
 		audioPreset = audioPresetOption.preset,
 	)
 }
+
+fun UserPreferences.mpvPlaybackOptions(detectSupportedPassthroughMimes: () -> Set<String>) = mpvPlaybackOptions(
+	// Reuse the audio policy so downmix, presets and codec switches cannot drift
+	// from the decision to perform the platform's potentially expensive probes.
+	supportedPassthroughMimes = if (mpvAudioPolicy(managedAudioPassthroughMimeTypes).audioSpdif.isEmpty()) {
+		emptySet()
+	} else {
+		detectSupportedPassthroughMimes()
+	},
+)
 
 fun UserPreferences.mpvPlaybackOptions(
 	supportedPassthroughMimes: Set<String>,
