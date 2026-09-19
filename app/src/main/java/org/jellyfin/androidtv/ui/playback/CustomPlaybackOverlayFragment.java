@@ -1322,7 +1322,6 @@ public class CustomPlaybackOverlayFragment extends Fragment implements View.OnKe
         mLastTranscodingStatusFetchMs = now;
         mTranscodingStatusFetchInFlight = true;
 
-        String playSessionId = playbackController.getCurrentStreamInfo().getPlaySessionId();
         BaseItemDto item = playbackController.getCurrentlyPlayingItem();
         UUID itemId = item == null ? null : item.getId();
         String mediaSourceId = playbackController.getCurrentStreamInfo().getMediaSourceId();
@@ -1331,7 +1330,6 @@ public class CustomPlaybackOverlayFragment extends Fragment implements View.OnKe
             TranscodingInfo transcodingInfo = null;
             try {
                 transcodingInfo = transcodingStatusRepository.getValue().getTranscodingInfoBlocking(
-                        playSessionId,
                         itemId,
                         mediaSourceId
                 );
