@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.CustomMessage
@@ -108,7 +109,7 @@ class RecordPopup(
 				updateSeriesTimer(requireNotNull(currentOptions)) {
 					popup.dismiss()
 					customMessageRepository.pushMessage(CustomMessage.ActionComplete)
-					Utils.showToast(mContext, R.string.msg_settings_updated)
+					Toast.makeText(mContext, R.string.msg_settings_updated, Toast.LENGTH_LONG).show()
 				}
 			} else {
 				val id = programId ?: return@setOnClickListener
@@ -121,7 +122,7 @@ class RecordPopup(
 						selectedView?.setRecTimer(program.timerId)
 						selectedView?.setRecSeriesTimer(program.seriesTimerId)
 					}
-					Utils.showToast(mContext, R.string.msg_set_to_record)
+					Toast.makeText(mContext, R.string.msg_set_to_record, Toast.LENGTH_LONG).show()
 				}
 			}
 		}
