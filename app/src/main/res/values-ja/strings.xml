@@ -398,7 +398,6 @@
     <string name="pref_screensaver">スクリーンセーバー</string>
     <string name="app_notification_beta">アプリが %1$s に更新されました \nJellyfin ベータ プログラムにご参加いただきありがとうございます。</string>
     <string name="photos">フォト</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="dts_x">DTS:X</string>
     <plurals name="seconds">
         <item quantity="other">%1$s 秒</item>
@@ -628,7 +627,6 @@
     <string name="codec_level_4_1">レベル 4.1</string>
     <string name="codec_level_4_0">レベル 4.0</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">EL付きDolby Vision</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>

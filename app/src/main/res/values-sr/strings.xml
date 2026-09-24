@@ -481,7 +481,6 @@
         <item quantity="other">%1$s филмова</item>
     </plurals>
     <string name="skip_forward_length">Дужина за прескакање</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="pref_audio">Аудио</string>
     <string name="pref_refresh_rate_scale_on_tv">Мењај величину на ТВ</string>
     <string name="pref_mediasegment_actions">Акције медијских сегмента</string>
@@ -647,7 +646,6 @@
     <string name="codec_level_4_0">Ниво 4.0</string>
     <string name="auto">Аутоматски</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision са EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
