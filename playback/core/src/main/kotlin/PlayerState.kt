@@ -1,7 +1,11 @@
 package org.jellyfin.playback.core
 
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.jellyfin.playback.core.backend.BackendService
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
@@ -29,6 +33,7 @@ interface PlayerState {
 	val subtitleTimingSpeed: StateFlow<Float>
 	val subtitleTimingOffsetSupported: StateFlow<Boolean>
 	val trackRevision: StateFlow<Long>
+	val seekRequests: SharedFlow<Duration>
 
 	/**
 	 * The position information for the currently playing item or [PositionInfo.EMPTY]. This
@@ -100,6 +105,11 @@ class MutablePlayerState(
 
 	private val _trackRevision = MutableStateFlow(0L)
 	override val trackRevision: StateFlow<Long> get() = _trackRevision.asStateFlow()
+	private val _seekRequests = MutableSharedFlow<Duration>(
+		extraBufferCapacity = 1,
+		onBufferOverflow = BufferOverflow.DROP_OLDEST,
+	)
+	override val seekRequests: SharedFlow<Duration> get() = _seekRequests.asSharedFlow()
 
 	override val positionInfo: PositionInfo
 		get() = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
@@ -110,6 +120,7 @@ class MutablePlayerState(
 	init {
 		backendService.addListener(object : PlayerBackendEventListener() {
 			override fun onPlayStateChange(state: PlayState) {
+				if ((state == PlayState.STOPPED || state == PlayState.ERROR) && _scrubbing.value) setScrubbing(false)
 				if (queue?.entry?.value == null && state != PlayState.STOPPED) return
 				_playState.value = state
 			}
@@ -158,6 +169,7 @@ class MutablePlayerState(
 	}
 
 	override fun stop() {
+		_scrubbing.value = false
 		backendService.backend?.stop()
 		queue?.clear()
 		_playState.value = PlayState.STOPPED
@@ -165,13 +177,22 @@ class MutablePlayerState(
 
 	override fun seek(to: Duration) {
 		if (!canSeek) return
-		backendService.backend?.seekTo(to)
+		performSeek(to)
 	}
 
 	private fun seekRelative(amount: Duration) {
 		if (!canSeek) return
-		val current = backendService.backend?.getPositionInfo()?.active ?: Duration.ZERO
-		backendService.backend?.seekTo(current + amount)
+		val positionInfo = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
+		performSeek(positionInfo.active + amount, positionInfo.duration)
+	}
+
+	private fun performSeek(to: Duration, knownDuration: Duration? = null) {
+		val backend = backendService.backend ?: return
+		val duration = knownDuration ?: backend.getPositionInfo().duration
+		val target = to.coerceAtLeast(Duration.ZERO).let { position ->
+			if (duration > Duration.ZERO) position.coerceAtMost(duration) else position
+		}
+		if (backend.seekTo(target)) _seekRequests.tryEmit(target)
 	}
 
 	override fun fastForward(amount: Duration?) {
