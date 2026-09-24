@@ -21,7 +21,6 @@ import org.jellyfin.androidtv.data.querying.GetTrailersRequest
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.GridButton
-import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment
 import org.jellyfin.androidtv.ui.browsing.EnhancedBrowseFragment
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.TextItemPresenter
@@ -482,16 +481,16 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		this.reRetrieveTriggers = reRetrieveTriggers
 	}
 
-	fun setSortBy(option: BrowseGridFragment.SortOption) {
-		if (option.value != sortBy || option.order != sortOrder) {
-			sortBy = option.value
-			sortOrder = option.order
+	fun setSorting(field: ItemSortBy, direction: SortOrder) {
+		if (field != sortBy || direction != sortOrder) {
+			sortBy = field
+			sortOrder = direction
 			when (queryType) {
-				QueryType.Artists -> artistsQuery = setArtistsSorting(requireNotNull(artistsQuery), option)
-				QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsSorting(requireNotNull(albumArtistsQuery), option)
-				else -> query = setItemsSorting(requireNotNull(query), option)
+				QueryType.Artists -> artistsQuery = setArtistsSorting(requireNotNull(artistsQuery), field, direction)
+				QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsSorting(requireNotNull(albumArtistsQuery), field, direction)
+				else -> query = setItemsSorting(requireNotNull(query), field, direction)
 			}
-			if (option.value != ItemSortBy.SORT_NAME) setStartLetter(null)
+			if (field != ItemSortBy.SORT_NAME) setStartLetter(null)
 		}
 	}
 

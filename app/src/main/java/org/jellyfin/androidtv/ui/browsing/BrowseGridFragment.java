@@ -280,6 +280,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
         AlphaPickerView picker = vertical ? binding.alphaPickerVertical : binding.alphaPickerHorizontal;
         picker.setOnAlphaSelected(letter -> {
+            prepareForQueryChange();
             mAdapter.setStartLetter(letter.toString());
             loadGrid();
             return null;
@@ -595,7 +596,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             text += " " + getString(R.string.lbl_starting_with) + " " + mAdapter.getStartLetter();
         }
 
-        text += " " + getString(R.string.lbl_from) + " '" + folderName + "' " + getString(R.string.lbl_sorted_by) + " " + getSortOption(mAdapter.getSortBy()).name;
+        text += " " + getString(R.string.lbl_from) + " '" + folderName + "' " + getString(R.string.lbl_sorted_by) + " " +
+                getSortOption(mAdapter.getSortBy()).name + " " + LibrarySortStateKt.getMenuArrow(mAdapter.getSortOrder());
 
         binding.statusText.setText(text);
     }
@@ -1016,7 +1018,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             buildAdapter();
         }
 
-        mAdapter.setSortBy(getSortOption(libraryPreferences.get(LibraryPreferences.Companion.getSortBy())));
+        mAdapter.setSorting(
+                libraryPreferences.get(LibraryPreferences.Companion.getSortBy()),
+                libraryPreferences.get(LibraryPreferences.Companion.getSortOrder())
+        );
         if (mSelectedPosition >= 0) mPendingSelectedPosition = mSelectedPosition;
         mAdapter.Retrieve();
     }
@@ -1032,7 +1037,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             libraryPreferences.set(LibraryPreferences.Companion.getFilterUnwatchedOnly(), mAdapter.getFilters().isUnwatchedOnly());
             libraryPreferences.set(LibraryPreferences.Companion.getFilters(), mAdapter.getFilters().encode());
             libraryPreferences.set(LibraryPreferences.Companion.getSortBy(), mAdapter.getSortBy());
-            libraryPreferences.set(LibraryPreferences.Companion.getSortOrder(), getSortOption(mAdapter.getSortBy()).order);
+            libraryPreferences.set(LibraryPreferences.Companion.getSortOrder(), mAdapter.getSortOrder());
             return libraryPreferences.commit(continuation);
         });
     }
@@ -1053,14 +1058,22 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 //Create sort menu
                 PopupMenu sortMenu = new PopupMenu(getActivity(), mActiveToolBar, Gravity.END);
                 for (Map.Entry<Integer, SortOption> entry : sortOptions.entrySet()) {
-                    MenuItem item = sortMenu.getMenu().add(0, entry.getKey(), entry.getKey(), entry.getValue().name);
-                    item.setChecked(entry.getValue().value.equals(libraryPreferences.get(LibraryPreferences.Companion.getSortBy())));
+                    boolean active = entry.getValue().value.equals(mAdapter.getSortBy());
+                    String label = entry.getValue().name + (active ? " " + LibrarySortStateKt.getMenuArrow(mAdapter.getSortOrder()) : "");
+                    MenuItem item = sortMenu.getMenu().add(0, entry.getKey(), entry.getKey(), label);
+                    item.setChecked(active);
                 }
                 sortMenu.getMenu().setGroupCheckable(0, true, true);
                 sortMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                     @Override
                     public boolean onMenuItemClick(MenuItem item) {
-                        mAdapter.setSortBy(Objects.requireNonNull(sortOptions.get(item.getItemId())));
+                        SortOption selected = Objects.requireNonNull(sortOptions.get(item.getItemId()));
+                        LibrarySortState next = LibrarySortStateKt.selectSort(
+                                new LibrarySortState(mAdapter.getSortBy(), mAdapter.getSortOrder()),
+                                new LibrarySortOption(selected.value, selected.order)
+                        );
+                        prepareForQueryChange();
+                        mAdapter.setSorting(next.getField(), next.getDirection());
                         mAdapter.Retrieve();
                         item.setChecked(true);
                         updateDisplayPrefs();
