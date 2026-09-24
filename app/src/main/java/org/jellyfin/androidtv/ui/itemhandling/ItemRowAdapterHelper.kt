@@ -5,8 +5,6 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -76,7 +74,6 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 private const val LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT = 300
 
@@ -505,8 +502,6 @@ private fun List<MediaSourceInfo>.badgeStreamSummary(collectAll: Boolean = true)
 private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	api: ApiClient,
 ): List<BaseItemDto> = coroutineScope {
-	val seasonSamples = ConcurrentHashMap<UUID, Deferred<List<BaseItemDto>>>()
-	val scope = this
 	val sampleItems = asSequence()
 		.filter { it.needsSeriesOrSeasonStreamBadgeSource() }
 		.distinctBy { it.id }
@@ -517,7 +512,7 @@ private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	val samples = sampleItems.map { item ->
 		async {
 			parallelism.withPermit {
-				item.id to item.loadStreamBadgeSamples(api, seasonSamples, scope)
+				item.id to item.loadStreamBadgeSamples(api)
 			}
 		}
 	}.awaitAll().toMap()
@@ -526,45 +521,12 @@ private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 
 private suspend fun BaseItemDto.loadStreamBadgeSamples(
 	api: ApiClient,
-	seasonSamples: ConcurrentHashMap<UUID, Deferred<List<BaseItemDto>>>,
-	scope: CoroutineScope,
 ): List<BaseItemDto> = try {
 	when (type) {
-		BaseItemKind.SERIES -> {
-			val seasons = api.tvShowsApi.getSeasons(
-				seriesId = id,
-				fields = STREAM_BADGE_FIELDS,
-				isMissing = false,
-				enableImages = false,
-				enableUserData = false,
-			).content.items
-
-			val sampledSeasonIds = seasons
-				.filterNot { season -> season.mediaSources.orEmpty().hasCompleteRefreshBadgeStreams() }
-				.spreadSeriesStreamBadgeSampleIds(SERIES_STREAM_BADGE_SEASON_SAMPLE_SIZE)
-			val samples = mutableListOf<BaseItemDto>()
-			for (season in seasons) {
-				val seasonSample = if (season.mediaSources.orEmpty().hasCompleteRefreshBadgeStreams()) {
-					season
-				} else if (season.id !in sampledSeasonIds) {
-					season.takeIf { it.mediaSources.orEmpty().hasCacheableBadgeStreams() } ?: continue
-				} else {
-					val episodes = seasonSamples.getOrLoad(season.id, scope) {
-						api.loadCachedSeasonStreamBadgeSamples(id, season.id)
-					}
-
-					season.withSeriesStreamBadgeSource(episodes)
-				}
-
-				samples += seasonSample
-			}
-			samples
-		}
+		BaseItemKind.SERIES -> api.loadCachedStreamBadgeSamples(id, id)
 
 		BaseItemKind.SEASON -> seriesId?.let { seriesId ->
-			seasonSamples.getOrLoad(id, scope) {
-				api.loadCachedSeasonStreamBadgeSamples(seriesId, id)
-			}
+			api.loadCachedStreamBadgeSamples(seriesId, id, id)
 		}
 
 		else -> null
@@ -575,70 +537,33 @@ private suspend fun BaseItemDto.loadStreamBadgeSamples(
 	Timber.w(error, "Unable to load stream badge samples for $type $id")
 	emptyList()
 }
-
-internal fun List<BaseItemDto>.spreadSeriesStreamBadgeSampleIds(limit: Int): Set<UUID> {
-	if (limit <= 0) return emptySet()
-	if (limit == 1) return firstOrNull()?.let { setOf(it.id) }.orEmpty()
-	if (size <= limit) return map { it.id }.toSet()
-
-	val lastIndex = lastIndex
-	return (0 until limit)
-		.map { sample -> get((sample * lastIndex.toFloat() / (limit - 1)).roundToInt()).id }
-		.toSet()
-}
-
-private suspend fun ConcurrentHashMap<UUID, Deferred<List<BaseItemDto>>>.getOrLoad(
-	seasonId: UUID,
-	scope: CoroutineScope,
-	load: suspend () -> List<BaseItemDto>,
-): List<BaseItemDto> = computeIfAbsent(seasonId) {
-	scope.async { load() }
-}.await()
-
-private suspend fun ApiClient.loadCachedSeasonStreamBadgeSamples(
+private suspend fun ApiClient.loadCachedStreamBadgeSamples(
 	seriesId: UUID,
-	seasonId: UUID,
+	cacheId: UUID,
+	seasonId: UUID? = null,
 ): List<BaseItemDto> {
-	SeriesStreamBadgeCache.get(seasonId)?.let { cached -> return cached }
+	val cached = SeriesStreamBadgeCache.get(cacheId)
+	if (cached?.hasCompleteSeriesStreamBadgeSource(cacheId) == true) return cached
 
-	return loadSeasonStreamBadgeSamples(seriesId, seasonId).also { samples ->
-		if (samples.isNotEmpty()) SeriesStreamBadgeCache.save(seriesId, seasonId, samples)
-	}
+	val samples = loadStreamBadgeSamples(seriesId, seasonId)
+	return samples.also {
+		if (samples.isNotEmpty()) SeriesStreamBadgeCache.save(seriesId, cacheId, samples)
+	}.ifEmpty { cached.orEmpty() }
 }
 
-private suspend fun ApiClient.loadSeasonStreamBadgeSamples(seriesId: UUID, seasonId: UUID): List<BaseItemDto> {
-	var lastError: Exception? = null
-	val samples = mutableListOf<BaseItemDto>()
-	var remainingAttempts = SERIES_STREAM_BADGE_EPISODE_ATTEMPTS
-	while (remainingAttempts-- > 0) {
-		try {
-			val startIndex = samples.size
-			val items = tvShowsApi.getEpisodes(
-				seriesId = seriesId,
-				seasonId = seasonId,
-				fields = STREAM_BADGE_FIELDS,
-				isMissing = false,
-				limit = if (samples.isEmpty()) SERIES_STREAM_BADGE_SAMPLE_SIZE else 1,
-				startIndex = startIndex,
-				sortBy = ItemSortBy.DATE_CREATED,
-			).content.items
-			if (items.isEmpty()) break
+private suspend fun ApiClient.loadStreamBadgeSamples(seriesId: UUID, seasonId: UUID?) =
+	tvShowsApi.getEpisodes(
+		seriesId = seriesId,
+		seasonId = seasonId,
+		fields = STREAM_BADGE_FIELDS,
+		isMissing = false,
+		limit = SERIES_STREAM_BADGE_SAMPLE_SIZE,
+		enableImages = false,
+		enableUserData = false,
+		sortBy = ItemSortBy.DATE_CREATED,
+	).content.items
 
-			samples += items
-			if (samples.hasCompleteSeriesStreamBadgeSource(seasonId)) return samples
-		} catch (error: CancellationException) {
-			throw error
-		} catch (error: Exception) {
-			lastError = error
-		}
-	}
-
-	if (samples.isNotEmpty()) return samples
-	Timber.w(lastError, "Unable to load stream badge sample for season $seasonId")
-	return emptyList()
-}
-
-private fun List<BaseItemDto>.hasCompleteSeriesStreamBadgeSource(seasonId: UUID) =
+internal fun List<BaseItemDto>.hasCompleteSeriesStreamBadgeSource(seasonId: UUID) =
 	BaseItemDto(id = seasonId, type = BaseItemKind.SEASON)
 		.withSeriesStreamBadgeSource(this)
 		.mediaSources
@@ -932,10 +857,8 @@ internal object DirectStreamBadgeCache {
 
 private val DIRECT_STREAM_BADGE_TYPES = streamBadgeItemTypes - setOf(BaseItemKind.SERIES, BaseItemKind.SEASON)
 private val STREAM_BADGE_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS)
-private const val SERIES_STREAM_BADGE_EPISODE_ATTEMPTS = 3
-private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 2
-private const val SERIES_STREAM_BADGE_SEASON_SAMPLE_SIZE = 6
-private const val SERIES_STREAM_BADGE_PARALLELISM = 8
+private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 6
+private const val SERIES_STREAM_BADGE_PARALLELISM = 4
 
 fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
