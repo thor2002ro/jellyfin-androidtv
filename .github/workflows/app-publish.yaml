@@ -9,7 +9,7 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-24.04
-    if: ${{ contains(github.repository_owner, 'jellyfin') }}
+    if: ${{ github.repository_owner == 'thor2002ro' }}
     permissions:
       contents: write
     steps:
@@ -74,8 +74,8 @@ jobs:
                 sudo rm -r /srv/repository/main/client/androidtv/versions/v${{ env.JELLYFIN_VERSION }}
             fi
             sudo mv /srv/incoming/androidtv/v${{ env.JELLYFIN_VERSION }} /srv/repository/main/client/androidtv/versions/v${{ env.JELLYFIN_VERSION }}
-            cd /srv/repository/main/client/androidtv;
-            sudo rm -rf *.apk version.txt;
-            sudo ln -s versions/v${{ env.JELLYFIN_VERSION }}/jellyfin-androidtv-v${{ env.JELLYFIN_VERSION }}-*.apk .;
-            sudo ln -s versions/v${{ env.JELLYFIN_VERSION }}/version.txt .;
+            cd /srv/repository/main/client/androidtv
+            sudo rm -rf *.apk version.txt
+            sudo ln -s versions/v${{ env.JELLYFIN_VERSION }}/jellyfin-androidtv-thor-v${{ env.JELLYFIN_VERSION }}-*.apk .
+            sudo ln -s versions/v${{ env.JELLYFIN_VERSION }}/version.txt .
           EOF
