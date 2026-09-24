@@ -600,7 +600,6 @@
     <string name="codec_level_4_2">ระดับ 4.2</string>
     <string name="preference_enable_ass">เล่นคำบรรยาย ASS โดยตรง</string>
     <string name="preference_enable_pgs_description">ต้องแปลงรหัสเมื่อปิดใช้งาน</string>
-    <string name="preference_enable_ass_description">ฟีเจอร์ทดลอง อาจทำงานได้ไม่สมบูรณ์</string>
     <string name="auto">อัตโนมัติ</string>
     <plurals name="seconds">
         <item quantity="other">%1$s วินาที</item>

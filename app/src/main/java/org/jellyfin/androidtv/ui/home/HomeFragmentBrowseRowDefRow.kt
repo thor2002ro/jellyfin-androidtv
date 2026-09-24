@@ -8,6 +8,7 @@ import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
+import org.jellyfin.androidtv.ui.card.ChannelCardView
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter
@@ -16,7 +17,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 class HomeFragmentBrowseRowDefRow(
-	private val browseRowDef: BrowseRowDef
+	private val browseRowDef: BrowseRowDef,
+	private val channelCardLongClick: ((item: Any?, cardView: ChannelCardView) -> Boolean)? = null,
 ) : HomeFragmentRow, KoinComponent {
 	private val userPreferences by inject<UserPreferences>()
 
@@ -35,7 +37,7 @@ class HomeFragmentBrowseRowDefRow(
 			QueryType.LiveTvProgram -> ItemRowAdapter(
 				context,
 				browseRowDef.programQuery,
-				if (browseRowDef.useChannelCards) ChannelCardPresenter() else cardPresenter,
+				if (browseRowDef.useChannelCards) ChannelCardPresenter(onLongClick = channelCardLongClick) else cardPresenter,
 				rowsAdapter,
 				browseRowDef.liveTvProgramSelectAction,
 			)
