@@ -502,7 +502,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		when (queryType) {
 			QueryType.Artists -> artistsQuery = setArtistsFilter(requireNotNull(artistsQuery), filters.filters)
 			QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsFilter(requireNotNull(albumArtistsQuery), filters.filters)
-			else -> query = setItemsFilter(requireNotNull(query), filters.filters)
+			else -> query = filters.applyTo(requireNotNull(query))
 		}
 		removeRow()
 	}
