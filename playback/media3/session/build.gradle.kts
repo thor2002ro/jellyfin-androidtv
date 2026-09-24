@@ -5,6 +5,7 @@ plugins {
 android {
 	namespace = "org.jellyfin.playback.media3.session"
 	compileSdk = libs.versions.android.compileSdk.get().toInt()
+	ndkVersion = libs.versions.android.ndk.get()
 
 	defaultConfig {
 		minSdk = libs.versions.android.minSdk.get().toInt()
