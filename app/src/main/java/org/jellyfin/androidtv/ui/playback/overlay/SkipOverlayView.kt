@@ -6,13 +6,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -27,29 +28,38 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.Text
-import org.jellyfin.androidtv.ui.playback.segment.MediaSegmentRepository
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun SkipOverlayComposable(
 	visible: Boolean,
+	playerUiVisible: Boolean,
+	onClick: () -> Unit,
 ) {
+	val bottomPadding = if (playerUiVisible) 220.dp else 48.dp
+	val shape = RoundedCornerShape(6.dp)
+	val selected = visible && !playerUiVisible
+
 	Box(
 		contentAlignment = Alignment.BottomEnd,
 		modifier = Modifier
-			.padding(48.dp, 48.dp)
+			.padding(start = 48.dp, top = 48.dp, end = 48.dp, bottom = bottomPadding)
 	) {
 		AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut()) {
 			Row(
 				modifier = Modifier
-					.clip(RoundedCornerShape(6.dp))
+					.clip(shape)
 					.background(colorResource(R.color.popup_menu_background).copy(alpha = 0.6f))
+					.then(
+						if (selected) Modifier.border(2.dp, colorResource(R.color.button_default_normal_text), shape)
+						else Modifier
+					)
+					.clickable(enabled = visible, onClick = onClick)
 					.padding(10.dp),
 				horizontalArrangement = Arrangement.spacedBy(8.dp),
 				verticalAlignment = Alignment.CenterVertically,
@@ -77,6 +87,8 @@ class SkipOverlayView @JvmOverloads constructor(
 	private val _currentPosition = MutableStateFlow(Duration.ZERO)
 	private val _targetPosition = MutableStateFlow<Duration?>(null)
 	private val _skipUiEnabled = MutableStateFlow(true)
+	private val _playerUiVisible = MutableStateFlow(false)
+	private var onSkipClick: (() -> Unit)? = null
 
 	var currentPosition: Duration
 		get() = _currentPosition.value
@@ -108,13 +120,23 @@ class SkipOverlayView @JvmOverloads constructor(
 			_skipUiEnabled.value = value
 		}
 
+	var playerUiVisible: Boolean
+		get() = _playerUiVisible.value
+		set(value) {
+			_playerUiVisible.value = value
+		}
+
+	fun setOnSkipClickListener(listener: Runnable?) {
+		onSkipClick = { listener?.run() }
+	}
+
 	val visible: Boolean
 		get() {
 			val enabled = _skipUiEnabled.value
 			val targetPosition = _targetPosition.value
 			val currentPosition = _currentPosition.value
 
-			return enabled && targetPosition != null && currentPosition <= (targetPosition - MediaSegmentRepository.SkipMinDuration)
+			return enabled && targetPosition != null && currentPosition < targetPosition
 		}
 
 	@Composable
@@ -122,17 +144,16 @@ class SkipOverlayView @JvmOverloads constructor(
 		val skipUiEnabled by _skipUiEnabled.collectAsState()
 		val currentPosition by _currentPosition.collectAsState()
 		val targetPosition by _targetPosition.collectAsState()
+		val playerUiVisible by _playerUiVisible.collectAsState()
 
 		val visible by remember(skipUiEnabled, currentPosition, targetPosition) {
 			derivedStateOf { visible }
 		}
 
-		// Auto hide
-		LaunchedEffect(skipUiEnabled, targetPosition) {
-			delay(MediaSegmentRepository.AskToSkipAutoHideDuration)
-			_targetPosition.value = null
-		}
-
-		SkipOverlayComposable(visible)
+		SkipOverlayComposable(
+			visible = visible,
+			playerUiVisible = playerUiVisible,
+			onClick = { onSkipClick?.invoke() },
+		)
 	}
 }

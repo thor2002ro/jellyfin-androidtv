@@ -110,6 +110,11 @@ class ReportingHelper(
 		when (item.type) {
 			BaseItemKind.MOVIE -> dataRefreshService.lastMoviePlayback = Instant.now()
 			BaseItemKind.EPISODE -> dataRefreshService.lastTvPlayback = Instant.now()
+			BaseItemKind.TV_CHANNEL,
+			BaseItemKind.LIVE_TV_CHANNEL,
+			BaseItemKind.PROGRAM,
+			BaseItemKind.TV_PROGRAM,
+			BaseItemKind.LIVE_TV_PROGRAM -> dataRefreshService.lastTvPlayback = Instant.now()
 			else -> Unit
 		}
 	}
