@@ -305,7 +305,6 @@
     <string name="user_picker_disable_title">Wyłączone</string>
     <string name="auto_sign_in">Automatyczne logowanie</string>
     <string name="lbl_switch_user">Zmień konto</string>
-    <string name="no_network_permissions">Jellyfin wymaga uprawnień sieciowych do działania</string>
     <string name="pref_theme_muted_purple">Wyciszony fiolet</string>
     <string name="lbl_record_all">Nagra wszystkie odcinki</string>
     <string name="lbl_start_end_on_schedule">Początek i koniec zgodnie z planem</string>

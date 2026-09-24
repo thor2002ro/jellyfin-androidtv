@@ -342,7 +342,6 @@
     <string name="pref_developer_link">Налады распрацоўшчыка</string>
     <string name="image_size_xlarge">Вельмі вялікі</string>
     <string name="discovered_servers_empty">У лакальнай сетцы не знойдзена ніводнага сервера.</string>
-    <string name="no_network_permissions">Jellyfin патрабуе сеткавых дазволаў для працы</string>
     <string name="searchable_settings_description">Мультымедыя</string>
     <string name="server_unsupported_notification">Гэты сервер выкарыстоўвае версію Jellyfin %1$s, якая не падтрымліваецца. Калі ласка, абнавіце Jellyfin да %2$s або больш позняй версіі, каб працягваць выкарыстоўваць праграму.</string>
     <string name="pref_crash_reports">Адпраўляць справаздачы аб збоях на сервер</string>

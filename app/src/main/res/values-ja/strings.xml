@@ -247,7 +247,6 @@
     <string name="welcome_title">Jellyfinへようこそ!</string>
     <string name="saved_servers">保存されたサーバー</string>
     <string name="press_to_close">押して閉じる</string>
-    <string name="no_network_permissions">Jellyfinが機能するためにはネットワーク権限が必要です</string>
     <string name="lbl_switch_user">ユーザー切り替え</string>
     <string name="user_picker_last_user_summary">最後にアクティブだったユーザーを使用する</string>
     <string name="user_picker_last_user_title">最近使用したもの</string>
