@@ -695,6 +695,11 @@
     <string name="library_filter_apply">Apply filters</string>
     <string name="library_filter_done">Done</string>
     <string name="library_filter_active_count">%1$d active filters</string>
+    <string name="library_card_spacing">Card spacing</string>
+    <string name="library_card_spacing_compact">Compact</string>
+    <string name="library_card_spacing_normal">Normal</string>
+    <string name="library_card_spacing_relaxed">Relaxed</string>
+    <string name="library_show_card_titles">Show card titles</string>
     <string name="backdrop_behavior_with_blur">Backdrop with blur</string>
     <string name="backdrop_behavior_without_blur">Backdrop without blur</string>
     <string name="user_avc_level">H.264 (AVC) level</string>

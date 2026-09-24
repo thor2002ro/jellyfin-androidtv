@@ -1,6 +1,8 @@
 package org.jellyfin.androidtv.ui.browsing;
 
 import static org.koin.java.KoinJavaComponent.inject;
+import static org.jellyfin.androidtv.ui.presentation.CardPresenterKt.resolveBrowseGridSpacing;
+import static org.jellyfin.androidtv.ui.presentation.CardPresenterKt.shouldShowBrowseCardInfo;
 
 import android.os.Bundle;
 import android.os.Handler;
@@ -36,6 +38,7 @@ import org.jellyfin.androidtv.constant.CustomMessage;
 import org.jellyfin.androidtv.constant.Extras;
 import org.jellyfin.androidtv.constant.GridDirection;
 import org.jellyfin.androidtv.constant.ImageType;
+import org.jellyfin.androidtv.constant.LibraryCardSpacing;
 import org.jellyfin.androidtv.constant.PosterSize;
 import org.jellyfin.androidtv.constant.QueryType;
 import org.jellyfin.androidtv.data.model.FilterOptions;
@@ -99,6 +102,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private PosterSize mPosterSizeSetting = PosterSize.MED;
     private ImageType mImageType = ImageType.POSTER;
     private GridDirection mGridDirection = GridDirection.HORIZONTAL;
+    private LibraryCardSpacing mCardSpacing = LibraryCardSpacing.NORMAL;
+    private boolean mShowCardTitles = false;
     private boolean determiningPosterSize = false;
 
     private UUID mParentId;
@@ -206,6 +211,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mPosterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
         mImageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
         mGridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
+        mCardSpacing = libraryPreferences.get(LibraryPreferences.Companion.getCardSpacing());
+        mShowCardTitles = libraryPreferences.get(LibraryPreferences.Companion.getShowCardTitles());
 
         setGridPresenter(createGridPresenter(mGridDirection));
 
@@ -358,6 +365,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                     presenter.getNumberOfRows(),
                     mGridItemSpacingHorizontal,
                     mGridItemSpacingVertical,
+                    shouldShowBrowseCardInfo(mShowCardTitles),
                     pixelsToDp(titleMargin.getMarginStart(), density),
                     pixelsToDp(clockMargin.getMarginEnd(), density),
                     mGridPaddingTop,
@@ -374,6 +382,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                     mVerticalColumnCount,
                     mGridItemSpacingHorizontal,
                     mGridItemSpacingVertical,
+                    shouldShowBrowseCardInfo(mShowCardTitles),
                     mGridPaddingLeft
             );
         }
@@ -825,8 +834,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mDirty = true;
         }
         mCardHeight = cardHeightInt;
-        mGridItemSpacingHorizontal = spacingHorizontalInt;
-        mGridItemSpacingVertical = spacingVerticalInt;
+        mGridItemSpacingHorizontal = resolveBrowseGridSpacing(spacingHorizontalInt, mCardSpacing);
+        mGridItemSpacingVertical = resolveBrowseGridSpacing(spacingVerticalInt, mCardSpacing);
         mGridPaddingLeft = paddingLeftInt;
         mGridPaddingTop = paddingTopInt;
     }
@@ -862,13 +871,18 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         PosterSize posterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
         ImageType imageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
         GridDirection gridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
+        LibraryCardSpacing cardSpacing = libraryPreferences.get(LibraryPreferences.Companion.getCardSpacing());
+        boolean showCardTitles = libraryPreferences.get(LibraryPreferences.Companion.getShowCardTitles());
 
-        if (mImageType != imageType || mPosterSizeSetting != posterSizeSetting || mGridDirection != gridDirection || mDirty) {
+        if (mImageType != imageType || mPosterSizeSetting != posterSizeSetting || mGridDirection != gridDirection ||
+                mCardSpacing != cardSpacing || mShowCardTitles != showCardTitles || mDirty) {
             determiningPosterSize = true;
 
             mImageType = imageType;
             mPosterSizeSetting = posterSizeSetting;
             mGridDirection = gridDirection;
+            mCardSpacing = cardSpacing;
+            mShowCardTitles = showCardTitles;
 
             if (mGridDirection.equals(GridDirection.VERTICAL) && (mGridPresenter == null || !(mGridPresenter instanceof ComposeVerticalGridPresenter))) {
                 setGridPresenter(new ComposeVerticalGridPresenter());

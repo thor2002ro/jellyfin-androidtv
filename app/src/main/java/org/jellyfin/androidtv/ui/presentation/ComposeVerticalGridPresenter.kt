@@ -73,6 +73,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 		val columns: Int = 1,
 		val horizontalSpacing: Int = 0,
 		val verticalSpacing: Int = 0,
+		val showCardTitles: Boolean = false,
 		val paddingLeft: Int = 0,
 	)
 
@@ -145,6 +146,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 		columns: Int,
 		horizontalSpacing: Int,
 		verticalSpacing: Int,
+		showCardTitles: Boolean,
 		paddingLeft: Int,
 	) {
 		config.value = GridConfig(
@@ -153,6 +155,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 			columns = columns.coerceAtLeast(1),
 			horizontalSpacing = horizontalSpacing,
 			verticalSpacing = verticalSpacing,
+			showCardTitles = showCardTitles,
 			paddingLeft = paddingLeft,
 		)
 	}
@@ -310,6 +313,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 							item = rowItem,
 							focused = focused,
 							showInfo = false,
+							showBrowserTitle = configValue.showCardTitles,
 							imageType = configValue.imageType,
 							staticHeight = configValue.cardHeight,
 							uniformAspect = true,

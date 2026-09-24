@@ -9,6 +9,11 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class CardPresenterTests : FunSpec({
+	test("card title preference controls browser card metadata") {
+		shouldShowBrowseCardInfo(showCardTitles = false) shouldBe false
+		shouldShowBrowseCardInfo(showCardTitles = true) shouldBe true
+	}
+
 	test("static-height poster folders preserve wide artwork") {
 		val rowItem = BaseItemDtoBaseRowItem(
 			BaseItemDto(
