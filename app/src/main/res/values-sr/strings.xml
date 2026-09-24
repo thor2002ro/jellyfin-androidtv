@@ -125,7 +125,6 @@
     <string name="lbl_song_title">Назив песме</string>
     <string name="lbl_album_name">Назив албума</string>
     <string name="lbl_next_episode">Следећа епизода</string>
-    <string name="lbl_previous_episode">Претходна епизода</string>
     <string name="lbl_more_like_this">Још оваквог садржаја</string>
     <string name="lbl_resume_preroll">Настави пред пуштање</string>
     <string name="lbl_resume_from">Настави од %1$s</string>

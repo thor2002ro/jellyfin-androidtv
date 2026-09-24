@@ -184,7 +184,7 @@
             android:divider="@drawable/blank10x10"
             android:orientation="horizontal"
             android:showDividers="none"
-            app:layout_constraintEnd_toEndOf="@id/guide_main_end"
+            app:layout_constraintEnd_toEndOf="@id/guide_right_end"
             app:layout_constraintStart_toStartOf="@id/guide_main_start"
             app:layout_constraintTop_toBottomOf="@id/fdSummaryText" />
 

@@ -173,7 +173,6 @@
     <string name="lbl_song_title">Τίτλος τραγουδιού</string>
     <string name="lbl_album_name">Όνομα φακέλου</string>
     <string name="lbl_next_episode">Επόμενο Επεισόδιο</string>
-    <string name="lbl_previous_episode">Προηγούμενο επισόδιο</string>
     <string name="lbl_more_like_this">Περισσότερα σαν αυτό</string>
     <string name="lbl_resume_from">Συνέχιση από%1$s</string>
     <string name="lbl_guide_option_number">Αριθμός καναλιού</string>

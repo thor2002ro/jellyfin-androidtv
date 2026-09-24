@@ -132,7 +132,6 @@
     <string name="lbl_song_title">Názov skladby</string>
     <string name="lbl_album_name">Názov albumu</string>
     <string name="lbl_next_episode">Nasledujúca epizóda</string>
-    <string name="lbl_previous_episode">Predchádzajúca epizóda</string>
     <string name="lbl_more_like_this">Navrhované</string>
     <string name="lbl_resume_from">Pokračovať od %1$s</string>
     <string name="lbl_guide_option_number">Číslo kanálu</string>

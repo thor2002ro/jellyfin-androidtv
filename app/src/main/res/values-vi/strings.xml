@@ -144,7 +144,6 @@
     <string name="lbl_song_title">Tựa bài hát</string>
     <string name="lbl_album_name">Tên Album</string>
     <string name="lbl_next_episode">Tập kế tiếp</string>
-    <string name="lbl_previous_episode">Tập trước</string>
     <string name="lbl_more_like_this">Thêm nữa giống vậy</string>
     <string name="lbl_resume_from">Tiếp tục từ %1$s</string>
     <string name="lbl_guide_option_number">Số kênh</string>

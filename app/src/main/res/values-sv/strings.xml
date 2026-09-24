@@ -27,7 +27,6 @@
     <string name="lbl_song_title">Låttitel</string>
     <string name="lbl_album_name">Albumnamn</string>
     <string name="lbl_next_episode">Nästa avsnitt</string>
-    <string name="lbl_previous_episode">Föregående avsnitt</string>
     <string name="lbl_more_like_this">Mer som detta</string>
     <string name="lbl_resume_from">Återuppta från %1$s</string>
     <string name="lbl_resume_preroll">Fortsätt reklamvideo</string>
