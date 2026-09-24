@@ -127,7 +127,6 @@
     <string name="pref_live_tv_cat">TV Diretta</string>
     <string name="lbl_recorded_tv">Registrazione TV</string>
     <string name="lbl_live_tv_guide">Guida TV Diretta</string>
-    <string name="lbl_no_recordings">Nessuna registrazione disponibile</string>
     <string name="msg_burn_sub_warning">Scrittura dei sottotitoli in corso. Potrebbero volerci alcuni secondi…</string>
     <string name="msg_unable_load_subs">Impossibile caricare i sottotitoli</string>
     <string name="msg_subtitles_loading">Caricamento sottotitoli…</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">Mostra lo sfondo nero dietro i sottotitoli</string>
     <string name="pref_subtitles_background_title">Abilita lo sfondo</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">Fallito handshake SSL</string>
     <string name="server_issue_timeout">La connessione è andata in timeout</string>
     <string name="server_issue_outdated_version">Il server usa la versione %1$s non più supportata. Aggiorna all %2$s o superiore</string>
     <string name="server_issue_unsupported_version">Il server usa la versione %1$s che non è supportata</string>
