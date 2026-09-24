@@ -38,7 +38,6 @@
     <string name="no_program_data">Nav pieejami programmas dati</string>
     <string name="msg_record_entire_series">Ierakstīt visas sērijas\?</string>
     <string name="lbl_just_this_once">Tikai šoreiz</string>
-    <string name="lbl_select_date">Izvēlies datumu</string>
     <string name="lbl_show_premieres">Rādīt sezonas pirmizrādes</string>
     <string name="lbl_open">Atvēŗt</string>
     <string name="lbl_clear_queue">Notīrīt rindu</string>
@@ -72,7 +71,6 @@
     <string name="lbl_live_tv_guide">Tiešsaistes TV Ceļvedis</string>
     <string name="msg_unable_load_subs">Neizdevās ielādēt subtitrus</string>
     <string name="msg_subtitles_loading">Subtitri lādējas…</string>
-    <string name="lbl_filters">Tiešraides TV filtri</string>
     <string name="lbl_display_preferences">Displeja iestatījumi</string>
     <string name="lbl_starting_with">sākot ar tiem, kuru nosaukums sākas ar</string>
     <string name="lbl_rating">Reitings</string>
@@ -247,7 +245,6 @@
     <string name="pref_customization">Pielāgošana</string>
     <string name="pref_telemetry_category">Avāriju ziņošana</string>
     <string name="pref_crash_report_logs">Iekļaut pierakstus</string>
-    <string name="msg_live_tv_prev">Ielādēt iepriekšējās %1$d stundas?</string>
     <string name="lbl_user_last_used">Pēdējo reizi lietots %1$s %2$s</string>
     <string name="login_help_title">Nepieciešama palīdzība?</string>
     <string name="last_use">Pēdējais lietots</string>
@@ -273,7 +270,6 @@
     <string name="image_size_large">Liels</string>
     <string name="pref_watched_indicator">Rādīt \"skatīts\" indikatorus</string>
     <string name="login_other_options">Citas iespējas:</string>
-    <string name="lbl_tv_filter_status">uz nākamajām %1$d stundām</string>
     <string name="lbl_stretch">Izstiept</string>
     <string name="pref_clock_display">Rādīt pulksteni</string>
     <string name="image_type_poster">Plakāti</string>
@@ -282,7 +278,6 @@
     <string name="pref_audio">Audio</string>
     <string name="lbl_remove">Noņemt</string>
     <string name="lbl_hide_unwatched_count">Kad vienums tiek skatīts</string>
-    <string name="lbl_tv_channel_status">%1$d no %2$d kanāliem</string>
     <string name="lbl_server">Serveris</string>
     <string name="no_player">Nav atskaņotāja</string>
     <string name="episode_missing">Trūkstoša epizode</string>
@@ -300,7 +295,6 @@
     <string name="login_quickconnect_step_1">1. Atveriet Jellyfin lietotni tālrunī vai tīmekļa pārlūkprogrammā un pierakstieties savā kontā</string>
     <string name="login_quickconnect_step_2">2. Atveriet lietotāja izvēlni un atveriet lapu Quick Connect</string>
     <string name="lbl_auto_crop">Automātiski apgriezts</string>
-    <string name="lbl_load_guide_data">Ielādēt ceļveža datus</string>
     <string name="turn_off">Izslēgt šo opciju</string>
     <string name="pref_clock_display_playback">Atskaņošanas laikā</string>
     <string name="lbl_home">Sākums</string>
@@ -318,7 +312,6 @@
     <string name="press_to_close">Nospiediet, lai aizvērtu</string>
     <string name="mark_watched">Atzīmēt skatītos</string>
     <string name="pref_next_up_behavior_title">Rādīt informāciju par nākamo video</string>
-    <string name="msg_live_tv_next">Ielādēt nākamas %1$d stundas?</string>
     <string name="no_player_message">Šķiet, ka jums nav ieinstalēta video atbalstoša lietotne. Lai atskaņotu video saturu, jums ir jāuzinstalē trešās puses lietojumprogramma.</string>
     <string name="too_many_errors">Pārāk daudz kļūdu. Mēģinajums pabeigts</string>
     <string name="msg_no_items">Nav vienumu, ko atskaņot</string>

@@ -1027,15 +1027,15 @@ private fun buildThumbnailCacheRows(
 ) = listOf(
 	PlaybackInfoRowModel(
 		label = "Trickplay",
-		value = TrickplayTileSheetMemoryCache.stats(trickplayUrls).formatCacheStats(trickplayUrls.size),
+		value = PlayerThumbnailMemoryCache.stats(trickplayUrls).formatCacheStats(trickplayUrls.size),
 	),
 	PlaybackInfoRowModel(
 		label = "Chapters",
-		value = ChapterThumbnailMemoryCache.stats(chapterUrls).formatCacheStats(chapterUrls.size),
+		value = PlayerThumbnailMemoryCache.stats(chapterUrls).formatCacheStats(chapterUrls.size),
 	),
 )
 
-private fun TrickplayTileSheetMemoryStats.formatCacheStats(total: Int) =
+private fun PlayerThumbnailMemoryStats.formatCacheStats(total: Int) =
 	"$count/$total ${bytes.formatCacheBytes()}"
 
 private fun Long.formatCacheBytes() = "%.1f MiB".format(this / 1024.0 / 1024.0)

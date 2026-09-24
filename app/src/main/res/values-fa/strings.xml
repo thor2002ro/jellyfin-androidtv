@@ -141,7 +141,6 @@
     <string name="msg_burn_sub_warning">چسباندن زیرنویس میتوانید تا چند دقیقه به طول بیانجامد. لطفاً صبور باشید…</string>
     <string name="msg_unable_load_subs">نمایش زیرنویس امکان پذیر نیست</string>
     <string name="msg_subtitles_loading">درحال بارگذاری زیرنویس ها…</string>
-    <string name="lbl_filters">فیلتر های پخش زنده</string>
     <string name="lbl_ended">پایان</string>
     <string name="lbl__continuing">ادامه دارد</string>
     <string name="lbl_display_preferences">تنظیمات صفحه نمایش</string>
@@ -190,7 +189,6 @@
     <string name="no_program_data">هیچ داده ای برای برنامه در درسترس نیست</string>
     <string name="msg_record_entire_series">ضبط تمام سریال؟</string>
     <string name="lbl_just_this_once">فقط این بار</string>
-    <string name="lbl_select_date">انتخاب تاریخ</string>
     <string name="lbl_in_x_days">در %d روز</string>
     <string name="desc_premieres">نمایش یک ردیف از قسمت های آزمایشی برای تمام سریال هایی که تماشا میکنید</string>
     <string name="lbl_show_premieres">نمایش اولین نمایش فصل</string>
@@ -380,12 +378,7 @@
     <string name="lbl_new_episodes">قسمت های جدید</string>
     <string name="lbl_new_only">فقط جدید</string>
     <string name="lbl_news">اخبار</string>
-    <string name="lbl_tv_filter_status">برای %1$d ساعت آینده</string>
-    <string name="lbl_tv_channel_status">%1$d از %2$d کانال</string>
     <string name="seek_error">امکان جستجو وجود ندارد</string>
-    <string name="msg_live_tv_prev">بارگیری %1$d ساعت قبلی؟</string>
-    <string name="msg_live_tv_next">بارگیری %1$d ساعت بعدی؟</string>
-    <string name="lbl_load_guide_data">بارگیری داده های راهنما</string>
     <string name="episode_missing_message_2">این قسمت در کتابخانه شما موجود نیست. پخش متوقف خواهد شد.</string>
     <string name="episode_missing_message">این قسمت در کتابخانه شما موجود نیست. آیا می خواهید آن را رد کنید و به مورد بعدی ادامه دهید؟</string>
     <string name="episode_missing">قسمت گم شده</string>

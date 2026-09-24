@@ -120,7 +120,6 @@
     <string name="lbl_display_preferences">Preferências de exibição</string>
     <string name="lbl__continuing">CONTINUANDO</string>
     <string name="lbl_ended">FINALIZADO</string>
-    <string name="lbl_filters">Filtros de TV Ao Vivo</string>
     <string name="msg_subtitles_loading">Carregando legendas…</string>
     <string name="msg_unable_load_subs">Não foi possível carregar a legenda</string>
     <string name="msg_burn_sub_warning">Incorporando legendas. Isso pode levar alguns segundos…</string>
@@ -190,7 +189,6 @@
     <string name="lbl_sports">Esportes</string>
     <string name="no_program_data">Não há dados disponíveis do programa</string>
     <string name="msg_record_entire_series">Gravar séries inteiras\?</string>
-    <string name="lbl_select_date">Selecionar data</string>
     <string name="lbl_in_x_days">Em %d dias</string>
     <string name="lbl_now_playing_album">de %1$s</string>
     <string name="lbl_now_playing_track">%1$s de %2$s</string>
@@ -237,8 +235,6 @@
     <string name="no_player">Nenhum reprodutor de vídeo</string>
     <string name="mark_watched_message">O item não parece ter sido reproduzido totalmente. Marcar como assitido\?</string>
     <string name="mark_watched">Marcar como assistido</string>
-    <string name="lbl_tv_filter_status">pelas próximas %1$d horas</string>
-    <string name="lbl_tv_channel_status">%1$d de %2$d canais</string>
     <string name="just_one">Apenas essa</string>
     <string name="turn_off">Desabilite essa opção</string>
     <string name="audio_error">Não foi possível reproduzir áudio %1$s</string>
@@ -247,9 +243,6 @@
     <string name="too_many_errors">Erros excessivos. Desistindo</string>
     <string name="player_error">Erro no reprodutor encontrado. Tentando novamente…</string>
     <string name="seek_error">Incapaz de buscar</string>
-    <string name="msg_live_tv_prev">Carregar as %1$d horas anteriores?</string>
-    <string name="msg_live_tv_next">Carregar as próximas %1$d horas?</string>
-    <string name="lbl_load_guide_data">Carregar programação dos canais</string>
     <string name="episode_missing_message_2">Esse episódio não está disponível na sua biblioteca. A reprodução será interrompida.</string>
     <string name="episode_missing_message">Esse episódio não está disponível na sua biblioteca. Gostaria de pular esse e continuar para o próximo\?</string>
     <string name="episode_missing">Episódio não disponível</string>

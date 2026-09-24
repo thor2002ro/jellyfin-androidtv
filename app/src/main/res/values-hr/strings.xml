@@ -79,7 +79,6 @@
     <string name="msg_burn_sub_warning">Podnapisi spojeni sa videom mogu uzeti nekoliko minuta. Budite strpljivi…</string>
     <string name="msg_unable_load_subs">Nije moguće učitati podnapis</string>
     <string name="msg_subtitles_loading">Podnapisi se učitavaju…</string>
-    <string name="lbl_filters">Live TV Filteri</string>
     <string name="lbl_ended">ZAVRŠENO</string>
     <string name="lbl__continuing">NASTAVLJA SE</string>
     <string name="lbl_display_preferences">Prikaži postavke</string>
@@ -154,9 +153,6 @@
     <string name="too_many_errors">Previše grešaka. Odustajem</string>
     <string name="player_error">Greška u izvođaču. Pokušat ću ponovno…</string>
     <string name="seek_error">Nije moguće pretraživati</string>
-    <string name="msg_live_tv_prev">Učitaj prethodnih %1$d sati?</string>
-    <string name="msg_live_tv_next">Učitaj sljedećih %1$d sati?</string>
-    <string name="lbl_load_guide_data">Učitaj podatke TV rasporeda</string>
     <string name="episode_missing_message_2">Ova epizoda nedostaje u vašoj biblioteci. Reprodukcija će stati.</string>
     <string name="episode_missing_message">Ova epizoda nedostaje u vašoj biblioteci. Želite li ju preskočiti i nastaviti s idućom\?</string>
     <string name="episode_missing">Epizoda nedostaje</string>
@@ -192,8 +188,6 @@
     <string name="lbl_new_episodes">Nove epizode</string>
     <string name="lbl_new_only">Samo novo</string>
     <string name="lbl_news">Vijesti</string>
-    <string name="lbl_tv_filter_status">za idućih %1$d sati</string>
-    <string name="lbl_tv_channel_status">%1$d od %2$d kanala</string>
     <string name="lbl_song_title">Naslov pjesme</string>
     <string name="lbl_album_name">Naslov albuma</string>
     <string name="lbl_next_episode">Sljedeća epizoda</string>
@@ -222,7 +216,6 @@
     <string name="no_program_data">Nema podataka o programu</string>
     <string name="msg_record_entire_series">Snimi cijelu seriju\?</string>
     <string name="lbl_just_this_once">Samo ovaj put</string>
-    <string name="lbl_select_date">Odaberi datum</string>
     <string name="lbl_in_x_days">Za %d dana</string>
     <string name="desc_premieres">Prikaži red novih pilot epizoda serija koje gledate</string>
     <string name="lbl_show_premieres">Prikaži premijere sezone</string>

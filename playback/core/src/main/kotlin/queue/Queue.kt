@@ -86,12 +86,25 @@ interface Queue {
 	suspend fun peekPrevious(): QueueEntry?
 
 	/**
+	 * Get the previously playing entry only when it is already loaded.
+	 */
+	fun peekPreviousCached(): QueueEntry?
+
+	/**
 	 * Get the next entry or null if none.
 	 *
 	 * @param usePlaybackOrder Whether to use the playback order from the [PlayerState]. Default to true.
 	 * @param useRepeatMode Whether to use the repeat mode from the [PlayerState]. Default to false.
 	 */
 	suspend fun peekNext(
+		usePlaybackOrder: Boolean = true,
+		useRepeatMode: Boolean = false,
+	): QueueEntry?
+
+	/**
+	 * Get the next entry only when it is already loaded.
+	 */
+	fun peekNextCached(
 		usePlaybackOrder: Boolean = true,
 		useRepeatMode: Boolean = false,
 	): QueueEntry?
@@ -108,4 +121,21 @@ interface Queue {
 		usePlaybackOrder: Boolean = true,
 		useRepeatMode: Boolean = false,
 	): Collection<QueueEntry>
+
+	/**
+	 * Get the next n already-loaded entries in the queue.
+	 */
+	fun peekNextCached(
+		amount: Int,
+		usePlaybackOrder: Boolean = true,
+		useRepeatMode: Boolean = false,
+	): Collection<QueueEntry>
+
+	/**
+	 * Check whether a next entry exists without loading it.
+	 */
+	fun hasNext(
+		usePlaybackOrder: Boolean = true,
+		useRepeatMode: Boolean = false,
+	): Boolean
 }
