@@ -6,7 +6,6 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.ChangeTriggerType
 import org.jellyfin.androidtv.data.repository.ItemRepository
-import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -21,7 +20,6 @@ import java.time.LocalDateTime
 class HomeFragmentHelper(
 	private val context: Context,
 	private val userRepository: UserRepository,
-	private val userPreferences: UserPreferences,
 ) {
 	fun loadRecentlyAdded(userViews: Collection<BaseItemDto>): HomeFragmentRow {
 		return HomeFragmentLatestRow(userRepository, userViews)
@@ -59,15 +57,11 @@ class HomeFragmentHelper(
 	}
 
 	fun loadNextUp(): HomeFragmentRow {
-		val maxDays = userPreferences[UserPreferences.homeNextUpMaxDays]
-		val nextUpDateCutoff = maxDays.takeIf { it > 0 }?.let { LocalDateTime.now().minusDays(it.toLong()) }
-
 		val query = GetNextUpRequest(
 			imageTypeLimit = 1,
 			limit = ITEM_LIMIT_NEXT_UP,
 			enableResumable = false,
 			fields = ItemRepository.streamBadgeFields,
-			nextUpDateCutoff = nextUpDateCutoff,
 		)
 
 		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_next_up), query, arrayOf(ChangeTriggerType.TvPlayback)))
@@ -96,3 +90,8 @@ class HomeFragmentHelper(
 		private const val ITEM_LIMIT_ON_NOW = 20
 	}
 }
+
+internal fun GetNextUpRequest.withHomeNextUpCutoff(
+	maxDays: Int,
+	now: LocalDateTime = LocalDateTime.now(),
+) = copy(nextUpDateCutoff = maxDays.takeIf { it > 0 }?.let { now.minusDays(it.toLong()) })
