@@ -40,6 +40,7 @@ dependencies {
 	implementation(libs.androidx.media3.decoder.ffmpeg)
 	implementation(libs.androidx.media3.ui)
 	implementation(libs.libass.media3)
+	implementation(libs.libass.provider)
 
 	// Logging
 	implementation(libs.timber)
