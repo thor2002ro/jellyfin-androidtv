@@ -48,7 +48,7 @@ class HomeFragmentBrowseRowDefRow(
 
 		rowAdapter.setReRetrieveTriggers(browseRowDef.changeTriggers)
 		val row = ListRow(header, rowAdapter)
-		rowAdapter.setRow(row)
+		rowAdapter.setRow(row, rowsAdapter.size().toDouble())
 		rowAdapter.Retrieve()
 		rowsAdapter.add(row)
 	}
