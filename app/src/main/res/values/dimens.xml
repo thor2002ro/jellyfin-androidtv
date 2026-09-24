@@ -1,6 +1,7 @@
 <resources>
     <dimen name="overscan_horizontal">27dp</dimen>
     <dimen name="overscan_vertical">48dp</dimen>
+    <dimen name="subtitle_offset_panel_top_margin">32dp</dimen>
 
     <dimen name="player_popup_menu_offset_y">4dp</dimen>
     <dimen name="player_popup_menu_padding_horizontal">4dp</dimen>
