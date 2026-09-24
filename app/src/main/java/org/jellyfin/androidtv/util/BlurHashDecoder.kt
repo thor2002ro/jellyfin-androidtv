@@ -11,18 +11,25 @@ import kotlin.math.withSign
 object BlurHashDecoder {
 	private const val CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~"
 
+	fun isValid(blurHash: String?): Boolean {
+		if (blurHash == null || blurHash.length < 6 || blurHash.any { it !in CHARS }) return false
+
+		val numCompEnc = decode83(blurHash, 0, 1)
+		val totalComp = ((numCompEnc % 9) + 1) * ((numCompEnc / 9) + 1)
+		return blurHash.length == 4 + 2 * totalComp
+	}
+
 	/**
 	 * Decode a blur hash into a new bitmap.
 	 */
 	fun decode(blurHash: String?, width: Int, height: Int, punch: Float = 1f): Bitmap? {
-		if (blurHash == null || blurHash.length < 6 || width <= 0 || height <= 0) return null
+		if (!isValid(blurHash) || width <= 0 || height <= 0) return null
+		requireNotNull(blurHash)
 
 		val numCompEnc = decode83(blurHash, 0, 1)
 		val numCompX = (numCompEnc % 9) + 1
 		val numCompY = (numCompEnc / 9) + 1
 		val totalComp = numCompX * numCompY
-		if (blurHash.length != 4 + 2 * totalComp) return null
-
 		val maxAcEnc = decode83(blurHash, 1, 2)
 		val maxAc = (maxAcEnc + 1) / 166f
 		val colors = FloatArray(totalComp * 3)

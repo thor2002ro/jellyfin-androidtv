@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.integration.dream.composable
 
 import android.widget.ImageView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -24,27 +23,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.integration.dream.model.DreamContent
 import org.jellyfin.androidtv.ui.base.SeekbarDefaults
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.AsyncImage
+import org.jellyfin.androidtv.ui.composable.BlurHashImage
 import org.jellyfin.androidtv.ui.composable.LyricsDtoBox
-import org.jellyfin.androidtv.ui.composable.blurHashPainter
 import org.jellyfin.androidtv.ui.composable.modifier.fadingEdges
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.player.base.PlayerSeekbar
 import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
-import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
 import org.jellyfin.androidtv.util.sdk.getHighHeaderTitle
@@ -53,7 +49,6 @@ import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.jellyfin.lyrics.lyrics
 import org.jellyfin.playback.jellyfin.lyrics.lyricsFlow
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ImageType
 import org.koin.compose.koinInject
@@ -65,7 +60,6 @@ fun DreamContentNowPlaying(
 ) = Box(
 	modifier = Modifier.fillMaxSize(),
 ) {
-	val api = koinInject<ApiClient>()
 	val playbackManager = koinInject<PlaybackManager>()
 	val context = LocalContext.current
 	val lyrics = content.entry.run { lyricsFlow.collectAsState(lyrics) }.value
@@ -77,15 +71,11 @@ fun DreamContentNowPlaying(
 		?: content.item.parentImages[ImageType.PRIMARY]
 
 	// Background
-	if (primaryImage?.blurHash != null) {
-		Image(
-			painter = blurHashPainter(primaryImage.blurHash, IntSize(32, 32)),
-			contentDescription = null,
-			alignment = Alignment.Center,
-			contentScale = ContentScale.Crop,
-			modifier = Modifier.fillMaxSize(),
-		)
-
+	BlurHashImage(
+		blurHash = primaryImage?.blurHash,
+		aspectRatio = primaryImage?.aspectRatio ?: 1f,
+		scaleType = ImageView.ScaleType.CENTER_CROP,
+	) {
 		DreamContentVignette()
 	}
 
@@ -118,8 +108,7 @@ fun DreamContentNowPlaying(
 	) {
 		if (primaryImage != null) {
 			AsyncImage(
-				url = primaryImage.getUrl(api),
-				blurHash = primaryImage.blurHash,
+				image = primaryImage,
 				scaleType = ImageView.ScaleType.CENTER_CROP,
 				modifier = Modifier
 					.size(128.dp)
@@ -170,7 +159,6 @@ fun BoxScope.DreamPausedNowPlayingBadge(
 ) {
 	if (content == null) return
 
-	val api = koinInject<ApiClient>()
 	val playbackManager = koinInject<PlaybackManager>()
 	val context = LocalContext.current
 	val positionInfo by rememberPlayerPositionInfo(playbackManager)
@@ -194,8 +182,7 @@ fun BoxScope.DreamPausedNowPlayingBadge(
 	) {
 		if (image != null) {
 			AsyncImage(
-				url = image.getUrl(api),
-				blurHash = image.blurHash,
+				image = image,
 				scaleType = ImageView.ScaleType.CENTER_CROP,
 				modifier = Modifier
 					.size(88.dp)
