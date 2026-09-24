@@ -3,6 +3,7 @@ package org.jellyfin.playback.jellyfin.mediastream
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStreamResolver
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.backend.createPlaybackErrorOrigin
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.dovi.DoviDecision
@@ -265,6 +266,7 @@ class JellyfinMediaStreamResolver(
 		externalSubtitles = getExternalSubtitles(api),
 		selectedAudioStreamIndex = mediaStreamOptions.audioStreamIndex ?: mediaSource.defaultAudioStreamIndex,
 		selectedSubtitleStreamIndex = mediaStreamOptions.subtitleStreamIndex ?: mediaSource.defaultSubtitleStreamIndex,
+		errorOrigin = queueEntry.createPlaybackErrorOrigin(requireNotNull(mediaSource.id)),
 	)
 
 }
