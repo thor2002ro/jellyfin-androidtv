@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -91,6 +92,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 	private var selectedListener: OnItemViewSelectedListener? = null
 	private var clickedListener: OnItemViewClickedListener? = null
 	private var directionalKeyListener: Runnable? = null
+	private var keyListener: View.OnKeyListener? = null
 	private val directionalKeyGuard = BrowseGridDirectionalKeyGuard()
 
 	private val adapterObserver = object : ObjectAdapter.DataObserver() {
@@ -178,6 +180,10 @@ class ComposeVerticalGridPresenter : Presenter() {
 
 	fun setOnDirectionalKeyListener(listener: Runnable?) {
 		directionalKeyListener = listener
+	}
+
+	fun setOnKeyListener(listener: View.OnKeyListener?) {
+		keyListener = listener
 	}
 
 	private fun scheduleAdapterSync() {
@@ -332,6 +338,13 @@ class ComposeVerticalGridPresenter : Presenter() {
 										return@onPreviewKeyEvent true
 									}
 									val target = findBrowseGridFocusTarget(packedItems, entry.adapterPosition, direction)
+									val nativeEvent = event.nativeKeyEvent
+									if (
+										shouldForwardVerticalGridKey(target, direction) &&
+										keyListener?.onKey(holder.gridView, nativeEvent.keyCode, nativeEvent) == true
+									) {
+										return@onPreviewKeyEvent true
+									}
 									if (target < 0) {
 										return@onPreviewKeyEvent shouldConsumeMissingBrowseGridTarget(direction)
 									}
@@ -466,6 +479,9 @@ private fun assignBrowseGridCells(
 }
 
 internal enum class BrowseGridFocusDirection { UP, DOWN, LEFT, RIGHT }
+
+internal fun shouldForwardVerticalGridKey(target: Int, direction: BrowseGridFocusDirection): Boolean =
+	target < 0 && direction == BrowseGridFocusDirection.UP
 
 internal fun shouldConsumeMissingBrowseGridTarget(direction: BrowseGridFocusDirection): Boolean =
 	direction == BrowseGridFocusDirection.UP || direction == BrowseGridFocusDirection.DOWN

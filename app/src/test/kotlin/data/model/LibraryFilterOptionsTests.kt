@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
+import org.jellyfin.androidtv.constant.LibraryViewStyle
 import org.jellyfin.sdk.model.api.ItemFilter
 import org.jellyfin.sdk.model.api.VideoType
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
@@ -116,4 +117,7 @@ class LibraryFilterOptionsTests : FunSpec({
 		LibraryCardSpacing.COMPACT.apply(1) shouldBe 2
 	}
 
+	test("view style defaults can represent cards and dense list") {
+		LibraryViewStyle.entries.map { it.name } shouldBe listOf("CARDS", "DENSE_LIST")
+	}
 })
