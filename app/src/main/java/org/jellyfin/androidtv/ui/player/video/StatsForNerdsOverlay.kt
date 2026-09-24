@@ -369,7 +369,7 @@ private object NewPlayerStreamStatusBuilder {
 					externalSubtitle.index == selectedSubtitle?.index
 			}
 		val selectedSubtitleCodec = subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle)
-		val showAssStats = selectedSubtitle != null && selectedSubtitleCodec.isAssSubtitleCodec()
+		val showLibassStats = selectedSubtitle != null && frameStats.libass != null
 
 		return listOf(
 			PlaybackInfoSection(
@@ -426,12 +426,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Codec", selectedSubtitleCodec.formatCodec())
 					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
-					if (showAssStats) {
-						row("ASS extractor", frameStats.subtitleExtractor)
-						row("ASS render", frameStats.subtitleRender)
-						row("ASS parser", frameStats.subtitleParser)
-						row("ASS path", frameStats.subtitlePath)
-					}
+					subtitleDiagnosticValues(frameStats).forEach { (label, value) -> row(label, value) }
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
 					row(
 						"Timing",
@@ -448,7 +443,7 @@ private object NewPlayerStreamStatusBuilder {
 			PlaybackInfoSection(
 				title = "libass Metrics",
 				rows = rows {
-					if (showAssStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
+					if (showLibassStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
 				},
 			),
 			PlaybackInfoSection(
@@ -920,6 +915,13 @@ private fun PlaybackInfoStaticRow(
 			style = style,
 		)
 	}
+}
+
+internal fun subtitleDiagnosticValues(stats: PlaybackFrameStats): List<Pair<String, String>> = buildList {
+	stats.subtitleExtractor?.takeIf(String::isNotBlank)?.let { add("Provider" to it) }
+	stats.subtitleRender?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
+	stats.subtitleParser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
+	stats.subtitlePath?.takeIf(String::isNotBlank)?.let { add("Path" to it) }
 }
 
 private data class PlaybackInfoSection(
