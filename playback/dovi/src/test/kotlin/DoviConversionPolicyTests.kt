@@ -70,7 +70,6 @@ class DoviConversionPolicyTests : FunSpec({
 		container: String? = "mkv",
 		bridgeAvailable: Boolean = true,
 		builtInPlayerSelected: Boolean = true,
-		externalPlayerSelected: Boolean = false,
 		retrySuppressed: Boolean = false,
 	): DoviDecision = DoviCompatibilityPolicy.decide(
 		DoviCompatibilityPolicy.Input(
@@ -84,7 +83,6 @@ class DoviConversionPolicyTests : FunSpec({
 			nativeCapabilities = capabilities,
 			workarounds = workarounds,
 			builtInPlayerSelected = builtInPlayerSelected,
-			externalPlayerSelected = externalPlayerSelected,
 			retrySuppressed = retrySuppressed,
 		),
 	)
@@ -726,9 +724,8 @@ class DoviConversionPolicyTests : FunSpec({
 		}
 	}
 
-	test("unsupported containers external players and unselected built-in players fail closed") {
+	test("unsupported containers backends and unselected built-in players fail closed") {
 		decide(container = "avi").route shouldBe DoviRoute.ServerFallback
-		decide(externalPlayerSelected = true).route shouldBe DoviRoute.ServerFallback
 		decide(builtInPlayerSelected = false).route shouldBe DoviRoute.ServerFallback
 		decide(backend = DoviPlaybackBackend.OTHER).route shouldBe DoviRoute.ServerFallback
 	}
