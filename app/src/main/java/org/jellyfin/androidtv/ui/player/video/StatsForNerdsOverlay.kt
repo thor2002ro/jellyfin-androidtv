@@ -504,7 +504,7 @@ private object NewPlayerStreamStatusBuilder {
 	private fun MutableList<PlaybackInfoRowModel>.addLibassStats(stats: PlaybackLibassStats) {
 		row("OpenGL", stats.openGlMode)
 		row("Samples", stats.renderCount.toString())
-		row("FPS", stats.fps.formatLibassRate())
+		row("ASS eval/s", stats.fps.formatLibassRate())
 		row(
 			"Render ms",
 			"${stats.averageRenderMs.formatLibassMs()} avg, " +
@@ -522,6 +522,19 @@ private object NewPlayerStreamStatusBuilder {
 			"Atlas px",
 			"${stats.totalAtlasUploadPagePixels.formatPixelCount()} total, " +
 				"${stats.maxAtlasUploadPagePixels.formatPixelCount()} max",
+		)
+		row(
+			"Atlas updates",
+			"${stats.metadataReuseCount} metadata, " +
+				"${stats.incrementalAtlasUpdateCount} partial, " +
+				"${stats.completeAtlasReplacementCount} full",
+		)
+		row("Mask copy", "${stats.nativeCopiedMaskBytes.formatPixelCount()} B native")
+		row("GL upload", "${stats.glUploadedMaskBytes.formatPixelCount()} B, ${stats.glUploadSubmissionMs.formatLibassMs()} ms")
+		row(
+			"ASS surface",
+			"${stats.activeSurfacePixels.formatPixelCount()} active / " +
+				"${stats.allocatedSurfacePixels.formatPixelCount()} allocated px",
 		)
 		if (stats.executorTimeoutCount > 0L || stats.supersededRequestCount > 0L) {
 			row("Executor", "${stats.executorTimeoutCount} timeouts, ${stats.supersededRequestCount} superseded")
