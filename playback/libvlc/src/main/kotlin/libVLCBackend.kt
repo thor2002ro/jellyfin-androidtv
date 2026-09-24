@@ -29,6 +29,8 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoGeometry
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.support.PlaySupportReport
@@ -215,6 +217,7 @@ class LibVLCBackend(
 	private var appliedInstanceOptions = currentInstanceOptions()
 	private var libVLC = createLibVLC(appliedInstanceOptions)
 	private var player = createPlayer(libVLC, appliedInstanceOptions)
+	private val videoOutput = LibVLCVideoOutput { aspectRatio -> player.setAspectRatio(aspectRatio) }
 	private val handler = Handler(Looper.getMainLooper())
 	private val timedEvents = TimedEventTracker()
 	private var normalBufferDuration: Duration? = null
@@ -274,6 +277,10 @@ class LibVLCBackend(
 		attachViews()
 	}
 
+	override fun setVideoOutputTransform(transform: VideoOutputTransform) {
+		videoOutput.apply(transform)
+	}
+
 	private fun applySubtitleSurfaceStyle(subtitleStyle: PlayerSubtitleStyle) {
 		this.subtitleStyle = subtitleStyle
 		val view = subtitleView ?: return
@@ -327,6 +334,8 @@ class LibVLCBackend(
 	}
 
 	private fun setMedia(stream: PlayableMediaStream) {
+		videoOutput.apply(VideoOutputTransform.NONE)
+		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		ensureInstanceOptions()
 		currentStream = stream
 		endReported = false
@@ -368,6 +377,8 @@ class LibVLCBackend(
 
 	override fun stop() {
 		handler.removeCallbacks(tick)
+		videoOutput.apply(VideoOutputTransform.NONE)
+		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		player.stop()
 		currentStream = null
 		endReported = false
@@ -461,6 +472,7 @@ class LibVLCBackend(
 		appliedInstanceOptions = desiredOptions
 		libVLC = createLibVLC(desiredOptions)
 		player = createPlayer(libVLC, desiredOptions)
+		videoOutput.reapply()
 		attachViews()
 	}
 
@@ -649,7 +661,9 @@ class LibVLCBackend(
 		sarNum: Int,
 		sarDen: Int,
 	) {
-		if (width > 0 && height > 0) listener?.onVideoSizeChange(width, height)
+		listener?.onVideoGeometryChange(
+			libVLCVideoGeometry(width, height, visibleWidth, visibleHeight, sarNum, sarDen)
+		)
 	}
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {

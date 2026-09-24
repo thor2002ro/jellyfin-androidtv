@@ -343,9 +343,12 @@ public class VideoManager {
     }
 
     public void setZoom(@NonNull ZoomMode mode) {
-        mZoomMode = mode;
-        switch (mode) {
+        ZoomMode legacyMode = mode == ZoomMode.AUTO ? ZoomMode.FIT : mode;
+        mZoomMode = legacyMode;
+        switch (legacyMode) {
             case FIT:
+            case HORIZONTAL_STRETCH:
+            case VERTICAL_STRETCH:
                 mExoPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 break;
             case AUTO_CROP:
