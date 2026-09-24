@@ -2128,6 +2128,33 @@ internal fun formatExoBufferDetails(
 	}
 }.joinToString(", ").takeIf(String::isNotEmpty)
 
+@OptIn(UnstableApi::class)
+internal fun Format?.colorDetails(): Map<String, String> {
+	val color = this?.colorInfo ?: return emptyMap()
+	return buildMap {
+		when (color.colorSpace) {
+			C.COLOR_SPACE_BT601 -> "BT.601"
+			C.COLOR_SPACE_BT709 -> "BT.709"
+			C.COLOR_SPACE_BT2020 -> "BT.2020"
+			else -> null
+		}?.let { put("Color space", it) }
+		when (color.colorTransfer) {
+			C.COLOR_TRANSFER_ST2084 -> "PQ (ST 2084)"
+			C.COLOR_TRANSFER_HLG -> "HLG"
+			C.COLOR_TRANSFER_SDR -> "SDR"
+			C.COLOR_TRANSFER_SRGB -> "sRGB"
+			C.COLOR_TRANSFER_LINEAR -> "Linear"
+			C.COLOR_TRANSFER_GAMMA_2_2 -> "Gamma 2.2"
+			else -> null
+		}?.let { put("Color transfer", it) }
+		when (color.colorRange) {
+			C.COLOR_RANGE_FULL -> "Full"
+			C.COLOR_RANGE_LIMITED -> "Limited"
+			else -> null
+		}?.let { put("Color range", it) }
+	}
+}
+
 private fun Format.dolbyVisionMode(): String = codecs
 	?.split(',')
 	?.firstNotNullOfOrNull { codec ->
