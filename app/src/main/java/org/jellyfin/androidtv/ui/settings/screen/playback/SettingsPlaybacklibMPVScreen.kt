@@ -29,6 +29,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.LibMPVChoiceSetting
+import org.jellyfin.androidtv.preference.constant.LibMPVGpuApi
 import org.jellyfin.androidtv.preference.constant.LibMPVPreferenceOption
 import org.jellyfin.androidtv.preference.constant.resetLibMPVPreferences
 import org.jellyfin.androidtv.preference.mpvAudioChannels
@@ -63,9 +64,12 @@ import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.androidtv.util.DeviceGraphicsInfo
+import org.jellyfin.androidtv.util.DeviceGraphicsInfoProvider
 import org.jellyfin.playback.mpv.LibMPVOptionInfo
 import org.jellyfin.playback.mpv.LibMPVOptionValueError
 import org.jellyfin.playback.mpv.isLibMPVOptionManagedByJellyfin
+import org.jellyfin.playback.mpv.isLibMPVVulkanSupported
 import org.jellyfin.playback.mpv.normalizeLibMPVOptionValue
 import org.jellyfin.playback.mpv.parseLibMPVOptionOverrides
 import org.jellyfin.playback.mpv.serializeLibMPVOptionOverrides
@@ -324,6 +328,14 @@ fun SettingsPlaybackLibMPVChoiceScreen(setting: LibMPVChoiceSetting) {
 	val backendSettings = koinInject<LibMPVBackendSettings>()
 	val selected = setting.selected(userPreferences)
 	val default = setting.defaultOption()
+	var graphicsInfo by remember(setting) { mutableStateOf<DeviceGraphicsInfo?>(null) }
+	val vulkanSupported = graphicsInfo?.let { info -> isLibMPVVulkanSupported(info.vulkanApiVersion) } == true
+
+	LaunchedEffect(setting) {
+		if (setting == LibMPVChoiceSetting.GPU_API) {
+			graphicsInfo = DeviceGraphicsInfoProvider.get()
+		}
+	}
 
 	SettingsColumn {
 		item {
@@ -339,15 +351,45 @@ fun SettingsPlaybackLibMPVChoiceScreen(setting: LibMPVChoiceSetting) {
 			)
 		}
 
+		if (setting == LibMPVChoiceSetting.GPU_API) {
+			item {
+				val info = graphicsInfo
+				ListSection(
+					overlineContent = { Text(stringResource(R.string.preference_mpv_gpu_device)) },
+					headingContent = { Text(info?.label ?: stringResource(R.string.loading)) },
+					captionContent = info?.let {
+						{
+							Text(
+								stringResource(
+									R.string.preference_mpv_gpu_device_versions,
+									it.openGlVersion ?: stringResource(R.string.preference_mpv_gpu_version_unavailable),
+									it.vulkanVersion ?: stringResource(R.string.preference_mpv_gpu_version_unavailable),
+								)
+							)
+						}
+					},
+				)
+			}
+		}
+
 		items(setting.options()) { entry ->
+			val vulkanUnavailable = entry == LibMPVGpuApi.VULKAN &&
+				graphicsInfo != null &&
+				!vulkanSupported
 			ListButton(
+				enabled = entry != LibMPVGpuApi.VULKAN || vulkanSupported,
 				overlineContent = if (entry == default) {
 					{ Text(stringResource(R.string.preference_mpv_default_badge)) }
 				} else null,
 				headingContent = { Text(stringResource(entry.nameRes)) },
 				captionContent = {
 					val nativeValue = entry.mpvValue.ifEmpty { stringResource(R.string.preference_mpv_value_auto) }
-					Text("${stringResource(entry.descriptionRes)} ($nativeValue)")
+					val availability = if (vulkanUnavailable) {
+						" ${stringResource(R.string.preference_mpv_gpu_api_vulkan_unavailable)}"
+					} else {
+						""
+					}
+					Text("${stringResource(entry.descriptionRes)} ($nativeValue)$availability")
 				},
 				trailingContent = { RadioButton(checked = selected == entry) },
 				onClick = {
