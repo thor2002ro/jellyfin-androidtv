@@ -1865,7 +1865,6 @@ class ExoPlayerBackend(
 			subtitleExtractor = subtitleExtractorDebug(),
 			subtitleRender = subtitleRenderDebug(),
 			subtitleParser = subtitleParserDebug(),
-			subtitlePath = subtitlePathDebug(),
 			extractorFlags = tsExtractorFlags?.let(::formatTsExtractorFlags),
 			backendDetails = videoInputFormat.colorDetails(),
 			doviTransform = doviTransform,
@@ -1920,12 +1919,6 @@ class ExoPlayerBackend(
 	private fun subtitleParserDebug(): String = when {
 		exoPlayerOptions.enableLibass && exoPlayerOptions.libassRenderType != AssRenderType.CUES -> "AssSubtitleParserFactory"
 		else -> "DefaultSubtitleParserFactory"
-	}
-
-	private fun subtitlePathDebug(): String = when {
-		exoPlayerOptions.enableLibass -> "libass renderer; extraction parser off"
-		exoPlayerOptions.parseSubtitlesDuringExtraction -> "extraction parser"
-		else -> "renderer parser"
 	}
 
 	private fun refreshAudioPassthroughSupport(
