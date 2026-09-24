@@ -3,16 +3,16 @@ package org.jellyfin.androidtv.ui.player.video
 import android.app.ActivityManager
 import android.content.Context
 import android.net.TrafficStats
-import android.opengl.EGL14
-import android.opengl.EGLConfig
-import android.opengl.GLES20
 import android.os.Build
 import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
+import org.jellyfin.androidtv.util.DeviceGraphicsInfo
+import org.jellyfin.androidtv.util.DeviceGraphicsInfoProvider
 import java.io.File
 
 internal class PlaybackPerformanceSampler(context: Context) {
+	private val appContext = context.applicationContext
 	private var previousCpuSnapshot: CpuSnapshot? = null
 	private var previousProcessCpuSnapshot: ProcessCpuSnapshot? = null
 	private var previousGpuBusySnapshot: GpuBusySnapshot? = null
@@ -34,10 +34,11 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	private var totalNetworkSourceAvailable = true
 	private var hardwareCpuTemperatureAvailable = true
 	private var hardwareGpuTemperatureAvailable = true
-	private val activityManager = context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+	private val activityManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+	private val memoryInfo = ActivityManager.MemoryInfo()
 	private val appUid = context.applicationInfo.uid
 	private val hardwarePropertiesManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-		context.applicationContext.getSystemService("hardware_properties")
+		appContext.getSystemService("hardware_properties")
 	} else {
 		null
 	}
@@ -49,8 +50,9 @@ internal class PlaybackPerformanceSampler(context: Context) {
 				method.name == "getDeviceTemperatures" && method.parameterTypes.size == 2
 			}
 	}
-	private val detectedGpuRendererLabel by lazy { detectGpuRendererLabel() }
-	private val detectedGpuLabel by lazy { buildGpuLabel() }
+	private lateinit var detectedGraphicsInfo: DeviceGraphicsInfo
+	private val detectedGpuRendererLabel by lazy { detectedGraphicsInfo.gpuName }
+	private val detectedGpuLabel by lazy { detectedGraphicsInfo.label }
 	private val detectedGpuTokens by lazy { detectedGpuRendererLabel.toSourceTokens() }
 
 	private val cpuClockTicksPerSecond by lazy {
@@ -62,13 +64,22 @@ internal class PlaybackPerformanceSampler(context: Context) {
 
 	private val gpuPercentSources by lazy { discoverGpuPercentSources() }
 	private val gpuBusySources by lazy { discoverGpuBusySources() }
+	private val gpuSourceFiles by lazy {
+		discoverSourceFiles(GpuPercentFileNames + GpuBusyFileNames, GpuSourceDiscoveryDepth)
+	}
+	private val thermalZones by lazy { discoverThermalZones() }
 
-	fun sample(): PlaybackPerformanceSample = PlaybackPerformanceSample(
-		cpu = sampleCpu(),
-		gpu = sampleGpu(),
-		memory = sampleMemory(),
-		network = sampleNetwork(),
-	)
+	suspend fun sample(): PlaybackPerformanceSample {
+		if (!::detectedGraphicsInfo.isInitialized) {
+			detectedGraphicsInfo = DeviceGraphicsInfoProvider.get()
+		}
+		return PlaybackPerformanceSample(
+			cpu = sampleCpu(),
+			gpu = sampleGpu(),
+			memory = sampleMemory(),
+			network = sampleNetwork(),
+		)
+	}
 
 	private fun sampleCpu(): UsageMetric {
 		val temperatureCelsius = sampleTemperature(TemperatureDevice.CPU)
@@ -117,7 +128,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			return null
 		}
 
-		val values = line.split(Regex("\\s+"))
+		val values = line.split(WhitespaceRegex)
 			.drop(1)
 			.mapNotNull { value -> value.toLongOrNull() }
 		if (values.size < 4) {
@@ -154,7 +165,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 
 		val values = stat.substring(endOfName + 2)
 			.trim()
-			.split(Regex("\\s+"))
+			.split(WhitespaceRegex)
 		val userTicks = values.getOrNull(11)?.toLongOrNull()
 		val systemTicks = values.getOrNull(12)?.toLongOrNull()
 		if (userTicks == null || systemTicks == null) {
@@ -227,7 +238,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	private fun readGpuPercent(): GpuPercent? {
 		activeGpuPercentSource?.let { source ->
 			readFirstNumber(source.file)
-				?.normalizeGpuPercent()
+				?.asGpuPercent()
 				?.let { percent -> return GpuPercent(source.label, percent) }
 			failedGpuPercentSourceKeys += source.sourceKey
 			activeGpuPercentSource = null
@@ -239,7 +250,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			if (source.sourceKey in failedGpuPercentSourceKeys) return@firstNotNullOfOrNull null
 
 			val percent = readFirstNumber(source.file)
-				?.normalizeGpuPercent()
+				?.asGpuPercent()
 			if (percent == null) {
 				failedGpuPercentSourceKeys += source.sourceKey
 				return@firstNotNullOfOrNull null
@@ -282,7 +293,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	private fun readGpuBusySnapshot(source: GpuBusySource): GpuBusySnapshot? {
 		val values = runCatching { source.file.readText() }
 			.getOrNull()
-			?.split(Regex("\\s+"))
+			?.split(WhitespaceRegex)
 			?.mapNotNull { value -> value.toLongOrNull() }
 			?: return null
 		if (values.size < 2) return null
@@ -300,12 +311,12 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	}
 
 	private fun discoverGpuPercentSources(): List<GpuPercentSource> =
-		discoverSourceFiles(GpuPercentFileNames, GpuSourceDiscoveryDepth)
+		gpuSourceFiles
+			.filter { file -> file.name in GpuPercentFileNames }
 			.mapNotNull { file ->
 				val score = file.gpuSourceScore()
 				if (score <= 0) return@mapNotNull null
 
-				if (readFirstNumber(file)?.normalizeGpuPercent() == null) return@mapNotNull null
 				GpuPercentSource(
 					label = detectedGpuLabel,
 					file = file,
@@ -316,20 +327,18 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			.sortedWith(compareByDescending<GpuPercentSource> { source -> source.score }.thenBy { source -> source.file.path })
 
 	private fun discoverGpuBusySources(): List<GpuBusySource> =
-		discoverSourceFiles(GpuBusyFileNames, GpuSourceDiscoveryDepth)
+		gpuSourceFiles
+			.filter { file -> file.name in GpuBusyFileNames }
 			.mapNotNull { file ->
 				val score = file.gpuSourceScore()
 				if (score <= 0) return@mapNotNull null
 
-				val source = GpuBusySource(
+				GpuBusySource(
 					label = detectedGpuLabel,
 					file = file,
 					sourceKey = file.sourceKey(),
 					score = score,
 				)
-				if (readGpuBusySnapshot(source) == null) return@mapNotNull null
-
-				source
 			}
 			.sortedWith(compareByDescending<GpuBusySource> { source -> source.score }.thenBy { source -> source.file.path })
 
@@ -342,10 +351,6 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			"gpu_busy_percentage" -> 6
 			"busy_percent" -> 5
 			"gpubusy" -> 5
-			"gpu_utilization" -> 5
-			"utilisation" -> 3
-			"utilization" -> 3
-			"load" -> 1
 			else -> 0
 		}
 
@@ -370,21 +375,20 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	private fun sampleMemory(): MemoryUsageMetric {
 		if (!memorySourceAvailable) return MemoryUsageMetric()
 
-		val info = ActivityManager.MemoryInfo()
 		val manager = activityManager ?: run {
 			memorySourceAvailable = false
 			return MemoryUsageMetric()
 		}
-		if (runCatching { manager.getMemoryInfo(info) }.isFailure) {
+		if (runCatching { manager.getMemoryInfo(memoryInfo) }.isFailure) {
 			memorySourceAvailable = false
 			return MemoryUsageMetric()
 		}
 
-		val totalBytes = info.totalMem.takeIf { it > 0 } ?: run {
+		val totalBytes = memoryInfo.totalMem.takeIf { it > 0 } ?: run {
 			memorySourceAvailable = false
 			return MemoryUsageMetric()
 		}
-		val usedBytes = (totalBytes - info.availMem).coerceIn(0L, totalBytes)
+		val usedBytes = (totalBytes - memoryInfo.availMem).coerceIn(0L, totalBytes)
 		val percent = (usedBytes.toFloat() / totalBytes.toFloat() * 100f).coerceIn(0f, 100f)
 
 		return MemoryUsageMetric(
@@ -484,25 +488,15 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		}
 
 	private fun discoverTemperatureSources(device: TemperatureDevice): List<TemperatureSource> {
-		val zones = runCatching {
-			File("/sys/class/thermal")
-				.listFiles()
-				.orEmpty()
-				.filter { file -> file.name.startsWith("thermal_zone") }
-				.sortedBy { file -> file.name }
-		}.getOrDefault(emptyList())
-
-		val candidates = zones.mapNotNull { zone ->
-			val type = runCatching { File(zone, "type").readText().trim() }.getOrNull()
-				?: return@mapNotNull null
-
-			val tempFile = File(zone, "temp")
-			if (readTemperatureCelsius(tempFile) == null) return@mapNotNull null
-
-			val score = temperatureSourceScore(device, zone, type)
+		val candidates = thermalZones.mapNotNull { zone ->
+			val score = temperatureSourceScore(device, zone.directory, zone.type)
 			if (score <= 0) return@mapNotNull null
 
-			TemperatureSource(file = tempFile, sourceKey = tempFile.sourceKey(), score = score)
+			TemperatureSource(
+				file = zone.temperatureFile,
+				sourceKey = zone.temperatureFile.sourceKey(),
+				score = score,
+			)
 		}
 		val preferredCandidates = candidates
 			.filter { source -> source.score >= PreferredTemperatureSourceScore }
@@ -510,6 +504,26 @@ internal class PlaybackPerformanceSampler(context: Context) {
 
 		return preferredCandidates
 			.sortedWith(compareByDescending<TemperatureSource> { source -> source.score }.thenBy { source -> source.file.path })
+	}
+
+	private fun discoverThermalZones(): List<ThermalZone> {
+		val directories = runCatching {
+			File("/sys/class/thermal")
+				.listFiles()
+				.orEmpty()
+				.filter { file -> file.name.startsWith("thermal_zone") }
+				.sortedBy { file -> file.name }
+		}.getOrDefault(emptyList())
+
+		return directories.mapNotNull { directory ->
+			val type = runCatching { File(directory, "type").readText().trim() }.getOrNull()
+				?: return@mapNotNull null
+			ThermalZone(
+				directory = directory,
+				type = type,
+				temperatureFile = File(directory, "temp"),
+			)
+		}
 	}
 
 	private fun sampleHardwareTemperature(device: TemperatureDevice): Float? {
@@ -536,7 +550,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 
 		val temperature = values
 			.asSequence()
-			.mapNotNull { value -> value.normalizeTemperatureCelsius() }
+			.mapNotNull { value -> value.asHardwareTemperatureCelsius() }
 			.maxOrNull()
 		if (temperature == null) markHardwareTemperatureUnavailable(device)
 
@@ -558,25 +572,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		?.toFloatOrNull()
 
 	private fun readTemperatureCelsius(file: File): Float? =
-		readFirstNumber(file)?.normalizeTemperatureCelsius()
-
-	private fun Float.normalizeGpuPercent(): Float? = when {
-		this in 0f..100f -> this
-		this in 100f..255f -> this / 255f * 100f
-		this in 255f..1_000f -> this / 10f
-		else -> null
-	}
-
-	private fun Float.normalizeTemperatureCelsius(): Float? {
-		val celsius = when {
-			!isFinite() -> return null
-			this > 1_000f -> this / 1_000f
-			this > 200f -> this / 10f
-			else -> this
-		}
-
-		return celsius.takeIf { it in -50f..200f }
-	}
+		readFirstNumber(file)?.asThermalZoneTemperatureCelsius()
 
 	private fun temperatureSourceScore(
 		device: TemperatureDevice,
@@ -673,9 +669,10 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			?.takeIf { text -> text.isNotBlank() }
 
 	private fun String.toSourceTokens(ignoreCommonTokens: Boolean = true): Set<String> {
-		val textTokens = split(Regex("[^A-Za-z0-9]+"))
+		val sourceTokens = split(SourceTokenSeparatorRegex)
+		val textTokens = sourceTokens
 			.map { token -> token.lowercase() }
-		val acronymTokens = split(Regex("[^A-Za-z0-9]+"))
+		val acronymTokens = sourceTokens
 			.mapNotNull { token ->
 				token.filter(Char::isUpperCase)
 					.lowercase()
@@ -689,164 +686,6 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			.filterNot { token -> ignoreCommonTokens && token in IgnoredGpuSourceTokens }
 			.toSet()
 	}
-
-	private fun buildGpuLabel(): String =
-		listOfNotNull(detectedGpuRendererLabel, detectSocLabel())
-			.distinctBy { label -> label.lowercase() }
-			.joinToString(" / ")
-
-	private fun detectGpuRendererLabel(): String =
-		runCatching { detectOpenGlRenderer() }
-			.getOrNull()
-			?.sanitizeGpuLabel()
-			?: "GPU"
-
-	private fun detectSocLabel(): String? = buildList {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Build.SOC_MODEL)
-		add(readCpuInfoValue("Hardware"))
-		add(readCpuInfoValue("model name"))
-		add(readCpuInfoValue("Processor"))
-		add(Build.HARDWARE)
-		add(Build.BOARD)
-	}.firstNotNullOfOrNull { value -> value.sanitizeSocLabel() }
-
-	private fun readCpuInfoValue(key: String): String? = runCatching {
-		File("/proc/cpuinfo").useLines { lines ->
-			lines.firstNotNullOfOrNull { line ->
-				val separator = line.indexOf(':')
-				if (separator <= 0) return@firstNotNullOfOrNull null
-				if (!line.substring(0, separator).trim().equals(key, ignoreCase = true)) return@firstNotNullOfOrNull null
-				line.substring(separator + 1).trim()
-			}
-		}
-	}.getOrNull()
-
-	private fun String?.sanitizeSocLabel(): String? = this
-		?.trim()
-		?.replace(Regex("\\s+"), " ")
-		?.takeIf { label -> label.isNotBlank() && !label.equals("unknown", ignoreCase = true) }
-		?.let(SocModelRegex::find)
-		?.value
-
-	private fun detectOpenGlRenderer(): String? {
-		val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-		if (display == EGL14.EGL_NO_DISPLAY) return null
-
-		val previousDisplay = EGL14.eglGetCurrentDisplay()
-		val previousContext = EGL14.eglGetCurrentContext()
-		val previousDrawSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)
-		val previousReadSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
-		val hadPreviousContext = previousDisplay != EGL14.EGL_NO_DISPLAY && previousContext != EGL14.EGL_NO_CONTEXT
-		var initialized = false
-		var madeCurrent = false
-		var releaseThread = false
-		var surface = EGL14.EGL_NO_SURFACE
-		var context = EGL14.EGL_NO_CONTEXT
-		try {
-			initialized = EGL14.eglInitialize(display, IntArray(1), 0, IntArray(1), 0)
-			if (!initialized) return null
-
-			val configs = arrayOfNulls<EGLConfig>(1)
-			val configCount = IntArray(1)
-			val configAttributes = intArrayOf(
-				EGL14.EGL_RENDERABLE_TYPE,
-				EGL14.EGL_OPENGL_ES2_BIT,
-				EGL14.EGL_SURFACE_TYPE,
-				EGL14.EGL_PBUFFER_BIT,
-				EGL14.EGL_RED_SIZE,
-				8,
-				EGL14.EGL_GREEN_SIZE,
-				8,
-				EGL14.EGL_BLUE_SIZE,
-				8,
-				EGL14.EGL_NONE,
-			)
-			if (!EGL14.eglChooseConfig(display, configAttributes, 0, configs, 0, 1, configCount, 0)) return null
-			val config = configs.firstOrNull() ?: return null
-			if (configCount[0] <= 0) return null
-
-			surface = EGL14.eglCreatePbufferSurface(
-				display,
-				config,
-				intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE),
-				0,
-			)
-			if (surface == EGL14.EGL_NO_SURFACE) return null
-
-			context = EGL14.eglCreateContext(
-				display,
-				config,
-				EGL14.EGL_NO_CONTEXT,
-				intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE),
-				0,
-			)
-			if (context == EGL14.EGL_NO_CONTEXT) return null
-			if (!EGL14.eglMakeCurrent(display, surface, surface, context)) return null
-			madeCurrent = true
-
-			return GLES20.glGetString(GLES20.GL_RENDERER)
-		} finally {
-			if (initialized) {
-				if (madeCurrent) {
-					if (hadPreviousContext) {
-						if (!EGL14.eglMakeCurrent(previousDisplay, previousDrawSurface, previousReadSurface, previousContext)) {
-							EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-						}
-					} else {
-						EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-						releaseThread = true
-					}
-				}
-				if (context != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(display, context)
-				if (surface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, surface)
-				if (releaseThread) EGL14.eglReleaseThread()
-			}
-		}
-	}
-
-	private fun String.sanitizeGpuLabel(): String? {
-		val clean = trim()
-			.replace("(TM)", "")
-			.replace(Regex("[(),;]+"), " ")
-			.replace(Regex("\\s+"), " ")
-			.trim()
-			.takeIf { label -> label.isNotBlank() && !label.equals("unknown", ignoreCase = true) }
-			?: return null
-
-		val tokens = clean.split(' ')
-			.map { token -> token.trim() }
-			.filter { token -> token.isNotBlank() }
-			.filterNot { token -> token.normalizedGpuRendererToken() in GpuRendererNoiseTokens }
-			.filterNot { token -> GpuRendererVersionToken.matches(token.lowercase()) }
-
-		if (tokens.isEmpty()) return clean
-
-		val modelStart = tokens.indexOfFirst { token -> token.isGpuModelToken() }
-		val modelTokens = when {
-			modelStart > 0 && tokens[modelStart - 1].isGpuVendorToken() -> tokens.drop(modelStart - 1)
-			modelStart >= 0 -> tokens.drop(modelStart)
-			else -> tokens
-		}
-
-		return modelTokens
-			.take(GpuRendererLabelMaxWords)
-			.joinToString(" ")
-			.takeIf { label -> label.isNotBlank() }
-			?: clean
-	}
-
-	private fun String.normalizedGpuRendererToken() = trim(',', '(', ')')
-		.lowercase()
-		.removeSuffix(":")
-
-	private fun String.isGpuModelToken(): Boolean {
-		val normalized = normalizedGpuRendererToken()
-		return isGpuVendorToken() ||
-			normalized.any(Char::isDigit) ||
-			normalized.startsWith("gc")
-	}
-
-	private fun String.isGpuVendorToken() = normalizedGpuRendererToken() in GpuRendererVendorTokens
 
 	private fun Long?.orZero() = this ?: 0L
 
@@ -899,6 +738,12 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		val score: Int,
 	)
 
+	private data class ThermalZone(
+		val directory: File,
+		val type: String,
+		val temperatureFile: File,
+	)
+
 	private enum class NetworkSnapshotSource {
 		APP,
 		DEVICE,
@@ -916,41 +761,13 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		private const val GpuSourceDiscoveryDepth = 4
 		private const val PreferredTemperatureSourceScore = 8
 		private const val SysfsHintMaxLength = 512
-		private const val GpuRendererLabelMaxWords = 4
 		private val FirstNumberRegex = Regex("-?\\d+(?:\\.\\d+)?")
-		private val SocModelRegex = Regex("\\b[A-Za-z]{1,8}\\d[A-Za-z0-9._-]*\\b")
-		private val GpuRendererVersionToken = Regex("(?:[vrp]\\d+(?:[._-]?[a-z]?\\d+)+.*|\\d+(?:[._-][a-z]?\\d+)+.*)")
-		private val GpuRendererVendorTokens = setOf(
-			"adreno",
-			"immortalis",
-			"mali",
-			"nvidia",
-			"powervr",
-			"tegra",
-			"vivante",
-		)
-		private val GpuRendererNoiseTokens = setOf(
-			"android",
-			"angle",
-			"arm",
-			"es",
-			"google",
-			"graphics",
-			"inc",
-			"llc",
-			"opengl",
-			"renderer",
-			"technologies",
-			"vulkan",
-		)
+		private val SourceTokenSeparatorRegex = Regex("[^A-Za-z0-9]+")
+		private val WhitespaceRegex = Regex("\\s+")
 		private val GpuPercentFileNames = setOf(
 			"busy_percent",
 			"gpu_busy_percent",
 			"gpu_busy_percentage",
-			"gpu_utilization",
-			"load",
-			"utilisation",
-			"utilization",
 		)
 		private val GpuBusyFileNames = setOf("gpubusy")
 		private val GpuSourceRoots = listOf(
@@ -986,6 +803,15 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		)
 	}
 }
+
+internal fun Float.asGpuPercent(): Float? =
+	takeIf { value -> value.isFinite() && value in 0f..100f }
+
+internal fun Float.asHardwareTemperatureCelsius(): Float? =
+	takeIf { value -> value.isFinite() && value in -50f..200f }
+
+internal fun Float.asThermalZoneTemperatureCelsius(): Float? =
+	(this / 1_000f).takeIf { value -> value.isFinite() && value in -50f..200f }
 
 internal data class PlaybackPerformanceSample(
 	val cpu: UsageMetric,
