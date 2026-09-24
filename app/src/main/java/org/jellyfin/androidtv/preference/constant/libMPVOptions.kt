@@ -17,6 +17,7 @@ import org.jellyfin.androidtv.preference.mpvLoopFilter
 import org.jellyfin.androidtv.preference.mpvOptionOverrides
 import org.jellyfin.androidtv.preference.mpvReplayGain
 import org.jellyfin.androidtv.preference.mpvScaler
+import org.jellyfin.androidtv.preference.mpvSoftwareDecodingForLiveTv
 import org.jellyfin.androidtv.preference.mpvSubtitleAssOverride
 import org.jellyfin.androidtv.preference.mpvSubtitleUseMargins
 import org.jellyfin.androidtv.preference.mpvToneMapping
@@ -38,7 +39,8 @@ enum class LibMPVDecoder(
 	override val descriptionRes: Int,
 	val decoder: LibMPVVideoDecoder,
 ) : LibMPVPreferenceOption {
-	AUTOMATIC(R.string.preference_mpv_value_auto, R.string.preference_mpv_decoder_auto_description, LibMPVVideoDecoder.AUTOMATIC),
+	AUTOMATIC(R.string.preference_mpv_decoder_auto_unsafe, R.string.preference_mpv_decoder_auto_unsafe_description, LibMPVVideoDecoder.AUTOMATIC),
+	AUTO_SAFE(R.string.preference_mpv_decoder_auto_safe, R.string.preference_mpv_decoder_auto_safe_description, LibMPVVideoDecoder.AUTO_SAFE),
 	SOFTWARE(R.string.preference_mpv_decoder_software, R.string.preference_mpv_decoder_software_description, LibMPVVideoDecoder.SOFTWARE),
 	MEDIACODEC(R.string.preference_mpv_decoder_mediacodec, R.string.preference_mpv_decoder_mediacodec_description, LibMPVVideoDecoder.MEDIACODEC),
 	MEDIACODEC_COPY(R.string.preference_mpv_decoder_mediacodec_copy, R.string.preference_mpv_decoder_mediacodec_copy_description, LibMPVVideoDecoder.MEDIACODEC_COPY),
@@ -184,7 +186,7 @@ enum class LibMPVChoiceSetting(
 
 	fun defaultOption(): LibMPVPreferenceOption = when (this) {
 		DECODER -> LibMPVDecoder.AUTOMATIC
-		VIDEO_OUTPUT -> LibMPVVideoOutput.GPU
+		VIDEO_OUTPUT -> LibMPVVideoOutput.GPU_NEXT
 		GPU_CONTEXT -> LibMPVGpuContext.ANDROID
 		GPU_API -> LibMPVGpuApi.AUTO
 		VIDEO_SYNC -> LibMPVVideoSync.AUDIO
@@ -196,7 +198,7 @@ enum class LibMPVChoiceSetting(
 		AUDIO_SPDIF -> LibMPVAudioSpdif.NONE
 		REPLAY_GAIN -> LibMPVReplayGain.DISABLED
 		LOOP_FILTER -> LibMPVLoopFilter.DEFAULT
-		SUBTITLE_ASS_OVERRIDE -> LibMPVSubtitleAssOverride.FORCE
+		SUBTITLE_ASS_OVERRIDE -> LibMPVSubtitleAssOverride.NO
 	}
 
 	fun selected(preferences: UserPreferences): LibMPVPreferenceOption = when (this) {
@@ -258,13 +260,14 @@ fun UserPreferences.mpvPlaybackOptions() = LibMPVPlaybackOptions(
 	skipLoopFilter = this[UserPreferences.mpvLoopFilter].mpvValue,
 	subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,
 	subtitleUseMargins = this[UserPreferences.mpvSubtitleUseMargins],
+	softwareDecodingForLiveTv = this[UserPreferences.mpvSoftwareDecodingForLiveTv],
 	customOptions = parseLibMPVOptionOverrides(this[UserPreferences.mpvOptionOverrides]).values
 		.filterKeys { name -> !isLibMPVOptionManagedByJellyfin(name) },
 )
 
 fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvDecoder] = LibMPVDecoder.AUTOMATIC
-	this[UserPreferences.mpvVideoOutput] = LibMPVVideoOutput.GPU
+	this[UserPreferences.mpvVideoOutput] = LibMPVVideoOutput.GPU_NEXT
 	this[UserPreferences.mpvGpuContext] = LibMPVGpuContext.ANDROID
 	this[UserPreferences.mpvGpuApi] = LibMPVGpuApi.AUTO
 	this[UserPreferences.mpvVideoSync] = LibMPVVideoSync.AUDIO
@@ -276,11 +279,12 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvAudioSpdif] = LibMPVAudioSpdif.NONE
 	this[UserPreferences.mpvReplayGain] = LibMPVReplayGain.DISABLED
 	this[UserPreferences.mpvLoopFilter] = LibMPVLoopFilter.DEFAULT
-	this[UserPreferences.mpvSubtitleAssOverride] = LibMPVSubtitleAssOverride.FORCE
+	this[UserPreferences.mpvSubtitleAssOverride] = LibMPVSubtitleAssOverride.NO
 	this[UserPreferences.mpvInterpolation] = false
 	this[UserPreferences.mpvDeband] = false
 	this[UserPreferences.mpvAudioPitchCorrection] = true
 	this[UserPreferences.mpvSubtitleUseMargins] = true
+	this[UserPreferences.mpvSoftwareDecodingForLiveTv] = false
 	this[UserPreferences.mpvDecoderThreads] = 0
 	this[UserPreferences.mpvOptionOverrides] = ""
 }
