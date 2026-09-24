@@ -117,7 +117,7 @@ internal fun QueueEntry.retainDoviPlaybackPlanFor(
 		mediaSource.id == plan.mediaSourceId &&
 		mediaSource.container.equals(plan.container, ignoreCase = true) &&
 		video?.toDoviVideoCodec() == plan.codec &&
-		video?.videoRangeType == plan.sourceRangeType
+		video.videoRangeType == plan.sourceRangeType
 	doviDecision = plan?.decision.takeIf { matches && it == expectedDecision }
 }
 
