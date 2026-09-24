@@ -56,6 +56,7 @@ import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
+import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.koin.compose.koinInject
 
 private const val DefaultVideoAspectRatio = 16f / 9f
@@ -76,6 +77,11 @@ fun VideoPlayerScreen(
 	}
 
 	val playState by playbackManager.state.playState.collectAsState()
+	val networkRecoveryService = remember(playbackManager) {
+		playbackManager.getService<NetworkPlaybackRecoveryService>()
+	}
+	val networkRecovering by networkRecoveryService?.recovering?.collectAsState()
+		?: remember { mutableStateOf(false) }
 	LiveTvTrackCacheUpdater(playbackManager)
 	val playing = playState.isActivePlayback
 	ScreensaverLock(
@@ -113,7 +119,7 @@ fun VideoPlayerScreen(
 		)
 
 		VideoBufferingIndicator(
-			visible = playState == PlayState.BUFFERING,
+			visible = playState == PlayState.BUFFERING || networkRecovering,
 			modifier = Modifier.align(Alignment.Center),
 		)
 
