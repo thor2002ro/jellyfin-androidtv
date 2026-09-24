@@ -11,7 +11,6 @@
     <string name="lbl_song">أغنية</string>
     <string name="lbl_artists">الفنانون</string>
     <string name="msg_unable_load_subs">تعذر تحميل الترجمة</string>
-    <string name="lbl_filters">فلاتر التلفاز المباشر</string>
     <string name="lbl_ended">انتهى</string>
     <string name="lbl_display_preferences">تفضيلات العرض</string>
     <string name="lbl_starting_with">بدءًا بتلك التي يبدأ اسمها بـ</string>
@@ -142,9 +141,6 @@
     <string name="subtitle_error">تعذر تحديد الترجمة</string>
     <string name="too_many_errors">أخطاء كثيرة. تم الإلغاء</string>
     <string name="seek_error">تعذر التنقل</string>
-    <string name="msg_live_tv_prev">تحميل الـ %1$d ساعات السابقة؟</string>
-    <string name="msg_live_tv_next">تحميل الـ %1$d ساعات القادمة؟</string>
-    <string name="lbl_load_guide_data">تحميل بيانات الدليل</string>
     <string name="episode_missing_message_2">هذه الحلقة مفقودة من مكتبتك. سيتوقف التشغيل.</string>
     <string name="episode_missing_message">هذه الحلقة مفقودة من مكتبتك. هل ترغب في تخطيها والمتابعة إلى الحلقة التالية؟</string>
     <string name="episode_missing">حلقة مفقودة</string>
@@ -178,8 +174,6 @@
     <string name="lbl_new_episodes">حلقات جديدة</string>
     <string name="lbl_new_only">الجديد فقط</string>
     <string name="lbl_news">الأخبار</string>
-    <string name="lbl_tv_filter_status">للـ %1$d ساعات القادمة</string>
-    <string name="lbl_tv_channel_status">%1$d من %2$d قنوات</string>
     <string name="lbl_song_title">عنوان الأغنية</string>
     <string name="lbl_album_name">اسم الألبوم</string>
     <string name="lbl_next_episode">الحلقة التالية</string>
@@ -206,7 +200,6 @@
     <string name="no_program_data">لا تتوفر بيانات للبرنامج</string>
     <string name="msg_record_entire_series">تسجيل المسلسل بأكمله؟</string>
     <string name="lbl_just_this_once">هذه المرة فقط</string>
-    <string name="lbl_select_date">تحديد التاريخ</string>
     <string name="lbl_in_x_days">خلال %d أيام</string>
     <string name="lbl_show_premieres">عرض العروض الأولى للمواسم</string>
     <string name="lbl_refresh_switching">تبديل معدل التحديث</string>

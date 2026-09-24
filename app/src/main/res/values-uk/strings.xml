@@ -120,7 +120,6 @@
     <string name="no_program_data">Дані програми недоступні</string>
     <string name="msg_record_entire_series">Записати весь серіал\?</string>
     <string name="lbl_just_this_once">Тільки цього разу</string>
-    <string name="lbl_select_date">Вибір дати</string>
     <string name="lbl_in_x_days">За %d днів</string>
     <string name="desc_premieres">Відображає рядок нових пілотних епізодів для будь-якого серіалу, який ви переглядаєте</string>
     <string name="lbl_show_premieres">Відображати прем’єри сезонів</string>
@@ -156,8 +155,6 @@
     <string name="lbl_new_episodes">Нові епізоди</string>
     <string name="lbl_new_only">Тільки нове</string>
     <string name="lbl_news">Новини</string>
-    <string name="lbl_tv_filter_status">за наступні %1$d години</string>
-    <string name="lbl_tv_channel_status">%1$d з %2$d каналів</string>
     <string name="lbl_episode_not_record">Цей показ НЕ записуватиметься</string>
     <string name="lbl_live">Наживо</string>
     <string name="lbl_sports">Спорт</string>
@@ -213,7 +210,6 @@
     <string name="msg_burn_sub_warning">Вбудовуються субтитри. Це може зайняти деякий час…</string>
     <string name="msg_unable_load_subs">Не вдається завантажити субтитри</string>
     <string name="msg_subtitles_loading">Завантаження субтитрів…</string>
-    <string name="lbl_filters">Фільтри телеканалів</string>
     <string name="lbl_ended">ЗАВЕРШЕНО</string>
     <string name="lbl__continuing">ПРОДОВЖУЄТЬСЯ</string>
     <string name="lbl_display_preferences">Параметри відображення</string>
@@ -242,9 +238,6 @@
     <string name="too_many_errors">Занадто багато помилок. Все здаюся</string>
     <string name="player_error">Виникла помилка плеєру. Повторна спроба…</string>
     <string name="seek_error">Неможливо знайти</string>
-    <string name="msg_live_tv_prev">Завантажити попередні %1$d годин?</string>
-    <string name="msg_live_tv_next">Завантажити наступні %1$d годин?</string>
-    <string name="lbl_load_guide_data">Завантажити дані телегіда</string>
     <string name="episode_missing_message_2">Цей епізод відсутній у вашій медіатеці. Відтворення зупиниться.</string>
     <string name="episode_missing_message">Цей епізод відсутній у вашій медіатеці. Бажаєте пропустити його й перейти до наступного\?</string>
     <string name="episode_missing">Епізод відсутній</string>

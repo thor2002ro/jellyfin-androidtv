@@ -120,7 +120,6 @@
     <string name="lbl_display_preferences">Weergavevoorkeuren</string>
     <string name="lbl__continuing">Wordt vervolgd</string>
     <string name="lbl_ended">Afgelopen</string>
-    <string name="lbl_filters">Live-tv-filters</string>
     <string name="msg_subtitles_loading">Ondertiteling laden…</string>
     <string name="msg_unable_load_subs">Ondertiteling kan niet worden geladen</string>
     <string name="msg_burn_sub_warning">Ondertiteling aan het inbranden. Dit kan enkele seconden duren…</string>
@@ -188,7 +187,6 @@
     <string name="lbl_sports">Sport</string>
     <string name="msg_record_entire_series">Volledige serie opnemen\?</string>
     <string name="lbl_just_this_once">Alleen deze keer</string>
-    <string name="lbl_select_date">Datum kiezen</string>
     <string name="lbl_image_size">Afbeeldingsformaat</string>
     <string name="lbl_repeat_episodes">Afleveringen herhalen</string>
     <string name="lbl_new_episodes">Nieuwe afleveringen</string>
@@ -234,8 +232,6 @@
     <string name="pref_subtitle_track_button">Knop ondertitelspoor</string>
     <string name="pref_audio_track_button">Knop geluidsspoor</string>
     <string name="mark_watched">Als gekeken markeren</string>
-    <string name="lbl_tv_filter_status">voor de komende %1$d uur</string>
-    <string name="lbl_tv_channel_status">%1$d van %2$d kanalen</string>
     <string name="player_error">Afspeelfout. Opnieuw proberen…</string>
     <string name="just_one">Enkel deze</string>
     <string name="turn_off">Zet deze optie uit</string>
@@ -243,8 +239,6 @@
     <string name="msg_no_items">Geen items om af te spelen</string>
     <string name="subtitle_error">Kan ondertiteling niet selecteren</string>
     <string name="too_many_errors">Te veel fouten. Opgegeven</string>
-    <string name="msg_live_tv_prev">Vorige %1$d uren laden?</string>
-    <string name="msg_live_tv_next">Volgende %1$d uren laden?</string>
     <string name="episode_missing_message_2">Deze aflevering ontbreekt in je bibliotheek. Afspelen zal stoppen.</string>
     <string name="episode_missing_message">Deze aflevering ontbreekt in je bibliotheek. Wil je deze overslaan en verdergaan met de volgende\?</string>
     <string name="episode_missing">Aflevering ontbreekt</string>
@@ -254,7 +248,6 @@
     <string name="lbl_audio_track">Geluidsspoor selecteren</string>
     <string name="lbl_pause">Pauzeren</string>
     <string name="seek_error">Kan niet zoeken</string>
-    <string name="lbl_load_guide_data">Gidsgegevens laden</string>
     <string name="mark_watched_message">Het item lijkt niet volledig afgespeeld te zijn. Markeren als gekeken\?</string>
     <string name="watch_count_overflow">99+</string>
     <string name="lbl_playback_control_ends">Afgelopen om %1$s</string>
