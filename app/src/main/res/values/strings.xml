@@ -695,6 +695,9 @@
     <string name="library_filter_apply">Apply filters</string>
     <string name="library_filter_done">Done</string>
     <string name="library_filter_active_count">%1$d active filters</string>
+    <string name="library_view_style">View style</string>
+    <string name="library_view_style_cards">Cards</string>
+    <string name="library_view_style_dense_list">Dense list</string>
     <string name="library_card_spacing">Card spacing</string>
     <string name="library_card_spacing_compact">Compact</string>
     <string name="library_card_spacing_normal">Normal</string>

@@ -86,6 +86,13 @@ class ComposeVerticalGridPresenterTests : FunSpec({
 		shouldConsumeMissingBrowseGridTarget(BrowseGridFocusDirection.UP).shouldBe(true)
 	}
 
+	test("only a missing upward card target is forwarded to the screen") {
+		shouldForwardVerticalGridKey(target = -1, BrowseGridFocusDirection.UP).shouldBe(true)
+		shouldForwardVerticalGridKey(target = 4, BrowseGridFocusDirection.UP).shouldBe(false)
+		shouldForwardVerticalGridKey(target = -1, BrowseGridFocusDirection.DOWN).shouldBe(false)
+		shouldForwardVerticalGridKey(target = -1, BrowseGridFocusDirection.LEFT).shouldBe(false)
+	}
+
 	test("attached focus target moves directly without queuing a scroll request") {
 		var queuedPosition: Int? = null
 
