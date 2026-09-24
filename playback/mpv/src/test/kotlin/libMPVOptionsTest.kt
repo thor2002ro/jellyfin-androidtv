@@ -11,6 +11,73 @@ import kotlin.time.Duration.Companion.seconds
 import `is`.xyz.mpv.MPVNode
 
 class LibMPVOptionsTest : StringSpec({
+	"NVIDIA detection uses manufacturer only" {
+		isLibMPVNvidiaDevice("NVIDIA") shouldBe true
+		isLibMPVNvidiaDevice("NVIDIA Corporation") shouldBe true
+		isLibMPVNvidiaDevice("Google") shouldBe false
+	}
+
+	"NVIDIA Hi10P fallback avoids expensive unrelated tuning" {
+		libMPVNvidiaFallbackOptions(LibMPVShieldFallback.HI10P) shouldBe linkedMapOf(
+			"hwdec" to "no",
+			"vo" to "gpu-next",
+			"vd-lavc-skiploopfilter" to "nonref",
+		)
+	}
+
+	"NVIDIA MPEG-2 fallback avoids unrelated Hi10P tuning" {
+		libMPVNvidiaFallbackOptions(LibMPVShieldFallback.MPEG2) shouldBe linkedMapOf(
+			"hwdec" to "no",
+			"vo" to "gpu-next",
+		)
+	}
+
+	"NVIDIA runtime fallback resync is consumed once" {
+		val resync = LibMPVNvidiaFallbackResyncState()
+
+		resync.isPending shouldBe false
+		resync.schedule(position = 42.seconds, resumeAfter = true)
+		resync.isPending shouldBe true
+		resync.consume() shouldBe LibMPVNvidiaFallbackResync(position = 42.seconds, resumeAfter = true)
+		resync.isPending shouldBe false
+		resync.consume() shouldBe null
+	}
+
+	"NVIDIA runtime fallback resync honors the latest pause intent" {
+		val resync = LibMPVNvidiaFallbackResyncState()
+
+		resync.schedule(position = 42.seconds, resumeAfter = true)
+		resync.updateResumeAfter(false) shouldBe true
+		resync.consume() shouldBe LibMPVNvidiaFallbackResync(position = 42.seconds, resumeAfter = false)
+		resync.updateResumeAfter(true) shouldBe false
+	}
+
+	"NVIDIA live runtime fallback resumes without restoring a position" {
+		val resync = LibMPVNvidiaFallbackResyncState()
+
+		resync.schedule(position = null, resumeAfter = true)
+		resync.consume() shouldBe LibMPVNvidiaFallbackResync(position = null, resumeAfter = true)
+	}
+
+	"NVIDIA fallback configuration selects one decoder transition" {
+		libMPVNvidiaFallbackConfigurationChange(LibMPVShieldFallback.HI10P, fallbackAllowed = true) shouldBe
+			LibMPVNvidiaFallbackConfigurationChange.PRESERVE
+		libMPVNvidiaFallbackConfigurationChange(LibMPVShieldFallback.HI10P, fallbackAllowed = false) shouldBe
+			LibMPVNvidiaFallbackConfigurationChange.REMOVE
+		libMPVNvidiaFallbackConfigurationChange(activeFallback = null, fallbackAllowed = true) shouldBe
+			LibMPVNvidiaFallbackConfigurationChange.NONE
+	}
+
+	"NVIDIA fallback removal resyncs only when the decoder changes" {
+		libMPVNvidiaFallbackRemovalNeedsResync(LibMPVVideoDecoder.AUTOMATIC.mpvValue) shouldBe true
+		libMPVNvidiaFallbackRemovalNeedsResync(LibMPVVideoDecoder.SOFTWARE.mpvValue) shouldBe false
+	}
+
+	"MPV command results distinguish native failure" {
+		libMPVCommandSucceeded(MPVNode.None) shouldBe true
+		libMPVCommandSucceeded(null) shouldBe false
+	}
+
 	"resume position is passed to loadfile" {
 		728.seconds.mpvStartOption() shouldBe "start=728.0"
 	}
@@ -62,6 +129,53 @@ class LibMPVOptionsTest : StringSpec({
 	"automatic decoder modes expose unsafe as the default and safe separately" {
 		LibMPVVideoDecoder.AUTOMATIC.mpvValue shouldBe "auto-unsafe"
 		LibMPVVideoDecoder.AUTO_SAFE.mpvValue shouldBe "auto-safe"
+	}
+
+	"Shield fallback selects software only for eligible formats" {
+		selectLibMPVShieldFallback(
+			isNvidiaDevice = true,
+			fallbackAllowed = true,
+			codec = "h264",
+			profile = "High 10",
+			pixelFormat = "yuv420p10le",
+		) shouldBe LibMPVShieldFallback.HI10P
+		selectLibMPVShieldFallback(
+			isNvidiaDevice = true,
+			fallbackAllowed = true,
+			codec = "mpeg2video",
+			profile = null,
+			pixelFormat = "yuv420p",
+		) shouldBe LibMPVShieldFallback.MPEG2
+		selectLibMPVShieldFallback(
+			isNvidiaDevice = true,
+			fallbackAllowed = false,
+			codec = "h264",
+			profile = "High 10",
+			pixelFormat = "yuv420p10le",
+		) shouldBe null
+		selectLibMPVShieldFallback(
+			isNvidiaDevice = false,
+			fallbackAllowed = true,
+			codec = "h264",
+			profile = "High 10",
+			pixelFormat = "yuv420p10le",
+		) shouldBe null
+		selectLibMPVShieldFallback(
+			isNvidiaDevice = true,
+			fallbackAllowed = true,
+			codec = "h264",
+			profile = null,
+			pixelFormat = null,
+			bitDepth = 10,
+		) shouldBe LibMPVShieldFallback.HI10P
+		selectLibMPVShieldFallback(
+			isNvidiaDevice = true,
+			fallbackAllowed = true,
+			codec = "h264",
+			profile = "High",
+			pixelFormat = "yuv420p",
+			bitDepth = 8,
+		) shouldBe null
 	}
 
 	"Live TV software decoding yields to an explicit player override" {
@@ -166,6 +280,7 @@ class LibMPVOptionsTest : StringSpec({
 	"Jellyfin MPV defaults produce the complete managed profile" {
 		LibMPVPlaybackOptions.DEFAULT.videoPreset shouldBe LibMPVVideoPreset.OFF
 		LibMPVPlaybackOptions.DEFAULT.audioPreset shouldBe LibMPVAudioPreset.OFF
+		LibMPVPlaybackOptions.DEFAULT.nvidiaShieldWorkarounds shouldBe true
 		LibMPVPlaybackOptions.DEFAULT.managedOptions() shouldBe linkedMapOf(
 			"vo" to "gpu-next",
 			"gpu-context" to "android",
