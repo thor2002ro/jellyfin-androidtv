@@ -73,24 +73,38 @@ private val VIDEO_FILTER_ITEM_TYPES = setOf(
 	BaseItemKind.VIDEO,
 )
 
-internal fun shouldCacheLibraryFilterChoices(choices: LibraryFilterChoices): Boolean =
-	choices.unavailableSections.isEmpty()
-
 internal fun mergeFilterChoiceResults(
 	genres: Result<List<BaseItemDto>>,
 	years: Result<List<Int>>,
 	ratings: Result<List<String>>,
 	studios: Result<List<BaseItemDto>>,
+): LibraryFilterChoices = mergeFilterChoiceRefresh(null, genres, years, ratings, studios)
+
+internal fun mergeFilterChoiceRefresh(
+	previous: LibraryFilterChoices?,
+	genres: Result<List<BaseItemDto>>?,
+	years: Result<List<Int>>?,
+	ratings: Result<List<String>>?,
+	studios: Result<List<BaseItemDto>>?,
 ): LibraryFilterChoices = LibraryFilterChoices(
-	genres = genres.getOrDefault(emptyList()).groupEquivalentGenres(),
-	years = years.getOrDefault(emptyList()),
-	ratings = ratings.getOrDefault(emptyList()).groupEquivalentRatings(),
-	studios = studios.getOrDefault(emptyList()),
+	genres = genres?.getOrNull()?.groupEquivalentGenres() ?: previous?.genres.orEmpty(),
+	years = years?.getOrNull() ?: previous?.years.orEmpty(),
+	ratings = ratings?.getOrNull()?.groupEquivalentRatings() ?: previous?.ratings.orEmpty(),
+	studios = studios?.getOrNull() ?: previous?.studios.orEmpty(),
 	unavailableSections = buildSet {
-		if (genres.isFailure) add(LibraryFilterSection.GENRES)
-		if (years.isFailure) add(LibraryFilterSection.YEARS)
-		if (ratings.isFailure) add(LibraryFilterSection.RATINGS)
-		if (studios.isFailure) add(LibraryFilterSection.STUDIOS)
+		previous?.unavailableSections?.forEach { section ->
+			val wasRetried = when (section) {
+				LibraryFilterSection.GENRES -> genres != null
+				LibraryFilterSection.YEARS -> years != null
+				LibraryFilterSection.RATINGS -> ratings != null
+				LibraryFilterSection.STUDIOS -> studios != null
+			}
+			if (!wasRetried) add(section)
+		}
+		if (genres?.isFailure == true) add(LibraryFilterSection.GENRES)
+		if (years?.isFailure == true) add(LibraryFilterSection.YEARS)
+		if (ratings?.isFailure == true) add(LibraryFilterSection.RATINGS)
+		if (studios?.isFailure == true) add(LibraryFilterSection.STUDIOS)
 	},
 )
 
@@ -151,8 +165,10 @@ suspend fun loadLibraryFilterChoices(
 	api: ApiClient,
 	parentId: UUID,
 	includeTypes: Set<BaseItemKind>,
+	previous: LibraryFilterChoices? = null,
 ): LibraryFilterChoices = coroutineScope {
-	val genres = async(Dispatchers.IO) {
+	val sectionsToLoad = previous?.unavailableSections ?: LibraryFilterSection.entries.toSet()
+	val genres = if (LibraryFilterSection.GENRES in sectionsToLoad) async(Dispatchers.IO) {
 		runCatching {
 			api.genreApi.getGenres(
 				parentId = parentId,
@@ -163,8 +179,8 @@ suspend fun loadLibraryFilterChoices(
 				enableTotalRecordCount = false,
 			).content.items.filter { !it.name.isNullOrBlank() }
 		}
-	}
-	val years = async(Dispatchers.IO) {
+	} else null
+	val years = if (LibraryFilterSection.YEARS in sectionsToLoad) async(Dispatchers.IO) {
 		runCatching {
 			api.yearApi.getYears(
 				parentId = parentId,
@@ -175,16 +191,16 @@ suspend fun loadLibraryFilterChoices(
 				item.productionYear ?: item.name?.toIntOrNull()
 			}.distinct().sortedDescending()
 		}
-	}
-	val ratings = async(Dispatchers.IO) {
+	} else null
+	val ratings = if (LibraryFilterSection.RATINGS in sectionsToLoad) async(Dispatchers.IO) {
 		runCatching {
 			api.filterApi.getQueryFiltersLegacy(
 				parentId = parentId,
 				includeItemTypes = includeTypes,
 			).content.officialRatings.orEmpty().filter(String::isNotBlank).distinct().sorted()
 		}
-	}
-	val studios = async(Dispatchers.IO) {
+	} else null
+	val studios = if (LibraryFilterSection.STUDIOS in sectionsToLoad) async(Dispatchers.IO) {
 		runCatching {
 			api.studioApi.getStudios(
 				parentId = parentId,
@@ -193,12 +209,13 @@ suspend fun loadLibraryFilterChoices(
 				enableTotalRecordCount = false,
 			).content.items.filter { !it.name.isNullOrBlank() }.sortedBy { it.name }
 		}
-	}
+	} else null
 
-	mergeFilterChoiceResults(
-		genres = genres.await(),
-		years = years.await(),
-		ratings = ratings.await(),
-		studios = studios.await(),
+	mergeFilterChoiceRefresh(
+		previous = previous,
+		genres = genres?.await(),
+		years = years?.await(),
+		ratings = ratings?.await(),
+		studios = studios?.await(),
 	)
 }
