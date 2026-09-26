@@ -793,4 +793,5 @@
     <string name="lbl_bitstream_truehd">Bitstream Dolby TrueHD</string>
     <string name="lbl_passthrough_supported_formats">Supported: %1$s</string>
     <string name="lbl_passthrough_unsupported">Unsupported by current audio output</string>
+    <string name="preference_save_failed">Unable to save setting. Check your Jellyfin server connection.</string>
 </resources>

@@ -7,7 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.CustomMessage
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
@@ -24,6 +27,8 @@ import org.koin.compose.koinInject
 fun SettingsCustomizationScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
+	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val customMessageRepository = koinInject<CustomMessageRepository>()
 
 	SettingsColumn {
 		item {
@@ -78,13 +83,18 @@ fun SettingsCustomizationScreen() {
 		}
 
 		item {
-			var seriesThumbnailsEnabled by rememberPreference(userPreferences, UserPreferences.seriesThumbnailsEnabled)
+			var seriesThumbnailsEnabled by rememberPreference(
+				userSettingPreferences,
+				UserSettingPreferences.seriesThumbnailsEnabled,
+			) { customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration) }
 
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_use_series_thumbnails)) },
 				trailingContent = { Checkbox(checked = seriesThumbnailsEnabled) },
 				captionContent = { Text(stringResource(R.string.lbl_use_series_thumbnails_description)) },
-				onClick = { seriesThumbnailsEnabled = !seriesThumbnailsEnabled },
+				onClick = {
+					seriesThumbnailsEnabled = !seriesThumbnailsEnabled
+				},
 				modifier = Modifier.focusKey("series_thumbnails_enabled")
 			)
 		}

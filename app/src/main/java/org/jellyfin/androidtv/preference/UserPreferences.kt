@@ -230,17 +230,6 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var watchedIndicatorBehavior = enumPreference("pref_watched_indicator_behavior", WatchedIndicatorBehavior.ALWAYS)
 
 		/**
-		 * Enable series thumbnails in home screen rows
-		 */
-		var seriesThumbnailsEnabled = booleanPreference("pref_enable_series_thumbnails", true)
-
-		/**
-		 * Maximum days since last watch to show an item in next up.
-		 * Set to 0 to disable (no cutoff).
-		 */
-		var homeNextUpMaxDays = intPreference("home_next_up_max_days", 0)
-
-		/**
 		 * Subtitles foreground color
 		 */
 		var subtitlesBackgroundColor = longPreference("subtitles_background_color", 0x00FFFFFF)
@@ -415,6 +404,12 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 					"backdrop_behavior",
 					if (backdropEnabled) BackdropBehavior.BACKDROP_WITH_BLUR.name else BackdropBehavior.DISABLED.name
 				)
+			}
+
+			// Home options moved to Jellyfin user display preferences.
+			migration(toVersion = 10) {
+				remove(UserSettingPreferences.seriesThumbnailsEnabled.key)
+				remove(UserSettingPreferences.homeNextUpMaxDays.key)
 			}
 		}
 	}
