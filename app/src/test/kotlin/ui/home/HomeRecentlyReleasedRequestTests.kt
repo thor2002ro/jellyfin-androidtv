@@ -24,6 +24,7 @@ class HomeRecentlyReleasedRequestTests : FunSpec({
 		request.startIndex shouldBe 0
 		request.recursive shouldBe true
 		request.limit shouldBe 50
+		request.enableTotalRecordCount shouldBe false
 		request.imageTypeLimit shouldBe 1
 		request.maxPremiereDate shouldBe now
 		request.isUnaired shouldBe false

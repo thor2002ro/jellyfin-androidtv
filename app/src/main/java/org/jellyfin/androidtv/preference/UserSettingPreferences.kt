@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.preference
 
 import org.jellyfin.androidtv.constant.HomeSectionType
+import org.jellyfin.androidtv.constant.distinctHomeSections
 import org.jellyfin.androidtv.preference.store.DisplayPreferencesStore
 import org.jellyfin.preference.booleanPreference
 import org.jellyfin.preference.enumPreference
@@ -22,7 +23,6 @@ class UserSettingPreferences(
 		val homeCombineContinueWatchingNextUp = booleanPreference("androidtvHomeCombineContinueWatchingNextUp", false)
 		val homeNextUpRewatching = booleanPreference("androidtvHomeNextUpRewatching", false)
 		val homeRecentlyReleased = booleanPreference("androidtvHomeRecentlyReleased", false)
-		val homeFavoriteVideos = booleanPreference("androidtvHomeFavoriteVideos", false)
 
 		val homesection0 = enumPreference("homesection0", HomeSectionType.LIBRARY_TILES_SMALL)
 		val homesection1 = enumPreference("homesection1", HomeSectionType.RESUME)
@@ -53,4 +53,5 @@ class UserSettingPreferences(
 		get() = homesections
 			.map(::get)
 			.filterNot { it == HomeSectionType.NONE }
+			.distinctHomeSections()
 }
