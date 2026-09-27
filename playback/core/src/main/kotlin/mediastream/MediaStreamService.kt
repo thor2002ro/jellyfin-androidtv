@@ -81,16 +81,14 @@ internal class MediaStreamService(
 
 	private suspend fun playEntry(entry: QueueEntry): Boolean {
 		val backend = requireNotNull(manager.backend)
-		val startPosition = entry.startPosition
+		val startPosition = entry.startPosition?.coerceAtLeast(Duration.ZERO)
+		entry.startPosition = startPosition
 		val hasMediaStream = entry.ensureMediaStream(startPosition)
 
 		if (hasMediaStream) {
 			manager.state.resetSubtitleTiming()
 			backend.playItem(entry)
-			if (startPosition != null) {
-				manager.state.seek(startPosition)
-				entry.startPosition = null
-			}
+			entry.startPosition = null
 			return true
 		} else {
 			Timber.e("Unable to resolve stream for entry $entry")
@@ -119,8 +117,9 @@ internal class MediaStreamService(
 			queuedEntry.mediaStream = null
 		}
 		entry.mediaStream = newStream
+		entry.startPosition = position?.coerceAtLeast(Duration.ZERO)
 		backend.replaceItem(entry)
-		position?.let(manager.state::seek)
+		entry.startPosition = null
 		if (!playWhenReady) manager.state.pause()
 
 		return true
