@@ -33,7 +33,7 @@ fun SettingsPlaybackBitstreamAudioScreen(
 	SettingsColumn {
 		item {
 			ListSection(
-				overlineContent = { Text(stringResource(R.string.preference_codecs).uppercase()) },
+				overlineContent = { Text(stringResource(R.string.pref_audio).uppercase()) },
 				headingContent = { Text(stringResource(format.nameRes)) },
 				captionContent = { AudioPassthroughSupportCaption(supportedPassthroughAudioFormats(format, supportedPassthroughMimes)) },
 			)
