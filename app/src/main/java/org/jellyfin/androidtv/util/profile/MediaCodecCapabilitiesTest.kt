@@ -1,7 +1,7 @@
 package org.jellyfin.androidtv.util.profile
 
-import android.media.MediaCodecList
 import android.media.MediaCodecInfo.CodecProfileLevel
+import android.media.MediaCodecList
 import android.util.Size
 import androidx.annotation.OptIn
 import androidx.media3.common.MimeTypes
@@ -11,6 +11,7 @@ import org.jellyfin.androidtv.util.profile.codec.AvcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.HevcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
 
+@OptIn(UnstableApi::class)
 class MediaCodecCapabilitiesTest(
 	private val softwareCodecsEnabled: Boolean,
 ) {
@@ -68,7 +69,16 @@ class MediaCodecCapabilitiesTest(
 
 	fun supportsMimeType(mime: String): Boolean = codecQuery.hasCodecForMime(mime)
 
-	@OptIn(UnstableApi::class)
+	fun supportsMpeg2(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_MPEG2)
+
+	// DivX and Xvid require Advanced Simple Profile; a Simple Profile decoder is insufficient.
+	fun supportsMpeg4Asp(): Boolean =
+		codecQuery.getDecoderLevel(MimeTypes.VIDEO_MP4V, CodecProfileLevel.MPEG4ProfileAdvancedSimple) > 0
+
+	fun supportsVp8(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VP8)
+
+	fun supportsVp9(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VP9)
+
 	fun supportsVp9Main10(): Boolean =
 		codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile2, CodecProfileLevel.VP9Level1) ||
 			codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile3, CodecProfileLevel.VP9Level1)
