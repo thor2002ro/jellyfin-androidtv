@@ -16,7 +16,6 @@ import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
-import org.jellyfin.androidtv.util.profile.codec.isPassthroughAudioAvailable
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.CodecType
@@ -80,6 +79,16 @@ private val hlsFmp4AudioCodecs = arrayOf(
 	Codec.Audio.DTS,
 )
 
+private val passthroughAudioCodecMimes = mapOf(
+	MimeTypes.AUDIO_AC3 to setOf(Codec.Audio.AC3),
+	MimeTypes.AUDIO_AC4 to setOf(Codec.Audio.AC4),
+	MimeTypes.AUDIO_E_AC3 to setOf(Codec.Audio.EAC3),
+	MimeTypes.AUDIO_DTS to setOf(Codec.Audio.DCA, Codec.Audio.DTS),
+	MimeTypes.AUDIO_TRUEHD to setOf(Codec.Audio.MLP, Codec.Audio.TRUEHD),
+)
+
+private val allPassthroughAudioCodecs = passthroughAudioCodecMimes.values.flatten().toSet()
+
 private fun UserPreferences.getMaxBitrate(): Int {
 	var maxBitrate = this[UserPreferences.maxBitrate].toFloatOrNull()
 
@@ -127,6 +136,7 @@ internal fun createDeviceProfile(
 		forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE),
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
+		passthroughAudioCodecs = getPassthroughAudioCodecs(context),
 	)
 }
 
@@ -146,19 +156,26 @@ internal fun createDeviceProfile(
 	forceEnabledHdr: Set<VideoRangeType>,
 	forceDisabledHdr: Set<VideoRangeType>,
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
+	passthroughAudioCodecs: Set<String> = allPassthroughAudioCodecs,
 ) = buildDeviceProfile {
 	val supportsOpus = mediaTest.supportsOpus()
+	val locallyDecodablePassthroughAudioCodecs = passthroughAudioCodecMimes.entries
+		.filter { (mime) -> mediaTest.supportsMimeType(mime) }
+		.flatMapTo(mutableSetOf()) { (_, codecs) -> codecs }
+	val enabledPassthroughCodecs = enabledPassthroughAudioCodecs(
+		isAC3Enabled = isAC3PrefEnabled,
+		isEAC3Enabled = isEAC3PrefEnabled,
+		isDTSEnabled = isDTSPrefEnabled,
+		isTrueHDEnabled = isTrueHDPrefEnabled,
+	)
 	val allowedAudioCodecs = when {
 		downMixAudio -> downmixSupportedAudioCodecs
 		else -> supportedAudioCodecs.filterNot { audioCodec ->
-			!isAudioCodecAvailable(audioCodec, supportsOpus) || when (audioCodec) {
-				// Remove codec if false.
-				Codec.Audio.AC3 -> !isAC3PrefEnabled
-				Codec.Audio.EAC3 -> !isEAC3PrefEnabled
-				Codec.Audio.TRUEHD -> !isTrueHDPrefEnabled
-				Codec.Audio.DTS -> !isDTSPrefEnabled
-				else -> false
-			}
+			val isPassthroughCodec = audioCodec in allPassthroughAudioCodecs
+			val canDecodeLocally = audioCodec in locallyDecodablePassthroughAudioCodecs
+			val canPassthrough = audioCodec in passthroughAudioCodecs && audioCodec in enabledPassthroughCodecs
+			!isAudioCodecAvailable(audioCodec, supportsOpus) ||
+				(isPassthroughCodec && !canDecodeLocally && !canPassthrough)
 		}.toTypedArray()
 	}
 
@@ -177,6 +194,10 @@ internal fun createDeviceProfile(
 	val supportsAV1 = mediaTest.supportsAV1()
 	val supportsAV1Main10 = mediaTest.supportsAV1Main10()
 	val supportsVC1 = mediaTest.supportsVc1()
+	val supportsMpeg2 = mediaTest.supportsMpeg2()
+	val supportsMpeg4Asp = mediaTest.supportsMpeg4Asp()
+	val supportsVP8 = mediaTest.supportsVp8()
+	val supportsVP9 = mediaTest.supportsVp9()
 	val maxResolutionAVC = mediaTest.getMaxResolution(MimeTypes.VIDEO_H264).capTo(maxResolution)
 	val maxResolutionHevc = mediaTest.getMaxResolution(MimeTypes.VIDEO_H265).capTo(maxResolution)
 	val maxHevcWidth = if (attemptSelectedHevcSource) maxResolution.maxWidth else maxResolutionHevc.width
@@ -238,7 +259,7 @@ internal fun createDeviceProfile(
 		type = DlnaProfileType.AUDIO
 		context = EncodingContext.STREAMING
 
-		container = Codec.Container.TS
+		container = Codec.Container.MP4
 		protocol = MediaStreamProtocol.HLS
 
 		audioCodec(Codec.Audio.AAC)
@@ -250,27 +271,25 @@ internal fun createDeviceProfile(
 		type = DlnaProfileType.VIDEO
 
 		container(
-			Codec.Container.ASF,
+			Codec.Container.AVI,
+			Codec.Container.FLV,
 			Codec.Container.HLS,
 			Codec.Container.M4V,
 			Codec.Container.MKV,
 			Codec.Container.MOV,
 			Codec.Container.MP4,
-			Codec.Container.OGM,
-			Codec.Container.OGV,
+			Codec.Container.MPEG,
 			Codec.Container.TS,
-			Codec.Container.VOB,
 			Codec.Container.WEBM,
-			Codec.Container.WMV,
-			Codec.Container.XVID,
 		)
 
 		videoCodec(
 			Codec.Video.AV1,
 			Codec.Video.H264,
 			Codec.Video.HEVC,
-			Codec.Video.MPEG,
+			Codec.Video.MPEG1VIDEO,
 			Codec.Video.MPEG2VIDEO,
+			Codec.Video.MPEG4,
 			Codec.Video.VC1,
 			Codec.Video.VP8,
 			Codec.Video.VP9,
@@ -280,10 +299,38 @@ internal fun createDeviceProfile(
 	}
 
 	// Audio
+	// An empty container declaration means every container to the server, including formats Media3 cannot demux.
 	directPlayProfile {
 		type = DlnaProfileType.AUDIO
 
+		container(
+			Codec.Container.AAC,
+			Codec.Container.AC3,
+			Codec.Container.AC4,
+			Codec.Container.EAC3,
+			Codec.Container.FLAC,
+			Codec.Container.FLV,
+			Codec.Container.HLS,
+			Codec.Container.M4A,
+			Codec.Container.MKV,
+			Codec.Container.MOV,
+			Codec.Container.MP3,
+			Codec.Container.MP4,
+			Codec.Container.OGG,
+			Codec.Container.TS,
+			Codec.Container.WAV,
+			Codec.Container.WEBM,
+		)
+
 		audioCodec(*allowedAudioCodecs)
+	}
+	// Server 12 selects the fMP4 remux container from an exact, single-codec MP4 profile.
+	for (audioCodec in hlsFmp4AudioCodecs.filter(allowedAudioCodecs::contains)) {
+		directPlayProfile {
+			type = DlnaProfileType.AUDIO
+			container(Codec.Container.MP4)
+			audioCodec(audioCodec)
+		}
 	}
 
 	/// Codec profiles
@@ -439,6 +486,39 @@ internal fun createDeviceProfile(
 		}
 	}
 
+	// MPEG-1 and MPEG-2 share the same Android decoder MIME type
+	for (videoCodec in arrayOf(Codec.Video.MPEG1VIDEO, Codec.Video.MPEG2VIDEO)) {
+		codecProfile {
+			type = CodecType.VIDEO
+			codec = videoCodec
+
+			conditions {
+				when {
+					!supportsMpeg2 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+					else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+				}
+			}
+		}
+	}
+
+	for ((videoCodec, supported) in arrayOf(
+		Codec.Video.MPEG4 to supportsMpeg4Asp,
+		Codec.Video.VP8 to supportsVP8,
+		Codec.Video.VP9 to supportsVP9,
+	)) {
+		codecProfile {
+			type = CodecType.VIDEO
+			codec = videoCodec
+
+			conditions {
+				when {
+					!supported -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+					else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+				}
+			}
+		}
+	}
+
 	// Get max resolutions for common codecs
 	// AVC
 	codecProfile {
@@ -500,7 +580,7 @@ internal fun createDeviceProfile(
 		if (!supportsAV1HDR10Plus) {
 			add(VideoRangeType.HDR10_PLUS)
 
-			if (!mediaTest.supportsAV1HDR10()) add(VideoRangeType.HDR10)
+			if (!supportsAV1HDR10) add(VideoRangeType.HDR10)
 		}
 	} - forceEnabledHdr + forceDisabledHdr
 
@@ -609,26 +689,38 @@ private fun Size.capTo(resolution: PlaybackResolution) = Size(
 
 @OptIn(UnstableApi::class)
 fun isPassthroughAudioAvailable(context: Context, mimetype: String): Boolean {
-	// Def audio attributes
-	val audioAttributes = AudioAttributes.Builder()
-		.setUsage(C.USAGE_MEDIA)
-		.setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-		.build()
-	// Get audio capabilities
-	val audioCapabilities = AudioCapabilities.getCapabilities(
-		context,
-		audioAttributes,
-		null,
-		listOf(
-			AudioFormat.CHANNEL_OUT_STEREO,
-			AudioFormat.CHANNEL_OUT_5POINT1 )
-	)
-	// Set audio format for a passthrough audio codec 2.0 check
+	val audioAttributes = passthroughAudioAttributes()
+	return getAudioCapabilities(context, audioAttributes).supportsPassthrough(mimetype, audioAttributes)
+}
+
+@OptIn(UnstableApi::class)
+private fun getPassthroughAudioCodecs(context: Context): Set<String> {
+	val audioAttributes = passthroughAudioAttributes()
+	val audioCapabilities = getAudioCapabilities(context, audioAttributes)
+	return passthroughAudioCodecMimes.entries.flatMapTo(mutableSetOf()) { (mime, codecs) ->
+		if (audioCapabilities.supportsPassthrough(mime, audioAttributes)) codecs else emptySet()
+	}
+}
+
+private fun passthroughAudioAttributes() = AudioAttributes.Builder()
+	.setUsage(C.USAGE_MEDIA)
+	.setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+	.build()
+
+@OptIn(UnstableApi::class)
+private fun getAudioCapabilities(context: Context, audioAttributes: AudioAttributes) = AudioCapabilities.getCapabilities(
+	context,
+	audioAttributes,
+	null,
+	listOf(AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.CHANNEL_OUT_5POINT1),
+)
+
+@OptIn(UnstableApi::class)
+private fun AudioCapabilities.supportsPassthrough(mime: String, audioAttributes: AudioAttributes): Boolean {
 	val format = Format.Builder()
-		.setSampleMimeType(mimetype)
+		.setSampleMimeType(mime)
 		.setChannelCount(Integer.bitCount(AudioFormat.CHANNEL_OUT_STEREO))
 		.setSampleRate(Format.NO_VALUE)
 		.build()
-	// Test Passthrough Direct Playback
-	return audioCapabilities.isPassthroughPlaybackSupported(format, audioAttributes)
+	return isPassthroughPlaybackSupported(format, audioAttributes)
 }

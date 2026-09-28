@@ -19,7 +19,6 @@ import org.jellyfin.androidtv.util.appendItem
 import org.jellyfin.androidtv.util.appendSection
 import org.jellyfin.androidtv.util.appendValue
 import org.jellyfin.androidtv.util.buildMarkdown
-import org.jellyfin.androidtv.util.profile.codec.isPassthroughAudioAvailable
 import org.jellyfin.sdk.api.client.util.ApiSerializer
 import org.jellyfin.sdk.model.ServerVersion
 import kotlin.time.Duration.Companion.nanoseconds
