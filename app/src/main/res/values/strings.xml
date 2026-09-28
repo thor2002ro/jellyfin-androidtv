@@ -743,4 +743,6 @@
     <string name="lbl_bitstream_eac3">Bitstream Dolby Digital Plus</string>
     <string name="lbl_bitstream_dts">Bitstream Digital Theater System</string>
     <string name="lbl_bitstream_truehd">Bitstream Dolby TrueHD</string>
+    <string name="lbl_passthrough_supported_formats">Supported: %1$s</string>
+    <string name="lbl_passthrough_unsupported">Unsupported by current audio output</string>
 </resources>
