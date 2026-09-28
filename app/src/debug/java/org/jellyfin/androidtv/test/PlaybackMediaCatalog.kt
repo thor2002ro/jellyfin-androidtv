@@ -7,6 +7,16 @@ import kotlinx.serialization.json.Json
 private val playbackCatalogJson = Json { prettyPrint = true }
 
 @Serializable
+data class PlaybackAudioDescriptor(
+	val codec: String?,
+	val profile: String?,
+	val channels: Int?,
+	val sampleRate: Int?,
+	val bitDepth: Int?,
+	val bitrate: Int?,
+)
+
+@Serializable
 data class PlaybackMediaDescriptor(
 	val id: String,
 	val name: String,
@@ -21,6 +31,15 @@ data class PlaybackMediaDescriptor(
 	val doviProfile: Int?,
 	val subtitleCodecs: Set<String>,
 	val audioCodecs: Set<String>,
+	val videoFrameRate: Float? = null,
+	val videoRefFrames: Int? = null,
+	val videoInterlaced: Boolean? = null,
+	val videoAnamorphic: Boolean? = null,
+	val videoBitrate: Int? = null,
+	val containerBitrate: Int? = null,
+	val videoStreamCount: Int = 1,
+	val audioStreamCount: Int = 0,
+	val audioStreams: List<PlaybackAudioDescriptor> = emptyList(),
 )
 
 data class PlaybackCoverage(
@@ -54,6 +73,12 @@ object PlaybackMediaCatalog {
 		PlaybackFixtureRule("1080p-sdr-ass", {
 			it.is1080p() && it.isSdr() && it.subtitleCodecs.any { codec -> codec.isCodec("ass") || codec.isCodec("ssa") }
 		}),
+		PlaybackFixtureRule("multi-track", {
+			it.is1080p() && it.isSdr() && it.videoCodec.isCodec("h264") &&
+				(it.audioStreamCount > 1 || it.subtitleCodecs.isNotEmpty())
+		}) {
+			it.audioStreamCount * 100 + it.subtitleCodecs.size * 10 + if (it.container.isCodec("mkv")) 1 else 0
+		},
 		PlaybackFixtureRule("4k-hdr10-hevc", {
 			it.is4k() && it.videoCodec.isCodec("hevc") && it.videoRange.equals("HDR10", ignoreCase = true)
 		}),
