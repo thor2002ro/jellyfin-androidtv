@@ -68,6 +68,7 @@ private fun stream(
 	type = MediaStreamType.SUBTITLE,
 	index = index,
 	isExternal = false,
+	isOriginal = true,
 	isTextSubtitleStream = true,
 	supportsExternalStream = false,
 )
