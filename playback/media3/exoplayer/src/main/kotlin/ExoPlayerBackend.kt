@@ -937,7 +937,11 @@ class ExoPlayerBackend(
 		}
 
 		val allocator = DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE).also { bufferAllocator = it }
-		val loadControl = DefaultLoadControl.Builder()
+		val targetBufferBytes = bufferOptions.maxBufferBytes
+			?.takeIf { it > 0 }
+			?.coerceAtMost(Int.MAX_VALUE.toLong())
+			?.toInt()
+		val loadControlBuilder = DefaultLoadControl.Builder()
 			.setAllocator(allocator)
 			.setBufferDurationsMs(
 				bufferOptions.minBufferDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
@@ -945,8 +949,9 @@ class ExoPlayerBackend(
 				bufferOptions.bufferForPlaybackDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
 				bufferOptions.bufferForPlaybackAfterRebufferDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
 			)
-			.setPrioritizeTimeOverSizeThresholds(true)
-			.build()
+			.setPrioritizeTimeOverSizeThresholds(targetBufferBytes == null)
+		targetBufferBytes?.let(loadControlBuilder::setTargetBufferBytes)
+		val loadControl = loadControlBuilder.build()
 
 		return ExoPlayer.Builder(context)
 			.setLoadControl(loadControl)
