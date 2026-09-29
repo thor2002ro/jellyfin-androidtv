@@ -284,7 +284,6 @@
     <string name="pref_clock_display_browsing">Mientras navega</string>
     <string name="lbl_always">Siempre</string>
     <string name="pref_clock_display">Mostrar reloj</string>
-    <string name="no_network_permissions">Jellyfin requiere permisos de acceso a red para funcionar</string>
     <string name="pref_theme_muted_purple">Púrpura silencioso</string>
     <string name="lbl_switch_user">Cambiar de cuenta</string>
     <string name="user_picker_last_user_summary">Utilizar la última cuenta activa</string>

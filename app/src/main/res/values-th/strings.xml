@@ -350,7 +350,6 @@
     <string name="user_picker_last_user_summary">ใช้บัญชีที่มีการใช้งานล่าสุด</string>
     <string name="lbl_switch_user">สลับบัญชี</string>
     <string name="pref_theme_muted_purple">ม่วงโทนหม่น</string>
-    <string name="no_network_permissions">Jellyfin จำเป็นต้องได้รับอนุญาตสิทธิ์เครือข่ายเพื่อทำงาน</string>
     <string name="press_to_close">กดเพื่อปิด</string>
     <string name="saved_servers">เซิร์ฟเวอร์ที่บันทึกไว้</string>
     <string name="welcome_title">ยินดีต้อนรับสู่ Jellyfin!</string>

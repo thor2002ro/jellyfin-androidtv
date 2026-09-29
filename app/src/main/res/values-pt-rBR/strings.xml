@@ -336,7 +336,6 @@
     <string name="welcome_title">Boas-vindas ao Jellyfin!</string>
     <string name="saved_servers">Servidores salvos</string>
     <string name="press_to_close">Pressione para fechar</string>
-    <string name="no_network_permissions">Jellyfin requer permissões de rede para funcionar</string>
     <string name="pref_theme_muted_purple">Roxo suave</string>
     <string name="pref_next_up_behavior_title">Mostrar as informações do próximo vídeo</string>
     <string name="lbl_fit">Normal</string>
