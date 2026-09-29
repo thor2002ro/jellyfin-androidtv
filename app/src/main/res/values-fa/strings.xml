@@ -195,7 +195,6 @@
     <string name="desc_premieres">نمایش یک ردیف از قسمت های آزمایشی برای تمام سریال هایی که تماشا میکنید</string>
     <string name="lbl_show_premieres">نمایش اولین نمایش فصل</string>
     <string name="lbl_next_episode">قسمت بعدی</string>
-    <string name="lbl_previous_episode">قسمت قبلی</string>
     <string name="lbl_more_like_this">بیشتر شبیه این</string>
     <string name="lbl_resume_from">از سرگیری از %1$s</string>
     <string name="lbl_resume_preroll">از سرگیری پیش نمایش</string>

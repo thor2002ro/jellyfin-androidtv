@@ -102,7 +102,6 @@
     <string name="lbl_song_title">歌曲标题</string>
     <string name="lbl_album_name">专辑名</string>
     <string name="lbl_next_episode">下一集</string>
-    <string name="lbl_previous_episode">上一集</string>
     <string name="lbl_more_like_this">更多类似</string>
     <string name="lbl_resume_from">自%1$s恢复</string>
     <string name="lbl_guide_option_number">频道编号</string>

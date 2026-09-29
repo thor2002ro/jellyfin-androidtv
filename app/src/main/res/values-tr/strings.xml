@@ -246,7 +246,6 @@
     <string name="lbl_song_title">Şarkı başlığı</string>
     <string name="lbl_album_name">Albüm ismi</string>
     <string name="lbl_next_episode">Sonraki bölüm</string>
-    <string name="lbl_previous_episode">Önceki bölüm</string>
     <string name="lbl_more_like_this">Benzerleri</string>
     <string name="lbl_resume_from">Sürdür: %1$s</string>
     <string name="lbl_resume_preroll">Ön gösterimi sürdür</string>

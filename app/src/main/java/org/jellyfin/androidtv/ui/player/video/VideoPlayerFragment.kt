@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.ui.base.BaseScreen
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.Destinations
@@ -39,27 +38,32 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val navigationRepository by inject<NavigationRepository>()
 	private val api by inject<ApiClient>()
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
+	private var closingPlayer = false
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 
 		// Create a queue from the items added to the legacy video queue
-		val queueSupplier = RewriteMediaManager.BaseItemQueueSupplier(api, videoQueueManager.getCurrentVideoQueue(), false)
+		val startIndex = videoQueueManager.getCurrentMediaPosition()
+		val startPosition = arguments
+			?.takeIf { it.containsKey(EXTRA_POSITION) }
+			?.getInt(EXTRA_POSITION)
+			?.milliseconds
+		val queueSupplier = RewriteMediaManager.BaseItemQueueSupplier(
+			api = api,
+			items = videoQueueManager.getCurrentVideoQueue(),
+			visibleInScreensaver = false,
+			initialStartPosition = startPosition,
+			initialStartIndex = startIndex,
+		)
 		Timber.i("Created a queue with ${queueSupplier.items.size} items")
 		playbackManager.queue.clear()
-		playbackManager.queue.addSupplier(queueSupplier, startIndex = videoQueueManager.getCurrentMediaPosition())
+		playbackManager.queue.addSupplier(queueSupplier, startIndex = startIndex)
 		playbackManager.queue.entry
 			.mapNotNull { entry -> entry?.baseItem?.liveTvChannelId() }
 			.distinctUntilChanged()
 			.onEach { channelId -> TvManager.setLastLiveTvChannel(channelId) }
 			.launchIn(lifecycleScope)
-
-		// Set position
-		arguments?.getInt(EXTRA_POSITION)?.milliseconds?.let {
-			lifecycleScope.launch {
-				playbackManager.state.seek(it)
-			}
-		}
 
 		// Pause player until the initial resume
 		playbackManager.state.pause()
@@ -92,6 +96,10 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	) = remoteKeyEventHandler?.invoke(keyCode, event) == true
 
 	private fun closePlayer() {
+		if (closingPlayer) return
+		closingPlayer = true
+		remoteKeyEventHandler = null
+
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
 		if (!navigationRepository.goBack()) {

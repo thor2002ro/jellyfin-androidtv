@@ -103,6 +103,8 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	var isStaticHeight = false
 		private set
 
+	private var initialSelectedPosition = -1
+	private var initialSelectedPositionApplied = false
 	private var fullyLoaded = false
 	private val currentlyRetrievingSemaphore = Any()
 	private var currentlyRetrieving = false
@@ -448,6 +450,18 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 
 	fun setSiblingRow(row: Row?) {
 		siblingRow = row
+	}
+
+	fun setInitialSelectedPosition(position: Int) {
+		initialSelectedPosition = position
+		initialSelectedPositionApplied = false
+	}
+
+	fun getPendingInitialSelectedPosition(): Int? =
+		initialSelectedPosition.takeIf { !initialSelectedPositionApplied && it >= 0 }
+
+	fun markInitialSelectedPositionApplied() {
+		initialSelectedPositionApplied = true
 	}
 
 	fun setReRetrieveTriggers(reRetrieveTriggers: Array<ChangeTriggerType>?) {

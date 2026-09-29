@@ -130,7 +130,6 @@
     <string name="lbl_song_title">Título de la canción</string>
     <string name="lbl_album_name">Nombre del álbum</string>
     <string name="lbl_next_episode">Siguiente episodio</string>
-    <string name="lbl_previous_episode">Episodio anterior</string>
     <string name="lbl_more_like_this">Más como este</string>
     <string name="lbl_resume_from">Reanudar desde %1$s</string>
     <string name="lbl_resume_preroll">Reanudar pre-roll</string>

@@ -17,7 +17,6 @@
     <string name="lbl_song_title">Dziesmas nosaukums</string>
     <string name="lbl_album_name">Albuma nosaukums</string>
     <string name="lbl_next_episode">Nākamā epizode</string>
-    <string name="lbl_previous_episode">Iepriekšējā epizode</string>
     <string name="lbl_more_like_this">Vairāk kā šis</string>
     <string name="lbl_resume_from">Turpināt no %1$s</string>
     <string name="lbl_guide_option_number">Kanāla skaitlis</string>
