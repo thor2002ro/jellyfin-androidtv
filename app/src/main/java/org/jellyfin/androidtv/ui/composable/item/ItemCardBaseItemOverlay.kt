@@ -29,7 +29,7 @@ import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.design.Tokens
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -157,8 +157,8 @@ private fun ProgressIndicator(
 	val currentQueueEntry by rememberQueueEntry(playbackManager)
 
 	val playedPercentage = when {
-		playState == PlayState.PLAYING && currentQueueEntry?.baseItem?.id == item.id -> rememberPlayerProgress(playbackManager).value
-		item.mediaType in progressMediaTypes -> item.userData?.playedPercentage?.toFloat()?.div(100f)?.coerceIn(0f, 1f)
+		playState.isActivePlayback && currentQueueEntry?.baseItem?.id == item.id -> rememberPlayerProgress(playbackManager).value
+		item.mediaType in progressMediaTypes -> item.userData?.playedPercentage?.toFloat()?.div(100f)?.coerceIn(0f, 1f)?.takeIf { it > 0f && it < 1f }
 
 		else -> null
 	}

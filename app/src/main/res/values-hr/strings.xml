@@ -76,7 +76,6 @@
     <string name="pref_live_tv_cat">TV uživo</string>
     <string name="lbl_recorded_tv">Snimljen TV program</string>
     <string name="lbl_live_tv_guide">TV vodič</string>
-    <string name="lbl_no_recordings">Nema dostupnih snimki</string>
     <string name="msg_burn_sub_warning">Podnapisi spojeni sa videom mogu uzeti nekoliko minuta. Budite strpljivi…</string>
     <string name="msg_unable_load_subs">Nije moguće učitati podnapis</string>
     <string name="msg_subtitles_loading">Podnapisi se učitavaju…</string>
@@ -365,7 +364,6 @@
     <string name="server_issue_unable_to_connect">Nije se moguće povezati</string>
     <string name="server_issue_unsupported_version">Server koristi verziju %1$s, koja nije podržana</string>
     <string name="server_issue_timeout">Veza je istekla</string>
-    <string name="server_issue_ssl_handshake">SSL nije uspio</string>
     <string name="sort_accounts_by">Sortiraj račune po</string>
     <string name="pref_accounts">Računi</string>
     <string name="pref_behavior">Ponašanje</string>

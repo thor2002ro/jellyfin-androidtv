@@ -195,7 +195,6 @@
     <string name="lbl_direct_stream_live">ഡയറക്ട് സ്ട്രീം ലൈവ് ടിവി</string>
     <string name="lbl_recorded_tv">റെക്കോർഡുചെയ്‌ത ടിവി</string>
     <string name="lbl_live_tv_guide">തത്സമയ ടിവി ഗൈഡ്</string>
-    <string name="lbl_no_recordings">റെക്കോർഡിംഗുകളൊന്നും ലഭ്യമല്ല</string>
     <string name="msg_unable_load_subs">സബ്‌ടൈറ്റിൽ ലോഡുചെയ്യാനായില്ല</string>
     <string name="lbl_filters">തത്സമയ ടി വി ഫിൽട്ടറുകൾ</string>
     <string name="lbl_ended">അവസാനിച്ചു</string>

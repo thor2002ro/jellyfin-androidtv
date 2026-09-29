@@ -82,7 +82,6 @@
     <string name="lbl_artists">Artis</string>
     <string name="lbl_albums">Album</string>
     <string name="lbl_programs">Program</string>
-    <string name="lbl_no_recordings">Tak ada rekaman tersedia</string>
     <string name="lbl_ended">BERAKHIR</string>
     <string name="lbl__continuing">BERLANJUT</string>
     <string name="lbl_display_preferences">Preferensi tampilan</string>
@@ -441,7 +440,6 @@
     <string name="video_start_delay">Penundaan mula video</string>
     <string name="segment_action_skip">Lewati</string>
     <string name="color_blue">Biru</string>
-    <string name="server_issue_ssl_handshake">SSL handshake gagal</string>
     <string name="pref_telemetry_description">Kirim laporan kerusakan, termasuk log</string>
     <string name="server_setup_incomplete">Pengaturan server belum selesai. Buka Jellyfin di peramban web untuk menyelesaikan sebelum masuk.</string>
     <string name="photo_albums">Album Foto</string>

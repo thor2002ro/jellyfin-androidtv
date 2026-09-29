@@ -108,7 +108,6 @@
     <string name="pref_live_tv_cat">TV en directe</string>
     <string name="lbl_recorded_tv">Enregistrat a la TV</string>
     <string name="lbl_live_tv_guide">Guia de TV en directe</string>
-    <string name="lbl_no_recordings">No hi ha gravacions disponibles</string>
     <string name="msg_burn_sub_warning">S\'estan afegint els subtítols. Això pot trigar uns segons…</string>
     <string name="msg_unable_load_subs">No s\'han pogut carregar els subtítols</string>
     <string name="msg_subtitles_loading">S\'estan carregant els subtítols…</string>
@@ -273,7 +272,6 @@
     <string name="pref_theme_dark">Fosc (Per defecte)</string>
     <string name="lbl_my_media">El meu contingut multimèdia</string>
     <string name="lbl_image_size">Mida de la imatge</string>
-    <string name="server_issue_ssl_handshake">Ha fallat l\'emparellament SSL</string>
     <string name="server_issue_timeout">Ha expirat el temps de connexió</string>
     <string name="server_issue_outdated_version">El servidor utilitza la versió no suportada %1$s, si us plau actualitza a la %2$s o superior</string>
     <string name="server_issue_unsupported_version">El servidor utilitza la versió %1$s, la qual no és compatible</string>

@@ -212,7 +212,6 @@
     <string name="msg_subtitles_loading">Maelezo mafupi yanapakia…</string>
     <string name="msg_unable_load_subs">Imeshindwa kupakia maelezo mafupi</string>
     <string name="msg_burn_sub_warning">Inajumuisha maelezo mafupi kwenye video. Hii inaweza kuchukua sekunde chache…</string>
-    <string name="lbl_no_recordings">Hakuna rekodi zinazopatikana</string>
     <string name="lbl_live_tv_guide">Mwongozo wa Live TV</string>
     <string name="lbl_recorded_tv">TV Iliyorekodiwa</string>
     <string name="pref_live_tv_cat">Runinga mubashara</string>
@@ -364,7 +363,6 @@
     <string name="server_issue_unsupported_version">Seva inatumia toleo la %1$s ambalo halitumiki</string>
     <string name="server_issue_outdated_version">Seva inatumia toleo la %1$s lisilotumika. Tafadhali sahihisha kwenda %2$s au jipya zaidi</string>
     <string name="server_issue_timeout">Muda wa kuunganisha umeisha</string>
-    <string name="server_issue_ssl_handshake">Hitilafu ya muunganisho salama wa SSL</string>
     <string name="pref_customization">Marekebisho binafsi</string>
     <string name="sort_accounts_by">Panga akaunti kwa</string>
     <string name="pref_accounts">Akaunti</string>

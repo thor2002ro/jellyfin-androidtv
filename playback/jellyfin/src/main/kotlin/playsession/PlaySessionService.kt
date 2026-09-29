@@ -64,7 +64,8 @@ class PlaySessionService(
 	override suspend fun onInitialize() {
 		state.playState.onEach { playState ->
 			when (playState) {
-				PlayState.PLAYING -> {
+				PlayState.PLAYING,
+				PlayState.BUFFERING -> {
 					sendStreamStart()
 					startProgressReports(PROGRESS_REPORTING_INTERVAL)
 				}
@@ -208,6 +209,7 @@ class PlaySessionService(
 				delay(interval)
 				when (state.playState.value) {
 					PlayState.PLAYING,
+					PlayState.BUFFERING,
 					PlayState.PAUSED -> sendStreamUpdate()
 
 					PlayState.STOPPED,
@@ -303,7 +305,7 @@ class PlaySessionService(
 					canSeek = true,
 					isMuted = state.volume.muted,
 					volumeLevel = (state.volume.volume * 100).roundToInt(),
-					isPaused = state.playState.value != PlayState.PLAYING,
+					isPaused = state.playState.value == PlayState.PAUSED,
 					aspectRatio = state.videoSize.value.aspectRatio.toString(),
 					positionTicks = reporting.positionTicks,
 					playMethod = playMethod,
@@ -373,7 +375,7 @@ class PlaySessionService(
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
 			org.jellyfin.playback.core.model.PlaybackOrder.SHUFFLE -> PlaybackOrder.SHUFFLE
 		}
-		val isPaused = state.playState.value != PlayState.PLAYING
+		val isPaused = state.playState.value == PlayState.PAUSED
 
 		runCatching {
 			api.playStateApi.reportPlaybackProgress(

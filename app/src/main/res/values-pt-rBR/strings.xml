@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Carregando legendas…</string>
     <string name="msg_unable_load_subs">Não foi possível carregar a legenda</string>
     <string name="msg_burn_sub_warning">Incorporando legendas. Isso pode levar alguns segundos…</string>
-    <string name="lbl_no_recordings">Sem gravações disponíveis</string>
     <string name="lbl_live_tv_guide">Guia de TV ao Vivo</string>
     <string name="lbl_recorded_tv">TV Gravada</string>
     <string name="pref_live_tv_cat">TV ao Vivo</string>
@@ -374,7 +373,6 @@
     <string name="license_description">Descrição</string>
     <string name="licenses_link_description">Veja as licenças das bibliotecas utilizadas pelo Jellyfin</string>
     <string name="licenses_link">Licenças</string>
-    <string name="server_issue_ssl_handshake">Falha no \"SSL handshake\"</string>
     <string name="server_issue_timeout">A conexão expirou</string>
     <string name="server_issue_outdated_version">Versão não suportada %1$s, Por favor atualize para a versão %2$s ou superior</string>
     <string name="server_issue_unsupported_version">Servidor está usando a versão %1$s que não é mais suportada</string>

@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.AnyRes
 import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
+import org.jellyfin.androidtv.util.apiclient.channelPrimaryImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
@@ -47,6 +48,12 @@ class ImageHelper(
 		width: Int? = null,
 		height: Int? = null,
 	): String? = item.itemImages[ImageType.PRIMARY]?.getUrl(api, maxWidth = width, maxHeight = height)
+
+	fun getChannelPrimaryImageUrl(
+		item: BaseItemDto,
+		width: Int? = null,
+		height: Int? = null,
+	): String? = item.channelPrimaryImage?.getUrl(api, maxWidth = width, maxHeight = height)
 
 	fun getPrimaryImageUrl(
 		item: BaseItemDto,

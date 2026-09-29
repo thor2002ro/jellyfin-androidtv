@@ -35,7 +35,6 @@
     <string name="btn_got_it">Selvä</string>
     <string name="lbl_remove_from_queue">Poista jonosta</string>
     <string name="lbl_recorded_tv">Televisiotallenteet</string>
-    <string name="lbl_no_recordings">Tallenteita ei ole</string>
     <string name="msg_unable_load_subs">Tekstitystä ei voitu ladata</string>
     <string name="msg_subtitles_loading">Tekstityksiä ladataan…</string>
     <string name="pref_audio_direct">Muuntamaton</string>
@@ -242,7 +241,6 @@
     <string name="pref_browsing">Selaus</string>
     <string name="pref_accounts">Tilit</string>
     <string name="pref_customization">Mukautus</string>
-    <string name="server_issue_ssl_handshake">SSL-kättely epäonnistui</string>
     <string name="server_issue_timeout">Yhteys aikakatkaistiin</string>
     <string name="server_issue_unsupported_version">Palvelimen versio on %1$s, eikä sitä tueta</string>
     <string name="server_issue_outdated_version">Palvelimen versio on %1$s, jota ei tueta. Päivitä vähintään versioon %2$s</string>
