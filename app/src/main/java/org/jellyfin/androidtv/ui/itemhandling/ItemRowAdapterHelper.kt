@@ -94,9 +94,20 @@ fun <T : Any> ItemRowAdapter.setItems(
 		}
 	}
 
-	replaceAll(allItems)
+	replaceAll(allItems, areItemsTheSame = ::areAdapterItemsTheSame)
 	itemsLoaded = allItems.size
 	addRowToParentIfResultsReceived()
+}
+
+internal fun areAdapterItemsTheSame(old: Any, new: Any): Boolean {
+	val oldRowItem = old as? BaseRowItem
+	val newRowItem = new as? BaseRowItem
+	if (oldRowItem != null || newRowItem != null) {
+		val oldItemId = oldRowItem?.itemId ?: return false
+		return oldItemId == newRowItem?.itemId
+	}
+
+	return old == new
 }
 
 private fun BaseRowItem.resumeSignature() = listOf(
