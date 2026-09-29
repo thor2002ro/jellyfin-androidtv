@@ -27,7 +27,7 @@ fun MediaInfo.getExternalSubtitles(api: ApiClient): List<ExternalSubtitle> =
 			val deliveryUrl = stream.deliveryUrl ?: return@mapNotNull null
 			ExternalSubtitle(
 				url = api.createUrl(deliveryUrl, ignorePathParameters = true),
-				mimeType = getSubtitleMimeType(stream.codec),
+				mimeType = subtitleMimeType(stream.codec),
 				language = stream.language,
 				title = stream.displayTitle,
 				index = stream.index,
@@ -36,11 +36,14 @@ fun MediaInfo.getExternalSubtitles(api: ApiClient): List<ExternalSubtitle> =
 			)
 		}
 
-private fun getSubtitleMimeType(codec: String?): String = when (codec?.lowercase()) {
+internal fun subtitleMimeType(codec: String?): String = when (codec?.lowercase()) {
 	"srt", "subrip" -> "application/x-subrip"
 	"ass", "ssa" -> "text/x-ssa"
 	"vtt", "webvtt" -> "text/vtt"
 	"ttml" -> "application/ttml+xml"
+	"pgs", "pgssub", "hdmv_pgs_subtitle" -> "application/pgs"
+	"vobsub", "dvdsub", "dvd_subtitle" -> "application/vobsub"
+	"dvbsub", "dvb_subtitle" -> "application/dvbsubs"
 	else -> "application/x-subrip" // default to SRT
 }
 

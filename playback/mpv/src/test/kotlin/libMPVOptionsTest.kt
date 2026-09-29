@@ -580,6 +580,102 @@ class LibMPVOptionsTest : StringSpec({
 		formatLibMPVBufferDetails(1_048_576, false, true, 2_097_152.0) shouldBe "1.00 MiB, idle"
 		formatLibMPVBufferDetails(1_048_576, true, false, 2_097_152.0) shouldBe "1.00 MiB, paused, 2.00 MiB/s"
 	}
+
+	"native subtitle overlay requires HDR direct MediaCodec output" {
+		shouldUseNativeSubtitleOverlay("HDR10", "mediacodec_embed") shouldBe true
+		shouldUseNativeSubtitleOverlay("DolbyVision", "mediacodec_embed") shouldBe true
+		shouldUseNativeSubtitleOverlay("SDR", "mediacodec_embed") shouldBe false
+		shouldUseNativeSubtitleOverlay("UNKNOWN", "mediacodec_embed") shouldBe false
+		shouldUseNativeSubtitleOverlay("HDR10", "gpu-next") shouldBe false
+	}
+
+	"native subtitle overlay supplies the Android canvas size" {
+		nativeSubtitleOverlayCommand(7, 1920, 1080).toList() shouldContainExactly listOf(
+			"subtitle-overlay-raw",
+			"7",
+			"1920",
+			"1080",
+		)
+	}
+
+	"unchanged native subtitle overlay omits pixels" {
+		parseLibMPVSubtitleOverlay(
+			MPVNode.MapNode(
+				mapOf(
+					"change-id" to MPVNode.IntNode(7),
+					"canvas-w" to MPVNode.IntNode(1920),
+					"canvas-h" to MPVNode.IntNode(1080),
+				)
+			),
+			previousChangeId = 7,
+		) shouldBe LibMPVSubtitleOverlayUpdate.Unchanged
+	}
+
+	"empty native subtitle overlay clears the previous bitmap" {
+		parseLibMPVSubtitleOverlay(
+			MPVNode.MapNode(
+				mapOf(
+					"change-id" to MPVNode.IntNode(8),
+					"canvas-w" to MPVNode.IntNode(1920),
+					"canvas-h" to MPVNode.IntNode(1080),
+					"w" to MPVNode.IntNode(0),
+					"h" to MPVNode.IntNode(0),
+				)
+			),
+			previousChangeId = 7,
+		) shouldBe LibMPVSubtitleOverlayUpdate.Clear(changeId = 8)
+	}
+
+	"visible native subtitle overlay preserves its crop and pixels" {
+		val pixels = byteArrayOf(0, 0, -1, -1, 0, -1, 0, -1)
+		val update = parseLibMPVSubtitleOverlay(
+			MPVNode.MapNode(
+				mapOf(
+					"change-id" to MPVNode.IntNode(8),
+					"canvas-w" to MPVNode.IntNode(1920),
+					"canvas-h" to MPVNode.IntNode(1080),
+					"x" to MPVNode.IntNode(100),
+					"y" to MPVNode.IntNode(900),
+					"w" to MPVNode.IntNode(2),
+					"h" to MPVNode.IntNode(1),
+					"stride" to MPVNode.IntNode(8),
+					"format" to MPVNode.StringNode("bgra"),
+					"data" to MPVNode.ByteArrayNode(pixels),
+				)
+			),
+			previousChangeId = 7,
+		) as LibMPVSubtitleOverlayUpdate.Frame
+
+		update.changeId shouldBe 8
+		update.canvasWidth shouldBe 1920
+		update.canvasHeight shouldBe 1080
+		update.x shouldBe 100
+		update.y shouldBe 900
+		update.width shouldBe 2
+		update.height shouldBe 1
+		update.pixels.toList() shouldContainExactly pixels.toList()
+	}
+
+	"malformed native subtitle overlay is rejected" {
+		parseLibMPVSubtitleOverlay(
+			MPVNode.MapNode(
+				mapOf(
+					"change-id" to MPVNode.IntNode(8),
+					"canvas-w" to MPVNode.IntNode(1920),
+					"canvas-h" to MPVNode.IntNode(1080),
+					"x" to MPVNode.IntNode(1919),
+					"y" to MPVNode.IntNode(1079),
+					"w" to MPVNode.IntNode(2),
+					"h" to MPVNode.IntNode(1),
+					"stride" to MPVNode.IntNode(8),
+					"format" to MPVNode.StringNode("bgra"),
+					"data" to MPVNode.ByteArrayNode(byteArrayOf(0, 0, 0, 0)),
+				)
+			),
+			previousChangeId = 7,
+		) shouldBe null
+	}
+
 })
 
 private fun option(
