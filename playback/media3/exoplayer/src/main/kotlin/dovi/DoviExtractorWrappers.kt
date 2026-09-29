@@ -298,7 +298,6 @@ internal class DoviExtractorOutput(
 	private fun newDoviOutput(output: TrackOutput, sampleDispatcher: DoviSampleDispatcher?) = DoviTrackOutput(
 		delegate = output,
 		request = { context()?.request },
-		inputPresentation = { context()?.inputPresentation ?: DoviPresentation.UNKNOWN },
 		sourceBasePresentation = { context()?.sourceBasePresentation ?: DoviPresentation.UNKNOWN },
 		dvLevel = { context()?.dvLevel },
 		transformer = transformer,
