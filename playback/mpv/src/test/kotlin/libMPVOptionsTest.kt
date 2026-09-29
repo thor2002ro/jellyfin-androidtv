@@ -9,6 +9,25 @@ import kotlin.time.Duration.Companion.seconds
 import `is`.xyz.mpv.MPVNode
 
 class LibMPVOptionsTest : StringSpec({
+	"mpv HDR mode reports dynamic metadata before transfer characteristics" {
+		mpvHdrMode("pq", 8, hasHdr10Plus = true) shouldBe "Dolby Vision (Profile 8)"
+		mpvHdrMode("pq", null, hasHdr10Plus = true) shouldBe "HDR10+"
+		mpvHdrMode("pq", null, hasHdr10Plus = false) shouldBe "HDR10"
+		mpvHdrMode("hlg", null, hasHdr10Plus = false) shouldBe "HLG"
+		mpvHdrMode("s-log2", null, hasHdr10Plus = false) shouldBe "Sony S-Log2"
+		mpvHdrMode("bt.1886", null, hasHdr10Plus = false) shouldBe "SDR (BT.1886)"
+	}
+
+	"MPV HDR pipeline reports conversion stages" {
+		mpvHdrPipeline("pq", 8, hasHdr10Plus = false) shouldBe
+			"Dolby Vision (Profile 8) \u2192 HDR10/PQ"
+	}
+
+	"MPV GPU API uses the observed Android EGL context" {
+		mpvGpuApi(currentContext = "android") shouldBe "opengl"
+		mpvGpuApi(currentContext = null) shouldBe null
+	}
+
 	"Jellyfin MPV defaults produce the complete managed profile" {
 		LibMPVPlaybackOptions.DEFAULT.managedOptions() shouldBe linkedMapOf(
 			"vo" to "gpu",
@@ -148,6 +167,12 @@ class LibMPVOptionsTest : StringSpec({
 		)
 	}
 
+	"missing MPV stats use a retry backoff" {
+		shouldReadLibMPVStatProperty(lastMissNanos = null, nowNanos = 100, retryNanos = 10) shouldBe true
+		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 109, retryNanos = 10) shouldBe false
+		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 110, retryNanos = 10) shouldBe true
+	}
+
 	"typed profile and universal controls cannot be replaced by expert overrides" {
 		isLibMPVOptionManagedByJellyfin("speed") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-color") shouldBe true
@@ -157,6 +182,11 @@ class LibMPVOptionsTest : StringSpec({
 		isLibMPVOptionManagedByJellyfin("hwdec") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-ass-override") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-max-bytes") shouldBe false
+	}
+
+	"MPV buffer details suppress stale speed while idle" {
+		formatLibMPVBufferDetails(1_048_576, false, true, 2_097_152.0) shouldBe "1.00 MiB, idle"
+		formatLibMPVBufferDetails(1_048_576, true, false, 2_097_152.0) shouldBe "1.00 MiB, paused, 2.00 MiB/s"
 	}
 })
 
