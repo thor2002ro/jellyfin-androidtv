@@ -35,7 +35,6 @@ import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.data.service.BackgroundService
-import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.CompositeClickedListener
@@ -71,7 +70,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val mediaManager by inject<MediaManager>()
 	private val notificationsRepository by inject<NotificationsRepository>()
 	private val userRepository by inject<UserRepository>()
-	private val userPreferences by inject<UserPreferences>()
 	private val userSettingPreferences by inject<UserSettingPreferences>()
 	private val userViewsRepository by inject<UserViewsRepository>()
 	private val dataRefreshService by inject<DataRefreshService>()
@@ -81,13 +79,14 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val keyProcessor by inject<KeyProcessor>()
 	private val playbackHelper by inject<PlaybackHelper>()
 
-	private val helper by lazy { HomeFragmentHelper(requireContext(), userRepository, userPreferences) }
+	private val helper by lazy { HomeFragmentHelper(requireContext(), userRepository) }
 
 	// Data
 	private var currentItem: BaseRowItem? = null
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
 	private var backgroundUpdateJob: Job? = null
+	private var homeRowsDebounceJob: Job? = null
 	private var homeRowsRefreshJob: Job? = null
 	private var currentBackgroundItemId: String? = null
 	private val homeRowAdapters = linkedSetOf<ItemRowAdapter>()
@@ -168,6 +167,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			.onEach { message ->
 				when (message) {
 					CustomMessage.RefreshCurrentItem -> refreshCurrentItem()
+					CustomMessage.RefreshHomeNextUp -> homeRowAdapters.toList()
+						.filter { it.nextUpQueryProvider != null }
+						.forEach(ItemRowAdapter::Retrieve)
 					else -> Unit
 				}
 			}.launchIn(lifecycleScope)
@@ -229,7 +231,11 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	private fun refreshHomeRows() {
-		scheduleHomeRowsRefresh(HOME_ROWS_REFRESH_DEBOUNCE_MS)
+		homeRowsDebounceJob?.cancel()
+		homeRowsDebounceJob = lifecycleScope.launch {
+			delay(HOME_ROWS_REFRESH_DEBOUNCE_MS)
+			retrieveHomeRows()
+		}
 	}
 
 	private fun retrieveHomeRows() {
@@ -264,6 +270,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		super.onDestroy()
 
 		backgroundUpdateJob?.cancel()
+		homeRowsDebounceJob?.cancel()
 		homeRowsRefreshJob?.cancel()
 		mediaManager.removeAudioEventListener(this)
 	}
