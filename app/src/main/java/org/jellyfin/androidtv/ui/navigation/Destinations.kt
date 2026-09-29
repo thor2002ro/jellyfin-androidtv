@@ -48,6 +48,8 @@ object Destinations {
 	)
 
 	fun isPlayback(destination: Destination.Fragment) = destination.fragment in playbackFragments
+	fun isAudioPlayback(destination: Destination.Fragment) = destination.fragment == AudioNowPlayingFragment::class
+	fun isLegacyVideoPlayback(destination: Destination.Fragment) = destination.fragment == CustomPlaybackOverlayFragment::class
 
 	// General
 	val home = fragmentDestination<HomeFragment>()
