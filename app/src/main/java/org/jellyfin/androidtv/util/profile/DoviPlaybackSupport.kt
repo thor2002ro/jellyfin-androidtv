@@ -144,7 +144,8 @@ internal fun createDoviPlaybackPlan(
 			sourceRangeType = videoStream.videoRangeType,
 		)
 	}
-	val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr = true)
+	val useHdrPlayer = userPreferences[UserPreferences.playbackPlayerPreferences(hdr = true).playbackBackend] != PlaybackBackend.SAME_VIDEO_PLAYER
+	val playerPreferences = UserPreferences.playbackPlayerPreferences(useHdrPlayer)
 	val externalPlayerSelected = userPreferences[playerPreferences.useExternalPlayer]
 	val builtInPlayerSelected = !externalPlayerSelected &&
 		userPreferences[playerPreferences.playbackRewriteVideoEnabled]
@@ -306,6 +307,7 @@ internal fun MediaStream.toDoviSource(): DoviSource {
 }
 
 private fun PlaybackBackend.toDoviBackend(): DoviPlaybackBackend = when (this) {
+	PlaybackBackend.SAME_VIDEO_PLAYER,
 	PlaybackBackend.EXOPLAYER -> DoviPlaybackBackend.MEDIA3
 	PlaybackBackend.MPV -> DoviPlaybackBackend.MPV
 	PlaybackBackend.LIBVLC -> DoviPlaybackBackend.OTHER
