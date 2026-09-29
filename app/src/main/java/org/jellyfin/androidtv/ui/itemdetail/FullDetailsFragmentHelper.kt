@@ -21,6 +21,7 @@ import org.jellyfin.androidtv.util.sdk.TrailerUtils.getExternalTrailerIntent
 import org.jellyfin.androidtv.util.sdk.compat.canResume
 import org.jellyfin.androidtv.util.sdk.compat.copyWithUserData
 import org.jellyfin.androidtv.util.showIfNotEmpty
+import org.jellyfin.androidtv.util.TrackSelectionServerSync
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.extensions.libraryApi
@@ -30,6 +31,7 @@ import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaType
+import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.SeriesTimerInfoDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.jellyfin.sdk.model.serializer.toUUID
@@ -151,6 +153,24 @@ fun FullDetailsFragment.togglePlayed() {
 		}
 
 		showMoreButtonIfNeeded()
+	}
+}
+
+fun FullDetailsFragment.saveAudioTrackSelectionToServer(stream: MediaStream?) {
+	val trackSelectionServerSync by inject<TrackSelectionServerSync>()
+
+	lifecycleScope.launch {
+		trackSelectionServerSync.saveAudioSelection(stream)
+	}
+}
+
+fun FullDetailsFragment.saveSubtitleTrackSelectionToServer(
+	stream: MediaStream?,
+) {
+	val trackSelectionServerSync by inject<TrackSelectionServerSync>()
+
+	lifecycleScope.launch {
+		trackSelectionServerSync.saveSubtitleSelection(stream)
 	}
 }
 
