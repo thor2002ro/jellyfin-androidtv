@@ -638,11 +638,6 @@
     <string name="font_weight_900">Чорны</string>
     <string name="backdrop_behavior_without_blur">Фон без размытасці</string>
     <string name="backdrop_behavior_with_blur">Фон з размытасцю</string>
-    <string name="playback_info_container">Кантэйнер: %1$s</string>
-    <string name="playback_info_video_title">Відэа</string>
-    <string name="playback_info_audio_title">Аўдыя</string>
-    <string name="playback_info_codec">Кодэк: %1$s</string>
-    <string name="playback_info_resolution">Раздзяляльнасць: %1$dx%2$d</string>
     <string name="codec_level_6_2">Узровень 6.2</string>
     <string name="codec_level_6_1">Узровень 6.1</string>
     <string name="codec_level_6_0">Узровень 6.0</string>
@@ -661,7 +656,5 @@
     <string name="user_hevc_level">Узровень H.265 (HEVC)</string>
     <string name="preference_codecs">Медыякодэкі</string>
     <string name="playback_info">Інфармацыя пра прайграванне</string>
-    <string name="playback_info_channels">Каналы: %1$d</string>
-    <string name="playback_info_video_range">Дыяпазон відэа: %1$s</string>
     <string name="preference_enable_ass_description">Эксперыментальная функцыя, можа працаваць ненадзейна</string>
 </resources>

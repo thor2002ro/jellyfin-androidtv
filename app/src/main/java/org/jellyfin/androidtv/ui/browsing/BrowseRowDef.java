@@ -114,10 +114,24 @@ public class BrowseRowDef {
         this.queryType = QueryType.LiveTvChannel;
     }
 
+    public BrowseRowDef(String header, GetLiveTvChannelsRequest query, ChangeTriggerType[] changeTriggers) {
+        headerText = header;
+        this.tvChannelQuery = query;
+        this.queryType = QueryType.LiveTvChannel;
+        this.changeTriggers = changeTriggers;
+    }
+
     public BrowseRowDef(String header, GetRecommendedProgramsRequest query) {
         headerText = header;
         this.programQuery = query;
         this.queryType = QueryType.LiveTvProgram;
+    }
+
+    public BrowseRowDef(String header, GetRecommendedProgramsRequest query, ChangeTriggerType[] changeTriggers) {
+        headerText = header;
+        this.programQuery = query;
+        this.queryType = QueryType.LiveTvProgram;
+        this.changeTriggers = changeTriggers;
     }
 
     public BrowseRowDef(String header, GetRecordingsRequest query) {
