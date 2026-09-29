@@ -12,7 +12,7 @@ enum class BufferLength(
 	val maxBufferDuration: Duration? = null,
 	val bufferForPlaybackDuration: Duration? = null,
 	val bufferForPlaybackAfterRebufferDuration: Duration? = null,
-	val liveTvBufferDuration: Duration = 5.seconds,
+	val liveTvBufferDuration: Duration? = null,
 ) : PreferenceEnum {
 	/**
 	 * Use default buffer durations.
