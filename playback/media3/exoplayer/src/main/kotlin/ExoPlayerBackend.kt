@@ -93,6 +93,7 @@ import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PlayState
@@ -310,12 +311,17 @@ internal data class PlaybackMediaItemTag(
 
 internal class DoviTransformStatsHolder {
 	private val observation = AtomicReference<PlaybackDoviTransformStats?>(null)
+	private val processor = AtomicReference(PlaybackDoviTransformProcessor.LIBDOVI)
 
 	fun record(value: PlaybackDoviTransformStats) {
 		observation.compareAndSet(null, value)
 	}
 
-	fun get(): PlaybackDoviTransformStats? = observation.get()
+	fun recordProcessor(value: PlaybackDoviTransformProcessor) {
+		processor.set(value)
+	}
+
+	fun get(): PlaybackDoviTransformStats? = observation.get()?.copy(processor = processor.get())
 }
 
 internal val MediaItem.playbackMediaItemTag: PlaybackMediaItemTag?
@@ -883,6 +889,7 @@ class ExoPlayerBackend(
 			onTransformObserved = { observation ->
 				doviTransformStats.record(observation.toPlaybackDoviTransformStats())
 			},
+			onProcessorChanged = doviTransformStats::recordProcessor,
 		).also { context ->
 			Timber.i(
 				"Media3 Dolby Vision transform target=%s strategy=%s",
