@@ -8,6 +8,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.LiveTvOption
 import org.jellyfin.androidtv.data.querying.GetAdditionalPartsRequest
@@ -57,7 +59,11 @@ import java.time.LocalDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import kotlin.math.min
+
+private const val LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT = 300
 
 fun <T : Any> ItemRowAdapter.setItems(
 	items: Collection<T>,
@@ -338,15 +344,20 @@ private fun MediaSourceInfo.hasBadgeStreams() =
 private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	api: ApiClient,
 ): List<BaseItemDto> {
+	val seasonSamples = mutableMapOf<UUID, List<BaseItemDto>>()
 	val samples = asSequence()
 		.filter { it.needsSeriesOrSeasonStreamBadgeSource() }
-		.associate { item -> item.id to item.loadStreamBadgeSamples(api) }
+		.distinctBy { it.id }
+		.associate { item -> item.id to item.loadStreamBadgeSamples(api, seasonSamples) }
 	if (samples.isEmpty()) return this
 
 	return withSeriesStreamBadgeSources(samples)
 }
 
-private suspend fun BaseItemDto.loadStreamBadgeSamples(api: ApiClient): List<BaseItemDto> = try {
+private suspend fun BaseItemDto.loadStreamBadgeSamples(
+	api: ApiClient,
+	seasonSamples: MutableMap<UUID, List<BaseItemDto>>,
+): List<BaseItemDto> = try {
 	when (type) {
 		BaseItemKind.SERIES -> api.tvShowsApi.getSeasons(
 			seriesId = id,
@@ -354,17 +365,16 @@ private suspend fun BaseItemDto.loadStreamBadgeSamples(api: ApiClient): List<Bas
 			isMissing = false,
 			enableImages = false,
 			enableUserData = false,
-		).content.items
+		).content.items.map { season ->
+			val episodes = seasonSamples[season.id]
+				?: api.loadCachedSeasonStreamBadgeSamples(id, season.id, seasonSamples)
+
+			season.withSeriesStreamBadgeSource(episodes)
+		}
 
 		BaseItemKind.SEASON -> seriesId?.let { seriesId ->
-			api.tvShowsApi.getEpisodes(
-				seriesId = seriesId,
-				seasonId = id,
-				fields = STREAM_BADGE_FIELDS,
-				isMissing = false,
-				limit = SERIES_STREAM_BADGE_SAMPLE_SIZE,
-				sortBy = ItemSortBy.DATE_CREATED,
-			).content.items
+			seasonSamples[id]
+				?: api.loadCachedSeasonStreamBadgeSamples(seriesId, id, seasonSamples)
 		}
 
 		else -> null
@@ -374,6 +384,46 @@ private suspend fun BaseItemDto.loadStreamBadgeSamples(api: ApiClient): List<Bas
 } catch (error: Exception) {
 	Timber.w(error, "Unable to load stream badge samples for $type $id")
 	emptyList()
+}
+
+private suspend fun ApiClient.loadCachedSeasonStreamBadgeSamples(
+	seriesId: UUID,
+	seasonId: UUID,
+	seasonSamples: MutableMap<UUID, List<BaseItemDto>>,
+): List<BaseItemDto> {
+	SeriesStreamBadgeCache.get(seasonId)?.let { cached ->
+		seasonSamples[seasonId] = cached
+		return cached
+	}
+
+	return loadSeasonStreamBadgeSamples(seriesId, seasonId).also { samples ->
+		seasonSamples[seasonId] = samples
+		if (samples.isNotEmpty()) SeriesStreamBadgeCache.save(seriesId, seasonId, samples)
+	}
+}
+
+private suspend fun ApiClient.loadSeasonStreamBadgeSamples(seriesId: UUID, seasonId: UUID): List<BaseItemDto> {
+	var lastError: Exception? = null
+	for (startIndex in 0 until SERIES_STREAM_BADGE_EPISODE_ATTEMPTS) {
+		try {
+			return tvShowsApi.getEpisodes(
+				seriesId = seriesId,
+				seasonId = seasonId,
+				fields = STREAM_BADGE_FIELDS,
+				isMissing = false,
+				limit = if (startIndex == 0) SERIES_STREAM_BADGE_SAMPLE_SIZE else 1,
+				startIndex = startIndex,
+				sortBy = ItemSortBy.DATE_CREATED,
+			).content.items
+		} catch (error: CancellationException) {
+			throw error
+		} catch (error: Exception) {
+			lastError = error
+		}
+	}
+
+	Timber.w(lastError, "Unable to load stream badge sample for season $seasonId")
+	return emptyList()
 }
 
 internal fun List<BaseItemDto>.withSeriesStreamBadgeSources(
@@ -393,8 +443,7 @@ private fun BaseItemDto.needsSeriesOrSeasonStreamBadgeSource() =
 internal fun BaseItemDto.withSeriesStreamBadgeSource(episodes: List<BaseItemDto>): BaseItemDto {
 	val sources = episodes
 		.asSequence()
-		.mapNotNull { episode -> episode.mediaSources?.firstOrNull { it.mediaStreams?.isNotEmpty() == true } }
-		.take(SERIES_STREAM_BADGE_SAMPLE_SIZE)
+		.mapNotNull { episode -> episode.mediaSources?.firstOrNull { it.hasBadgeStreams() } }
 		.toList()
 	val source = sources.firstOrNull() ?: return this
 	val audio = sources.aggregateStreams(MediaStreamType.AUDIO)
@@ -452,8 +501,160 @@ private fun MediaSourceInfo.selectedStream(type: MediaStreamType): MediaStream? 
 		?: streams.firstOrNull { it.type == type }
 }
 
+internal object SeriesStreamBadgeCache {
+	private const val SHARED_PREFERENCES_NAME = "series_stream_badges_v1"
+	private val CACHE_TTL_MS = TimeUnit.DAYS.toMillis(7)
+
+	private val json = Json {
+		encodeDefaults = true
+		ignoreUnknownKeys = true
+	}
+	private val badges = ConcurrentHashMap<UUID, CachedSeasonBadge>()
+
+	@Volatile
+	private var store: Store? = null
+
+	@Serializable
+	private data class CachedSeasonBadge(
+		val createdAtMillis: Long,
+		val seriesId: String? = null,
+		val sampleIds: List<String> = emptyList(),
+		val mediaSources: List<MediaSourceInfo> = emptyList(),
+	)
+
+	fun initialize(context: Context) {
+		synchronized(this) {
+			if (store != null) return
+
+			store = Store(context.applicationContext).also { badgeStore ->
+				badges.putAll(badgeStore.load(System.currentTimeMillis()))
+			}
+		}
+	}
+
+	fun get(seasonId: UUID): List<BaseItemDto>? {
+		val now = System.currentTimeMillis()
+		val cached = badges[seasonId] ?: return null
+		if (cached.isExpired(now)) {
+			badges.remove(seasonId)
+			store?.remove(seasonId)
+			return null
+		}
+
+		return listOf(BaseItemDto(
+			id = seasonId,
+			type = BaseItemKind.SEASON,
+			mediaSources = cached.mediaSources,
+		))
+	}
+
+	fun save(seriesId: UUID, seasonId: UUID, samples: List<BaseItemDto>) {
+		val mediaSources = BaseItemDto(id = seasonId, type = BaseItemKind.SEASON)
+			.withSeriesStreamBadgeSource(samples)
+			.mediaSources
+			.orEmpty()
+		if (mediaSources.isEmpty()) return
+
+		val cached = CachedSeasonBadge(
+			createdAtMillis = System.currentTimeMillis(),
+			seriesId = seriesId.toString(),
+			sampleIds = samples.map { sample -> sample.id.toString() },
+			mediaSources = mediaSources,
+		)
+		badges[seasonId] = cached
+		store?.save(seasonId, cached)
+	}
+
+	fun remove(itemIds: Set<UUID>) {
+		if (itemIds.isEmpty()) return
+
+		val itemIdStrings = itemIds.map(UUID::toString).toSet()
+		val seasonIds = badges
+			.filter { (seasonId, badge) ->
+				seasonId in itemIds ||
+					badge.seriesId in itemIdStrings ||
+					badge.sampleIds.any { sampleId -> sampleId in itemIdStrings }
+			}
+			.keys
+		if (seasonIds.isEmpty()) return
+
+		seasonIds.forEach(badges::remove)
+		store?.remove(seasonIds)
+	}
+
+	fun clear() {
+		badges.clear()
+		store?.clear()
+	}
+
+	private fun CachedSeasonBadge.isExpired(now: Long) =
+		now - createdAtMillis > CACHE_TTL_MS
+
+	private class Store(context: Context) {
+		private val preferences = context.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+		fun load(now: Long): Map<UUID, CachedSeasonBadge> {
+			val staleKeys = mutableListOf<String>()
+			val cached = preferences.all.mapNotNull { (seasonId, value) ->
+				val id = runCatching { UUID.fromString(seasonId) }.getOrNull()
+				if (id == null) {
+					staleKeys.add(seasonId)
+					return@mapNotNull null
+				}
+
+				val badge = (value as? String)
+					?.let { storedValue -> runCatching { json.decodeFromString<CachedSeasonBadge>(storedValue) }.getOrNull() }
+					?.takeIf { cachedBadge -> cachedBadge.seriesId != null && cachedBadge.mediaSources.isNotEmpty() && !cachedBadge.isExpired(now) }
+
+				if (badge == null) {
+					staleKeys.add(seasonId)
+					null
+				} else {
+					id to badge
+				}
+			}.toMap()
+
+			if (staleKeys.isNotEmpty()) {
+				preferences.edit().apply {
+					staleKeys.forEach(::remove)
+					apply()
+				}
+			}
+
+			return cached
+		}
+
+		fun save(seasonId: UUID, badge: CachedSeasonBadge) {
+			preferences.edit()
+				.putString(seasonId.toString(), json.encodeToString(badge))
+				.apply()
+		}
+
+		fun remove(seasonId: UUID) {
+			preferences.edit()
+				.remove(seasonId.toString())
+				.apply()
+		}
+
+		fun remove(seasonIds: Collection<UUID>) {
+			preferences.edit()
+				.apply {
+					seasonIds.forEach { seasonId -> remove(seasonId.toString()) }
+					apply()
+				}
+		}
+
+		fun clear() {
+			preferences.edit()
+				.clear()
+				.apply()
+		}
+	}
+}
+
 private val DIRECT_STREAM_BADGE_TYPES = setOf(BaseItemKind.MOVIE, BaseItemKind.EPISODE, BaseItemKind.VIDEO)
 private val STREAM_BADGE_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS)
+private const val SERIES_STREAM_BADGE_EPISODE_ATTEMPTS = 3
 private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 2
 
 fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsRequest) {
@@ -630,7 +831,12 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 					return@withContext programs
 				}
 
-				val channels = api.liveTvApi.getLiveTvChannels(GetLiveTvChannelsRequest()).content.items
+				val channels = api.liveTvApi.getLiveTvChannels(
+					GetLiveTvChannelsRequest(
+						addCurrentProgram = false,
+						limit = LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT,
+					)
+				).content.items
 					.associateBy { channel -> channel.id }
 
 				programs.map { program -> program.withChannelImage(channels[program.channelId]) }
