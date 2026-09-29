@@ -27,6 +27,20 @@ internal fun effectiveLibMPVVideoDecoder(
 	else -> configured
 }
 
+internal fun effectiveLibMPVVideoOutput(
+	configured: String,
+	decoder: LibMPVVideoDecoder,
+	videoRange: String?,
+): String {
+	val isHdr = !videoRange.isNullOrBlank() &&
+		!videoRange.equals("SDR", ignoreCase = true) &&
+		!videoRange.equals("UNKNOWN", ignoreCase = true)
+	val triesNativeMediaCodec = decoder == LibMPVVideoDecoder.AUTOMATIC ||
+		decoder == LibMPVVideoDecoder.AUTO_SAFE ||
+		decoder == LibMPVVideoDecoder.MEDIACODEC
+	return if (isHdr && triesNativeMediaCodec) "mediacodec_embed" else configured
+}
+
 /**
  * The Android-TV-friendly MPV profile. Every field has an explicit Jellyfin default.
  * Additional non-managed libMPV options are supplied through [customOptions].
