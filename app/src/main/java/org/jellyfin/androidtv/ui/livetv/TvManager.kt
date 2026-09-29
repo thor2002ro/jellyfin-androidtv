@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.text.format.DateUtils
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
@@ -147,6 +148,7 @@ object TvManager {
 	}
 
 	@JvmStatic
+	@Suppress("DEPRECATION")
 	fun getProgramsAsync(
 		fragment: Fragment,
 		startNdx: Int,
@@ -219,7 +221,7 @@ object TvManager {
 		timelineRow.addView(TextView(context).apply {
 			text = program.channelName
 			setTypeface(null, Typeface.BOLD)
-			setTextColor(context.resources.getColor(android.R.color.holo_blue_light))
+			setTextColor(ContextCompat.getColor(context, android.R.color.holo_blue_light))
 		})
 		timelineRow.addView(TextView(context).apply {
 			text = StringBuilder()
