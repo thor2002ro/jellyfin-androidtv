@@ -47,6 +47,19 @@ interface PlayerBackend {
 
 	fun onActivated() = Unit
 
+	fun reset() = stop()
+
+	fun cleanup() {
+		setListener(null)
+		setSurfaceView(null)
+		setSubtitleView(null)
+	}
+
+	fun release() {
+		reset()
+		cleanup()
+	}
+
 	val videoDecoderOptions: List<VideoDecoderOption>
 		get() = emptyList()
 	val selectedVideoDecoderOption: VideoDecoderOption?
@@ -55,6 +68,7 @@ interface PlayerBackend {
 		get() = null
 
 	fun setForcedVideoDecoderOption(option: VideoDecoderOption?) = Unit
+	fun reloadVideoDecoder(): Boolean = false
 
 	fun play()
 	fun pause()
