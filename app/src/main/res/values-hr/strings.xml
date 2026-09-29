@@ -499,7 +499,6 @@
         <item quantity="few">%1$s pjesme</item>
         <item quantity="other">%1$s pjesmi</item>
     </plurals>
-    <string name="dolby_vision">Dolby Vision</string>
     <plurals name="episodes">
         <item quantity="one">%1$s epizoda</item>
         <item quantity="few">%1$s epizode</item>
@@ -649,7 +648,6 @@
     <string name="codec_level_4_0">Razina 4.0</string>
     <string name="auto">Automatski</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision s EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
