@@ -1,11 +1,21 @@
 package org.jellyfin.playback.media3.exoplayer
 
+import androidx.media3.common.Player
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import kotlin.time.Duration.Companion.seconds
 
 class VideoDecoderTests : FunSpec({
+	test("forced decoder falls back to the previous working decoder before software") {
+		forcedVideoDecoderFallbacks(VideoDecoder.FFMPEG, VideoDecoder.HARDWARE) shouldBe
+			listOf(VideoDecoder.HARDWARE, VideoDecoder.SOFTWARE)
+		forcedVideoDecoderFallbacks(VideoDecoder.HARDWARE, null) shouldBe
+			listOf(VideoDecoder.SOFTWARE, VideoDecoder.FFMPEG)
+		forcedVideoDecoderFallbacks(VideoDecoder.SOFTWARE, null) shouldBe
+			listOf(VideoDecoder.FFMPEG, VideoDecoder.HARDWARE)
+	}
+
 	test("forced video decoder overrides the saved FFmpeg preference") {
 		null.prefersFfmpeg(false) shouldBe false
 		null.prefersFfmpeg(true) shouldBe true
@@ -42,6 +52,12 @@ class VideoDecoderTests : FunSpec({
 		null.effectiveVideoDecoder(VideoDecoder.HARDWARE, false, "ffmpeg") shouldBe VideoDecoder.FFMPEG
 		null.effectiveVideoDecoder(VideoDecoder.HARDWARE, true, "OMX.test.decoder") shouldBe VideoDecoder.HARDWARE
 		VideoDecoder.SOFTWARE.effectiveVideoDecoder(VideoDecoder.HARDWARE, true, "ffmpeg") shouldBe VideoDecoder.SOFTWARE
+		VideoDecoder.HARDWARE.effectiveVideoDecoder(
+			VideoDecoder.HARDWARE,
+			false,
+			"c2.test.decoder",
+			fallback = VideoDecoder.SOFTWARE,
+		) shouldBe VideoDecoder.SOFTWARE
 	}
 
 	test("Live TV starts on target buffer or timeout") {
@@ -65,6 +81,13 @@ class VideoDecoderTests : FunSpec({
 		hasDecoderStalled(10, 5, 11, 6) shouldBe false
 	}
 
+	test("decoder stalls are watched during active ready and buffering playback") {
+		shouldWatchVideoDecoderStall(true, Player.STATE_READY) shouldBe true
+		shouldWatchVideoDecoderStall(true, Player.STATE_BUFFERING) shouldBe true
+		shouldWatchVideoDecoderStall(false, Player.STATE_READY) shouldBe false
+		shouldWatchVideoDecoderStall(true, Player.STATE_IDLE) shouldBe false
+	}
+
 	test("Amlogic devices are matched from Android build fields") {
 		isAmlogicDevice(listOf("Google", "Amlogic S905X4")) shouldBe true
 		isAmlogicDevice(listOf("c2.amlogic.avc.decoder")) shouldBe true
@@ -72,19 +95,75 @@ class VideoDecoderTests : FunSpec({
 	}
 
 	test("Amlogic H264 TS Live TV detects access units without allowing non-IDR keyframes") {
-		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("h264")) shouldBe
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "mpegts",
+			videoCodecs = listOf("h264"),
+		) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-		liveTvTsExtractorFlags(isAmlogic = true, container = "ts", videoCodecs = listOf("avc")) shouldBe
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "ts",
+			videoCodecs = listOf("avc"),
+		) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-		liveTvTsExtractorFlags(isAmlogic = true, container = "hls|mpegts", videoCodecs = listOf("avc")) shouldBe
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "hls|mpegts",
+			videoCodecs = listOf("avc"),
+		) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegtsraw", videoCodecs = listOf("avc")) shouldBe
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "mpegtsraw",
+			videoCodecs = listOf("avc"),
+		) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("avc1.640028")) shouldBe
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "mpegts",
+			videoCodecs = listOf("avc1.640028"),
+		) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-		liveTvTsExtractorFlags(isAmlogic = true, container = "mpegts", videoCodecs = listOf("hevc")) shouldBe 0
-		liveTvTsExtractorFlags(isAmlogic = true, container = "hls", videoCodecs = listOf("h264")) shouldBe 0
-		liveTvTsExtractorFlags(isAmlogic = false, container = "mpegts", videoCodecs = listOf("h264")) shouldBe
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = false,
+			container = "mpegts",
+			videoCodecs = listOf("h264"),
+		) shouldBe 0
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "mpegts",
+			videoCodecs = listOf("hevc"),
+		) shouldBe 0
+		liveTvTsExtractorFlags(
+			isAmlogic = true,
+			hardwareVideoDecoding = true,
+			container = "hls",
+			videoCodecs = listOf("h264"),
+		) shouldBe 0
+		liveTvTsExtractorFlags(
+			isAmlogic = false,
+			hardwareVideoDecoding = false,
+			container = "mpegts",
+			videoCodecs = listOf("h264"),
+		) shouldBe
 			DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+	}
+
+	test("leaving hardware decoding recreates an Amlogic access-unit source") {
+		val flags = DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+
+		shouldRecreateLiveTvMediaSource(flags, VideoDecoder.HARDWARE) shouldBe false
+		shouldRecreateLiveTvMediaSource(flags, VideoDecoder.SOFTWARE) shouldBe true
+		shouldRecreateLiveTvMediaSource(flags, VideoDecoder.FFMPEG) shouldBe true
+		shouldRecreateLiveTvMediaSource(0, VideoDecoder.SOFTWARE) shouldBe false
+		shouldRecreateLiveTvMediaSource(null, VideoDecoder.SOFTWARE) shouldBe false
 	}
 })

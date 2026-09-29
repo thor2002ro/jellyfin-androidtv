@@ -2,6 +2,7 @@ package org.jellyfin.playback.core
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
@@ -21,6 +22,43 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class PlayerStateTests : FunSpec({
+	test("playback manager switches its active backend") {
+		val initial = backend()
+		val replacement = backend()
+		val bufferOptions = PlaybackBufferOptions(
+			maxBufferDuration = 120.seconds,
+			liveTvBufferDuration = 5.seconds,
+		)
+		val manager = PlaybackManager(
+			backend = initial,
+			services = mutableListOf(),
+			options = PlaybackManagerOptions(
+				playerVolumeState = NoOpPlayerVolumeState(),
+				defaultRewindAmount = { 10.seconds },
+				defaultFastForwardAmount = { 10.seconds },
+				bufferOptions = { bufferOptions },
+			),
+		)
+
+		manager.activeBackends.single() shouldBeSameInstanceAs initial
+		manager.isBackendActive(initial) shouldBe true
+		manager.isBackendActive(replacement) shouldBe false
+
+		manager.state.setSpeed(1.5f)
+		manager.switchBackend(replacement)
+
+		manager.backend shouldBeSameInstanceAs replacement
+		manager.activeBackends.single() shouldBeSameInstanceAs replacement
+		manager.isBackendActive(initial) shouldBe false
+		manager.isBackendActive(replacement) shouldBe true
+		verify { initial.setBufferOptions(bufferOptions) }
+		verify { initial.onActivated() }
+		verify { initial.stop() }
+		verify { replacement.setBufferOptions(bufferOptions) }
+		verify { replacement.onActivated() }
+		verify { replacement.setSpeed(1.5f) }
+	}
+
 	test("direct play Live TV ignores seek requests") {
 		val backend = backend()
 		val entry = QueueEntry().apply {
@@ -61,6 +99,17 @@ class PlayerStateTests : FunSpec({
 		state.subtitleTimingOffset.value shouldBe 3.seconds
 		state.subtitleTimingSpeed.value shouldBe 1.01f
 		verify { backend.setSubtitleTiming(3.seconds, 1.01f) }
+	}
+
+	test("backend without subtitle speed support keeps the default speed") {
+		val backend = backend(supportsSubtitleTimingSpeed = false)
+		val state = playerState(backend, QueueEntry(), subtitleTimingSupported = true)
+
+		state.setSubtitleTiming(2.seconds, 1.01f)
+
+		state.subtitleTimingOffset.value shouldBe 2.seconds
+		state.subtitleTimingSpeed.value shouldBe 1f
+		verify { backend.setSubtitleTiming(2.seconds, 1f) }
 	}
 
 	test("unsupported subtitle timing ignores adjustments but allows reset") {
@@ -132,7 +181,8 @@ private fun playerState(
 	return state
 }
 
-private fun backend() = mockk<PlayerBackend>(relaxed = true) {
+private fun backend(supportsSubtitleTimingSpeed: Boolean = true) = mockk<PlayerBackend>(relaxed = true) {
+	every { this@mockk.supportsSubtitleTimingSpeed } returns supportsSubtitleTimingSpeed
 	every { getPositionInfo() } returns PositionInfo(20.seconds, 20.seconds, 120.seconds)
 	justRun { seekTo(any()) }
 }
