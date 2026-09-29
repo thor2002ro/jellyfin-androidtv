@@ -297,7 +297,6 @@
     <string name="subtitle_error">字幕を選択できません</string>
     <string name="too_many_errors">エラーが多すぎます。断念します</string>
     <string name="player_error">プレイヤーエラーが発生しました。再試行します…</string>
-    <string name="lbl_load_guide_data">ガイドデータの読み込み</string>
     <string name="episode_missing_message_2">このエピソードはあなたのライブラリから欠落しています。再生は停止します。</string>
     <string name="episode_missing_message">このエピソードはあなたのライブラリから欠落しています。スキップして次のものに進みますか\?</string>
     <string name="episode_missing">エピソードがありません</string>
@@ -367,7 +366,6 @@
     <string name="random">ランダム</string>
     <string name="msg_playback_not_allowed">現在、再生を許可していません</string>
     <string name="msg_playback_restricted">管理者は現在このアイテムの再生を制限しています</string>
-    <string name="msg_live_tv_next">次の %1$d 時間を読み込みますか？</string>
     <string name="pref_playback_advanced">詳細な再生設定</string>
     <string name="server_issue_outdated_version">サーバーはサポートされていないバージョン %1$s を使用しています。%2$s 以降に更新してください</string>
     <string name="login_connect_to">%1$sに接続</string>
@@ -423,7 +421,6 @@
     <string name="enable_smart_view">スマートスクリーンを有効にする</string>
     <string name="desc_audio_night_mode">音量を自動的に調整します</string>
     <string name="lbl_subtitle_delay">字幕の遅延</string>
-    <string name="msg_live_tv_prev">前の %1$d 時間を読み込みますか？</string>
     <string name="server_issue_invalid_product">サーバーソフトウェアに互換性がありません</string>
     <string name="server_issue_timeout">接続がタイムアウトしました</string>
     <string name="pref_libraries_description">ライブラリの表示方法を変更する</string>
@@ -560,7 +557,6 @@
     <string name="speech_error_unavailable">スピーチ認識は使用不能です。</string>
     <string name="speech_error_unknown">スピーチ認識で想定外のエラーが生じました。</string>
     <string name="still_watching_label">まだ視聴してますか？</string>
-    <string name="lbl_tv_filter_status">あと %1$d 時間</string>
     <string name="lbl_starting_with">名前の最初の文字</string>
     <string name="lbl_episode_not_record">これは録画できません</string>
     <string name="lbl_show_indicators">表示項目</string>
