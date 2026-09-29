@@ -53,7 +53,6 @@ object StreamStatusBuilder {
 			row("ASS extractor", playbackController.subtitleExtractorDebug)
 			row("ASS render", playbackController.subtitleRenderDebug)
 			row("ASS parser", playbackController.subtitleParserDebug)
-			row("ASS path", playbackController.subtitlePathDebug)
 		}
 		row("Progress", TranscodingStatusFormatter.progress(transcodingInfo))
 		row("T speed", TranscodingStatusFormatter.speed(transcodingInfo))
