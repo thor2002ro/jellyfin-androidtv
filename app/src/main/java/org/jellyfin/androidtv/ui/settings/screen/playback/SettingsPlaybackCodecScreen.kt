@@ -8,6 +8,7 @@ import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.list.ListButton
@@ -24,6 +25,7 @@ import org.koin.compose.koinInject
 fun SettingsPlaybackCodecScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
+	val ac3Mode by rememberPreference(userPreferences, UserPreferences.bitstreamAc3)
 
 	SettingsColumn {
 		item {
@@ -58,11 +60,12 @@ fun SettingsPlaybackCodecScreen() {
 
 		items(BitstreamAudioFormat.entries.size) { index ->
 			val format = BitstreamAudioFormat.entries[index]
-			val mode = userPreferences[format.preference]
+			val mode by rememberPreference(userPreferences, format.preference)
 
 			ListButton(
 				headingContent = { Text(stringResource(format.nameRes)) },
 				captionContent = { Text(stringResource(mode.nameRes)) },
+				enabled = format != BitstreamAudioFormat.EAC3 || ac3Mode != BitstreamAudioMode.DISABLE,
 				onClick = {
 					router.push(
 						route = Routes.PLAYBACK_BITSTREAM_AUDIO,

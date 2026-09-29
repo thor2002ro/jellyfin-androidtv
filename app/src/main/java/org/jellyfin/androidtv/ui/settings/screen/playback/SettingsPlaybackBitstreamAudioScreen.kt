@@ -27,12 +27,15 @@ fun SettingsPlaybackBitstreamAudioScreen(
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	var mode by rememberPreference(userPreferences, format.preference)
+	val ac3Mode by rememberPreference(userPreferences, UserPreferences.bitstreamAc3)
+	val supportedPassthroughMimes = rememberSupportedPassthroughAudioMimes()
 
 	SettingsColumn {
 		item {
 			ListSection(
 				overlineContent = { Text(stringResource(R.string.preference_codecs).uppercase()) },
 				headingContent = { Text(stringResource(format.nameRes)) },
+				captionContent = { AudioPassthroughSupportCaption(supportedPassthroughAudioFormats(format, supportedPassthroughMimes)) },
 			)
 		}
 
@@ -40,8 +43,12 @@ fun SettingsPlaybackBitstreamAudioScreen(
 			ListButton(
 				headingContent = { Text(stringResource(entry.nameRes)) },
 				trailingContent = { RadioButton(checked = mode == entry) },
+				enabled = format != BitstreamAudioFormat.EAC3 || ac3Mode != BitstreamAudioMode.DISABLE || entry == BitstreamAudioMode.DISABLE,
 				onClick = {
 					mode = entry
+					if (format == BitstreamAudioFormat.AC3 && entry == BitstreamAudioMode.DISABLE) {
+						userPreferences[UserPreferences.bitstreamEac3] = BitstreamAudioMode.DISABLE
+					}
 					router.back()
 				},
 				modifier = Modifier.focusKey("bitstream_audio_${format.name}_${entry.name}", initialFocus = mode == entry),
