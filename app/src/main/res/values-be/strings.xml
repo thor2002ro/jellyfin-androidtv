@@ -654,5 +654,4 @@
     <string name="user_hevc_level">Узровень H.265 (HEVC)</string>
     <string name="preference_codecs">Медыякодэкі</string>
     <string name="playback_info">Інфармацыя пра прайграванне</string>
-    <string name="preference_enable_ass_description">Эксперыментальная функцыя, можа працаваць ненадзейна</string>
 </resources>

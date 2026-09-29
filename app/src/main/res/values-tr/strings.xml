@@ -646,7 +646,6 @@
     <string name="playback_info">Oynatma bilgisi</string>
     <string name="preference_enable_ass">Doğrudan oynatma için ASS altyazıları</string>
     <string name="preference_enable_pgs_description">Devre dışı bırakıldığında kod dönüştürme gerektirir</string>
-    <string name="preference_enable_ass_description">Deneysel özellik; güvenilir şekilde çalışmayabilir</string>
     <string name="pref_software_codecs_enabled">Yazılım codec bileşenlerini kullan</string>
     <string name="pref_software_codecs_enabled_description">Bazı yazılım tabanlı uygulamalar performansı düşürebilir. Bu seçeneği devre dışı bırakmak, kod dönüştürme işleminin gerçekleşme olasılığını artırır.</string>
     <string name="lbl_date_show_added">Dizinin eklendiği tarih</string>

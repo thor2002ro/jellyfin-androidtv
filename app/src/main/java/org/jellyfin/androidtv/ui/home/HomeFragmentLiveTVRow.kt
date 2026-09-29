@@ -8,12 +8,10 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Row
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
-import org.jellyfin.androidtv.constant.LiveTvOption
-import org.jellyfin.androidtv.ui.GridButton
+import org.jellyfin.androidtv.ui.livetv.liveTvActionButtons
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
-import org.jellyfin.androidtv.ui.presentation.GridButtonPresenter
+import org.jellyfin.androidtv.ui.presentation.LiveTvActionButtonPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
-import org.jellyfin.androidtv.util.Utils
 
 class HomeFragmentLiveTVRow(
 	private val activity: Activity,
@@ -21,21 +19,14 @@ class HomeFragmentLiveTVRow(
 ) : HomeFragmentRow {
 	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
 		val header = HeaderItem(rowsAdapter.size().toLong(), activity.getString(R.string.pref_live_tv_cat))
-		val adapter = ArrayObjectAdapter(GridButtonPresenter())
-
-		// Live TV Channels button
-		adapter.add(GridButton(LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID, activity.getString(R.string.channels)))
-		// Live TV Guide button
-		adapter.add(GridButton(LiveTvOption.LIVE_TV_GUIDE_OPTION_ID, activity.getString(R.string.lbl_live_tv_guide)))
-		// Live TV Recordings button
-		adapter.add(GridButton(LiveTvOption.LIVE_TV_RECORDINGS_OPTION_ID, activity.getString(R.string.lbl_recorded_tv)))
-		if (Utils.canManageRecordings(userRepository.currentUser.value)) {
-			// Recording Schedule button
-			adapter.add(GridButton(LiveTvOption.LIVE_TV_SCHEDULE_OPTION_ID, activity.getString(R.string.lbl_schedule)))
-			// Recording Series button
-			adapter.add(GridButton(LiveTvOption.LIVE_TV_SERIES_OPTION_ID, activity.getString(R.string.lbl_series)))
-		}
+		val adapter = ArrayObjectAdapter(LiveTvActionButtonPresenter(LIVE_TV_TILE_WIDTH_DP, LIVE_TV_TILE_HEIGHT_DP))
+		liveTvActionButtons(activity, userRepository.currentUser.value).forEach(adapter::add)
 
 		rowsAdapter.add(ListRow(header, adapter))
+	}
+
+	private companion object {
+		const val LIVE_TV_TILE_WIDTH_DP = 184
+		const val LIVE_TV_TILE_HEIGHT_DP = 112
 	}
 }
