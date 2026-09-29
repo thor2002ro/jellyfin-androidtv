@@ -329,6 +329,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		tvChannelQuery = query
 		this.chunkSize = chunkSize
 		queryType = QueryType.LiveTvChannel
+		isStaticHeight = true
 	}
 
 	constructor(
