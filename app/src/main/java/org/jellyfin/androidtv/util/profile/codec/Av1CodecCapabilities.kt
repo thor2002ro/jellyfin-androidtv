@@ -16,7 +16,7 @@ class Av1CodecCapabilities(
 		internal const val AV1_PROFILE_MAIN10 = 0x2
 		internal const val AV1_PROFILE_MAIN10_HDR10 = 0x1000
 		internal const val AV1_PROFILE_MAIN10_HDR10_PLUS = 0x2000
-		internal const val AV1_LEVEL5 = 0x1000
+		internal const val AV1_LEVEL2 = 0x1
 		internal const val DV_PROFILE_DVAV1_10 = 0x400
 	}
 
@@ -32,16 +32,17 @@ class Av1CodecCapabilities(
 	private val dolbyVisionProfile10: Int
 		get() = if (AndroidVersion.isAtLeastR) CodecProfileLevel.DolbyVisionProfileDvav110 else DV_PROFILE_DVAV1_10
 
-	private val level5: Int
-		get() = if (AndroidVersion.isAtLeastQ) CodecProfileLevel.AV1Level5 else AV1_LEVEL5
+	private val level2: Int
+		get() = if (AndroidVersion.isAtLeastQ) CodecProfileLevel.AV1Level2 else AV1_LEVEL2
+
+	private val supportsMain10 by lazy { query.hasDecoder(MIME_AV1, profileMain10, level2) }
+	private val supportsHdr10 by lazy { query.hasDecoder(MIME_AV1, profileMain10HDR10, level2) }
+	private val supportsHdr10Plus by lazy { query.hasDecoder(MIME_AV1, profileMain10HDR10Plus, level2) }
 
 	fun supportsAv1(): Boolean = query.hasCodecForMime(MIME_AV1)
 
-	fun supportsAv1Main10(): Boolean = query.hasDecoder(
-		MIME_AV1,
-		profileMain10,
-		level5,
-	)
+	fun supportsAv1Main10(): Boolean =
+		supportsMain10 || supportsHdr10 || supportsHdr10Plus
 
 	fun supportsAv1DolbyVision(): Boolean =
 		AndroidVersion.isAtLeastN &&
@@ -51,15 +52,7 @@ class Av1CodecCapabilities(
 				CodecProfileLevel.DolbyVisionLevelHd24,
 			)
 
-	fun supportsAv1HDR10(): Boolean = query.hasDecoder(
-		MIME_AV1,
-		profileMain10HDR10,
-		level5,
-	)
+	fun supportsAv1HDR10(): Boolean = supportsHdr10
 
-	fun supportsAv1HDR10Plus(): Boolean = query.hasDecoder(
-		MIME_AV1,
-		profileMain10HDR10Plus,
-		level5,
-	)
+	fun supportsAv1HDR10Plus(): Boolean = supportsHdr10Plus
 }
