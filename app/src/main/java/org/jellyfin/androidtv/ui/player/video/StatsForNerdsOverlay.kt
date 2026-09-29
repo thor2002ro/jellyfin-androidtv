@@ -98,7 +98,8 @@ fun PlaybackInfoOverlay(
 	val subtitleSpeed by playbackManager.state.subtitleTimingSpeed.collectAsState()
 	val subtitleOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
 	val softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled]
-	val parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction]
+	val parseSubtitlesDuringExtraction =
+		userPreferences[UserPreferences.exoPlayerParseSubtitlesDuringExtraction] && !userPreferences[UserPreferences.assDirectPlay]
 	val mediaTest = remember(softwareCodecsEnabled) { MediaCodecCapabilitiesTest(softwareCodecsEnabled) }
 	val forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE)
 	val forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)
