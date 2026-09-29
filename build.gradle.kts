@@ -12,16 +12,56 @@ val customMedia3FfmpegDecoderAarFile = run {
 	}.orEmpty()
 
 	require(files.size == 1) {
-		"Expected exactly one thor Media3 FFmpeg decoder AAR in $outputDir, found ${files.size}"
+		"Expected exactly one custom Media3 FFmpeg decoder AAR in $outputDir, found ${files.size}"
 	}
 	files.single()
 }
+val customMedia3Version = run {
+	val mediaVersionFile = listOf(
+		layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/constants.gradle").asFile,
+		layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/gradle/libs.versions.toml").asFile,
+	).first { it.isFile }
+	val releaseVersion = requireNotNull(Regex("""releaseVersion\s*=\s*['"]([^'"]+)['"]""").find(mediaVersionFile.readText())) {
+		"Could not read Media3 releaseVersion from $mediaVersionFile"
+	}.groupValues[1]
+	val mediaDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/media").asFile.absolutePath
+	val commit = providers.exec {
+		commandLine("git", "-c", "safe.directory=$mediaDir", "-C", mediaDir, "rev-parse", "--short", "HEAD")
+	}.standardOutput.asText.get().trim()
+
+	"$releaseVersion+$commit"
+}
+val customMedia3FfmpegDecoderVersion = customMedia3Version
+val customFfmpegVersion = run {
+	val releaseVersion = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/ffmpeg/RELEASE").asFile.readText().trim()
+	val ffmpegDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/ffmpeg").asFile.absolutePath
+	val commit = providers.exec {
+		commandLine("git", "-c", "safe.directory=$ffmpegDir", "-C", ffmpegDir, "rev-parse", "--short", "HEAD")
+	}.standardOutput.asText.get().trim()
+
+	"$releaseVersion+$commit"
+}
+val customLibyuvVersion = run {
+	val libyuvDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/build/libyuv").asFile.absolutePath
+	val branch = providers.exec {
+		commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "branch", "--show-current")
+	}.standardOutput.asText.get().trim().ifBlank { "unknown" }
+	val commit = providers.exec {
+		commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "rev-parse", "--short", "HEAD")
+	}.standardOutput.asText.get().trim()
+
+	"$branch+$commit"
+}
 
 if (!customMedia3FfmpegDecoderAarFile.isFile || customMedia3FfmpegDecoderAarFile.length() == 0L) {
-	throw GradleException("Missing thor Media3 FFmpeg decoder at $customMedia3FfmpegDecoderAarFile")
+	throw GradleException("Missing custom Media3 FFmpeg decoder at $customMedia3FfmpegDecoderAarFile")
 }
 
 extra["customMedia3FfmpegDecoderAarFile"] = customMedia3FfmpegDecoderAarFile
+extra["customMedia3Version"] = customMedia3Version
+extra["customMedia3FfmpegDecoderVersion"] = customMedia3FfmpegDecoderVersion
+extra["customFfmpegVersion"] = customFfmpegVersion
+extra["customLibyuvVersion"] = customLibyuvVersion
 
 buildscript {
 	dependencies {
