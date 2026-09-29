@@ -32,6 +32,8 @@ fun BaseItemDto.copyWithLastPlayedDate(
 
 internal val liveTvChannelFields = setOf(
 	ItemFields.OVERVIEW,
+	ItemFields.MEDIA_SOURCES,
+	ItemFields.MEDIA_STREAMS,
 )
 
 fun loadLiveTvChannels(fragment: Fragment, callback: (channels: Collection<BaseItemDto>?) -> Unit) {
