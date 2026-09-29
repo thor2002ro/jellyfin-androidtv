@@ -35,6 +35,7 @@ import org.jellyfin.androidtv.util.sdk.start
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.MediaSegmentDto
+import org.jellyfin.sdk.model.api.MediaSegmentType
 import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -44,6 +45,7 @@ fun VideoPlayerMediaSegmentOverlay(
 	playbackManager: PlaybackManager,
 	item: BaseItemDto?,
 	onPromptTargetChanged: (Duration?) -> Unit,
+	onEndingSkipPromptChanged: (Boolean) -> Unit = {},
 	modifier: Modifier = Modifier,
 ) {
 	val mediaSegmentRepository = koinInject<MediaSegmentRepository>()
@@ -57,6 +59,7 @@ fun VideoPlayerMediaSegmentOverlay(
 		handledSkipSegmentKeys = emptySet()
 		previousPosition = null
 		onPromptTargetChanged(null)
+		onEndingSkipPromptChanged(false)
 	}
 
 	val position = positionInfo.active
@@ -91,6 +94,7 @@ fun VideoPlayerMediaSegmentOverlay(
 
 	LaunchedEffect(promptSegment?.key) {
 		onPromptTargetChanged(promptSegment?.end)
+		onEndingSkipPromptChanged(promptSegment?.type == MediaSegmentType.OUTRO)
 	}
 
 	AnimatedVisibility(
