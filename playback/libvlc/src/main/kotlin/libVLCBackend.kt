@@ -479,8 +479,22 @@ class LibVLCBackend(
 				bufferingPlayState(event.buffering)?.let { listener?.onPlayStateChange(it) }
 			}
 			MediaPlayer.Event.ESAdded -> when (event.esChangedType) {
-				IMedia.Track.Type.Audio -> applyInitialTrackSelection(TrackType.AUDIO)
-				IMedia.Track.Type.Text -> applyInitialTrackSelection(TrackType.SUBTITLE)
+				IMedia.Track.Type.Audio -> {
+					notifyTracksChanged()
+					applyInitialTrackSelection(TrackType.AUDIO)
+				}
+				IMedia.Track.Type.Text -> {
+					notifyTracksChanged()
+					applyInitialTrackSelection(TrackType.SUBTITLE)
+				}
+				else -> Unit
+			}
+			MediaPlayer.Event.ESDeleted,
+			MediaPlayer.Event.ESSelected,
+			-> when (event.esChangedType) {
+				IMedia.Track.Type.Audio,
+				IMedia.Track.Type.Text,
+				-> notifyTracksChanged()
 				else -> Unit
 			}
 			MediaPlayer.Event.Playing -> {
