@@ -18,8 +18,7 @@ import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.androidtv.util.AndroidVersion
-import org.jellyfin.androidtv.util.TrackSelectionManager
-import org.jellyfin.androidtv.util.sdk.trackSelectionIds
+import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.playback.core.playbackManager
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
@@ -32,8 +31,6 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.okhttp.OkHttpFactory
 import org.jellyfin.sdk.model.api.MediaSourceInfo
-import org.jellyfin.sdk.model.api.MediaStream
-import org.jellyfin.sdk.model.api.MediaStreamType
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
@@ -136,66 +133,10 @@ private fun createJellyfinMediaStreamOptions(
 	val mediaSource = item.mediaSources
 		?.firstOrNull { mediaSource -> mediaSourceId == null || mediaSource.id == mediaSourceId }
 		?: item.mediaSources?.firstOrNull()
-	val trackSelectionItemIds = item.trackSelectionIds()
-	val subtitleSelection = TrackSelectionManager.getSelectedSubtitleTrackSelection(trackSelectionItemIds)
 
 	return JellyfinMediaStreamOptions(
-		audioStreamIndex = TrackSelectionManager.getSelectedAudioTrack(trackSelectionItemIds)
-			?: findPreferredAudioStreamIndex(mediaSource, videoQueueManager),
-		subtitleStreamIndex = when {
-			subtitleSelection.hasSelection -> subtitleSelection.trackIndex
-			else -> findPreferredSubtitleStreamIndex(mediaSource, videoQueueManager)
-		},
+		audioStreamIndex = TrackSelectionResolver.resolvePlaybackAudioStreamIndex(item, mediaSource, videoQueueManager),
+		subtitleStreamIndex = TrackSelectionResolver.resolvePlaybackSubtitleStreamIndex(item, mediaSource, videoQueueManager),
 		alwaysBurnInSubtitleWhenTranscoding = userPreferences[UserPreferences.subtitlesBurnDuringTranscode],
 	)
 }
-
-private fun findPreferredAudioStreamIndex(
-	mediaSource: MediaSourceInfo?,
-	videoQueueManager: VideoQueueManager,
-): Int? {
-	val language = videoQueueManager.getLastPlayedAudioLanguageIsoCode() ?: return null
-	val codec = videoQueueManager.getLastPlayedAudioCodec()
-	val audioStreams = mediaSource.mediaStreamsOfType(MediaStreamType.AUDIO)
-
-	return audioStreams.firstOrNull { stream ->
-		stream.language == language && codec != null && stream.codec == codec
-	}?.index ?: audioStreams.firstOrNull { stream ->
-		stream.language == language
-	}?.index
-}
-
-private fun findPreferredSubtitleStreamIndex(
-	mediaSource: MediaSourceInfo?,
-	videoQueueManager: VideoQueueManager,
-): Int? {
-	val language = videoQueueManager.getLastPlayedSubtitleLanguageIsoCode() ?: return null
-	if (language.isEmpty()) return -1
-
-	val forced = videoQueueManager.getLastPlayedSubtitleForcedState()
-	val codec = videoQueueManager.getLastPlayedSubtitleCodec()
-	val title = videoQueueManager.getLastPlayedSubtitleTitle()
-	val subtitleStreams = mediaSource.mediaStreamsOfType(MediaStreamType.SUBTITLE)
-
-	return subtitleStreams.firstOrNull { stream ->
-		stream.language == language &&
-			stream.isForced == forced &&
-			codec != null &&
-			stream.codec == codec &&
-			title != null &&
-			stream.matchesTitle(title)
-	}?.index ?: subtitleStreams.firstOrNull { stream ->
-		stream.language == language &&
-			stream.isForced == forced &&
-			codec != null &&
-			stream.codec == codec
-	}?.index ?: subtitleStreams.firstOrNull { stream ->
-		stream.language == language && stream.isForced == forced
-	}?.index
-}
-
-private fun MediaSourceInfo?.mediaStreamsOfType(type: MediaStreamType): List<MediaStream> =
-	this?.mediaStreams.orEmpty().filter { stream -> stream.type == type }
-
-private fun MediaStream.matchesTitle(title: String): Boolean =
-	this.title == title || this.displayTitle == title

@@ -682,4 +682,7 @@
     <string name="photo_player">Photo player</string>
     <string name="photo_display_duration">Photo display duration</string>
     <string name="photo_display_duration_description">How long to wait before showing the next photo</string>
+    <string name="lbl_subtitle_offset">Subtitle offset</string>
+    <string name="lbl_subtitle_offset_current">Subtitle offset %1$s</string>
+    <string name="lbl_reset">Reset</string>
 </resources>
