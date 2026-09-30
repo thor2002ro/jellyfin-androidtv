@@ -13,7 +13,6 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.work.WorkManager
-import androidx.work.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -133,10 +132,7 @@ class StartupActivity : FragmentActivity() {
 		// Update background worker
 		with(ProcessLifecycleOwner.get().lifecycleScope) {
 			launch {
-				// Cancel all current workers
-				workManager.cancelAllWork().await()
-
-				// Recreate periodic workers
+				// Ensure periodic workers exist
 				LeanbackChannelWorker.enqueue(workManager)
 			}
 
@@ -166,7 +162,11 @@ class StartupActivity : FragmentActivity() {
 			else -> null
 		}
 
-		navigationRepository.reset(destination, true)
+		if (destination == null && !isTaskRoot && intent.action == Intent.ACTION_MAIN) {
+			navigationRepository.navigate(navigationRepository.currentDestination.value, replace = true)
+		} else {
+			navigationRepository.reset(destination, true)
+		}
 
 		val intent = Intent(this, MainActivity::class.java)
 		// Clear navigation history

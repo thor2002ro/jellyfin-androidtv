@@ -82,7 +82,7 @@ class LiveTvGuidePlayerFragment : Fragment(), View.OnKeyListener {
 	}
 
 	override fun onStop() {
-		LiveTvGuidePlayback.stopSessionIfStarted(playbackManager)
+		stopPlayback()
 		super.onStop()
 	}
 
@@ -121,11 +121,6 @@ object LiveTvGuidePlayback {
 	) {
 		if (!started) return
 		stop(playbackManager, videoQueueManager)
-	}
-
-	fun stopSessionIfStarted(playbackManager: PlaybackManager) {
-		if (!started) return
-		stopSession(playbackManager)
 	}
 
 	private fun stop(

@@ -19,7 +19,9 @@ import androidx.tvprovider.media.tv.TvContractCompat.WatchNextPrograms
 import androidx.tvprovider.media.tv.WatchNextProgram
 import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -73,6 +75,7 @@ class LeanbackChannelWorker(
 	workerParams: WorkerParameters,
 ) : CoroutineWorker(context, workerParams), KoinComponent {
 	companion object {
+		private const val ONE_TIME_UPDATE_REQUEST_NAME = "LeanbackChannelOneTimeUpdateRequest"
 		private const val PERIODIC_UPDATE_REQUEST_NAME = "LeanbackChannelPeriodicUpdateRequest"
 		private const val CHANNEL_STORE_NAME = "leanback_channels"
 
@@ -82,6 +85,14 @@ class LeanbackChannelWorker(
 		fun isAvailable(context: Context) = AndroidVersion.isAtLeastO &&
 			context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) &&
 			context.packageManager.resolveContentProvider(TvContractCompat.AUTHORITY, 0) != null
+
+		fun enqueueOneTime(workManager: WorkManager) {
+			workManager.enqueueUniqueWork(
+				ONE_TIME_UPDATE_REQUEST_NAME,
+				ExistingWorkPolicy.KEEP,
+				OneTimeWorkRequestBuilder<LeanbackChannelWorker>().build(),
+			)
+		}
 
 		suspend fun enqueue(workManager: WorkManager) {
 			workManager.enqueueUniquePeriodicWork(
