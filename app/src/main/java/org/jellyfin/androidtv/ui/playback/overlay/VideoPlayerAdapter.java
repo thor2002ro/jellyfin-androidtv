@@ -1,14 +1,21 @@
 package org.jellyfin.androidtv.ui.playback.overlay;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.leanback.media.PlayerAdapter;
+import androidx.media3.common.util.UnstableApi;
 
 import org.jellyfin.androidtv.auth.repository.UserRepository;
 import org.jellyfin.androidtv.ui.playback.CustomPlaybackOverlayFragment;
 import org.jellyfin.androidtv.ui.playback.PlaybackController;
+import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetFormatsKt;
+import org.jellyfin.androidtv.ui.playback.VideoManagerHelperKt;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.StreamHelper;
-import org.jellyfin.sdk.model.api.ChapterInfo;
+import org.jellyfin.androidtv.util.sdk.BaseItemExtensionsKt;
+import org.jellyfin.sdk.model.api.MediaStream;
+import org.jellyfin.sdk.model.api.MediaStreamType;
+import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod;
 import org.jellyfin.sdk.model.api.MediaSourceInfo;
 import org.koin.java.KoinJavaComponent;
 
@@ -104,6 +111,35 @@ public class VideoPlayerAdapter extends PlayerAdapter {
         return StreamHelper.getSubtitleStreams(playbackController.getCurrentMediaSource()).size() > 0;
     }
 
+    @OptIn(markerClass = UnstableApi.class)
+    public boolean hasTimingAdjustableSubtitle() {
+        MediaSourceInfo mediaSource = playbackController.getCurrentMediaSource();
+        if (mediaSource == null || mediaSource.getMediaStreams() == null) return false;
+
+        int selectedSubtitleStreamIndex = playbackController.getSubtitleStreamIndex();
+        if (selectedSubtitleStreamIndex < 0) return false;
+
+        for (MediaStream stream : mediaSource.getMediaStreams()) {
+            if (stream.getIndex() != selectedSubtitleStreamIndex) {
+                continue;
+            }
+
+            if (stream.getType() != MediaStreamType.SUBTITLE) {
+                return false;
+            }
+
+            SubtitleDeliveryMethod deliveryMethod = stream.getDeliveryMethod();
+            if (deliveryMethod == SubtitleDeliveryMethod.ENCODE || deliveryMethod == SubtitleDeliveryMethod.DROP) {
+                return false;
+            }
+
+            String mimeType = VideoManagerHelperKt.getSubtitleMediaStreamCodec(stream);
+            return SubtitleTimingOffsetFormatsKt.isSubtitleTimingOffsetSupported(mimeType);
+        }
+
+        return false;
+    }
+
     public boolean hasMultiAudio() {
         return StreamHelper.getAudioStreams(playbackController.getCurrentMediaSource()).size() > 1;
     }
@@ -132,6 +168,14 @@ public class VideoPlayerAdapter extends PlayerAdapter {
     public CustomPlaybackOverlayFragment getMasterOverlayFragment() {
         return customPlaybackOverlayFragment;
     }
+
+	public boolean consumeSkipOverlay() {
+		return customPlaybackOverlayFragment != null && customPlaybackOverlayFragment.consumeSkipOverlay();
+	}
+
+	public boolean consumeAutoSelectedSkipOverlay() {
+		return customPlaybackOverlayFragment != null && customPlaybackOverlayFragment.consumeAutoSelectedSkipOverlay();
+	}
 
     @NonNull
     public LeanbackOverlayFragment getLeanbackOverlayFragment() {
@@ -174,7 +218,6 @@ public class VideoPlayerAdapter extends PlayerAdapter {
 
     boolean hasChapters() {
         org.jellyfin.sdk.model.api.BaseItemDto item = getCurrentlyPlayingItem();
-        List<ChapterInfo> chapters = item.getChapters();
-        return chapters != null && chapters.size() > 0;
+        return item != null && !BaseItemExtensionsKt.buildChapterItems(item).isEmpty();
     }
 }

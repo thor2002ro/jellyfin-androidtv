@@ -183,6 +183,38 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         }
     }
 
+    public long getSubtitleTimingOffsetUs() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleTimingOffsetUs() : 0L;
+    }
+
+    public @Nullable String getSubtitleExtractorDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleExtractorDebug() : null;
+    }
+
+    public @Nullable String getSubtitleRenderDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleRenderDebug() : null;
+    }
+
+    public @Nullable String getSubtitleParserDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitleParserDebug() : null;
+    }
+
+    public @Nullable String getSubtitlePathDebug() {
+        return hasInitializedVideoManager() ? mVideoManager.getSubtitlePathDebug() : null;
+    }
+
+    public void adjustSubtitleTimingOffsetUs(long deltaUs) {
+        if (hasInitializedVideoManager()) {
+            mVideoManager.adjustSubtitleTimingOffsetUs(deltaUs);
+        }
+    }
+
+    public void resetSubtitleTimingOffset() {
+        if (hasInitializedVideoManager()) {
+            mVideoManager.resetSubtitleTimingOffset();
+        }
+    }
+
     public void setPlaybackSpeed(float speed) {
         mRequestedPlaybackSpeed = speed;
         if (hasInitializedVideoManager()) {
