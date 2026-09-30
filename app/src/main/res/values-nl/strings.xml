@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Ondertiteling laden…</string>
     <string name="msg_unable_load_subs">Ondertiteling kan niet worden geladen</string>
     <string name="msg_burn_sub_warning">Ondertiteling aan het inbranden. Dit kan enkele seconden duren…</string>
-    <string name="lbl_no_recordings">Geen opnames beschikbaar</string>
     <string name="lbl_live_tv_guide">Live-tv-gids</string>
     <string name="lbl_recorded_tv">Tv-opnamen</string>
     <string name="pref_live_tv_cat">Live-tv</string>
@@ -378,7 +377,6 @@
     <string name="lbl_playback_speed">Afspeelsnelheid</string>
     <string name="pref_playback_description">Beeld, ondertiteling, live-tv, volgende</string>
     <string name="pref_customization_description">Thema, startscherm, knoppen</string>
-    <string name="server_issue_ssl_handshake">SSL-handshake mislukt</string>
     <string name="server_issue_timeout">Verbindingstime-out</string>
     <string name="home_section_resume_book">Verderlezen</string>
     <string name="pref_direct_stream_live_on">Transcoderen uitgeschakeld</string>

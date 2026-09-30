@@ -163,7 +163,6 @@
     <string name="msg_error_live_stream">Error al transmitir la TV en vivo. Se reintentará…</string>
     <string name="pref_live_tv_cat">TV en vivo</string>
     <string name="lbl_live_tv_guide">Guía de TV en vivo</string>
-    <string name="lbl_no_recordings">No hay grabaciones disponibles</string>
     <string name="msg_burn_sub_warning">Integrando subtítulos al video. Ésto puede tomar algunos minutos…</string>
     <string name="lbl_display_preferences">Preferencias de pantalla</string>
     <string name="lbl_starting_with">comenzando con aquellos cuyo nombre comienza con</string>
@@ -388,7 +387,6 @@
     <string name="pref_accounts">Cuentas</string>
     <string name="sort_accounts_by">Ordenar cuentas por</string>
     <string name="pref_customization">Personalización</string>
-    <string name="server_issue_ssl_handshake">Verificación SSL fallada</string>
     <string name="server_issue_timeout">Tiempo de conexión agotada</string>
     <string name="server_issue_outdated_version">La versión del servidor %1$s no tiene soporte, por favor actualiza a %2$s o superior</string>
     <string name="server_issue_unsupported_version">La versión %1$s del servidor no es soportada</string>

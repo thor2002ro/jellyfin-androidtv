@@ -205,7 +205,6 @@
     <string name="pref_live_tv_cat">Élő TV</string>
     <string name="lbl_recorded_tv">Felvett TV-k</string>
     <string name="lbl_live_tv_guide">Élő TV-újság</string>
-    <string name="lbl_no_recordings">Nincs elérhető felvétel</string>
     <string name="msg_burn_sub_warning">Feliratok beégetése. Ez eltarthat pár másodpercig…</string>
     <string name="msg_unable_load_subs">Feliratok betöltése sikertelen</string>
     <string name="msg_subtitles_loading">Feliratok betöltése…</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">Mutasson fekete hátteret a feliratok mögött</string>
     <string name="pref_subtitles_background_title">Háttér engedélyezése</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">Az SSL Handshake sikertelen</string>
     <string name="server_issue_timeout">Kapcsolat időtúllépés</string>
     <string name="server_issue_outdated_version">A szerver a %1$s verziót használja, de legalább %2$s verziónak kell lennie</string>
     <string name="server_issue_unsupported_version">A szerver a %1$s verziót használja, amely nem támogatott</string>

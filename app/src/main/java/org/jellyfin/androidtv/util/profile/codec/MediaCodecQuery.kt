@@ -28,7 +28,7 @@ class MediaCodecQuery(
 			info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
 		} ?: return false
 
-		Timber.i("found codec %s for mime %s", info.name, mime)
+		Timber.d("Found codec %s for mime %s", info.name, mime)
 		return true
 	}
 

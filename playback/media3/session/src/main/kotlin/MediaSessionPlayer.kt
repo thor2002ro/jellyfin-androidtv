@@ -12,7 +12,10 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.guava.future
@@ -22,6 +25,9 @@ import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.RepeatMode
+import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.mediastream.mediaStreamFlow
+import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
 import timber.log.Timber
@@ -29,6 +35,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(UnstableApi::class)
+@kotlin.OptIn(ExperimentalCoroutinesApi::class)
 internal class MediaSessionPlayer(
 	looper: Looper,
 	private val scope: CoroutineScope,
@@ -38,6 +45,9 @@ internal class MediaSessionPlayer(
 	init {
 		// Invalidate mediasession state when certain player state changes
 		manager.queue.entry.invalidateStateOnEach(scope)
+		manager.queue.entry
+			.flatMapLatest { entry -> entry?.mediaStreamFlow ?: flowOf(null) }
+			.invalidateStateOnEach(scope)
 		state.playState.invalidateStateOnEach(scope)
 		state.videoSize.invalidateStateOnEach(scope)
 		state.speed.invalidateStateOnEach(scope)
@@ -45,15 +55,17 @@ internal class MediaSessionPlayer(
 	}
 
 	// Little helper function for the init block
-	private fun <T> StateFlow<T>.invalidateStateOnEach(
+	private fun <T> Flow<T>.invalidateStateOnEach(
 		scope: CoroutineScope,
 	) = onEach {
 		withContext(Dispatchers.Main) { invalidateState() }
 	}.launchIn(scope)
 
 	override fun getState(): State = State.Builder().apply {
+		val playPauseEnabled = manager.queue.entry.value?.isLiveTv != true
+
 		setAvailableCommands(Commands.Builder().apply {
-			add(COMMAND_PLAY_PAUSE)
+			addIf(COMMAND_PLAY_PAUSE, playPauseEnabled)
 			add(COMMAND_PREPARE)
 			add(COMMAND_STOP)
 			add(COMMAND_SEEK_TO_DEFAULT_POSITION)
@@ -108,6 +120,7 @@ internal class MediaSessionPlayer(
 				setPlaybackState(when (state.playState.value) {
 					PlayState.STOPPED -> STATE_IDLE
 					PlayState.PLAYING -> STATE_READY
+					PlayState.BUFFERING -> STATE_BUFFERING
 					PlayState.PAUSED -> STATE_READY
 					PlayState.ERROR -> STATE_ENDED
 				})
@@ -122,7 +135,10 @@ internal class MediaSessionPlayer(
 		setContentPositionMs { state.positionInfo.active.inWholeMilliseconds }
 		setContentBufferedPositionMs { state.positionInfo.buffer.inWholeMilliseconds }
 
-		setPlayWhenReady(state.playState.value == PlayState.PLAYING, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+		setPlayWhenReady(
+			state.playState.value.isActivePlayback,
+			PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
+		)
 		setPlaybackParameters(PlaybackParameters(state.speed.value))
 		setShuffleModeEnabled(state.playbackOrder.value != PlaybackOrder.DEFAULT)
 		setRepeatMode(if (state.repeatMode.value == RepeatMode.NONE) REPEAT_MODE_OFF else REPEAT_MODE_ALL)
@@ -136,6 +152,10 @@ internal class MediaSessionPlayer(
 
 	override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
 		Timber.d("handleSetPlayWhenReady(playWhenReady=${playWhenReady})")
+		if (manager.queue.entry.value?.isLiveTv == true) {
+			Timber.d("Ignoring play/pause request for Live TV")
+			return Futures.immediateVoidFuture()
+		}
 		if (playWhenReady) state.unpause()
 		else state.pause()
 		return Futures.immediateVoidFuture()

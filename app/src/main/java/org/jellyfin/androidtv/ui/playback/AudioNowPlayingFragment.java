@@ -251,7 +251,7 @@ public class AudioNowPlayingFragment extends Fragment {
     private AudioEventListener audioEventListener = new AudioEventListener() {
         @Override
         public void onPlaybackStateChange(@NonNull PlaybackController.PlaybackState newState, @Nullable org.jellyfin.sdk.model.api.BaseItemDto currentItem) {
-            Timber.d("**** Got playstate change: %s", newState.toString());
+            Timber.d("Got playstate change: %s", newState.toString());
             if (currentItem != mBaseItem) loadItem();
             updateButtons();
         }

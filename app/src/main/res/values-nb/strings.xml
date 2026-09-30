@@ -125,7 +125,6 @@
     <string name="msg_subtitles_loading">Laster undertekster…</string>
     <string name="msg_unable_load_subs">Kunne ikke laste undertekster</string>
     <string name="msg_burn_sub_warning">Innbrenning av teksting kan ta noen sekunder. Vennligst vent…</string>
-    <string name="lbl_no_recordings">Ingen opptak tilgjengelige</string>
     <string name="lbl_live_tv_guide">TV-guide</string>
     <string name="lbl_recorded_tv">TV-opptak</string>
     <string name="pref_live_tv_cat">Direkte-TV</string>
@@ -476,7 +475,6 @@
     <string name="pref_refresh_rate_scale_on_tv">Skala på TV</string>
     <string name="pref_crash_reports_enabled">Krasj raporter vil bli sent til din siste brukte server</string>
     <string name="pref_crash_report_logs_enabled">Logger vil bli inkludert i krasj rapporter</string>
-    <string name="server_issue_ssl_handshake">SSL-håndtrykk mislyktes</string>
     <string name="pref_crash_reports">Send krasj raport til server</string>
     <string name="crash_report_toast">Oops! Noe gikk galt, en krasj rapport er sendt til din Jellyfin server.</string>
     <string name="license_artifact">Gjenstand</string>

@@ -197,7 +197,6 @@
     <string name="pref_live_tv_cat">ТВ уживо</string>
     <string name="lbl_recorded_tv">Снимљен ТВ програм</string>
     <string name="lbl_live_tv_guide">Телевизијски водич</string>
-    <string name="lbl_no_recordings">Нема доступних снимака</string>
     <string name="msg_burn_sub_warning">Спајање титлова са видеом. Ово може потрајати неколико секунди…</string>
     <string name="msg_unable_load_subs">Није могуће учитати титл</string>
     <string name="msg_subtitles_loading">Учитавам титлове…</string>
@@ -307,7 +306,6 @@
     <string name="lbl_remove_user_content">Уклони налог</string>
     <string name="lbl_remove_users">Ово ће такође уклонити све повезане кориснике</string>
     <string name="lbl_manage_servers">Управљање серверима</string>
-    <string name="server_issue_ssl_handshake">SSL руковање није успело</string>
     <string name="server_issue_timeout">Веза је истекла</string>
     <string name="server_issue_outdated_version">Сервер користи неподржану верзију %1$s Молимо Вас надоградите на %2$s или новију</string>
     <string name="server_issue_unsupported_version">Сервер користи верзију %1$s која није подржана</string>

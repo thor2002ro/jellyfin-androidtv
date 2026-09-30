@@ -377,7 +377,6 @@
     <string name="pref_audio_compat">სტერეომდე ჩამოყვანა</string>
     <string name="lbl_goto_series">სერიალზე გადართვა</string>
     <string name="lbl_filters">პირდაპირი ეთერის ფილტრები</string>
-    <string name="lbl_no_recordings">ჩანაწერები ხელმისაწვდომი არაა</string>
     <string name="lbl_live_tv_guide">პირდაპირი ეთერის გიდი</string>
     <string name="lbl_add_to_queue">რიგში დამატება</string>
     <string name="lbl_play_from_here">აქედან დაკვრა</string>
@@ -422,7 +421,6 @@
     <string name="pref_subtitles_position">წანაცვლება ქვედა მხრიდან</string>
     <string name="server_issue_unable_to_connect">დაკავშირება შეუძლებელია</string>
     <string name="server_issue_timeout">კავშირის მოლოდინის ვადა ამოიწურა</string>
-    <string name="server_issue_ssl_handshake">SSL-ის არხის აწყობა ჩავარდა</string>
     <string name="sort_accounts_by">ანგარიშების დალაგების პირობა</string>
     <string name="pref_home_description">ნაჩვენები სექციების მორგება</string>
     <string name="pref_customization_description">თემა, საწყისი, თავიდან ასახვა</string>

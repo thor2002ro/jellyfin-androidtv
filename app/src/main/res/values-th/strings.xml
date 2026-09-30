@@ -83,7 +83,6 @@
     <string name="lbl_from">จาก</string>
     <string name="lbl_kids">เด็ก</string>
     <string name="lbl__continuing">มีต่อ</string>
-    <string name="lbl_no_recordings">ไม่มีบันทึก ที่ชมได้</string>
     <string name="lbl_direct_stream_live">สตรีมตรงไปยังโทรทัศน์สด</string>
     <string name="lbl_programs">โปรแกรม</string>
     <string name="lbl_albums">อัลบั้ม</string>
@@ -418,7 +417,6 @@
     <string name="server_issue_unsupported_version">เซิร์ฟเวอร์ใช้เวอร์ชัน %1$s ซึ่งไม่รองรับการใช้งาน</string>
     <string name="server_issue_outdated_version">เซิร์ฟเวอร์ใช้เวอร์ชัน %1$s ซึ่งไม่รองรับ โปรดอัปเดตเป็น %2$s หรือใหม่กว่า</string>
     <string name="server_issue_timeout">หมดเวลาการเชื่อมต่อ</string>
-    <string name="server_issue_ssl_handshake">การเชื่อมต่อ SSL ล้มเหลว</string>
     <string name="pref_customization">การปรับแต่ง</string>
     <string name="sort_accounts_by">เรียงลำดับบัญชีตาม</string>
     <string name="pref_accounts">บัญชี</string>

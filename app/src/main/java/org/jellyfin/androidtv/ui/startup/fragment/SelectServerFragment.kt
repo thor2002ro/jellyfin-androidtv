@@ -117,12 +117,16 @@ class SelectServerFragment : Fragment() {
 						if (state is UnableToConnectState) {
 							Toast.makeText(
 								requireContext(),
-								getString(
-									R.string.server_connection_failed_candidates,
-									state.addressCandidates
-										.map { "${it.key} ${it.value.getSummary(requireContext())}" }
-										.joinToString(prefix = "\n", separator = "\n")
-								),
+								if (state.addressCandidates.isEmpty()) {
+									getString(R.string.server_connection_failed)
+								} else {
+									getString(
+										R.string.server_connection_failed_candidates,
+										state.addressCandidates
+											.map { "${it.key} - ${it.value.getSummary(requireContext())}" }
+											.joinToString(prefix = "\n", separator = "\n")
+									)
+								},
 								Toast.LENGTH_LONG,
 							).show()
 						}
@@ -234,8 +238,8 @@ class SelectServerFragment : Fragment() {
 			return ViewHolder(view)
 		}
 
-		override fun onBindViewHolder(holder: ViewHolder, statefulServer: StatefulServer) = with(holder.serverButtonView) {
-			val (serverState, server) = statefulServer
+		override fun onBindViewHolder(holder: ViewHolder, item: StatefulServer) = with(holder.serverButtonView) {
+			val (serverState, server) = item
 
 			// Set data
 			name = server.name
@@ -249,7 +253,7 @@ class SelectServerFragment : Fragment() {
 			}
 
 			// Set actions
-			setOnClickListener { serverClickListener(statefulServer) }
+			setOnClickListener { serverClickListener(item) }
 			setPopupMenu { serverPopupBuilder(server) }
 		}
 
