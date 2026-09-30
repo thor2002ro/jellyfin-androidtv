@@ -495,7 +495,6 @@
     <string name="photo_albums">אלבומי תמונות</string>
     <string name="lbl_hide_watched_checkmark">כאשר ישנם פרקים נותרים</string>
     <string name="pref_external_player">השתמש בנגן חיצוני</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="person_birthday_and_age">תאריך לידה %1$s (%2$d)</string>
     <string name="dolby_atmos">Dolby Atmos</string>
     <string name="dts_x">DTS:X</string>
@@ -650,7 +649,6 @@
     <string name="codec_level_4_0">רמה 4.0</string>
     <string name="auto">אוטומטי</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision עם EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>

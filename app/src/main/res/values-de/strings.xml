@@ -489,7 +489,6 @@
     <string name="lbl_runtime">Laufzeit</string>
     <string name="lbl_hide_watched_checkmark">Wenn es noch weitere Folgen gibt</string>
     <string name="person_birthday_and_age">Geboren %1$s (%2$d)</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <plurals name="items">
         <item quantity="one">%1$s Element</item>
         <item quantity="other">%1$s Elemente</item>
@@ -632,7 +631,6 @@
     <string name="codec_level_4_0">Level 4.0</string>
     <string name="auto">Automatisch</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision mit EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>

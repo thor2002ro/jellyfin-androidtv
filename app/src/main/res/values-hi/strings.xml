@@ -522,7 +522,6 @@
     <string name="segment_type_outro">आऊटरो</string>
     <string name="skip_forward_length">स्किप फॉरवर्ड लंबाई</string>
     <string name="pref_screensaver_inapp_enabled_description">ऐप खुला होने पर जेलीफिन स्क्रीनसेवर दिखाएं</string>
-    <string name="dolby_vision">डॉल्बी विजन</string>
     <string name="pref_playback_advanced">उन्नत प्लेबैक विकल्प</string>
     <string name="pref_screensaver_ageratingrequired_enabled">केवल आयु रेटिंग सेट वाले आइटम दिखाए जा रहे हैं</string>
     <string name="all_channels">सभी चैनल</string>
@@ -623,7 +622,6 @@
     <string name="codec_level_manual">मैनुअल ओवरराइड</string>
     <string name="auto">ऑटो</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision with EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
