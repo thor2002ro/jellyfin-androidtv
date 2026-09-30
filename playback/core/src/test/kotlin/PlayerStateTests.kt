@@ -4,16 +4,26 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
-import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import org.jellyfin.playback.core.backend.BackendService
 import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStreamContainer
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
@@ -45,12 +55,14 @@ class PlayerStateTests : FunSpec({
 		manager.isBackendActive(replacement) shouldBe false
 
 		manager.state.setSpeed(1.5f)
+		manager.state.setScrubbing(true)
 		manager.switchBackend(replacement)
 
 		manager.backend shouldBeSameInstanceAs replacement
 		manager.activeBackends.single() shouldBeSameInstanceAs replacement
 		manager.isBackendActive(initial) shouldBe false
 		manager.isBackendActive(replacement) shouldBe true
+		manager.state.scrubbing.value shouldBe false
 		verify { initial.setBufferOptions(bufferOptions) }
 		verify { initial.onActivated() }
 		verify { initial.reset() }
@@ -85,6 +97,108 @@ class PlayerStateTests : FunSpec({
 		state.seek(30.seconds)
 
 		verify { backend.seekTo(30.seconds) }
+	}
+
+	test("successful seek requests publish distinct target updates") {
+		val state = playerState(backend(), QueueEntry())
+
+		coroutineScope {
+			val requests = async(start = CoroutineStart.UNDISPATCHED) { state.seekRequests.take(2).toList() }
+			state.seek(30.seconds)
+			yield()
+			state.seek(30.seconds)
+
+			requests.await() shouldBe listOf(30.seconds, 30.seconds)
+		}
+	}
+
+	test("relative seek targets stay within the media duration") {
+		val backend = backend(PositionInfo(115.seconds, 115.seconds, 120.seconds))
+		val state = playerState(backend, QueueEntry())
+
+		coroutineScope {
+			val target = async(start = CoroutineStart.UNDISPATCHED) { state.seekRequests.first() }
+			state.fastForward()
+
+			target.await() shouldBe 120.seconds
+		}
+		verify { backend.seekTo(120.seconds) }
+	}
+
+	test("relative seeks reuse their position snapshot") {
+		val backend = backend()
+		val state = playerState(backend, QueueEntry())
+
+		state.fastForward()
+
+		verify(exactly = 1) { backend.getPositionInfo() }
+	}
+
+	test("bursty seek requests retain the newest buffered target") {
+		val state = playerState(backend(), QueueEntry())
+		val firstReceived = CompletableDeferred<Unit>()
+		val continueCollecting = CompletableDeferred<Unit>()
+
+		coroutineScope {
+			val requests = async(start = CoroutineStart.UNDISPATCHED) {
+				state.seekRequests
+					.map { position ->
+						if (position == 10.seconds) {
+							firstReceived.complete(Unit)
+							continueCollecting.await()
+						}
+						position
+					}
+					.take(2)
+					.toList()
+			}
+			state.seek(10.seconds)
+			firstReceived.await()
+			state.seek(20.seconds)
+			state.seek(30.seconds)
+			continueCollecting.complete(Unit)
+
+			requests.await() shouldBe listOf(10.seconds, 30.seconds)
+		}
+	}
+
+	test("rejected seek requests do not publish target updates") {
+		val state = playerState(backend(seekAccepted = false), QueueEntry())
+
+		coroutineScope {
+			val requests = mutableListOf<Duration>()
+			val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+				state.seekRequests.collect { requests += it }
+			}
+			state.seek(30.seconds)
+			yield()
+
+			requests shouldBe emptyList()
+			collector.cancel()
+		}
+	}
+
+	test("stopping clears shared scrubbing state") {
+		val state = playerState(backend(), QueueEntry())
+		state.setScrubbing(true)
+
+		state.stop()
+
+		state.scrubbing.value shouldBe false
+	}
+
+	listOf(PlayState.STOPPED, PlayState.ERROR).forEach { terminalState ->
+		test("backend $terminalState events finish scrubbing") {
+			val backend = backend()
+			val backendService = BackendService()
+			val state = playerState(backend, QueueEntry(), backendService = backendService)
+			state.setScrubbing(true)
+
+			backendService.BackendEventListener().onPlayStateChange(terminalState)
+
+			state.scrubbing.value shouldBe false
+			verify(exactly = 1) { backend.setScrubbing(false) }
+		}
 	}
 
 	test("offset adjustment keeps the current subtitle speed") {
@@ -203,10 +317,14 @@ private fun playerState(
 	return state
 }
 
-private fun backend(supportsSubtitleTimingSpeed: Boolean = true) = mockk<PlayerBackend>(relaxed = true) {
+private fun backend(
+	positionInfo: PositionInfo = PositionInfo(20.seconds, 20.seconds, 120.seconds),
+	supportsSubtitleTimingSpeed: Boolean = true,
+	seekAccepted: Boolean = true,
+) = mockk<PlayerBackend>(relaxed = true) {
 	every { this@mockk.supportsSubtitleTimingSpeed } returns supportsSubtitleTimingSpeed
-	every { getPositionInfo() } returns PositionInfo(20.seconds, 20.seconds, 120.seconds)
-	justRun { seekTo(any()) }
+	every { getPositionInfo() } returns positionInfo
+	every { seekTo(any()) } returns seekAccepted
 }
 
 private fun stream(

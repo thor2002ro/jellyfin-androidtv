@@ -15,6 +15,43 @@ class LibMPVOptionsTest : StringSpec({
 		728.seconds.mpvStartOption() shouldBe "start=728.0"
 	}
 
+	"scrubbing previews with keyframes then settles at the requested position" {
+		val scrubbing = LibMPVScrubState()
+
+		scrubbing.begin(5.seconds)
+		scrubbing.seek(10.seconds) shouldBe LibMPVSeekRequest(10.seconds, LibMPVSeekPrecision.KEYFRAME)
+		scrubbing.finish() shouldBe LibMPVSeekRequest(10.seconds, LibMPVSeekPrecision.EXACT, 5.seconds)
+		scrubbing.finish() shouldBe null
+	}
+
+	"key repeats preserve the position where scrubbing began" {
+		val scrubbing = LibMPVScrubState()
+
+		scrubbing.begin(5.seconds)
+		scrubbing.seek(10.seconds)
+		scrubbing.begin(10.seconds)
+		scrubbing.seek(20.seconds)
+		scrubbing.finish() shouldBe LibMPVSeekRequest(20.seconds, LibMPVSeekPrecision.EXACT, 5.seconds)
+	}
+
+	"an interrupted scrub cannot make a later seek approximate" {
+		val scrubbing = LibMPVScrubState()
+
+		scrubbing.begin(5.seconds)
+		scrubbing.seek(10.seconds)
+		scrubbing.seek(20.seconds) shouldBe LibMPVSeekRequest(20.seconds, LibMPVSeekPrecision.EXACT)
+		scrubbing.finish() shouldBe null
+	}
+
+	"reset discards a pending scrub target" {
+		val scrubbing = LibMPVScrubState()
+
+		scrubbing.begin(5.seconds)
+		scrubbing.seek(10.seconds)
+		scrubbing.reset()
+		scrubbing.finish() shouldBe null
+	}
+
 	"last MPV position survives after the native property becomes unavailable" {
 		val last = PositionInfo(120.seconds, 130.seconds, 1_200.seconds)
 		mpvPositionInfo(null, null, null, null, last) shouldBe last
