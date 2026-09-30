@@ -13,6 +13,8 @@ import org.jellyfin.androidtv.ui.base.LocalTextStyle
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.player.base.PlayerHeader
 import org.jellyfin.androidtv.util.getTimeFormatter
+import org.jellyfin.androidtv.util.sdk.getHighHeaderTitle
+import org.jellyfin.androidtv.util.sdk.getLowHeaderTitle
 import org.jellyfin.sdk.model.api.BaseItemDto
 
 @Composable
@@ -26,9 +28,11 @@ fun VideoPlayerHeader(
 		if (item != null) {
 			val context = LocalContext.current
 			val timeFormatter = remember(context) { context.getTimeFormatter() }
+			val highHeaderTitle = item.getHighHeaderTitle(context)
+			val lowHeaderTitle = item.getLowHeaderTitle(context, liveTvProgramName).orEmpty()
 
 			Text(
-				text = item.name.orEmpty(),
+				text = highHeaderTitle,
 				overflow = TextOverflow.Ellipsis,
 				maxLines = 1,
 				style = LocalTextStyle.current.copy(
@@ -38,7 +42,7 @@ fun VideoPlayerHeader(
 			)
 
 			Text(
-				text = liveTvProgramName ?: item.seriesName.orEmpty(),
+				text = lowHeaderTitle,
 				overflow = TextOverflow.Ellipsis,
 				maxLines = 1,
 				style = LocalTextStyle.current.copy(

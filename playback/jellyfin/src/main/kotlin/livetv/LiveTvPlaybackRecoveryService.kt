@@ -23,6 +23,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class LiveTvPlaybackRecoveryService(
 	private val liveTvPlaybackPolicy: LiveTvPlaybackPolicy,
+	private val networkAvailable: () -> Boolean = { true },
 ) : PlayerService() {
 	private var playbackErrorRecoveryJob: Job? = null
 	private var streamEndRecoveryJob: Job? = null
@@ -33,7 +34,7 @@ class LiveTvPlaybackRecoveryService(
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
 			override fun onPlaybackError(error: PlaybackError) {
 				val entry = manager.queue.entry.value
-				lastPlaybackError = error.takeIf { entry?.isLiveTvEntry() == true }
+				lastPlaybackError = error.takeIf { entry?.let(liveTvPlaybackPolicy::isLiveTv) == true }
 			}
 
 			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
@@ -63,6 +64,7 @@ class LiveTvPlaybackRecoveryService(
 
 				PlayState.STOPPED -> {
 					lastPlaybackError = null
+					cancelPlaybackErrorRecovery()
 					cancelStalledBufferRecovery()
 				}
 			}
@@ -76,18 +78,20 @@ class LiveTvPlaybackRecoveryService(
 			try {
 				while (state.playState.value != PlayState.PLAYING && state.playState.value != PlayState.BUFFERING) {
 					val entry = manager.queue.entry.value ?: return@launch
-					if (!entry.isLiveTvEntry()) return@launch
+					if (!liveTvPlaybackPolicy.isLiveTv(entry)) return@launch
 
 					delay(PLAYBACK_ERROR_RETRY_INTERVAL)
 
 					if (state.playState.value == PlayState.PLAYING || state.playState.value == PlayState.BUFFERING) return@launch
 					val delayedEntry = manager.queue.entry.value ?: return@launch
-					if (delayedEntry !== entry || !delayedEntry.isLiveTvEntry()) return@launch
+					if (delayedEntry !== entry || !liveTvPlaybackPolicy.isLiveTv(delayedEntry)) return@launch
 
 					recoverPlaybackError(delayedEntry, lastPlaybackError)
 				}
 			} finally {
-				playbackErrorRecoveryJob = null
+				if (playbackErrorRecoveryJob === coroutineContext[Job]) {
+					playbackErrorRecoveryJob = null
+				}
 			}
 		}
 	}
@@ -118,7 +122,7 @@ class LiveTvPlaybackRecoveryService(
 			)
 			return
 		}
-		if (!entry.isLiveTvEntry()) return
+		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
 
 		reloadCurrentLiveTvStream(
 			startMessage = "Reloading Live TV queue entry after playback error without changing playback method",
@@ -131,7 +135,7 @@ class LiveTvPlaybackRecoveryService(
 		if (streamEndRecoveryJob?.isActive == true) return
 
 		val entry = manager.queue.entry.value ?: return
-		if (!entry.isLiveTvEntry()) return
+		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
 
 		val entryIndex = manager.queue.entryIndex.value
 		if (entryIndex == Queue.INDEX_NONE) return
@@ -147,7 +151,7 @@ class LiveTvPlaybackRecoveryService(
 					if (currentEntry != null && currentEntry !== entry) return@launch
 
 					val retryEntry = currentEntry ?: entry
-					if (!retryEntry.isLiveTvEntry()) return@launch
+					if (!liveTvPlaybackPolicy.isLiveTv(retryEntry)) return@launch
 
 					retryEntry.mediaStream = null
 
@@ -165,7 +169,9 @@ class LiveTvPlaybackRecoveryService(
 					}
 				}
 			} finally {
-				streamEndRecoveryJob = null
+				if (streamEndRecoveryJob === coroutineContext[Job]) {
+					streamEndRecoveryJob = null
+				}
 			}
 		}
 	}
@@ -175,7 +181,7 @@ class LiveTvPlaybackRecoveryService(
 
 		val entry = manager.queue.entry.value ?: return
 		if (entry.mediaStream?.identifier == null) return
-		if (!entry.isLiveTvEntry()) return
+		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
 
 		stalledBufferRecoveryJob = coroutineScope.launch(Dispatchers.Main) {
 			try {
@@ -187,7 +193,7 @@ class LiveTvPlaybackRecoveryService(
 				while (state.playState.value == PlayState.BUFFERING) {
 					val currentEntry = manager.queue.entry.value
 					val currentStreamIdentifier = currentEntry?.mediaStream?.identifier
-					if (currentEntry?.isLiveTvEntry() != true || currentStreamIdentifier == null) {
+					if (currentEntry?.let(liveTvPlaybackPolicy::isLiveTv) != true || currentStreamIdentifier == null) {
 						return@launch
 					}
 
@@ -203,7 +209,7 @@ class LiveTvPlaybackRecoveryService(
 					val delayedEntry = manager.queue.entry.value
 					val delayedStreamIdentifier = delayedEntry?.mediaStream?.identifier
 					if (state.playState.value != PlayState.BUFFERING) return@launch
-					if (delayedEntry?.isLiveTvEntry() != true || delayedStreamIdentifier == null) return@launch
+					if (delayedEntry?.let(liveTvPlaybackPolicy::isLiveTv) != true || delayedStreamIdentifier == null) return@launch
 
 					if (delayedStreamIdentifier != streamIdentifier) {
 						streamIdentifier = delayedStreamIdentifier
@@ -265,7 +271,9 @@ class LiveTvPlaybackRecoveryService(
 					lastBuffer = reloadedPositionInfo.buffer
 				}
 			} finally {
-				stalledBufferRecoveryJob = null
+				if (stalledBufferRecoveryJob === coroutineContext[Job]) {
+					stalledBufferRecoveryJob = null
+				}
 			}
 		}
 	}
@@ -275,6 +283,10 @@ class LiveTvPlaybackRecoveryService(
 		successMessage: String,
 		failureMessage: String,
 	): Boolean {
+		val entry = manager.queue.entry.value ?: return false
+		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return false
+		if (!waitForNetworkAvailable(entry, startMessage)) return false
+
 		Timber.i(startMessage)
 		val reloaded = manager.reloadCurrentMediaStream(position = null, playWhenReady = true)
 		if (reloaded) {
@@ -285,6 +297,30 @@ class LiveTvPlaybackRecoveryService(
 		return reloaded
 	}
 
+	private suspend fun waitForNetworkAvailable(entry: QueueEntry, reason: String): Boolean {
+		var logged = false
+		while (!isNetworkAvailable()) {
+			val currentEntry = manager.queue.entry.value
+			if (currentEntry !== entry || !liveTvPlaybackPolicy.isLiveTv(currentEntry) || state.playState.value == PlayState.STOPPED) {
+				return false
+			}
+
+			if (!logged) {
+				Timber.i("Network unavailable; waiting before $reason")
+				logged = true
+			}
+			delay(PLAYBACK_ERROR_RETRY_INTERVAL)
+		}
+
+		return true
+	}
+
+	private fun isNetworkAvailable(): Boolean =
+		runCatching(networkAvailable).getOrElse { error ->
+			Timber.w(error, "Unable to read network state; assuming network is available")
+			true
+		}
+
 	private fun cancelStalledBufferRecovery() {
 		stalledBufferRecoveryJob?.cancel()
 		stalledBufferRecoveryJob = null
@@ -294,9 +330,6 @@ class LiveTvPlaybackRecoveryService(
 		playbackErrorRecoveryJob?.cancel()
 		playbackErrorRecoveryJob = null
 	}
-
-	private fun QueueEntry.isLiveTvEntry(): Boolean =
-		baseItem?.let(liveTvPlaybackPolicy::isLiveTv) == true
 
 	private fun stalledBufferRecoveryDelay(recoveryAttempts: Int) =
 		STALLED_BUFFER_RECOVERY_INTERVAL * (recoveryAttempts + 1)
