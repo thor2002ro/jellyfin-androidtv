@@ -8,4 +8,5 @@ data class PlaybackBufferOptions(
 	val bufferForPlaybackDuration: Duration? = null,
 	val bufferForPlaybackAfterRebufferDuration: Duration? = null,
 	val liveTvBufferDuration: Duration? = null,
+	val maxBufferBytes: Long? = null,
 )
