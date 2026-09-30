@@ -6,7 +6,12 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -343,15 +348,23 @@ private fun MediaSourceInfo.hasBadgeStreams() =
 
 private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	api: ApiClient,
-): List<BaseItemDto> {
-	val seasonSamples = mutableMapOf<UUID, List<BaseItemDto>>()
-	val samples = asSequence()
+): List<BaseItemDto> = coroutineScope {
+	val seasonSamples = ConcurrentHashMap<UUID, List<BaseItemDto>>()
+	val sampleItems = asSequence()
 		.filter { it.needsSeriesOrSeasonStreamBadgeSource() }
 		.distinctBy { it.id }
-		.associate { item -> item.id to item.loadStreamBadgeSamples(api, seasonSamples) }
-	if (samples.isEmpty()) return this
+		.toList()
+	if (sampleItems.isEmpty()) return@coroutineScope this@withSeriesOrSeasonStreamBadges
 
-	return withSeriesStreamBadgeSources(samples)
+	val parallelism = Semaphore(SERIES_STREAM_BADGE_PARALLELISM)
+	val samples = sampleItems.map { item ->
+		async {
+			parallelism.withPermit {
+				item.id to item.loadStreamBadgeSamples(api, seasonSamples)
+			}
+		}
+	}.awaitAll().toMap()
+	withSeriesStreamBadgeSources(samples)
 }
 
 private suspend fun BaseItemDto.loadStreamBadgeSamples(
@@ -656,6 +669,7 @@ private val DIRECT_STREAM_BADGE_TYPES = setOf(BaseItemKind.MOVIE, BaseItemKind.E
 private val STREAM_BADGE_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS)
 private const val SERIES_STREAM_BADGE_EPISODE_ATTEMPTS = 3
 private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 2
+private const val SERIES_STREAM_BADGE_PARALLELISM = 8
 
 fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
