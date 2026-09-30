@@ -14,27 +14,38 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
 import timber.log.Timber
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val LiveTvProgramPositionRefreshInterval = 1.seconds
 private val LiveTvProgramRefreshRetryInterval = 30.seconds
+private const val LiveTvNextProgramWindowHours = 6L
 
 data class LiveTvProgramTimeline(
 	val start: LocalDateTime,
 	val end: LocalDateTime,
 	val duration: Duration,
 	val programName: String?,
+	val nextProgram: LiveTvProgramDetails? = null,
 ) {
 	fun positionAt(now: LocalDateTime): Duration =
 		durationBetween(start, now).coerceIn(Duration.ZERO, duration)
 }
+
+data class LiveTvProgramDetails(
+	val start: LocalDateTime,
+	val end: LocalDateTime,
+	val name: String,
+)
 
 @Composable
 fun rememberLiveTvProgramTimeline(
@@ -50,17 +61,16 @@ fun rememberLiveTvProgramTimeline(
 		if (channelId == null) return@LaunchedEffect
 
 		while (true) {
-			delay(timeline.refreshDelay())
-
 			val updatedTimeline = withContext(Dispatchers.IO) {
 				runCatching {
-					api.liveTvApi.getChannel(channelId).content.liveTvProgramTimeline()
+					api.liveTvProgramTimeline(channelId, timeline)
 				}.onFailure { error ->
 					Timber.w(error, "Failed to refresh Live TV current program")
 				}.getOrNull()
 			}
 
 			if (updatedTimeline != null) timeline = updatedTimeline
+			delay(timeline.refreshDelay())
 			if (updatedTimeline == null || !updatedTimeline.end.isAfter(LocalDateTime.now())) {
 				delay(LiveTvProgramRefreshRetryInterval)
 			}
@@ -68,6 +78,31 @@ fun rememberLiveTvProgramTimeline(
 	}
 
 	return timeline
+}
+
+private suspend fun ApiClient.liveTvProgramTimeline(
+	channelId: UUID,
+	fallback: LiveTvProgramTimeline?,
+): LiveTvProgramTimeline? {
+	val currentTimeline = liveTvApi.getChannel(channelId).content.liveTvProgramTimeline()
+		?: fallback
+		?: return null
+
+	val nextProgram = runCatching {
+		liveTvApi.getLiveTvPrograms(
+			channelIds = listOf(channelId),
+			enableImages = false,
+			sortBy = setOf(ItemSortBy.START_DATE),
+			sortOrder = setOf(SortOrder.ASCENDING),
+			maxStartDate = currentTimeline.end.plusHours(LiveTvNextProgramWindowHours),
+			minEndDate = currentTimeline.end.minusSeconds(1),
+			enableTotalRecordCount = false,
+		).content.items.nextProgramAfter(currentTimeline)
+	}.onFailure { error ->
+		Timber.w(error, "Failed to load Live TV next program")
+	}.getOrNull()
+
+	return currentTimeline.copy(nextProgram = nextProgram)
 }
 
 @Composable
@@ -82,6 +117,29 @@ fun rememberLiveTvProgramPosition(timeline: LiveTvProgramTimeline?): Duration {
 	}
 
 	return timeline?.positionAt(now) ?: Duration.ZERO
+}
+
+private fun Collection<BaseItemDto>.nextProgramAfter(timeline: LiveTvProgramTimeline): LiveTvProgramDetails? =
+	sortedBy { program -> program.startDate ?: LocalDateTime.MIN }
+		.asSequence()
+		.mapNotNull { program -> program.liveTvProgramDetails() }
+		.firstOrNull { program -> !program.start.isBefore(timeline.end) }
+
+private fun BaseItemDto.liveTvProgramDetails(): LiveTvProgramDetails? {
+	val start = startDate ?: return null
+	val duration = runTimeTicks?.ticks
+	val end = endDate
+		?: duration?.let { start.plus(it.inWholeMilliseconds, ChronoUnit.MILLIS) }
+		?: return null
+	val name = name?.takeUnless { value -> value.isBlank() } ?: return null
+
+	if (!end.isAfter(start)) return null
+
+	return LiveTvProgramDetails(
+		start = start,
+		end = end,
+		name = name,
+	)
 }
 
 private fun BaseItemDto.liveTvProgramTimeline(): LiveTvProgramTimeline? {

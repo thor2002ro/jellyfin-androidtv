@@ -120,7 +120,6 @@
     <string name="lbl_guide_option_number">Rásnummar</string>
     <string name="lbl_subtitle_background_color">Bakgrundslitur</string>
     <string name="lbl_from_beginning">Spæl frá byrjanini</string>
-    <string name="lbl_previous_episode">Undanfarni partur</string>
     <string name="lbl_next_episode">Næsti partur</string>
     <string name="lbl_album_name">Útgávunavn</string>
     <string name="lbl_tv_channel_status">%1$d av %2$d rásum</string>

@@ -47,7 +47,6 @@
     <string name="lbl_song_title">Назва пісні</string>
     <string name="lbl_album_name">Назва альбому</string>
     <string name="lbl_next_episode">Наступний епізод</string>
-    <string name="lbl_previous_episode">Попередній епізод</string>
     <string name="lbl_more_like_this">Подібні до цього</string>
     <string name="lbl_resume_from">Продовжити з %1$s</string>
     <string name="lbl_guide_option_number">Номер каналу</string>
