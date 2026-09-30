@@ -5,7 +5,6 @@ import static org.koin.java.KoinJavaComponent.inject;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.graphics.Point;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.DisplayMetrics;
@@ -399,94 +398,73 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         if (mRecordButton != null) mRecordButton.setActivated(id != null);
     }
 
-    private int posterHeight;
-
     @Override
     public void setRecSeriesTimer(String id) {
-        if (mProgramInfo != null) mProgramInfo = JavaCompat.copyWithTimerId(mProgramInfo, id);
+        if (mProgramInfo != null) mProgramInfo = JavaCompat.copyWithSeriesTimerId(mProgramInfo, id);
         if (mRecSeriesButton != null) mRecSeriesButton.setActivated(id != null);
         if (mSeriesSettingsButton != null)
             mSeriesSettingsButton.setVisibility(id == null ? View.GONE : View.VISIBLE);
 
     }
+    private void buildDetailsOverviewRow(BaseItemDto item) {
+        Double aspect = imageHelper.getValue().getImageAspectRatio(item, false);
+        int posterHeight = aspect > 1
+                ? Utils.convertDpToPixel(requireContext(), 160)
+                : Utils.convertDpToPixel(requireContext(), item.getType() == BaseItemKind.PERSON || item.getType() == BaseItemKind.MUSIC_ARTIST ? 300 : 200);
 
-    private class BuildDorTask extends AsyncTask<BaseItemDto, Integer, MyDetailsOverviewRow> {
+        mDetailsOverviewRow = new MyDetailsOverviewRow(item);
 
-        @Override
-        protected MyDetailsOverviewRow doInBackground(BaseItemDto... params) {
-            BaseItemDto item = params[0];
+        String primaryImageUrl = imageHelper.getValue().getLogoImageUrl(mBaseItem, 600);
+        if (primaryImageUrl == null) {
+            primaryImageUrl = imageHelper.getValue().getPrimaryImageUrl(mBaseItem, false, null, posterHeight);
+        }
 
-            // Figure image size
-            Double aspect = imageHelper.getValue().getImageAspectRatio(item, false);
-            posterHeight = aspect > 1 ? Utils.convertDpToPixel(requireContext(), 160) : Utils.convertDpToPixel(requireContext(), item.getType() == BaseItemKind.PERSON || item.getType() == BaseItemKind.MUSIC_ARTIST ? 300 : 200);
+        mDetailsOverviewRow.setSummary(item.getOverview());
+        switch (item.getType()) {
+            case PERSON:
+            case MUSIC_ARTIST:
+                break;
+            default:
+                BaseItemPerson director = BaseItemExtensionsKt.getFirstPerson(item, PersonKind.DIRECTOR);
 
-            mDetailsOverviewRow = new MyDetailsOverviewRow(item);
+                InfoItem firstRow;
+                if (item.getType() == BaseItemKind.SERIES) {
+                    firstRow = new InfoItem(
+                            getString(R.string.lbl_seasons),
+                            String.valueOf(Utils.getSafeValue(item.getChildCount(), 0)));
+                } else {
+                    firstRow = new InfoItem(
+                            getString(R.string.lbl_directed_by),
+                            director != null ? director.getName() : getString(R.string.lbl_bracket_unknown));
+                }
+                mDetailsOverviewRow.setInfoItem1(firstRow);
 
-            String primaryImageUrl = imageHelper.getValue().getLogoImageUrl(mBaseItem, 600);
-            if (primaryImageUrl == null) {
-                primaryImageUrl = imageHelper.getValue().getPrimaryImageUrl(mBaseItem, false, null, posterHeight);
-            }
-
-            mDetailsOverviewRow.setSummary(item.getOverview());
-            switch (item.getType()) {
-                case PERSON:
-                case MUSIC_ARTIST:
-                    break;
-                default:
-
-                    BaseItemPerson director = BaseItemExtensionsKt.getFirstPerson(item, PersonKind.DIRECTOR);
-
-                    InfoItem firstRow;
-                    if (item.getType() == BaseItemKind.SERIES) {
-                        firstRow = new InfoItem(
-                                getString(R.string.lbl_seasons),
-                                String.format("%d", Utils.getSafeValue(item.getChildCount(), 0)));
+                if (item.getRunTimeTicks() != null && item.getRunTimeTicks() > 0) {
+                    mDetailsOverviewRow.setInfoItem2(new InfoItem(getString(R.string.lbl_runs), getRunTime()));
+                    ClockBehavior clockBehavior = userPreferences.getValue().get(UserPreferences.Companion.getClockBehavior());
+                    if (clockBehavior == ClockBehavior.ALWAYS || clockBehavior == ClockBehavior.IN_MENUS) {
+                        mDetailsOverviewRow.setInfoItem3(new InfoItem(getString(R.string.lbl_ends), getEndTime()));
                     } else {
-                        firstRow = new InfoItem(
-                                getString(R.string.lbl_directed_by),
-                                director != null ? director.getName() : getString(R.string.lbl_bracket_unknown));
-                    }
-                    mDetailsOverviewRow.setInfoItem1(firstRow);
-
-                    if ((item.getRunTimeTicks() != null && item.getRunTimeTicks() > 0) || item.getRunTimeTicks() != null) {
-                        mDetailsOverviewRow.setInfoItem2(new InfoItem(getString(R.string.lbl_runs), getRunTime()));
-                        ClockBehavior clockBehavior = userPreferences.getValue().get(UserPreferences.Companion.getClockBehavior());
-                        if (clockBehavior == ClockBehavior.ALWAYS || clockBehavior == ClockBehavior.IN_MENUS) {
-                            mDetailsOverviewRow.setInfoItem3(new InfoItem(getString(R.string.lbl_ends), getEndTime()));
-                        } else {
-                            mDetailsOverviewRow.setInfoItem3(new InfoItem());
-                        }
-                    } else {
-                        mDetailsOverviewRow.setInfoItem2(new InfoItem());
                         mDetailsOverviewRow.setInfoItem3(new InfoItem());
                     }
-
-            }
-
-            mDetailsOverviewRow.setImageDrawable(primaryImageUrl);
-
-
-            return mDetailsOverviewRow;
+                } else {
+                    mDetailsOverviewRow.setInfoItem2(new InfoItem());
+                    mDetailsOverviewRow.setInfoItem3(new InfoItem());
+                }
         }
 
-        @Override
-        protected void onPostExecute(MyDetailsOverviewRow detailsOverviewRow) {
-            super.onPostExecute(detailsOverviewRow);
+        mDetailsOverviewRow.setImageDrawable(primaryImageUrl);
 
-            if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
+        ClassPresenterSelector ps = new ClassPresenterSelector();
+        ps.addClassPresenter(MyDetailsOverviewRow.class, mDorPresenter);
+        mListRowPresenter = new CustomListRowPresenter(Utils.convertDpToPixel(requireContext(), 10));
+        ps.addClassPresenter(ListRow.class, mListRowPresenter);
+        mRowsAdapter = new MutableObjectAdapter<Row>(ps);
+        mRowsFragment.setAdapter(mRowsAdapter);
+        mRowsAdapter.add(mDetailsOverviewRow);
 
-            ClassPresenterSelector ps = new ClassPresenterSelector();
-            ps.addClassPresenter(MyDetailsOverviewRow.class, mDorPresenter);
-            mListRowPresenter = new CustomListRowPresenter(Utils.convertDpToPixel(requireContext(), 10));
-            ps.addClassPresenter(ListRow.class, mListRowPresenter);
-            mRowsAdapter = new MutableObjectAdapter<Row>(ps);
-            mRowsFragment.setAdapter(mRowsAdapter);
-            mRowsAdapter.add(detailsOverviewRow);
-
-            updateInfo(detailsOverviewRow.getItem());
-            addAdditionalRows(mRowsAdapter);
-
-        }
+        updateInfo(item);
+        addAdditionalRows(mRowsAdapter);
     }
 
     public void setBaseItem(BaseItemDto item) {
@@ -505,7 +483,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                         mProgramInfo.getRunTimeTicks()
                 );
             }
-            new BuildDorTask().execute(item);
+            buildDetailsOverviewRow(item);
         }
     }
 
