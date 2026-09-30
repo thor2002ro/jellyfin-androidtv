@@ -27,10 +27,10 @@ class ItemCardBaseItemOverlayTests : FunSpec({
 		item.streamBadges(
 			audioLanguagePreference = "fr",
 			subtitleLanguagePreference = null,
-		)?.audio shouldBe "FR EN JP"
+		)?.audio shouldBe "FR EN JP +1"
 	}
 
-	test("stream badges show up to three available subtitles") {
+	test("stream badges count hidden subtitles") {
 		val item = item(
 			source(
 				stream(MediaStreamType.SUBTITLE, 0, "eng"),
@@ -44,7 +44,7 @@ class ItemCardBaseItemOverlayTests : FunSpec({
 		item.streamBadges(
 			audioLanguagePreference = null,
 			subtitleLanguagePreference = "de",
-		)?.subtitle shouldBe "DE EN JP"
+		)?.subtitle shouldBe "DE EN JP +1"
 	}
 
 	test("stream badges show on season cards") {
