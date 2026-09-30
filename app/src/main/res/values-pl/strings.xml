@@ -668,7 +668,6 @@
     <string name="pref_software_codecs_enabled_description">Niektóre implementacje programowe mogą obniżać wydajność. Wyłączenie tej opcji zwiększa prawdopodobieństwo transkodowania.</string>
     <string name="preference_enable_ass">Bezpośrednie odtwarzanie napisów ASS</string>
     <string name="preference_enable_pgs_description">Wymaga transkodowania po wyłączeniu</string>
-    <string name="preference_enable_ass_description">Funkcja eksperymentalna, może nie działać niezawodnie</string>
     <string name="lbl_date_show_added">Data dodania serialu</string>
     <string name="lbl_date_episode_added">Data dodania ocinka</string>
     <string name="truehd">TrueHD</string>
