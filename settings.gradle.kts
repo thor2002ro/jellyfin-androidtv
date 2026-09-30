@@ -14,6 +14,18 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "jellyfin-androidtv"
 
+file("local.properties").takeIf { it.isFile }?.inputStream()?.use {
+	java.util.Properties().apply { load(it) }.getProperty("sdk.dir")?.let { sdkDir ->
+		System.setProperty("android.home", sdkDir)
+	}
+}
+
+includeBuild("dependencies/libass-android") {
+	dependencySubstitution {
+		substitute(module("io.github.peerless2012:ass-media")).using(project(":lib_ass_media"))
+	}
+}
+
 // Application
 include(":app")
 
