@@ -30,6 +30,10 @@ fun BaseItemDto.copyWithLastPlayedDate(
 	)
 )
 
+internal val liveTvChannelFields = setOf(
+	ItemFields.OVERVIEW,
+)
+
 fun loadLiveTvChannels(fragment: Fragment, callback: (channels: Collection<BaseItemDto>?) -> Unit) {
 	val liveTvPreferences by fragment.inject<LiveTvPreferences>()
 	val api by fragment.inject<ApiClient>()
@@ -42,7 +46,7 @@ fun loadLiveTvChannels(fragment: Fragment, callback: (channels: Collection<BaseI
 			withContext(Dispatchers.IO) {
 				api.liveTvApi.getLiveTvChannels(
 					addCurrentProgram = true,
-					fields = setOf(ItemFields.OVERVIEW),
+					fields = liveTvChannelFields,
 					enableFavoriteSorting = channelOrder.usesServerFavoriteSorting(favoritesAtTop),
 					sortBy = setOf(channelOrder.toLiveTvItemSortBy()),
 					sortOrder = channelOrder.toLiveTvSortOrder(),

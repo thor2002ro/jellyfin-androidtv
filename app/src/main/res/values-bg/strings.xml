@@ -204,7 +204,6 @@
     <string name="lbl_subtitle_text_color">Цвят на текста</string>
     <string name="lbl_subtitle_background_color">Цвят на фона</string>
     <string name="lbl_subtitle_text_stroke_color">Цвят на контурa</string>
-    <string name="lbl_previous_episode">Предишен епизод</string>
     <string name="lbl_album_name">Име на албума</string>
     <string name="lbl_sports">Спорт</string>
     <string name="lbl_repeat">Повторете</string>

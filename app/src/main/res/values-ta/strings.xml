@@ -150,7 +150,6 @@
     <string name="lbl_song_title">பாடல் தலைப்பு</string>
     <string name="lbl_album_name">ஆல்பத்தின் பெயர்</string>
     <string name="lbl_next_episode">அடுத்த அத்தியாயம்</string>
-    <string name="lbl_previous_episode">முந்தைய அத்தியாயம்</string>
     <string name="lbl_more_like_this">இதே போன்றவை</string>
     <string name="lbl_resume_from">%1$s இலிருந்து மீண்டும் தொடங்குங்கள்</string>
     <string name="lbl_resume_preroll">முன் ரோலை மீண்டும் தொடங்குங்கள்</string>

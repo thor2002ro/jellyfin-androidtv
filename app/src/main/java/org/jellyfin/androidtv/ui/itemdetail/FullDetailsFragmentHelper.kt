@@ -74,7 +74,6 @@ fun FullDetailsFragment.deleteItem(
 
 fun FullDetailsFragment.showDetailsMenu(
 	view: View,
-	baseItemDto: BaseItemDto,
 ) = popupMenu(requireContext(), view) {
 	// for each button check if it exists (not-null) and is invisible (overflow prevention)
 	if (queueButton?.isVisible == false) {
@@ -83,23 +82,6 @@ fun FullDetailsFragment.showDetailsMenu(
 
 	if (shuffleButton?.isVisible == false) {
 		item(getString(R.string.lbl_shuffle_all)) { shufflePlay() }
-	}
-
-	if (trailerButton?.isVisible == false) {
-		item(getString(R.string.lbl_play_trailers)) { playTrailers() }
-	}
-
-	if (favButton?.isVisible == false) {
-		val favoriteStringRes = when (baseItemDto.userData?.isFavorite) {
-			true -> R.string.lbl_remove_favorite
-			else -> R.string.lbl_add_favorite
-		}
-
-		item(getString(favoriteStringRes)) { toggleFavorite() }
-	}
-
-	if (goToSeriesButton?.isVisible == false) {
-		item(getString(R.string.lbl_goto_series)) { gotoSeries() }
 	}
 }.showIfNotEmpty()
 
@@ -122,7 +104,7 @@ fun FullDetailsFragment.toggleFavorite() {
 			favorite = !(mBaseItem.userData?.isFavorite ?: false)
 		)
 		mBaseItem = mBaseItem.copyWithUserData(userData)
-		favButton.isActivated = userData.isFavorite
+		updateFavoriteButton(userData.isFavorite)
 		dataRefreshService.lastFavoriteUpdate = Instant.now()
 	}
 }
@@ -221,31 +203,6 @@ fun FullDetailsFragment.getItem(id: UUID, callback: (item: BaseItemDto?) -> Unit
 		}
 
 		callback(response)
-	}
-}
-
-fun FullDetailsFragment.populatePreviousButton() {
-	if (mBaseItem.type != BaseItemKind.EPISODE) return
-
-	val api by inject<ApiClient>()
-
-	lifecycleScope.launch {
-		val siblings = withContext(Dispatchers.IO) {
-			api.tvShowsApi.getEpisodes(
-				seriesId = requireNotNull(mBaseItem.seriesId),
-				adjacentTo = mBaseItem.id,
-			).content
-		}
-
-		val previousItem = siblings.items
-			.filterNot { it.id == mBaseItem.id }
-			.firstOrNull()
-			?.id
-
-		mPrevItemId = previousItem
-		mPrevButton.isVisible = previousItem != null
-
-		showMoreButtonIfNeeded()
 	}
 }
 

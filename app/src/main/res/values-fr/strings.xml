@@ -195,7 +195,6 @@
     <string name="lbl_schedule">Programmation</string>
     <string name="lbl_resume_preroll">Reprise différé</string>
     <string name="lbl_series_recordings">Enregistrement des séries</string>
-    <string name="lbl_previous_episode">Épisode précédent</string>
     <string name="lbl_next_episode">Épisode suivant</string>
     <string name="lbl_album_name">Nom de l\'album</string>
     <string name="lbl_song_title">Titre de la chanson</string>

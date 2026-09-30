@@ -92,6 +92,10 @@ class BackendService {
 			callListeners { onPlayStateChange(state) }
 		}
 
+		override fun onPlaybackError(error: PlaybackError) {
+			callListeners { onPlaybackError(error) }
+		}
+
 		override fun onVideoSizeChange(width: Int, height: Int) {
 			callListeners { onVideoSizeChange(width, height) }
 		}

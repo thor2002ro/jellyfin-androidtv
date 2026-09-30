@@ -170,7 +170,6 @@
     <string name="lbl_song_title">Название композиции</string>
     <string name="lbl_album_name">Название альбома</string>
     <string name="lbl_next_episode">Следующий эпизод</string>
-    <string name="lbl_previous_episode">Предыдущий эпизод</string>
     <string name="lbl_resume_from">Возобновить с %1$s</string>
     <string name="lbl_guide_option_number">Номер канала</string>
     <string name="lbl_show_indicators">Показывать индикаторы для</string>
