@@ -57,6 +57,8 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import io.github.peerless2012.ass.media.AssHandler
 import io.github.peerless2012.ass.media.AssHandlerConfig
+import io.github.peerless2012.ass.media.AssPerformanceStats
+import io.github.peerless2012.ass.media.AssPerformanceStatsCollector
 import io.github.peerless2012.ass.media.factory.AssRenderersFactory
 import io.github.peerless2012.ass.media.kt.withAssMkvSupport
 import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
@@ -82,6 +84,7 @@ import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.QueueEntry
@@ -227,6 +230,11 @@ private fun String?.tokens() = this
 private fun isH264Codec(codec: String) = codec.lowercase().let { value ->
 	value.contains("h264") || value.contains("avc")
 }
+
+internal fun canPreloadNextItem(libassEnabled: Boolean) = !libassEnabled
+
+internal fun canMeasureLibassPerformance(libassEnabled: Boolean, renderType: AssRenderType) =
+	libassEnabled && renderType != AssRenderType.CUES
 
 private val currentDeviceIsAmlogic by lazy { isAmlogicDevice() }
 
@@ -509,6 +517,7 @@ class ExoPlayerBackend(
 		audioDecoderCounters = null
 		audioInputFormat = null
 		audioPassthroughSupported = null
+		if (exoPlayerOptions.enableLibass) assHandler.resetPerformanceStats()
 		audioPassthroughSupportDirty = true
 		audioCapabilitiesReceiverFailed = false
 	}
@@ -687,9 +696,14 @@ class ExoPlayerBackend(
 			player.currentMediaItem?.mediaId,
 			formatTsExtractorFlags(entry.liveTvTsExtractorFlags(usesHardwareVideoDecoder())),
 		)
-		player.addMediaSource(index + 1, entry.createMediaSource(stream))
-		player.removeMediaItem(index)
-		player.seekToDefaultPosition(index)
+		val mediaSource = entry.createMediaSource(stream)
+		if (canPreloadNextItem(exoPlayerOptions.enableLibass)) {
+			player.addMediaSource(index + 1, mediaSource)
+			player.removeMediaItem(index)
+			player.seekToDefaultPosition(index)
+		} else {
+			player.setMediaSource(mediaSource)
+		}
 		player.prepare()
 		return true
 	}
@@ -756,6 +770,7 @@ class ExoPlayerBackend(
 				glyphSize = exoPlayerOptions.libassGlyphSize,
 				cacheSize = exoPlayerOptions.libassCacheSize,
 				maxRenderPixels = exoPlayerOptions.libassMaxRenderPixels,
+				performanceStatsCollector = AssPerformanceStatsCollector(),
 			),
 		)
 	}
@@ -980,6 +995,7 @@ class ExoPlayerBackend(
 		if (!rendererPreferencesDirty && !loadControlDirty) return
 		if (exoPlayerDelegate.isInitialized()) {
 			subtitleTimingRendererInvalidator.cancel()
+			if (exoPlayerOptions.enableLibass) assHandler.reset()
 			exoPlayer.release()
 		}
 		trackSelectorDelegate = lazy(::createTrackSelector)
@@ -1333,6 +1349,7 @@ class ExoPlayerBackend(
 	}
 
 	override fun prepareItem(item: QueueEntry) {
+		if (!canPreloadNextItem(exoPlayerOptions.enableLibass)) return
 		applyRendererPreferences()
 		val stream = requireNotNull(item.mediaStream)
 		val player = exoPlayer
@@ -1371,22 +1388,31 @@ class ExoPlayerBackend(
 		resetPlaybackStats()
 		setPendingInitialTrackSelection(stream.initialTrackSelection())
 
-		var preparedItemIndex = (0 until exoPlayer.mediaItemCount).firstOrNull { index ->
-			exoPlayer.getMediaItemAt(index).mediaId == stream.hashCode().toString()
-		}
+		if (exoPlayerOptions.enableLibass) {
+			if (item.liveStreamTargetOffset != null) {
+				exoPlayer.setMediaSource(item.createMediaSource(stream))
+			} else {
+				exoPlayer.setMediaItem(item.toMediaItem(stream))
+			}
+			exoPlayer.prepare()
+		} else {
+			var preparedItemIndex = (0 until exoPlayer.mediaItemCount).firstOrNull { index ->
+				exoPlayer.getMediaItemAt(index).mediaId == stream.hashCode().toString()
+			}
 
-		// Prepare the item now if it doesn't exist yet
-		if (preparedItemIndex == null) {
-			prepareItem(item)
-			preparedItemIndex = exoPlayer.mediaItemCount - 1
-		}
+			// Prepare the item now if it doesn't exist yet
+			if (preparedItemIndex == null) {
+				prepareItem(item)
+				preparedItemIndex = exoPlayer.mediaItemCount - 1
+			}
 
-		// Seek to prepared media item
-		when (preparedItemIndex) {
-			exoPlayer.currentMediaItemIndex - 1 -> exoPlayer.seekToPreviousMediaItem()
-			exoPlayer.currentMediaItemIndex + 1 -> exoPlayer.seekToNextMediaItem()
-			exoPlayer.currentMediaItemIndex -> Unit
-			else -> exoPlayer.seekTo(preparedItemIndex, 0)
+			// Seek to prepared media item
+			when (preparedItemIndex) {
+				exoPlayer.currentMediaItemIndex - 1 -> exoPlayer.seekToPreviousMediaItem()
+				exoPlayer.currentMediaItemIndex + 1 -> exoPlayer.seekToNextMediaItem()
+				exoPlayer.currentMediaItemIndex -> Unit
+				else -> exoPlayer.seekTo(preparedItemIndex, 0)
+			}
 		}
 		schedulePendingInitialTrackSelectionRetry()
 
@@ -1466,6 +1492,11 @@ class ExoPlayerBackend(
 	}
 
 	override fun replaceItem(item: QueueEntry) {
+		if (exoPlayerOptions.enableLibass) {
+			currentStream = null
+			playItem(item, delayLiveStart = false)
+			return
+		}
 		applyRendererPreferences()
 		clearPendingLiveStart()
 		val stream = requireNotNull(item.mediaStream)
@@ -1524,6 +1555,7 @@ class ExoPlayerBackend(
 	override fun stop() {
 		clearPendingLiveStart()
 		exoPlayer.stop()
+		if (exoPlayerOptions.enableLibass) assHandler.reset()
 		clearSubtitleCues()
 		currentStream = null
 		mediaSourceTsExtractorFlags.clear()
@@ -1593,8 +1625,34 @@ class ExoPlayerBackend(
 			subtitleParser = subtitleParserDebug(),
 			subtitlePath = subtitlePathDebug(),
 			extractorFlags = tsExtractorFlags?.let(::formatTsExtractorFlags),
+			libass = if (canMeasureLibassPerformance(exoPlayerOptions.enableLibass, exoPlayerOptions.libassRenderType)) {
+				assHandler.performanceStats.toPlaybackLibassStats()
+			} else null,
 		)
 	}
+
+	private fun AssPerformanceStats.toPlaybackLibassStats() = PlaybackLibassStats(
+		renderCount = renderCount,
+		changedRenderCount = changedRenderCount,
+		emptyRenderCount = emptyRenderCount,
+		imageCount = imageCount,
+		slowRenderCount = slowRenderCount,
+		maxImageCount = maxImageCount,
+		maxBitmapPixels = maxBitmapPixels,
+		totalBitmapPixels = totalBitmapPixels,
+		atlasUploadPageCount = atlasUploadPageCount,
+		maxAtlasUploadPageCount = maxAtlasUploadPageCount,
+		maxAtlasUploadPagePixels = maxAtlasUploadPagePixels,
+		totalAtlasUploadPagePixels = totalAtlasUploadPagePixels,
+		executorTimeoutCount = executorTimeoutCount,
+		supersededRequestCount = supersededRequestCount,
+		fps = fps,
+		changedRatio = changedRatio,
+		averageRenderMs = averageRenderMs,
+		minRenderMs = minRenderMs,
+		maxRenderMs = maxRenderMs,
+		lastRenderMs = lastRenderMs,
+	)
 
 	private fun currentTsExtractorFlags(): Int? {
 		val entry = exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry ?: return null

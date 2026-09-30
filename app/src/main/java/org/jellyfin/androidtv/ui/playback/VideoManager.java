@@ -109,6 +109,7 @@ public class VideoManager {
     private String subtitleParserDebug;
     private String subtitlePathDebug;
     private final boolean parseSubtitlesDuringExtraction;
+    private final AssHandler assHandler;
 
     public VideoManager(@NonNull Activity activity, @NonNull View view, @NonNull PlaybackOverlayFragmentHelper helper) {
         mActivity = activity;
@@ -125,7 +126,7 @@ public class VideoManager {
         subtitlePathDebug = assDirectPlay
                 ? "libass renderer; extraction parser off"
                 : parseSubtitlesDuringExtraction ? "extraction parser" : "renderer parser";
-        AssHandler assHandler = assDirectPlay ? new AssHandler(
+        assHandler = assDirectPlay ? new AssHandler(
                 assRenderType,
                 new AssHandlerConfig(
                         userPreferences.get(UserPreferences.Companion.getLibassGlyphSize()).getGlyphs(),
@@ -714,7 +715,9 @@ public class VideoManager {
         _helper.setScreensaverLock(false);
         if (mExoPlayer != null) {
             mExoPlayerView.setPlayer(null);
+            if (assHandler != null) assHandler.reset();
             mExoPlayer.release();
+            if (assHandler != null) assHandler.release();
             mExoPlayer = null;
         }
     }
