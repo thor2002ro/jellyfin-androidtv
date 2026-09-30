@@ -35,6 +35,10 @@ android {
 		isCoreLibraryDesugaringEnabled = true
 	}
 
+	packaging {
+		jniLibs.pickFirsts += "**/libc++_shared.so"
+	}
+
 	splits {
 		abi {
 			isEnable = true
