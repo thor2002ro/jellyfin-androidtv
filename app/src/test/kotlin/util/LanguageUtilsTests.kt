@@ -37,6 +37,16 @@ class LanguageUtilsTests : FunSpec({
 		"unknown".toIso2LanguageBadgeOrNull() shouldBe null
 	}
 
+	test("toStreamLanguageBadgeOrNull maps unknown streams") {
+		"unknown".toStreamLanguageBadgeOrNull() shouldBe "UND"
+		"unknown - AAC".toStreamLanguageBadgeOrNull() shouldBe "UND"
+		"und".toStreamLanguageBadgeOrNull() shouldBe "UND"
+		"und_SRT".toStreamLanguageBadgeOrNull() shouldBe "UND"
+		"undefined".toStreamLanguageBadgeOrNull() shouldBe "UND"
+		"undetermined".toStreamLanguageBadgeOrNull() shouldBe "UND"
+		" ".toStreamLanguageBadgeOrNull() shouldBe null
+	}
+
 	test("toIso2LanguageDisplayOrSelf converts known codes and preserves labels") {
 		"eng".toIso2LanguageDisplayOrSelf() shouldBe "EN"
 		"fre".toIso2LanguageDisplayOrSelf() shouldBe "FR"
