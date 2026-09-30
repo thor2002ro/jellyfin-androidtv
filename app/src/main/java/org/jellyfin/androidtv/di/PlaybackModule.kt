@@ -13,9 +13,21 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.ExoPlayerBackendSettings
+import org.jellyfin.androidtv.preference.LibVLCBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
-import org.jellyfin.androidtv.preference.constant.BufferLength
+import org.jellyfin.androidtv.preference.libVLCAudioOutput
+import org.jellyfin.androidtv.preference.libVLCDecoder
+import org.jellyfin.androidtv.preference.playbackBackend
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpeg
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegAudioForLiveTv
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideoForLiveTv
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
+import org.jellyfin.androidtv.preference.constant.libVLCPlaybackOptions
+import org.jellyfin.androidtv.preference.constant.libVLCStartupOptions
+import org.jellyfin.androidtv.preference.constant.toPlaybackBufferOptions
 import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
@@ -25,16 +37,18 @@ import org.jellyfin.androidtv.util.AndroidVersion
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.playback.core.playbackManager
+import org.jellyfin.playback.core.plugin.playbackPlugin
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
 import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamOptions
+import org.jellyfin.playback.libvlc.LibVLCBackend
+import org.jellyfin.playback.libvlc.LibVLCInstanceOptions
+import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerOptions
-import org.jellyfin.playback.media3.exoplayer.exoPlayerPlugin
 import org.jellyfin.playback.media3.session.MediaSessionOptions
 import org.jellyfin.playback.media3.session.media3SessionPlugin
-import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.okhttp.OkHttpFactory
-import org.jellyfin.sdk.model.api.MediaSourceInfo
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
@@ -59,7 +73,45 @@ val playbackModule = module {
 		OkHttpDataSource.Factory(okHttpFactory.createClient(httpClientOptions))
 	}
 
+	single { createExoPlayerBackend() }
+	single { createLibVLCBackend() }
 	single { createPlaybackManager() }
+	single { ExoPlayerBackendSettings(get(), get()) }
+	single { LibVLCBackendSettings(get(), get()) }
+}
+
+private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
+	val userPreferences = get<UserPreferences>()
+	val exoPlayerOptions = ExoPlayerOptions(
+		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
+		preferFfmpegAudioForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] },
+		preferFfmpegVideo = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] },
+		preferFfmpegVideoForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv] },
+		enableLibass = userPreferences[UserPreferences.assDirectPlay],
+		libassRenderType = userPreferences[UserPreferences.libassRenderType].assRenderType,
+		libassGlyphSize = userPreferences[UserPreferences.libassGlyphSize].glyphs,
+		libassCacheSize = userPreferences[UserPreferences.libassCacheSize].megabytes,
+		libassMaxRenderPixels = userPreferences[UserPreferences.libassMaxRenderPixels].pixels,
+		parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction],
+		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
+		baseDataSourceFactory = get<HttpDataSource.Factory>(),
+	)
+	return ExoPlayerBackend(androidContext(), exoPlayerOptions)
+}
+
+private fun Scope.createLibVLCBackend(): LibVLCBackend {
+	val userPreferences = get<UserPreferences>()
+	return LibVLCBackend(
+		context = androidContext(),
+		instanceOptionsProvider = {
+			LibVLCInstanceOptions(
+				arguments = userPreferences.libVLCStartupOptions(),
+				audioOutput = userPreferences[UserPreferences.libVLCAudioOutput].vlcValue,
+			)
+		},
+		videoDecoderProvider = { userPreferences[UserPreferences.libVLCDecoder].decoder },
+		playbackOptionsProvider = { userPreferences.libVLCPlaybackOptions() },
+	)
 }
 
 fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
@@ -78,27 +130,11 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	}
 
 	val userPreferences = get<UserPreferences>()
-	val bufferLength = userPreferences[UserPreferences.bufferLength]
-	val exoPlayerOptions = ExoPlayerOptions(
-		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
-		preferFfmpegAudioForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] },
-		preferFfmpegVideo = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] },
-		preferFfmpegVideoForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv] },
-		enableLibass = userPreferences[UserPreferences.assDirectPlay],
-		libassRenderType = userPreferences[UserPreferences.libassRenderType].assRenderType,
-		libassGlyphSize = userPreferences[UserPreferences.libassGlyphSize].glyphs,
-		libassCacheSize = userPreferences[UserPreferences.libassCacheSize].megabytes,
-		libassMaxRenderPixels = userPreferences[UserPreferences.libassMaxRenderPixels].pixels,
-		parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction],
-		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
-		baseDataSourceFactory = get<HttpDataSource.Factory>(),
-		minBufferDuration = bufferLength.minBufferDuration,
-		maxBufferDuration = bufferLength.maxBufferDuration,
-		bufferForPlaybackDuration = bufferLength.bufferForPlaybackDuration,
-		bufferForPlaybackAfterRebufferDuration = bufferLength.bufferForPlaybackAfterRebufferDuration,
-		liveTvBufferDuration = bufferLength.liveTvBufferDuration,
-	)
-	install(exoPlayerPlugin(get(), exoPlayerOptions))
+	val backend = when (userPreferences[UserPreferences.playbackBackend]) {
+		PlaybackBackend.EXOPLAYER -> get<ExoPlayerBackend>()
+		PlaybackBackend.LIBVLC -> get<LibVLCBackend>()
+	}
+	install(playbackPlugin { provide(backend) })
 
 	val mediaSessionOptions = MediaSessionOptions(
 		channelId = notificationChannelId,
@@ -130,6 +166,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val userSettingPreferences = get<UserSettingPreferences>()
 	defaultRewindAmount = { userSettingPreferences[UserSettingPreferences.skipBackLength].milliseconds }
 	defaultFastForwardAmount = { userSettingPreferences[UserSettingPreferences.skipForwardLength].milliseconds }
+	bufferOptions = { userPreferences[UserPreferences.bufferLength].toPlaybackBufferOptions() }
 }
 
 private fun createJellyfinMediaStreamOptions(

@@ -3,6 +3,7 @@ package org.jellyfin.playback.core.model
 data class PlaybackFrameStats(
 	val droppedFrames: Int,
 	val corruptedFrames: Int,
+	val playerName: String? = null,
 	val videoDecodedFrames: Int = 0,
 	val videoDecoderName: String? = null,
 	val videoDecoderType: String? = null,

@@ -10,7 +10,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Implementation of the MPV player API.
  * Documentation: https://mpv-android.github.io/mpv-android/intent.html
  */
-class MpvExternalPlayerApi : ExternalPlayerApi {
+class LibMPVExternalPlayerApi : ExternalPlayerApi {
 	companion object {
 		val PACKAGE_NAMES = arrayOf(
 			"is.xyz.mpv"

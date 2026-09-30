@@ -12,6 +12,7 @@ import org.jellyfin.playback.core.ui.PlayerSurfaceView
 class BackendService {
 	private var _backend: PlayerBackend? = null
 	val backend get() = _backend
+	val activeBackends: List<PlayerBackend> get() = listOfNotNull(_backend)
 
 	private var listeners = mutableListOf<PlayerBackendEventListener>()
 	private var _surfaceView: PlayerSurfaceView? = null
@@ -27,6 +28,7 @@ class BackendService {
 			_surfaceView?.let(::setSurfaceView)
 			_subtitleView?.let(::setSubtitleView)
 			setListener(BackendEventListener())
+			onActivated()
 		}
 	}
 
