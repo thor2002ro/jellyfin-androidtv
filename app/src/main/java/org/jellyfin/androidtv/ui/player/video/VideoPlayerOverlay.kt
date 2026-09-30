@@ -59,6 +59,7 @@ private val DpadSeekScrubDuration = 750.milliseconds
 private val DpadSeekCommitDelay = 500.milliseconds
 private val DpadSeekToastDuration = 1500.milliseconds
 private val BackToStopTimeout = 2.seconds
+private val BackDuplicateGuardDuration = 250.milliseconds
 
 @Composable
 fun VideoPlayerOverlay(
@@ -85,6 +86,7 @@ fun VideoPlayerOverlay(
 	var seekScrubJob by remember { mutableStateOf<Job?>(null) }
 	var backToStopDeadline by remember { mutableStateOf(0L) }
 	var backToStopKeyCode by remember { mutableStateOf<Int?>(null) }
+	var lastBackRequestAt by remember { mutableStateOf(0L) }
 	var centerLongPressTriggered by remember { mutableStateOf(false) }
 	var centerLongPressJob by remember { mutableStateOf<Job?>(null) }
 	var previousPlayState by remember { mutableStateOf(playState) }
@@ -108,6 +110,9 @@ fun VideoPlayerOverlay(
 
 	fun requestStopConfirmation() {
 		val now = SystemClock.elapsedRealtime()
+		if (now - lastBackRequestAt <= BackDuplicateGuardDuration.inWholeMilliseconds) return
+		lastBackRequestAt = now
+
 		if (now <= backToStopDeadline) {
 			backToStopDeadline = 0L
 			onClosePlayer()
@@ -115,7 +120,7 @@ fun VideoPlayerOverlay(
 		}
 
 		backToStopDeadline = now + BackToStopTimeout.inWholeMilliseconds
-		hideOverlay()
+		if (playState != PlayState.PAUSED) hideOverlay()
 		mediaToastRegistry.emit(
 			icon = R.drawable.ic_stop,
 			text = R.string.player_back_to_stop,

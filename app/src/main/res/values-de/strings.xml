@@ -648,5 +648,4 @@
     <string name="pref_software_codecs_enabled_description">Einige softwarebasierte Implementierungen können die Leistung beeinträchtigen. Wenn Sie diese Option deaktivieren, wird eine Transkodierung wahrscheinlicher.</string>
     <string name="preference_enable_ass">ASS Untertitel direkt wiedergeben</string>
     <string name="preference_enable_pgs_description">Benötigt Transkodierung falls deaktiviert</string>
-    <string name="preference_enable_ass_description">Experimentelles Feature, könnte nicht zuverlässig arbeiten</string>
 </resources>
