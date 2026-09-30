@@ -229,7 +229,6 @@
     <string name="lbl_premieres">Estreias</string>
     <string name="lbl_resume_preroll">Continuar Lançamentos</string>
     <string name="lbl_show_indicators">Mostrar indicadores para</string>
-    <string name="lbl_premiere">Estreia</string>
     <string name="lbl_episode_not_record">Esta série NÃO gravará</string>
     <string name="desc_premieres">Mostrar uma lista de novos episódios piloto para as séries a que assiste</string>
     <string name="lbl_refresh_switching">Altera taxa de atualização</string>

@@ -200,7 +200,6 @@
     <string name="lbl_episode_not_record">รายการดังกล่าวไม่ถูกบันทึก</string>
     <string name="lbl_save">บันทึก</string>
     <string name="lbl_at_any_time">เวลาใดก็ได้</string>
-    <string name="lbl_premiere">ออกอากาศ</string>
     <string name="msg_record_entire_series">บันทึกทั้งซีรีส์ \?</string>
     <string name="lbl_latest_in">เพิ่งถูกเพิ่มใน %1$s</string>
     <string name="because_you_watched">เนื่องจากคุณรับชม %1$s</string>
