@@ -1,8 +1,13 @@
 package org.jellyfin.androidtv.ui.playback.overlay.action
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
+import org.jellyfin.androidtv.ui.playback.appendInline
+import org.jellyfin.androidtv.ui.playback.formatBitrate
 import org.jellyfin.androidtv.ui.playback.getSubtitleMediaStreamCodec
+import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
@@ -24,7 +29,11 @@ object StreamStatusBuilder {
 		val mediaSource = playbackController.currentMediaSource ?: streamInfo?.mediaSource
 		val videoStream = mediaSource?.stream(MediaStreamType.VIDEO)
 		val audioStream = mediaSource?.stream(MediaStreamType.AUDIO, playbackController.audioStreamIndex)
-		val subtitleStream = mediaSource?.stream(MediaStreamType.SUBTITLE, playbackController.subtitleStreamIndex)
+		val selectedSubtitleStreamIndex = playbackController.subtitleStreamIndex
+		val subtitleStream = selectedSubtitleStreamIndex
+			.takeIf { it >= 0 }
+			?.let { mediaSource?.stream(MediaStreamType.SUBTITLE, it) }
+		val showAssStats = subtitleStream?.codec.isAssSubtitleCodec() && !playbackController.isBurningSubtitlesForStatus()
 
 		row("Play", streamInfo?.playMethod?.displayName() ?: "Unknown")
 		row("Container", streamInfo?.container ?: mediaSource?.container)
@@ -40,6 +49,12 @@ object StreamStatusBuilder {
 		row("Sub source", subtitleSource(subtitleStream, playbackController.isBurningSubtitlesForStatus()))
 		row("Sub flags", subtitleFlags(subtitleStream))
 		row("Sub offset", subtitleOffset(subtitleStream, playbackController.isBurningSubtitlesForStatus(), playbackController.subtitleTimingOffsetUs))
+		if (showAssStats) {
+			row("ASS extractor", playbackController.subtitleExtractorDebug)
+			row("ASS render", playbackController.subtitleRenderDebug)
+			row("ASS parser", playbackController.subtitleParserDebug)
+			row("ASS path", playbackController.subtitlePathDebug)
+		}
 		row("Progress", TranscodingStatusFormatter.progress(transcodingInfo))
 		row("T speed", TranscodingStatusFormatter.speed(transcodingInfo))
 		row("T bitrate", TranscodingStatusFormatter.bitrate(transcodingInfo))
@@ -148,6 +163,7 @@ object StreamStatusBuilder {
 		else -> "${offsetUs.formatSignedSeconds()} ${if (stream.supportsSubtitleOffset()) "supported" else "unsupported"}"
 	}
 
+	@OptIn(UnstableApi::class)
 	private fun MediaStream.supportsSubtitleOffset(): Boolean {
 		val deliveryMethod = deliveryMethod
 		if (deliveryMethod == SubtitleDeliveryMethod.ENCODE || deliveryMethod == SubtitleDeliveryMethod.DROP) return false
@@ -165,19 +181,6 @@ object StreamStatusBuilder {
 	private fun resolution(stream: MediaStream) = when {
 		stream.width != null && stream.height != null -> "${stream.width}x${stream.height}"
 		else -> null
-	}
-
-	private fun Int.formatBitrate(): String {
-		return when {
-			this >= 1_000_000 -> "%.1f Mbps".format(this / 1_000_000.0)
-			else -> "%.0f Kbps".format(coerceAtLeast(0) / 1_000.0)
-		}
-	}
-
-	private fun StringBuilder.appendInline(value: String?) {
-		if (value.isNullOrBlank()) return
-		if (isNotEmpty()) append(' ')
-		append(value)
 	}
 
 	private fun Long.formatDuration(): String {
