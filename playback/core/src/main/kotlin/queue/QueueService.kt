@@ -30,6 +30,8 @@ class QueueService internal constructor() : PlayerService(), Queue {
 	private var orderIndexProvider: OrderIndexProvider = defaultOrderIndexProvider
 	private var currentQueueIndicesPlayed = mutableListOf<Int>()
 	private var entryChangePredicate: (suspend (QueueEntry) -> Boolean)? = null
+	internal var entryRevision = 0L
+		private set
 
 	override val estimatedSize get() = max(fetchedEntries.size, suppliers.sumOf { it.size } - removedEntries)
 
@@ -148,6 +150,7 @@ class QueueService internal constructor() : PlayerService(), Queue {
 	}
 
 	override fun clear() {
+		entryRevision++
 		suppliers.clear()
 		currentSupplierIndex = 0
 		currentSupplierEntryIndex = 0
@@ -210,6 +213,7 @@ class QueueService internal constructor() : PlayerService(), Queue {
 		}
 
 		// Set new index
+		if (_entry.value !== currentEntry) entryRevision++
 		_entryIndex.value = if (currentEntry == null) Queue.INDEX_NONE else index
 		_entry.value = currentEntry
 
