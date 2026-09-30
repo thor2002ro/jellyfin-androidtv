@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
@@ -39,6 +39,7 @@ import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
+import org.jellyfin.androidtv.ui.base.button.ProgressButton
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
@@ -79,6 +80,7 @@ fun AppUpdatePrompt(
 	val availableUpdate = update?.takeIf { windowInfo.isWindowFocused && !Destinations.isPlayback(destination) } ?: return
 	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
 	var downloading by remember(availableUpdate) { mutableStateOf(false) }
+	var downloadProgress by remember(availableUpdate) { mutableStateOf<Int?>(null) }
 	var updateMessage by remember(availableUpdate) { mutableStateOf<String?>(null) }
 
 	SettingsDialog(
@@ -88,13 +90,22 @@ fun AppUpdatePrompt(
 		UpdatePromptContent(
 			update = availableUpdate,
 			downloading = downloading,
+			downloadProgress = downloadProgress,
 			message = updateMessage,
 			onUpdate = {
 				downloading = true
+				downloadProgress = 0
 				updateMessage = null
 				lifecycleScope.launch {
-					val install = appUpdater.downloadAndStartInstall(availableUpdate)
+					val install = appUpdater.downloadAndStartInstall(
+						availableUpdate,
+						lifecycleScope.downloadProgressUpdater(
+							isDownloading = { downloading },
+							setProgress = { downloadProgress = it },
+						),
+					)
 					downloading = false
+					downloadProgress = null
 					if (install.installerStarted) {
 						notificationsRepository.dismissAppUpdatePrompt()
 					} else {
@@ -136,6 +147,7 @@ fun AppUpdateSettings(
 	var useUniversalApk by remember { mutableStateOf<Boolean?>(null) }
 	var checking by remember { mutableStateOf(false) }
 	var downloading by remember { mutableStateOf(false) }
+	var downloadProgress by remember { mutableStateOf<Int?>(null) }
 	var update by remember { mutableStateOf<AppUpdate?>(null) }
 	var updateMessage by remember { mutableStateOf<String?>(null) }
 
@@ -244,12 +256,22 @@ fun AppUpdateSettings(
 					if (downloading) CircularProgressIndicator(Modifier.size(20.dp))
 					else Icon(painterResource(R.drawable.ic_upload), contentDescription = null)
 				},
-				headingContent = { Text("Download and install") },
+				headingContent = {
+					Text(downloadProgress?.let { "Download and install $it%" } ?: "Download and install")
+				},
 				onClick = {
 					downloading = true
+					downloadProgress = 0
 					lifecycleScope.launch {
-						updateMessage = appUpdater.downloadAndStartInstall(availableUpdate).message
+						updateMessage = appUpdater.downloadAndStartInstall(
+							availableUpdate,
+							lifecycleScope.downloadProgressUpdater(
+								isDownloading = { downloading },
+								setProgress = { downloadProgress = it },
+							),
+						).message
 						downloading = false
+						downloadProgress = null
 					}
 				},
 			)
@@ -269,6 +291,7 @@ fun AppUpdateSettings(
 private fun UpdatePromptContent(
 	update: AppUpdate,
 	downloading: Boolean,
+	downloadProgress: Int?,
 	message: String?,
 	onUpdate: () -> Unit,
 	onClose: () -> Unit,
@@ -281,7 +304,7 @@ private fun UpdatePromptContent(
 	) {
 		Text(
 			text = if (update.prerelease) "PRE-RELEASE UPDATE" else "UPDATE AVAILABLE",
-			style = JellyfinTheme.typography.listHeader,
+			style = JellyfinTheme.typography.listHeader.copy(color = JellyfinTheme.colorScheme.listHeader),
 		)
 		Text(
 			text = update.versionName,
@@ -304,7 +327,7 @@ private fun UpdatePromptContent(
 			)
 			Text(
 				text = update.releaseNotes.ifBlank { "No release notes provided." },
-				style = JellyfinTheme.typography.default,
+				style = JellyfinTheme.typography.default.copy(color = JellyfinTheme.colorScheme.onBackground),
 			)
 		}
 
@@ -314,17 +337,21 @@ private fun UpdatePromptContent(
 			modifier = Modifier.fillMaxWidth(),
 			horizontalArrangement = Arrangement.spacedBy(12.dp),
 		) {
-			Button(
-				onClick = onUpdate,
-				enabled = !downloading,
-				modifier = Modifier.weight(1f),
-			) {
-				if (downloading) {
-					CircularProgressIndicator(Modifier.size(20.dp))
-					Spacer(Modifier.size(8.dp))
-					Text("Updating")
-				} else {
-					Text("Update")
+			if (downloading) {
+				ProgressButton(
+					progress = (downloadProgress ?: 0) / 100f,
+					onClick = onUpdate,
+					enabled = false,
+					modifier = Modifier.weight(1f),
+				) {
+					Text(downloadProgress?.let { "Updating $it%" } ?: "Updating")
+				}
+			} else {
+				Button(
+					onClick = onUpdate,
+					modifier = Modifier.weight(1f),
+				) {
+					Text("Update now")
 				}
 			}
 			Button(
@@ -338,8 +365,11 @@ private fun UpdatePromptContent(
 	}
 }
 
-private suspend fun AppUpdater.downloadAndStartInstall(update: AppUpdate): InstallOutcome {
-	return when (val download = download(update)) {
+private suspend fun AppUpdater.downloadAndStartInstall(
+	update: AppUpdate,
+	onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> },
+): InstallOutcome {
+	return when (val download = download(update, onProgress)) {
 		is DownloadResult.Ready -> when (val install = startInstall(download.file)) {
 			InstallStartResult.Started -> InstallOutcome("Installer opened", installerStarted = true)
 			InstallStartResult.PermissionRequired -> {
@@ -351,6 +381,25 @@ private suspend fun AppUpdater.downloadAndStartInstall(update: AppUpdate): Insta
 		}
 
 		is DownloadResult.Failed -> InstallOutcome(download.message)
+	}
+}
+
+private fun downloadProgressPercent(downloaded: Long, total: Long): Int? =
+	if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else null
+
+private fun CoroutineScope.downloadProgressUpdater(
+	isDownloading: () -> Boolean,
+	setProgress: (Int) -> Unit,
+): (downloaded: Long, total: Long) -> Unit {
+	var lastProgress = -1
+	return { downloaded, total ->
+		val progress = downloadProgressPercent(downloaded, total)
+		if (progress != null && progress != lastProgress) {
+			lastProgress = progress
+			launch {
+				if (isDownloading()) setProgress(progress)
+			}
+		}
 	}
 }
 
