@@ -494,7 +494,6 @@
     <string name="lbl_runtime">Duração</string>
     <string name="person_birthday_and_age">Nascido em %1$s (%2$d)</string>
     <string name="indicator_subtitles">CC</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="dolby_atmos">Dolby Atmos</string>
     <string name="dts_x">DTS:X</string>
     <string name="dts_hd">DTS-HD</string>
@@ -651,7 +650,6 @@
     <string name="codec_level_4_0">Nível 4.0</string>
     <string name="preference_enable_ass">Reprodução direta de legendas ASS</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision com EL</string>
     <string name="sdr">SDR</string>
     <string name="pref_software_codecs_enabled">Use codecs de software</string>
     <string name="pref_software_codecs_enabled_description">Algumas implementações via software podem reduzir o desempenho. Desativar esta opção torna a transcodificação mais provável.</string>
