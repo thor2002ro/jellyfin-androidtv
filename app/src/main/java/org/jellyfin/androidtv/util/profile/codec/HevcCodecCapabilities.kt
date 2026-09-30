@@ -41,6 +41,30 @@ class HevcCodecCapabilities(
 		AndroidVersion.isAtLeastN &&
 			query.hasCodecForMime(MIME_DOLBY_VISION)
 
+	fun supportsHevcDolbyVisionProfile5(): Boolean =
+		AndroidVersion.isAtLeastN &&
+			query.hasDecoder(
+				MIME_DOLBY_VISION,
+				CodecProfileLevel.DolbyVisionProfileDvheStn,
+				CodecProfileLevel.DolbyVisionLevelHd24,
+			)
+
+	fun supportsHevcDolbyVisionProfile7(): Boolean =
+		AndroidVersion.isAtLeastN &&
+			query.hasDecoder(
+				MIME_DOLBY_VISION,
+				CodecProfileLevel.DolbyVisionProfileDvheDtb,
+				CodecProfileLevel.DolbyVisionLevelHd24,
+			)
+
+	fun supportsHevcDolbyVisionProfile8(): Boolean =
+		AndroidVersion.isAtLeastN &&
+			query.hasDecoder(
+				MIME_DOLBY_VISION,
+				CodecProfileLevel.DolbyVisionProfileDvheSt,
+				CodecProfileLevel.DolbyVisionLevelHd24,
+			)
+
 	fun supportsHevcDolbyVisionEL(): Boolean =
 		AndroidVersion.isAtLeastN &&
 			query.hasDecoder(

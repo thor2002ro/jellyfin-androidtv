@@ -1,5 +1,8 @@
 package org.jellyfin.androidtv.ui.browsing;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.HeaderItem;
 import androidx.leanback.widget.ListRow;
@@ -9,6 +12,7 @@ import org.jellyfin.androidtv.R;
 import org.jellyfin.androidtv.auth.repository.UserRepository;
 import org.jellyfin.androidtv.constant.ChangeTriggerType;
 import org.jellyfin.androidtv.constant.Extras;
+import org.jellyfin.androidtv.constant.ImageType;
 import org.jellyfin.androidtv.constant.LiveTvOption;
 import org.jellyfin.androidtv.constant.QueryType;
 import org.jellyfin.androidtv.data.querying.GetSeriesTimersRequest;
@@ -31,7 +35,33 @@ import java.util.List;
 import timber.log.Timber;
 
 public class BrowseViewFragment extends EnhancedBrowseFragment {
+    private static final int LIVE_TV_TILE_WIDTH_DP = 184;
+    private static final int LIVE_TV_TILE_HEIGHT_DP = 112;
+
     private boolean isLiveTvLibrary;
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        if (isLiveTvLibrary) {
+            new Handler(Looper.getMainLooper()).postDelayed(this::refreshLiveTvRows, 3500);
+        }
+    }
+
+    private void refreshLiveTvRows() {
+        if (!isLiveTvLibrary || mRowsAdapter == null || !isAdded()) return;
+
+        for (int i = 0; i < mRowsAdapter.size(); i++) {
+            if (!(mRowsAdapter.get(i) instanceof ListRow)) continue;
+            if (!(((ListRow) mRowsAdapter.get(i)).getAdapter() instanceof ItemRowAdapter)) continue;
+
+            ItemRowAdapter adapter = (ItemRowAdapter) ((ListRow) mRowsAdapter.get(i)).getAdapter();
+            if (adapter.getQueryType() == QueryType.LiveTvChannel || adapter.getQueryType() == QueryType.LiveTvProgram) {
+                adapter.Retrieve();
+            }
+        }
+    }
 
     @Override
     protected void setupQueries(final RowLoader rowLoader) {
@@ -92,7 +122,7 @@ public class BrowseViewFragment extends EnhancedBrowseFragment {
                 showViews = true;
 
                 //On now
-                mRows.add(new BrowseRowDef(getString(R.string.lbl_on_now), BrowsingUtils.createLiveTVOnNowRequest()));
+                mRows.add(new BrowseRowDef(getString(R.string.lbl_on_now), BrowsingUtils.createLiveTVOnNowRequest(), new ChangeTriggerType[]{ChangeTriggerType.TvPlayback}));
 
                 //Upcoming
                 mRows.add(new BrowseRowDef(getString(R.string.lbl_coming_up), BrowsingUtils.createLiveTVUpcomingRequest()));
@@ -101,7 +131,10 @@ public class BrowseViewFragment extends EnhancedBrowseFragment {
                 mRows.add(new BrowseRowDef(getString(R.string.lbl_favorite_channels), BrowsingUtils.createLiveTVChannelsRequest(true)));
 
                 //Other Channels
-                mRows.add(new BrowseRowDef(getString(R.string.lbl_other_channels), BrowsingUtils.createLiveTVChannelsRequest(false)));
+                mRows.add(new BrowseRowDef(getString(R.string.lbl_other_channels), BrowsingUtils.createLiveTVChannelsRequest(false), new ChangeTriggerType[]{ChangeTriggerType.TvPlayback}));
+
+                //Recently Played Channels
+                mRows.add(new BrowseRowDef(getString(R.string.lbl_recently_played_channels), BrowsingUtils.createLiveTVRecentlyPlayedChannelsRequest(), new ChangeTriggerType[]{ChangeTriggerType.TvPlayback}));
 
                 //Latest Recordings
                 BrowseViewFragmentHelperKt.getLiveTvRecordingsAndTimers(this, (recordings, timers) -> {
@@ -192,8 +225,9 @@ public class BrowseViewFragment extends EnhancedBrowseFragment {
             //Views row
             HeaderItem gridHeader = new HeaderItem(mRowsAdapter.size(), getString(R.string.lbl_views));
 
-            GridButtonPresenter mGridPresenter = new GridButtonPresenter();
+            GridButtonPresenter mGridPresenter = new GridButtonPresenter(getDefaultGridButtonWidth(), getDefaultGridButtonHeight());
             ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
+            gridRowAdapter.add(new GridButton(LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID, getString(R.string.channels)));
             gridRowAdapter.add(new GridButton(LiveTvOption.LIVE_TV_GUIDE_OPTION_ID, getString(R.string.lbl_live_tv_guide)));
             gridRowAdapter.add(new GridButton(LiveTvOption.LIVE_TV_RECORDINGS_OPTION_ID, getString(R.string.lbl_recorded_tv)));
             if (Utils.canManageRecordings(KoinJavaComponent.<UserRepository>get(UserRepository.class).getCurrentUser().getValue())) {
@@ -206,5 +240,25 @@ public class BrowseViewFragment extends EnhancedBrowseFragment {
         } else {
             super.addAdditionalRows(rowAdapter);
         }
+    }
+
+    @Override
+    protected ImageType getDefaultCardImageType() {
+        return isLiveTvLibrary ? ImageType.THUMB : super.getDefaultCardImageType();
+    }
+
+    @Override
+    protected int getDefaultCardHeight() {
+        return isLiveTvLibrary ? LIVE_TV_TILE_HEIGHT_DP : super.getDefaultCardHeight();
+    }
+
+    @Override
+    protected int getDefaultGridButtonWidth() {
+        return isLiveTvLibrary ? LIVE_TV_TILE_WIDTH_DP : super.getDefaultGridButtonWidth();
+    }
+
+    @Override
+    protected int getDefaultGridButtonHeight() {
+        return isLiveTvLibrary ? LIVE_TV_TILE_HEIGHT_DP : super.getDefaultGridButtonHeight();
     }
 }
