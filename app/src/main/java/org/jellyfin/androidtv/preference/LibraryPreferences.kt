@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.preference
 import org.jellyfin.androidtv.constant.GridDirection
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
+import org.jellyfin.androidtv.constant.LibraryViewStyle
 import org.jellyfin.androidtv.constant.PosterSize
 import org.jellyfin.androidtv.preference.store.DisplayPreferencesStore
 import org.jellyfin.preference.booleanPreference
@@ -24,6 +25,7 @@ class LibraryPreferences(
 		val imageType = enumPreference("ImageType", ImageType.POSTER)
 		val gridDirection = enumPreference("GridDirection", GridDirection.HORIZONTAL)
 		val enableSmartScreen = booleanPreference("SmartScreen", false)
+		val viewStyle = enumPreference("ViewStyle", LibraryViewStyle.CARDS)
 		val cardSpacing = enumPreference("CardSpacing", LibraryCardSpacing.NORMAL)
 		val showCardTitles = booleanPreference("ShowCardTitles", false)
 
