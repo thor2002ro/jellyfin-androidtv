@@ -27,10 +27,13 @@ import kotlin.time.Duration.Companion.nanoseconds
 private val prettyPrintJson = Json { prettyPrint = true }
 private fun formatJson(json: String) = prettyPrintJson.encodeToString(prettyPrintJson.parseToJsonElement(json))
 
-private fun Range<Int>.prettyFormat() = if (lower == upper) "$lower" else "$lower-$upper"
+internal fun Range<Int>.prettyFormat() = if (lower == upper) "$lower" else "$lower-$upper"
+
+internal fun getMediaCodecDecoders() = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+	.filterNot { codec -> codec.isEncoder }
 
 // Names are copied from MediaCodecInfo.CodecCapabilities.FEATURE_xxx constants as some constants are not available in older API versions
-private val featureNames = setOf(
+internal val mediaCodecFeatureNames = setOf(
 	"adaptive-playback",
 	"detached-surface",
 	"dynamic-color-aspects",
@@ -85,8 +88,7 @@ fun createDeviceProfileReport(
 	}
 
 	// Device capabilities used to generate profile
-	val codecs = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
-		.filter { !it.isEncoder }
+	val codecs = getMediaCodecDecoders()
 		.sortedBy { if (AndroidVersion.isAtLeastQ) it.canonicalName else it.name }
 
 	appendDetails("Device codec decoders") {
@@ -148,7 +150,7 @@ fun createDeviceProfileReport(
 				}
 
 				// Only show features section if there is at least 1
-				featureNames.mapNotNull { name ->
+				mediaCodecFeatureNames.mapNotNull { name ->
 					when {
 						capabilities.isFeatureRequired(name) -> "$name (required)"
 						capabilities.isFeatureSupported(name) -> name

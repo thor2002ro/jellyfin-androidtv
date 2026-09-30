@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.settings.screen
 
 import android.content.Context
 import android.media.MediaCodecInfo
+import android.media.MediaCodecInfo.CodecCapabilities
 import android.media.MediaCodecList
 import androidx.annotation.OptIn
 import androidx.compose.foundation.focusable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -42,18 +44,25 @@ import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
+import org.jellyfin.androidtv.util.profile.getMediaCodecDecoders
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.mediaCodecFeatureNames
+import org.jellyfin.androidtv.util.profile.prettyFormat
 import org.koin.compose.koinInject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsDebugCapabilitiesScreen() {
 	val context = LocalContext.current
 	val userPreferences = koinInject<UserPreferences>()
 	val softwareCodecsEnabled by rememberPreference(userPreferences, UserPreferences.softwareCodecsEnabled)
-	val groups = remember(context, softwareCodecsEnabled) {
-		buildCapabilityGroups(context, softwareCodecsEnabled)
-	}
 	var rawExpanded by rememberSaveable { mutableStateOf(false) }
+	val groups by produceState<List<CapabilityGroup>>(emptyList(), context, softwareCodecsEnabled, rawExpanded) {
+		value = withContext(Dispatchers.Default) {
+			buildCapabilityGroups(context, softwareCodecsEnabled, rawExpanded)
+		}
+	}
 
 	SettingsColumn {
 		item {
@@ -116,20 +125,26 @@ private fun LazyListScope.capabilityGroup(
 		capabilityGroup(child)
 	}
 
-	items(group.items) { item ->
+	items(
+		items = group.items,
+		key = { item -> "${group.title}:${item.title}" },
+		contentType = { "capability_item" },
+	) { item ->
 		FocusableListControl(
 			headingContent = { CompactCapabilityText(item.title, 14) },
-			captionContent = item.detail?.let { detail -> ({ CompactCapabilityText(detail, 11) }) },
+			captionContent = item.detail?.let { detail -> ({
+				CompactCapabilityText(detail, 11, item.detailMaxLines)
+			}) },
 			trailingContent = item.supported?.let { supported -> ({ CapabilityBadge(supported) }) },
 		)
 	}
 }
 
 @Composable
-private fun CompactCapabilityText(text: String, size: Int) = Text(
+private fun CompactCapabilityText(text: String, size: Int, maxLines: Int = 1) = Text(
 	text = text,
 	fontSize = size.sp,
-	maxLines = 1,
+	maxLines = maxLines,
 	overflow = TextOverflow.Ellipsis,
 )
 
@@ -179,6 +194,7 @@ private fun CapabilityBadge(supported: Boolean) {
 private fun buildCapabilityGroups(
 	context: Context,
 	softwareCodecsEnabled: Boolean,
+	includeRawDetails: Boolean,
 ): List<CapabilityGroup> {
 	val mediaTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled)
 	val displayHdrTypes = getSupportedDisplayHdrTypes(context)
@@ -187,15 +203,14 @@ private fun buildCapabilityGroups(
 		buildHdrCapabilities(context, mediaTest, displayHdrTypes),
 		buildVideoCapabilities(context, mediaTest),
 		buildAudioCapabilities(context, softwareCodecsEnabled),
-		buildRawAndroidDecoderCapabilities(),
+		buildRawAndroidDecoderCapabilities(includeRawDetails),
 		buildFfmpegCapabilities(context),
 	)
 }
 
-private fun buildRawAndroidDecoderCapabilities(): CapabilityGroup {
-	val decoders = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+private fun buildRawAndroidDecoderCapabilities(includeDetails: Boolean): CapabilityGroup {
+	val decoders = getMediaCodecDecoders()
 		.asSequence()
-		.filterNot(MediaCodecInfo::isEncoder)
 		.distinctBy(MediaCodecInfo::getName)
 		.sortedBy(MediaCodecInfo::getName)
 		.toList()
@@ -204,9 +219,9 @@ private fun buildRawAndroidDecoderCapabilities(): CapabilityGroup {
 		title = "RAW",
 		caption = "All decoders reported by Android MediaCodec",
 		children = listOf(
-			rawDecoderGroup("Video", decoders, "video/"),
-			rawDecoderGroup("Audio", decoders, "audio/"),
-			rawOtherDecoderGroup(decoders),
+			rawDecoderGroup("Video", decoders, "video/", includeDetails),
+			rawDecoderGroup("Audio", decoders, "audio/", includeDetails),
+			rawOtherDecoderGroup(decoders, includeDetails),
 		).filter { group -> group.items.isNotEmpty() },
 		collapsible = true,
 	)
@@ -216,6 +231,7 @@ private fun rawDecoderGroup(
 	title: String,
 	decoders: List<MediaCodecInfo>,
 	typePrefix: String,
+	includeDetails: Boolean,
 ) = CapabilityGroup(
 	title = title,
 	items = decoders.mapNotNull { codec ->
@@ -223,27 +239,160 @@ private fun rawDecoderGroup(
 			.filter { type -> type.startsWith(typePrefix) }
 			.sorted()
 			.takeIf { types -> types.isNotEmpty() }
-			?.let { types -> rawDecoderItem(codec, types) }
+			?.let { types -> rawDecoderItem(codec, types, includeDetails) }
 	},
 )
 
-private fun rawOtherDecoderGroup(decoders: List<MediaCodecInfo>) = CapabilityGroup(
+private fun rawOtherDecoderGroup(decoders: List<MediaCodecInfo>, includeDetails: Boolean) = CapabilityGroup(
 	title = "Other",
 	items = decoders.mapNotNull { codec ->
 		codec.supportedTypes
 			.sorted()
 			.takeIf { types -> types.none { type -> type.startsWith("video/") || type.startsWith("audio/") } }
-			?.let { types -> rawDecoderItem(codec, types) }
+			?.let { types -> rawDecoderItem(codec, types, includeDetails) }
 	},
 )
 
 private fun rawDecoderItem(
 	codec: MediaCodecInfo,
 	types: List<String>,
+	includeDetails: Boolean,
 ): CapabilityItem {
 	val type = if (codec.isSoftwareDecoder) "sw" else "hw"
-	return CapabilityItem("$type: ${codec.name}", detail = types.joinToString())
+	return CapabilityItem(
+		title = "$type: ${codec.name}",
+		detail = if (includeDetails) rawDecoderDetail(codec, types) else null,
+		detailMaxLines = Int.MAX_VALUE,
+	)
 }
+
+@Suppress("DEPRECATION")
+private val mediaCodecColorFormatNames = mapOf(
+	CodecCapabilities.COLOR_FormatMonochrome to "Monochrome",
+	CodecCapabilities.COLOR_Format8bitRGB332 to "RGB 3:3:2 (8-bit)",
+	CodecCapabilities.COLOR_Format12bitRGB444 to "RGB 4:4:4 (12-bit)",
+	CodecCapabilities.COLOR_Format16bitARGB4444 to "ARGB 4:4:4:4 (16-bit)",
+	CodecCapabilities.COLOR_Format16bitARGB1555 to "ARGB 1:5:5:5 (16-bit)",
+	CodecCapabilities.COLOR_Format16bitRGB565 to "RGB 5:6:5 (16-bit)",
+	CodecCapabilities.COLOR_Format16bitBGR565 to "BGR 5:6:5 (16-bit)",
+	CodecCapabilities.COLOR_Format18bitRGB666 to "RGB 6:6:6 (18-bit)",
+	CodecCapabilities.COLOR_Format18bitARGB1665 to "ARGB 1:6:6:5 (18-bit)",
+	CodecCapabilities.COLOR_Format19bitARGB1666 to "ARGB 1:6:6:6 (19-bit)",
+	CodecCapabilities.COLOR_Format24bitRGB888 to "RGB 8:8:8 (24-bit)",
+	CodecCapabilities.COLOR_Format24bitBGR888 to "BGR 8:8:8 (24-bit)",
+	CodecCapabilities.COLOR_Format24bitARGB1887 to "ARGB 1:8:8:7 (24-bit)",
+	CodecCapabilities.COLOR_Format25bitARGB1888 to "ARGB 1:8:8:8 (25-bit)",
+	CodecCapabilities.COLOR_Format32bitBGRA8888 to "BGRA 8:8:8:8 (32-bit)",
+	CodecCapabilities.COLOR_Format32bitARGB8888 to "ARGB 8:8:8:8 (32-bit)",
+	CodecCapabilities.COLOR_FormatYUV411Planar to "YUV 4:1:1 planar",
+	CodecCapabilities.COLOR_FormatYUV411PackedPlanar to "YUV 4:1:1 packed planar",
+	CodecCapabilities.COLOR_FormatYUV420Planar to "YUV 4:2:0 planar",
+	CodecCapabilities.COLOR_FormatYUV420PackedPlanar to "YUV 4:2:0 packed planar",
+	CodecCapabilities.COLOR_FormatYUV420SemiPlanar to "YUV 4:2:0 semi-planar",
+	CodecCapabilities.COLOR_FormatYUV422Planar to "YUV 4:2:2 planar",
+	CodecCapabilities.COLOR_FormatYUV422PackedPlanar to "YUV 4:2:2 packed planar",
+	CodecCapabilities.COLOR_FormatYUV422SemiPlanar to "YUV 4:2:2 semi-planar",
+	CodecCapabilities.COLOR_FormatYCbYCr to "YCbYCr 4:2:2 packed",
+	CodecCapabilities.COLOR_FormatYCrYCb to "YCrYCb 4:2:2 packed",
+	CodecCapabilities.COLOR_FormatCbYCrY to "CbYCrY 4:2:2 packed",
+	CodecCapabilities.COLOR_FormatCrYCbY to "CrYCbY 4:2:2 packed",
+	CodecCapabilities.COLOR_FormatYUV444Interleaved to "YUV 4:4:4 interleaved",
+	CodecCapabilities.COLOR_FormatRawBayer8bit to "Raw Bayer (8-bit)",
+	CodecCapabilities.COLOR_FormatRawBayer10bit to "Raw Bayer (10-bit)",
+	CodecCapabilities.COLOR_FormatRawBayer8bitcompressed to "Raw Bayer compressed (8-bit)",
+	CodecCapabilities.COLOR_FormatL2 to "Luminance (2-bit)",
+	CodecCapabilities.COLOR_FormatL4 to "Luminance (4-bit)",
+	CodecCapabilities.COLOR_FormatL8 to "Luminance (8-bit)",
+	CodecCapabilities.COLOR_FormatL16 to "Luminance (16-bit)",
+	CodecCapabilities.COLOR_FormatL24 to "Luminance (24-bit)",
+	CodecCapabilities.COLOR_FormatL32 to "Luminance (32-bit)",
+	CodecCapabilities.COLOR_FormatYUV420PackedSemiPlanar to "YUV 4:2:0 packed semi-planar",
+	CodecCapabilities.COLOR_FormatYUV422PackedSemiPlanar to "YUV 4:2:2 packed semi-planar",
+	CodecCapabilities.COLOR_Format18BitBGR666 to "BGR 6:6:6 (18-bit)",
+	CodecCapabilities.COLOR_Format24BitARGB6666 to "ARGB 6:6:6:6 (24-bit)",
+	CodecCapabilities.COLOR_Format24BitABGR6666 to "ABGR 6:6:6:6 (24-bit)",
+	CodecCapabilities.COLOR_FormatYUVP010 to "YUV P010 4:2:0 semi-planar (10-bit)",
+	CodecCapabilities.COLOR_FormatYUVP210 to "YUV P210 4:2:2 semi-planar (10-bit)",
+	CodecCapabilities.COLOR_Format64bitABGRFloat to "ABGR float (64-bit)",
+	CodecCapabilities.COLOR_FormatSurface to "Surface",
+	CodecCapabilities.COLOR_Format32bitABGR8888 to "ABGR 8:8:8:8 (32-bit)",
+	CodecCapabilities.COLOR_Format32bitABGR2101010 to "ABGR 2:10:10:10 (32-bit)",
+	CodecCapabilities.COLOR_FormatRGBAFlexible to "RGBA flexible",
+	CodecCapabilities.COLOR_FormatRGBFlexible to "RGB flexible",
+	CodecCapabilities.COLOR_FormatYUV420Flexible to "YUV 4:2:0 flexible",
+	CodecCapabilities.COLOR_FormatYUV422Flexible to "YUV 4:2:2 flexible",
+	CodecCapabilities.COLOR_FormatYUV444Flexible to "YUV 4:4:4 flexible",
+	CodecCapabilities.COLOR_TI_FormatYUV420PackedSemiPlanar to "TI YUV 4:2:0 packed semi-planar",
+	CodecCapabilities.COLOR_QCOM_FormatYUV420SemiPlanar to "Qualcomm YUV 4:2:0 semi-planar",
+)
+
+private fun Int.prettyColorFormat(): String {
+	val name = mediaCodecColorFormatNames[this] ?: "Vendor/unknown"
+	return "$name (0x${toUInt().toString(16).uppercase()})"
+}
+
+@Suppress("CyclomaticComplexMethod")
+internal fun rawDecoderDetail(codec: MediaCodecInfo, types: List<String>) = buildList {
+	if (AndroidVersion.isAtLeastQ) {
+		runCatching { codec.canonicalName }.getOrNull()?.let { add("canonicalName: $it") }
+		runCatching { codec.isVendor }.getOrNull()?.let { add("isVendor: $it") }
+		runCatching { codec.isHardwareAccelerated }.getOrNull()?.let { add("isHardwareAccelerated: $it") }
+		runCatching { codec.isSoftwareOnly }.getOrNull()?.let { add("isSoftwareOnly: $it") }
+		runCatching { codec.isAlias }.getOrNull()?.let { add("isAlias: $it") }
+	}
+
+	for (type in types) {
+		add(type)
+		val capabilities = runCatching { codec.getCapabilitiesForType(type) }.getOrNull() ?: continue
+
+		runCatching { capabilities.audioCapabilities }.getOrNull()?.let { audio ->
+			if (AndroidVersion.isAtLeastS) {
+				runCatching { audio.minInputChannelCount }.getOrNull()?.let { add("minInputChannelCount: $it") }
+				runCatching { audio.inputChannelCountRanges }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { ranges ->
+					add("inputChannelCountRanges: ${ranges.joinToString { it.prettyFormat() }}")
+				}
+			}
+			runCatching { audio.maxInputChannelCount }.getOrNull()?.let { add("maxInputChannelCount: $it") }
+			runCatching { audio.bitrateRange }.getOrNull()?.let { add("bitrateRange: ${it.prettyFormat()}") }
+			runCatching { audio.supportedSampleRates }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { rates ->
+				add("supportedSampleRates: ${rates.joinToString()}")
+			}
+			runCatching { audio.supportedSampleRateRanges }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { ranges ->
+				add("supportedSampleRateRanges: ${ranges.joinToString { it.prettyFormat() }}")
+			}
+		}
+
+		runCatching { capabilities.videoCapabilities }.getOrNull()?.let { video ->
+			runCatching { video.bitrateRange }.getOrNull()?.let { add("bitrateRange: ${it.prettyFormat()}") }
+			runCatching { video.supportedFrameRates }.getOrNull()?.let { add("supportedFrameRates: ${it.prettyFormat()}") }
+			runCatching { video.supportedWidths }.getOrNull()?.let { add("supportedWidths: ${it.prettyFormat()}") }
+			runCatching { video.supportedHeights }.getOrNull()?.let { add("supportedHeights: ${it.prettyFormat()}") }
+			runCatching { video.widthAlignment }.getOrNull()?.let { add("widthAlignment: $it") }
+			runCatching { video.heightAlignment }.getOrNull()?.let { add("heightAlignment: $it") }
+			if (AndroidVersion.isAtLeastQ) {
+				runCatching { video.supportedPerformancePoints }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { points ->
+					add("supportedPerformancePoints: ${points.joinToString()}")
+				}
+			}
+		}
+
+		runCatching { capabilities.colorFormats }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { formats ->
+			add("colorFormats: ${formats.joinToString { it.prettyColorFormat() }}")
+		}
+		runCatching { capabilities.profileLevels }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { levels ->
+			add("profileLevels: ${levels.joinToString { "${it.profile}: ${it.level}" }}")
+		}
+		mediaCodecFeatureNames.mapNotNull { name ->
+			when {
+				runCatching { capabilities.isFeatureRequired(name) }.getOrDefault(false) -> "$name (required)"
+				runCatching { capabilities.isFeatureSupported(name) }.getOrDefault(false) -> name
+				else -> null
+			}
+		}.takeIf { it.isNotEmpty() }?.let { features ->
+			add("features: ${features.joinToString()}")
+		}
+	}
+}.joinToString("\n")
 
 private val MediaCodecInfo.isSoftwareDecoder: Boolean
 	get() = if (AndroidVersion.isAtLeastQ) {
@@ -417,4 +566,5 @@ private data class CapabilityItem(
 	val title: String,
 	val supported: Boolean? = null,
 	val detail: String? = null,
+	val detailMaxLines: Int = 1,
 )

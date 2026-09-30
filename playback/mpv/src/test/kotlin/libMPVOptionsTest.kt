@@ -213,6 +213,25 @@ class LibMPVOptionsTest : StringSpec({
 		) shouldBe LibMPVVideoDecoder.SOFTWARE
 	}
 
+	"HDR uses direct output only when the decoder can try native MediaCodec" {
+		listOf(
+			Triple(LibMPVVideoDecoder.MEDIACODEC, "HDR10", "mediacodec_embed"),
+			Triple(LibMPVVideoDecoder.AUTOMATIC, "HDR10", "mediacodec_embed"),
+			Triple(LibMPVVideoDecoder.AUTO_SAFE, "HLG", "mediacodec_embed"),
+			Triple(LibMPVVideoDecoder.MEDIACODEC, "SDR", "gpu-next"),
+			Triple(LibMPVVideoDecoder.MEDIACODEC, "UNKNOWN", "gpu-next"),
+			Triple(LibMPVVideoDecoder.MEDIACODEC, null, "gpu-next"),
+			Triple(LibMPVVideoDecoder.SOFTWARE, "HDR10", "gpu-next"),
+			Triple(LibMPVVideoDecoder.MEDIACODEC_COPY, "HDR10", "gpu-next"),
+		).forEach { (decoder, videoRange, expected) ->
+			effectiveLibMPVVideoOutput(
+				configured = "gpu-next",
+				decoder = decoder,
+				videoRange = videoRange,
+			) shouldBe expected
+		}
+	}
+
 	"mpv HDR mode reports dynamic metadata before transfer characteristics" {
 		mpvHdrMode("pq", 8, hasHdr10Plus = true) shouldBe "Dolby Vision (Profile 8)"
 		mpvHdrMode("pq", null, hasHdr10Plus = true) shouldBe "HDR10+"
@@ -222,9 +241,11 @@ class LibMPVOptionsTest : StringSpec({
 		mpvHdrMode("bt.1886", null, hasHdr10Plus = false) shouldBe "SDR (BT.1886)"
 	}
 
-	"MPV HDR pipeline reports conversion stages" {
-		mpvHdrPipeline("pq", 8, hasHdr10Plus = false) shouldBe
-			"Dolby Vision (Profile 8) \u2192 HDR10/PQ"
+	"MPV HDR pipeline distinguishes direct converted and unknown Dolby Vision output" {
+		mpvHdrPipeline("pq", 8, false, "mediacodec_embed") shouldBe "Dolby Vision (Profile 8)"
+		mpvHdrPipeline("pq", 8, false, "gpu-next") shouldBe "Dolby Vision (Profile 8) \u2192 HDR10/PQ"
+		mpvHdrPipeline("pq", 8, false, null) shouldBe "Dolby Vision (Profile 8) \u2192 Unknown"
+		mpvHdrPipeline("pq", null, false, null) shouldBe "HDR10"
 	}
 
 	"MPV GPU API uses the observed Android context" {

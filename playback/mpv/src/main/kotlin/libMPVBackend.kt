@@ -20,6 +20,7 @@ import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
@@ -110,7 +111,11 @@ class LibMPVBackend(
 	private val effectiveVideoDecoderValue: String
 		get() = effectiveVideoDecoder.mpvValue
 	private val effectiveVideoOutput: String
-		get() = playbackOptions.videoOutput
+		get() = effectiveLibMPVVideoOutput(
+			configured = playbackOptions.videoOutput,
+			decoder = effectiveVideoDecoder,
+			videoRange = currentStream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()?.videoRange,
+		)
 
 	override val videoDecoderOptions = LibMPVVideoDecoder.entries.map { decoder ->
 		VideoDecoderOption(id = decoder.name, label = decoder.label)
@@ -230,6 +235,7 @@ class LibMPVBackend(
 		"terminal" to "no",
 	).apply {
 		putAll(playbackOptions.managedOptions(vulkanSupported))
+		put("vo", effectiveVideoOutput)
 		put("hwdec", effectiveVideoDecoderValue)
 		putAll(currentPresetOptions())
 		putAll(currentCustomOptions())
@@ -445,9 +451,10 @@ class LibMPVBackend(
 
 	private fun setMedia(stream: PlayableMediaStream) {
 		cancelNvidiaFallbackResync(restorePlayback = false)
-		ensureInstanceOptions(currentStream?.queueEntry !== stream.queueEntry)
-		scrubbing.reset()
+		val forceRecreate = currentStream?.queueEntry !== stream.queueEntry
 		currentStream = stream
+		ensureInstanceOptions(forceRecreate)
+		scrubbing.reset()
 		endReported = false
 		externalSubtitlesAdded = false
 		loadRequested = true
@@ -776,6 +783,7 @@ class LibMPVBackend(
 		removedOptions.forEach(::restoreCustomOption)
 		val runtimeOptions = linkedMapOf<String, String>().apply {
 			putAll(playbackOptions.managedOptions(vulkanSupported))
+			put("vo", effectiveVideoOutput)
 			putAll(presetOptions)
 			putAll(customOptions)
 			putAll(fallbackOptions)
@@ -1006,7 +1014,7 @@ class LibMPVBackend(
 				?: string("current-tracks/video/decoder"),
 			videoDecoderType = hardwareDecoder?.let { "Hardware ($it)" } ?: "Software",
 			videoCodec = string("current-tracks/video/codec"),
-			videoHdrMode = mpvHdrPipeline(videoGamma, dolbyVisionProfile, hasHdr10Plus),
+			videoHdrMode = mpvHdrPipeline(videoGamma, dolbyVisionProfile, hasHdr10Plus, videoOutput),
 			videoSourceFps = double("container-fps")?.toFloat(),
 			videoBitrate = double("video-bitrate")?.toInt(),
 			videoRange = string("video-params/colorlevels"),
@@ -1531,14 +1539,15 @@ internal fun mpvHdrPipeline(
 	gamma: String?,
 	dolbyVisionProfile: Int?,
 	hasHdr10Plus: Boolean,
+	videoOutput: String?,
 ): String? {
 	val source = mpvHdrMode(gamma, dolbyVisionProfile, hasHdr10Plus) ?: return null
-	val decoded = mpvHdrMode(gamma, null, hasHdr10Plus)
-		?.let { if (gamma == "pq") "$it/PQ" else it }
-	return buildList {
-		add(source)
-		if (decoded != null && decoded != source) add(decoded)
-	}.joinToString(" \u2192 ")
+	if (dolbyVisionProfile == null || videoOutput == "mediacodec_embed") return source
+
+	val output = if (videoOutput == "gpu" || videoOutput == "gpu-next") {
+		mpvHdrMode(gamma, null, hasHdr10Plus)?.let { if (gamma == "pq") "$it/PQ" else it }
+	} else null
+	return "$source \u2192 ${output ?: "Unknown"}"
 }
 
 internal fun mpvGpuApi(currentContext: String?): String? =
