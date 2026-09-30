@@ -93,3 +93,11 @@ data class MediaStreamSubtitleTrack(
 	val title: String?,
 	val isExternal: Boolean,
 ) : MediaStreamTrack
+
+fun MediaStream.totalBitrate(): Long = tracks.sumOf { track ->
+	when (track) {
+		is MediaStreamAudioTrack -> track.bitrate.toLong().coerceAtLeast(0)
+		is MediaStreamVideoTrack -> track.bitrate.toLong().coerceAtLeast(0)
+		else -> 0
+	}
+}
