@@ -61,6 +61,7 @@ class PlaybackManager internal constructor(
 		applyBackendOptions(backend)
 		if (backend !== backendService.backend) {
 			backendService.switchBackend(backend)
+			if (state.scrubbing.value) state.setScrubbing(false)
 			backend.setSpeed(state.speed.value)
 		}
 	}
