@@ -3,8 +3,11 @@ package org.jellyfin.playback.media3.exoplayer
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.media.MediaCodecList
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.TypedValue
 import android.view.ViewGroup
 import androidx.annotation.OptIn
@@ -44,6 +47,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
@@ -69,6 +73,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
@@ -92,6 +97,7 @@ import org.jellyfin.playback.media3.exoplayer.support.toFormats
 import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 enum class VideoDecoder {
 	HARDWARE,
@@ -102,6 +108,105 @@ enum class VideoDecoder {
 internal fun VideoDecoder?.prefersFfmpeg(defaultPreference: Boolean) =
 	this?.let { decoder -> decoder == VideoDecoder.FFMPEG } ?: defaultPreference
 
+internal fun shouldPreferFfmpeg(
+	globalPreference: Boolean,
+	liveTvPreference: Boolean,
+	isLiveTv: Boolean,
+) = globalPreference || (isLiveTv && liveTvPreference)
+
+internal data class FfmpegRendererPreferences(
+	val audio: Boolean,
+	val video: Boolean,
+)
+
+internal fun rendererPreferencesChanged(
+	applied: FfmpegRendererPreferences?,
+	desired: FfmpegRendererPreferences,
+) = applied != desired
+
+internal fun VideoDecoder?.effectiveVideoDecoder(
+	stage: VideoDecoder,
+	preferFfmpeg: Boolean,
+	decoderName: String?,
+): VideoDecoder = this ?: when {
+	decoderName?.startsWith("ffmpeg", ignoreCase = true) == true -> VideoDecoder.FFMPEG
+	decoderName != null -> stage
+	preferFfmpeg -> VideoDecoder.FFMPEG
+	else -> stage
+}
+
+internal fun shouldStartLivePlayback(
+	isReady: Boolean,
+	bufferedDurationMs: Long,
+	targetBufferDurationMs: Long,
+	timedOut: Boolean,
+) = timedOut || (isReady && bufferedDurationMs >= targetBufferDurationMs)
+
+internal fun hasDecoderStalled(
+	queuedInputBufferCount: Int,
+	renderedOutputBufferCount: Int,
+	currentQueuedInputBufferCount: Int,
+	currentRenderedOutputBufferCount: Int,
+) = currentQueuedInputBufferCount > queuedInputBufferCount &&
+	currentRenderedOutputBufferCount <= renderedOutputBufferCount
+
+internal fun targetLiveTvBufferDuration(
+	liveStreamOffset: Duration?,
+	configuredOffset: Duration?,
+	initialLiveStreamOffset: Duration = 5.seconds,
+): Duration? {
+	if (liveStreamOffset == null) return null
+	if (configuredOffset != null) return maxOf(liveStreamOffset, configuredOffset)
+	return liveStreamOffset.takeIf { it > initialLiveStreamOffset }
+}
+
+internal fun isAmlogicDevice(fields: Iterable<String?> = amlogicDeviceFields()) =
+	fields.any { field -> field?.contains("amlogic", ignoreCase = true) == true }
+
+internal fun liveTvTsExtractorFlags(
+	isAmlogic: Boolean,
+	container: String?,
+	videoCodecs: Iterable<String>,
+) = when {
+	!isAmlogic -> DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+	isH264TransportStream(container, videoCodecs) -> DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+	else -> 0
+}
+
+private fun amlogicDeviceFields() = buildList {
+	add(Build.MANUFACTURER)
+	add(Build.BRAND)
+	add(Build.HARDWARE)
+	add(Build.BOARD)
+	add(Build.PRODUCT)
+	add(Build.DEVICE)
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Build.SOC_MODEL)
+	addAll(codecNames())
+}
+
+private fun codecNames() = runCatching {
+	MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.map { it.name }
+}.getOrDefault(emptyList())
+
+private fun isH264TransportStream(container: String?, videoCodecs: Iterable<String>) =
+	container.tokens().any { it in transportStreamContainers } &&
+		videoCodecs.any(::isH264Codec)
+
+private val transportStreamContainers = setOf("ts", "mpegts", "mpeg-ts", "mpeg_ts", "mpegtsraw")
+
+private fun String?.tokens() = this
+	?.lowercase()
+	?.split(',', '|', ';', ' ')
+	?.map(String::trim)
+	?.filter(String::isNotEmpty)
+	.orEmpty()
+
+private fun isH264Codec(codec: String) = codec.lowercase().let { value ->
+	value.contains("h264") || value.contains("avc")
+}
+
+private val currentDeviceIsAmlogic by lazy { isAmlogicDevice() }
+
 @OptIn(UnstableApi::class)
 class ExoPlayerBackend(
 	private val context: Context,
@@ -110,15 +215,33 @@ class ExoPlayerBackend(
 	companion object {
 		const val TS_SEARCH_BYTES = 3 * TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES
 		const val MEDIA_ITEM_COUNT_MAX = 10
-		private val LIVE_TV_TS_EXTRACTOR_FLAGS =
-			DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
 		private const val INITIAL_TRACK_SELECTION_RETRY_LIMIT = 8
 		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
+		private const val LIVE_START_CHECK_INTERVAL_MS = 250L
+		private const val LIVE_START_TIMEOUT_MS = 15_000L
 		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
+		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
 
-		private fun formatTsExtractorFlags(flags: Int) =
-			if (flags == 0) "none (0)" else "ALLOW_NON_IDR_KEYFRAMES ($flags)"
+		private fun QueueEntry.liveTvTsExtractorFlags(): Int {
+			val stream = mediaStream ?: return if (currentDeviceIsAmlogic) 0 else
+				DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+
+			return liveTvTsExtractorFlags(
+				isAmlogic = currentDeviceIsAmlogic,
+				container = stream.container.format,
+				videoCodecs = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().map { track -> track.codec },
+			)
+		}
+
+		private fun formatTsExtractorFlags(flags: Int): String {
+			if (flags == 0) return "none (0)"
+			val names = buildList {
+				if (flags and DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES != 0) add("ALLOW_NON_IDR_KEYFRAMES")
+				if (flags and DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS != 0) add("DETECT_ACCESS_UNITS")
+			}
+			return "${names.joinToString("|")} ($flags)"
+		}
 
 		private fun Player.playbackStateName(): String = when (playbackState) {
 			Player.STATE_IDLE -> "IDLE"
@@ -175,6 +298,7 @@ class ExoPlayerBackend(
 	private val startHandler = Handler(Looper.getMainLooper())
 	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
 	private val videoFirstFrameHandler = Handler(Looper.getMainLooper())
+	private val videoBufferingHandler = Handler(Looper.getMainLooper())
 	private val videoRendererSwitchHandler = Handler(Looper.getMainLooper())
 	private var pendingLiveStartStream: PlayableMediaStream? = null
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
@@ -183,11 +307,18 @@ class ExoPlayerBackend(
 	private var videoDecoderType: String? = null
 	private var videoInputFormat: Format? = null
 	private var videoDecoderCounters: DecoderCounters? = null
+	private var hasRenderedFirstVideoFrame = false
 	private var videoDecoderStage = VideoDecoder.HARDWARE
 	private var hardwareVideoDecoderRetryCount = 0
 	private var disabledHardwareVideoRendererIndex: Int? = null
 	var forcedVideoDecoder: VideoDecoder? = null
 		private set
+	val activeVideoDecoder: VideoDecoder
+		get() = forcedVideoDecoder.effectiveVideoDecoder(
+			stage = videoDecoderStage,
+			preferFfmpeg = preferFfmpegVideo(),
+			decoderName = videoDecoderName,
+		)
 	private var audioDecoderName: String? = null
 	private var audioDecoderType: String? = null
 	private var audioDecoderCounters: DecoderCounters? = null
@@ -200,6 +331,7 @@ class ExoPlayerBackend(
 	private var reportedPlayState: PlayState? = null
 	private var reportedEndedStream: PlayableMediaStream? = null
 	private var rendererPreferencesDirty = false
+	private var appliedRendererPreferences: FfmpegRendererPreferences? = null
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 	private val audioCapabilitiesReceiver by lazy {
 		AudioCapabilitiesReceiver(
@@ -309,9 +441,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun QueueEntry.liveTvBufferDuration(): Duration? {
-		val liveStreamOffset = liveStreamTargetOffset ?: return null
-		val configuredOffset = exoPlayerOptions.liveTvBufferDuration ?: return liveStreamOffset
-		return maxOf(liveStreamOffset, configuredOffset)
+		return targetLiveTvBufferDuration(liveStreamTargetOffset, exoPlayerOptions.liveTvBufferDuration)
 	}
 
 	private fun resetPlaybackStats() {
@@ -331,7 +461,9 @@ class ExoPlayerBackend(
 
 	private fun resetVideoDecoderFallback() {
 		videoFirstFrameHandler.removeCallbacksAndMessages(null)
+		videoBufferingHandler.removeCallbacksAndMessages(null)
 		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
+		hasRenderedFirstVideoFrame = false
 		videoDecoderStage = VideoDecoder.HARDWARE
 		hardwareVideoDecoderRetryCount = 0
 		disabledHardwareVideoRendererIndex?.let { rendererIndex ->
@@ -342,8 +474,29 @@ class ExoPlayerBackend(
 		disabledHardwareVideoRendererIndex = null
 	}
 
+	private fun rendererPreferences() = FfmpegRendererPreferences(
+		audio = shouldPreferFfmpeg(
+			globalPreference = exoPlayerOptions.preferFfmpegAudio(),
+			liveTvPreference = exoPlayerOptions.preferFfmpegAudioForLiveTv(),
+			isLiveTv = currentStream?.queueEntry?.liveStreamTargetOffset != null,
+		),
+		video = shouldPreferFfmpeg(
+			globalPreference = exoPlayerOptions.preferFfmpegVideo(),
+			liveTvPreference = exoPlayerOptions.preferFfmpegVideoForLiveTv(),
+			isLiveTv = currentStream?.queueEntry?.liveStreamTargetOffset != null,
+		),
+	)
+
+	private fun preferFfmpegVideo() = rendererPreferences().video
+
+	private fun ensureRendererPreferences() {
+		if (!rendererPreferencesChanged(appliedRendererPreferences, rendererPreferences())) return
+		rendererPreferencesDirty = true
+		applyRendererPreferences()
+	}
+
 	private fun scheduleVideoFirstFrameFallback(decoderName: String) {
-		if (forcedVideoDecoder != null || exoPlayerOptions.preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
+		if (forcedVideoDecoder != null || preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
 
 		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
 		val counters = videoDecoderCounters ?: return
@@ -354,49 +507,84 @@ class ExoPlayerBackend(
 			if (videoDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) {
 				return@postDelayed
 			}
-			if (counters.queuedInputBufferCount == queuedInputBufferCount ||
-				counters.renderedOutputBufferCount > renderedOutputBufferCount
-			) return@postDelayed
-
-			val hardwareRendererIndex = (0 until exoPlayer.rendererCount)
-				.firstOrNull { exoPlayer.getRendererType(it) == C.TRACK_TYPE_VIDEO }
-				?: return@postDelayed
-			val retryHardware = videoDecoderStage == VideoDecoder.HARDWARE &&
-				hardwareVideoDecoderRetryCount < HARDWARE_VIDEO_DECODER_RETRY_LIMIT
-			val nextStage = when {
-				retryHardware -> VideoDecoder.HARDWARE
-				videoDecoderStage == VideoDecoder.HARDWARE -> VideoDecoder.SOFTWARE
-				else -> VideoDecoder.FFMPEG
-			}
-			if (retryHardware) hardwareVideoDecoderRetryCount++
-			videoDecoderStage = nextStage
-			Timber.w(
-				"Video decoder rendered no frames after %dms; resetting decoder=%s target=%s mediaId=%s queuedInputs=%d hardwareRetry=%d/%d",
-				VIDEO_FIRST_FRAME_TIMEOUT_MS,
-				decoderName,
-				when (nextStage) {
-					VideoDecoder.HARDWARE -> "hardware"
-					VideoDecoder.SOFTWARE -> "Android software"
-					else -> "FFmpeg"
-				},
-				mediaId,
+			if (!hasDecoderStalled(
+				queuedInputBufferCount,
+				renderedOutputBufferCount,
 				counters.queuedInputBufferCount,
-				hardwareVideoDecoderRetryCount,
-				HARDWARE_VIDEO_DECODER_RETRY_LIMIT,
-			)
-			trackSelector.setParameters(
-				trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, true)
-			)
-			if (nextStage != VideoDecoder.FFMPEG) {
-				videoRendererSwitchHandler.post {
-					trackSelector.setParameters(
-						trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, false)
-					)
-				}
-			} else {
-				disabledHardwareVideoRendererIndex = hardwareRendererIndex
-			}
+				counters.renderedOutputBufferCount,
+			)) return@postDelayed
+
+			fallbackVideoDecoder(decoderName, counters, "rendered no first frame after ${VIDEO_FIRST_FRAME_TIMEOUT_MS}ms")
 		}, VIDEO_FIRST_FRAME_TIMEOUT_MS)
+	}
+
+	private fun scheduleLiveTvDecoderStallFallback() {
+		videoBufferingHandler.removeCallbacksAndMessages(null)
+		if (!hasRenderedFirstVideoFrame || currentStream?.queueEntry?.liveStreamTargetOffset == null) return
+
+		val decoderName = videoDecoderName ?: return
+		if (forcedVideoDecoder != null || preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true)) return
+		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
+		val counters = videoDecoderCounters ?: return
+		val queuedInputBufferCount = counters.queuedInputBufferCount
+		val renderedOutputBufferCount = counters.renderedOutputBufferCount
+
+		videoBufferingHandler.postDelayed({
+			if (exoPlayer.playbackState != Player.STATE_BUFFERING || !exoPlayer.playWhenReady) return@postDelayed
+			if (videoDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) return@postDelayed
+			if (!hasDecoderStalled(
+				queuedInputBufferCount,
+				renderedOutputBufferCount,
+				counters.queuedInputBufferCount,
+				counters.renderedOutputBufferCount,
+			)) return@postDelayed
+
+			fallbackVideoDecoder(decoderName, counters, "decoder accepted input without rendering output for ${VIDEO_DECODER_STALL_TIMEOUT_MS}ms")
+		}, VIDEO_DECODER_STALL_TIMEOUT_MS)
+	}
+
+	private fun fallbackVideoDecoder(decoderName: String, counters: DecoderCounters, reason: String) {
+		if (videoDecoderName != decoderName || forcedVideoDecoder != null || preferFfmpegVideo()) return
+
+		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
+		val hardwareRendererIndex = (0 until exoPlayer.rendererCount)
+			.firstOrNull { exoPlayer.getRendererType(it) == C.TRACK_TYPE_VIDEO }
+			?: return
+		val retryHardware = videoDecoderStage == VideoDecoder.HARDWARE &&
+			hardwareVideoDecoderRetryCount < HARDWARE_VIDEO_DECODER_RETRY_LIMIT
+		val nextStage = when {
+			retryHardware -> VideoDecoder.HARDWARE
+			videoDecoderStage == VideoDecoder.HARDWARE -> VideoDecoder.SOFTWARE
+			else -> VideoDecoder.FFMPEG
+		}
+		if (retryHardware) hardwareVideoDecoderRetryCount++
+		videoDecoderStage = nextStage
+		Timber.w(
+			"Video decoder %s; resetting decoder=%s target=%s mediaId=%s queuedInputs=%d hardwareRetry=%d/%d",
+			reason,
+			decoderName,
+			when (nextStage) {
+				VideoDecoder.HARDWARE -> "hardware"
+				VideoDecoder.SOFTWARE -> "Android software"
+				else -> "FFmpeg"
+			},
+			mediaId,
+			counters.queuedInputBufferCount,
+			hardwareVideoDecoderRetryCount,
+			HARDWARE_VIDEO_DECODER_RETRY_LIMIT,
+		)
+		trackSelector.setParameters(
+			trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, true)
+		)
+		if (nextStage != VideoDecoder.FFMPEG) {
+			videoRendererSwitchHandler.post {
+				trackSelector.setParameters(
+					trackSelector.buildUponParameters().setRendererDisabled(hardwareRendererIndex, false)
+				)
+			}
+		} else {
+			disabledHardwareVideoRendererIndex = hardwareRendererIndex
+		}
 	}
 
 	private val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
@@ -491,6 +679,7 @@ class ExoPlayerBackend(
 	private val exoPlayer get() = exoPlayerDelegate.value
 
 	private fun createExoPlayer(): ExoPlayer {
+		val rendererPreferences = rendererPreferences()
 		val dataSourceFactory = DefaultDataSource.Factory(
 			context,
 			exoPlayerOptions.baseDataSourceFactory,
@@ -511,6 +700,18 @@ class ExoPlayerBackend(
 				exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass
 			)
 			setSubtitleParserFactory(subtitleParserFactory)
+		}
+
+		fun createMediaSourceFactory(
+			extractorsFactory: DefaultExtractorsFactory,
+			subtitleParserFactory: SubtitleParser.Factory,
+			assSubtitleParserFactory: AssSubtitleParserFactory? = null,
+		): DefaultMediaSourceFactory {
+			val extractors: ExtractorsFactory = assSubtitleParserFactory
+				?.let { extractorsFactory.withAssMkvSupport(it, assHandler) }
+				?: extractorsFactory
+			return DefaultMediaSourceFactory(dataSourceFactory, extractors)
+				.configureSubtitles(subtitleParserFactory)
 		}
 
 		fun MediaSource.Factory.withExternalSubtitlesInRenderer() =
@@ -548,13 +749,36 @@ class ExoPlayerBackend(
 			if (forcedVideoDecoder != null && forcedVideoDecoder != VideoDecoder.FFMPEG) {
 				renderers.removeAll { renderer -> renderer is ExperimentalFfmpegVideoRenderer }
 			}
-			if (forcedVideoDecoder.prefersFfmpeg(exoPlayerOptions.preferFfmpegVideo())) preferFfmpeg(C.TRACK_TYPE_VIDEO)
-			if (exoPlayerOptions.preferFfmpegAudio()) preferFfmpeg(C.TRACK_TYPE_AUDIO)
+			if (forcedVideoDecoder.prefersFfmpeg(rendererPreferences.video)) preferFfmpeg(C.TRACK_TYPE_VIDEO)
+			if (rendererPreferences.audio) preferFfmpeg(C.TRACK_TYPE_AUDIO)
 			renderers.toTypedArray()
 		}
 
 		val normalExtractorsFactory = createExtractorsFactory()
-		val liveTvExtractorsFactory = createExtractorsFactory(LIVE_TV_TS_EXTRACTOR_FLAGS)
+		val liveTvExtractorsFactory = createExtractorsFactory(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
+		val amlogicH264LiveTvExtractorsFactory = createExtractorsFactory(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+
+		fun createLiveTvMediaSourceFactory(
+			subtitleParserFactory: SubtitleParser.Factory,
+			assSubtitleParserFactory: AssSubtitleParserFactory? = null,
+		) = LiveTvMediaSourceFactory(
+			defaultFactory = createMediaSourceFactory(
+				normalExtractorsFactory,
+				subtitleParserFactory,
+				assSubtitleParserFactory,
+			),
+			liveTvFactory = createMediaSourceFactory(
+				liveTvExtractorsFactory,
+				subtitleParserFactory,
+				assSubtitleParserFactory,
+			),
+			amlogicH264LiveTvFactory = createMediaSourceFactory(
+				amlogicH264LiveTvExtractorsFactory,
+				subtitleParserFactory,
+				assSubtitleParserFactory,
+			),
+		)
+
 		val renderersFactory: RenderersFactory
 		if (exoPlayerOptions.enableLibass) {
 			val assSubtitleParserFactory = AssSubtitleParserFactory(assHandler)
@@ -562,15 +786,7 @@ class ExoPlayerBackend(
 				AssRenderType.CUES -> DefaultSubtitleParserFactory()
 				else -> assSubtitleParserFactory
 			}
-			val normalMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				normalExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(subtitleParserFactory)
-			val liveTvMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				liveTvExtractorsFactory.withAssMkvSupport(assSubtitleParserFactory, assHandler),
-			).configureSubtitles(subtitleParserFactory)
-			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
+			mediaSourceFactory = createLiveTvMediaSourceFactory(subtitleParserFactory, assSubtitleParserFactory)
 				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
@@ -583,15 +799,7 @@ class ExoPlayerBackend(
 			}.let { AssRenderersFactory(assHandler, it) }
 		} else {
 			val defaultSubtitleParserFactory = DefaultSubtitleParserFactory()
-			val normalMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				normalExtractorsFactory,
-			).configureSubtitles(defaultSubtitleParserFactory)
-			val liveTvMediaSourceFactory = DefaultMediaSourceFactory(
-				dataSourceFactory,
-				liveTvExtractorsFactory,
-			).configureSubtitles(defaultSubtitleParserFactory)
-			mediaSourceFactory = LiveTvMediaSourceFactory(normalMediaSourceFactory, liveTvMediaSourceFactory)
+			mediaSourceFactory = createLiveTvMediaSourceFactory(defaultSubtitleParserFactory)
 				.withExternalSubtitlesInRenderer()
 			renderersFactory = SubtitleTimingOffsetRenderersFactory(
 				context = context,
@@ -622,6 +830,7 @@ class ExoPlayerBackend(
 			.setPauseAtEndOfMediaItems(true)
 			.build()
 			.also { player ->
+				appliedRendererPreferences = rendererPreferences
 				subtitleTimingRendererInvalidator
 				player.setVideoSurfaceView(playerSurfaceView?.surface)
 				player.addListener(PlayerListener())
@@ -657,6 +866,7 @@ class ExoPlayerBackend(
 		}
 		trackSelectorDelegate = lazy(::createTrackSelector)
 		exoPlayerDelegate = lazy(::createExoPlayer)
+		appliedRendererPreferences = null
 		rendererPreferencesDirty = false
 	}
 
@@ -699,6 +909,7 @@ class ExoPlayerBackend(
 			initializedTimestampMs: Long,
 			initializationDurationMs: Long,
 		) {
+			hasRenderedFirstVideoFrame = false
 			videoDecoderName = decoderName
 			videoDecoderType = when {
 				decoderName.startsWith("ffmpeg", ignoreCase = true) -> "ffmpeg"
@@ -713,6 +924,7 @@ class ExoPlayerBackend(
 			output: Any,
 			renderTimeMs: Long,
 		) {
+			hasRenderedFirstVideoFrame = true
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		}
 
@@ -721,6 +933,7 @@ class ExoPlayerBackend(
 			decoderName: String,
 		) {
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
+			videoBufferingHandler.removeCallbacksAndMessages(null)
 			if (videoDecoderName == decoderName) {
 				videoDecoderName = null
 				videoDecoderType = null
@@ -741,6 +954,7 @@ class ExoPlayerBackend(
 			decoderCounters: DecoderCounters,
 		) {
 			videoFirstFrameHandler.removeCallbacksAndMessages(null)
+			videoBufferingHandler.removeCallbacksAndMessages(null)
 			if (videoDecoderCounters === decoderCounters) {
 				videoDecoderName = null
 				videoDecoderType = null
@@ -868,6 +1082,8 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
+			if (playbackState == Player.STATE_BUFFERING) scheduleLiveTvDecoderStallFallback()
+			else videoBufferingHandler.removeCallbacksAndMessages(null)
 			onIsPlayingChanged(exoPlayer.isPlaying)
 			if (playbackState == Player.STATE_ENDED) {
 				reportCurrentMediaStreamEnd("playback-state-ended")
@@ -1001,6 +1217,7 @@ class ExoPlayerBackend(
 		listener?.onSubtitleTimingOffsetSupportChange(false, resetTimingOnUnsupported = false)
 		currentStream = stream
 		reportedEndedStream = null
+		ensureRendererPreferences()
 		resetPlaybackStats()
 		setPendingInitialTrackSelection(stream.initialTrackSelection())
 
@@ -1048,7 +1265,7 @@ class ExoPlayerBackend(
 
 		fun startPlayback() {
 			val isLiveTv = item.liveStreamTargetOffset != null
-			val tsExtractorFlags = if (isLiveTv) LIVE_TV_TS_EXTRACTOR_FLAGS else 0
+			val tsExtractorFlags = if (isLiveTv) item.liveTvTsExtractorFlags() else 0
 			Timber.i(
 				"Playback source check mediaId=%s isLiveTv=%s liveTargetOffsetMs=%s method=%s container=%s intendedTsExtractorFlags=%s uri=%s",
 				stream.hashCode().toString(),
@@ -1063,17 +1280,36 @@ class ExoPlayerBackend(
 		}
 
 		clearPendingLiveStart()
-		val liveStartDelay = item.liveTvBufferDuration().takeIf { delayLiveStart }
-		if (liveStartDelay != null && liveStartDelay > Duration.ZERO) {
+		val liveStartBuffer = item.liveTvBufferDuration().takeIf { delayLiveStart }
+		if (liveStartBuffer != null && liveStartBuffer > Duration.ZERO) {
 			pendingLiveStartStream = stream
 			exoPlayer.pause()
 			listener?.onPlayStateChange(PlayState.BUFFERING)
-			startHandler.postDelayed({
-				if (pendingLiveStartStream == stream && currentStream == stream) {
-					pendingLiveStartStream = null
-					startPlayback()
+			val deadlineMs = SystemClock.elapsedRealtime() + LIVE_START_TIMEOUT_MS
+			startHandler.post(object : Runnable {
+				override fun run() {
+					if (pendingLiveStartStream != stream || currentStream != stream) return
+
+					val timedOut = SystemClock.elapsedRealtime() >= deadlineMs
+					if (shouldStartLivePlayback(
+						isReady = exoPlayer.playbackState == Player.STATE_READY,
+						bufferedDurationMs = exoPlayer.totalBufferedDuration,
+						targetBufferDurationMs = liveStartBuffer.inWholeMilliseconds,
+						timedOut = timedOut,
+					)) {
+						Timber.i(
+							"Starting Live TV bufferedMs=%s targetMs=%s timedOut=%s",
+							exoPlayer.totalBufferedDuration,
+							liveStartBuffer.inWholeMilliseconds,
+							timedOut,
+						)
+						pendingLiveStartStream = null
+						startPlayback()
+					} else {
+						startHandler.postDelayed(this, LIVE_START_CHECK_INTERVAL_MS)
+					}
 				}
-			}, liveStartDelay.inWholeMilliseconds)
+			})
 		} else {
 			startPlayback()
 		}
@@ -1167,6 +1403,7 @@ class ExoPlayerBackend(
 		val counters = exoPlayer.videoDecoderCounters
 		counters?.ensureUpdated()
 		refreshAudioPassthroughSupport(allowReceiverRegistration = true)
+		val tsExtractorFlags = currentTsExtractorFlags()
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
@@ -1185,7 +1422,14 @@ class ExoPlayerBackend(
 			subtitleRender = subtitleRenderDebug(),
 			subtitleParser = subtitleParserDebug(),
 			subtitlePath = subtitlePathDebug(),
+			extractorFlags = tsExtractorFlags?.let(::formatTsExtractorFlags),
 		)
+	}
+
+	private fun currentTsExtractorFlags(): Int? {
+		val entry = exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry ?: return null
+		if (entry.liveStreamTargetOffset == null) return null
+		return entry.liveTvTsExtractorFlags()
 	}
 
 	private fun subtitleExtractorDebug(): String = when {
@@ -1555,16 +1799,19 @@ class ExoPlayerBackend(
 	private inner class LiveTvMediaSourceFactory(
 		private val defaultFactory: MediaSource.Factory,
 		private val liveTvFactory: MediaSource.Factory,
+		private val amlogicH264LiveTvFactory: MediaSource.Factory,
 	) : MediaSource.Factory {
 		override fun setDrmSessionManagerProvider(drmSessionManagerProvider: DrmSessionManagerProvider): MediaSource.Factory {
 			defaultFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
 			liveTvFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
+			amlogicH264LiveTvFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
 			return this
 		}
 
 		override fun setLoadErrorHandlingPolicy(loadErrorHandlingPolicy: LoadErrorHandlingPolicy): MediaSource.Factory {
 			defaultFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
 			liveTvFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+			amlogicH264LiveTvFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
 			return this
 		}
 
@@ -1573,8 +1820,12 @@ class ExoPlayerBackend(
 		override fun createMediaSource(mediaItem: MediaItem): MediaSource {
 			val queueEntry = mediaItem.localConfiguration?.tag as? QueueEntry
 			val isLiveTv = queueEntry?.liveStreamTargetOffset != null
-			val tsExtractorFlags = if (isLiveTv) LIVE_TV_TS_EXTRACTOR_FLAGS else 0
-			val factory = if (isLiveTv) liveTvFactory else defaultFactory
+			val tsExtractorFlags = if (isLiveTv) queueEntry.liveTvTsExtractorFlags() else 0
+			val factory = when (tsExtractorFlags) {
+				DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES -> liveTvFactory
+				DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS -> amlogicH264LiveTvFactory
+				else -> defaultFactory
+			}
 
 			Timber.i(
 				"Creating %s media source for mediaId=%s uri=%s liveTargetOffsetMs=%s tsExtractorFlags=%s",
