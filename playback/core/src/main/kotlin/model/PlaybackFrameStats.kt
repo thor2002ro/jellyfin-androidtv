@@ -35,6 +35,7 @@ data class PlaybackFrameStats(
 	val audioDecoderName: String? = null,
 	val audioDecoderType: String? = null,
 	val audioPassthroughSupported: Boolean? = null,
+	val bufferedBytes: String? = null,
 	val subtitleExtractor: String? = null,
 	val subtitleRender: String? = null,
 	val subtitleParser: String? = null,
@@ -48,4 +49,11 @@ data class PlaybackFrameStats(
 			corruptedFrames = 0,
 		)
 	}
+}
+
+fun Long.formatBufferBytes() = when {
+	this >= 1_073_741_824L -> "%.2f GiB".format(this / 1_073_741_824.0)
+	this >= 1_048_576L -> "%.2f MiB".format(this / 1_048_576.0)
+	this >= 1_024L -> "%.2f KiB".format(this / 1_024.0)
+	else -> "$this B"
 }
