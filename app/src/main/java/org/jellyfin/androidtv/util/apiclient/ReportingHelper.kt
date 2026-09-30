@@ -11,14 +11,12 @@ import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.playStateApi
 import org.jellyfin.sdk.model.api.BaseItemDto
-import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.PlaybackOrder
 import org.jellyfin.sdk.model.api.PlaybackProgressInfo
 import org.jellyfin.sdk.model.api.PlaybackStartInfo
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
 import org.jellyfin.sdk.model.api.RepeatMode
 import timber.log.Timber
-import java.time.Instant
 
 class ReportingHelper(
 	private val dataRefreshService: DataRefreshService,
@@ -106,16 +104,6 @@ class ReportingHelper(
 		}
 
 		// Update dataRefreshService
-		dataRefreshService.lastPlayback = Instant.now()
-		when (item.type) {
-			BaseItemKind.MOVIE -> dataRefreshService.lastMoviePlayback = Instant.now()
-			BaseItemKind.EPISODE -> dataRefreshService.lastTvPlayback = Instant.now()
-			BaseItemKind.TV_CHANNEL,
-			BaseItemKind.LIVE_TV_CHANNEL,
-			BaseItemKind.PROGRAM,
-			BaseItemKind.TV_PROGRAM,
-			BaseItemKind.LIVE_TV_PROGRAM -> dataRefreshService.lastTvPlayback = Instant.now()
-			else -> Unit
-		}
+		dataRefreshService.notifyPlayback(item)
 	}
 }
