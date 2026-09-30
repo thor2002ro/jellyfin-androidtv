@@ -375,11 +375,11 @@ private object NewPlayerStreamStatusBuilder {
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod) ?: frameStats.videoCodec)
 					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
 					row("Audio decoder", frameStats.audioDecoderLabel())
-					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod))
+					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
-					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
+					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
 					row("Audio language", audioLanguage(selectedAudio))
-					row("Bitrate", streamBitrate(videoTrack, audioTrack, transcodingInfo))
+					row("Bitrate", streamBitrate(videoTrack, audioTrack, frameStats, transcodingInfo))
 					row("Conversion speed", TranscodingStatusFormatter.speed(transcodingInfo))
 					row("Conversion reason", conversionReason(stream, transcodingInfo, isQualityForcedTranscode))
 					row("Workaround", clientWorkaroundInfo)
@@ -432,19 +432,25 @@ private object NewPlayerStreamStatusBuilder {
 				},
 			),
 			PlaybackInfoSection(
+				title = "libMPV Metrics",
+				rows = rows {
+					frameStats.backendDetails.forEach { (label, value) -> row(label, value) }
+				},
+			),
+			PlaybackInfoSection(
 				title = "Original Media Info",
 				rows = rows {
 					row("Container", stream.container.format)
 					row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
 					row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
 					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
-					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate())
-					row("Video range", videoTrack?.videoRange)
+					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate() ?: frameStats.videoSourceFps?.formatFrameRate())
+					row("Video range", videoTrack?.videoRange ?: frameStats.videoRange)
 					if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
-					row("Audio codec", audioTrack?.codec.formatCodec())
+					row("Audio codec", audioTrack?.codec.formatCodec() ?: frameStats.audioCodec.formatCodec())
 					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
-					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
-					row("Audio sample rate", audioTrack?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" })
+					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
+					row("Audio sample rate", (audioTrack?.sampleRate?.takeIf { it > 0 } ?: frameStats.audioSampleRate)?.let { "$it Hz" })
 				},
 			),
 		).filter { it.rows.isNotEmpty() }
@@ -522,8 +528,9 @@ private object NewPlayerStreamStatusBuilder {
 		selectedTrack: PlayerTrack?,
 		transcodingInfo: TranscodingInfo?,
 		conversionMethod: MediaConversionMethod,
+		fallbackCodec: String?,
 	): String? {
-		val source = (selectedTrack?.codec ?: track?.codec).formatCodec()
+		val source = (selectedTrack?.codec ?: track?.codec ?: fallbackCodec).formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
@@ -605,8 +612,13 @@ private object NewPlayerStreamStatusBuilder {
 	private fun streamBitrate(
 		videoTrack: MediaStreamVideoTrack?,
 		audioTrack: MediaStreamAudioTrack?,
+		frameStats: PlaybackFrameStats,
 		transcodingInfo: TranscodingInfo?,
 	): String? = TranscodingStatusFormatter.bitrate(transcodingInfo)
+		?: listOfNotNull(
+			frameStats.videoBitrate?.takeIf { it > 0 },
+			frameStats.audioBitrate?.takeIf { it > 0 },
+		).takeIf { it.isNotEmpty() }?.sum()?.formatBitrate()
 		?: listOfNotNull(
 			videoTrack?.bitrate?.takeIf { it > 0 },
 			audioTrack?.bitrate?.takeIf { it > 0 },
