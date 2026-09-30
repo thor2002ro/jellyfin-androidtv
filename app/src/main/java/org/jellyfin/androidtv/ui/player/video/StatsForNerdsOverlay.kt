@@ -202,7 +202,7 @@ fun PlaybackInfoOverlay(
 			chapterUrls = chapterCacheUrls,
 		)
 	}
-	val playerMetricSections = sections.filter { it.title.endsWith(" Metrics") }
+	val playerMetricSections = sections.filter { it.title == "${frameStats.playerName} Metrics" }
 	val playbackInfoSections = sections - playerMetricSections
 
 	Row(
@@ -452,7 +452,7 @@ private object NewPlayerStreamStatusBuilder {
 				},
 			),
 			PlaybackInfoSection(
-				title = "${frameStats.playerName ?: "Player"} Metrics",
+				title = "${frameStats.playerName} Metrics",
 				rows = rows {
 					frameStats.backendDetails.forEach { (label, value) -> row(label, value) }
 				},
