@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.player.video
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.preference.LiveTvPreferences
@@ -100,11 +101,13 @@ class LiveTvChannelNavigator(
 		return true
 	}
 
-	suspend fun getChannels(): List<BaseItemDto> = runCatching {
-		loadChannels()
-	}.onFailure { error ->
+	suspend fun getChannels(forceRefresh: Boolean = false): List<BaseItemDto> = runCatching {
+		loadChannels(forceRefresh)
+	}.getOrElse { error ->
+		if (error is CancellationException) throw error
 		Timber.e(error, "Unable to load Live TV channels")
-	}.getOrDefault(emptyList())
+		TvManager.getAllChannels().orEmpty()
+	}
 
 	private fun switchToChannel(
 		playbackManager: PlaybackManager,
@@ -138,11 +141,13 @@ class LiveTvChannelNavigator(
 		playbackManager.state.play()
 	}
 
-	private suspend fun loadChannels(): List<BaseItemDto> {
-		TvManager.getAllChannels()
-			?.takeUnless { TvManager.shouldForceReload() }
-			?.takeIf { channels -> channels.isNotEmpty() }
-			?.let { channels -> return channels }
+	private suspend fun loadChannels(forceRefresh: Boolean): List<BaseItemDto> {
+		if (!forceRefresh) {
+			TvManager.getAllChannels()
+				?.takeUnless { TvManager.shouldForceReload() }
+				?.takeIf { channels -> channels.isNotEmpty() }
+				?.let { channels -> return channels }
+		}
 
 		val channelOrder = LiveTvChannelOrder.fromString(liveTvPreferences[LiveTvPreferences.channelOrder])
 		val favoritesAtTop = liveTvPreferences[LiveTvPreferences.favsAtTop]

@@ -250,7 +250,6 @@
     <string name="lbl_at_any_time">At any time</string>
     <string name="lbl_on_schedule">On schedule</string>
     <string name="lbl_guest_stars">Guest stars</string>
-    <string name="lbl_premiere">Premiere</string>
     <string name="lbl_sort_by">Sort by</string>
     <string name="lbl_show_indicators">Show indicators for</string>
     <string name="lbl_guide_option_played">Last played</string>
