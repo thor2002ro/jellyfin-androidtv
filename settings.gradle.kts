@@ -41,6 +41,14 @@ include(":updater")
 
 dependencyResolutionManagement {
 	repositories {
+		exclusiveContent {
+			forRepository {
+				maven(rootDir.resolve("dependencies/jellyfin-androidx-media/OUTPUT/maven"))
+			}
+			filter {
+				includeGroup("androidx.media3")
+			}
+		}
 		mavenCentral()
 		google()
 		maven("https://androidx.dev/snapshots/builds/15645525/artifacts/repository") {
