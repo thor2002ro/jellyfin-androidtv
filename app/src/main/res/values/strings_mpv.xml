@@ -12,6 +12,8 @@
 	<string name="preference_mpv_section_expert">All libMPV options</string>
 	<string name="preference_mpv_software_decoding_livetv">Software decoding for Live TV</string>
 	<string name="preference_mpv_software_decoding_livetv_description">Start Live TV with software video decoding. An explicit decoder selection in player controls takes priority.</string>
+	<string name="preference_mpv_nvidia_shield_workarounds">NVIDIA Shield fallbacks</string>
+	<string name="preference_mpv_nvidia_shield_workarounds_description">Automatically use software decoding for H.264 Hi10P and MPEG-2 formats affected by NVIDIA Shield decoder problems. An explicit decoder selection in player controls takes priority.</string>
 	<string name="preference_mpv_video_preset">Built-in video preset</string>
 	<string name="preference_mpv_video_preset_description">Choose one bundled upstream video profile. Presets override overlapping renderer settings. HDR and 8K profiles are explicit choices rather than automatically detected.</string>
 	<string name="preference_mpv_anime_preset_off">Off</string>
