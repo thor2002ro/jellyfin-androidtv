@@ -668,7 +668,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         if (KoinJavaComponent.<UserPreferences>get(UserPreferences.class).get(UserPreferences.Companion.getDebuggingEnabled()) && mBaseItem.getMediaSources() != null) {
             for (MediaSourceInfo ms : mBaseItem.getMediaSources()) {
                 if (ms.getMediaStreams() != null && !ms.getMediaStreams().isEmpty()) {
-                    HeaderItem header = new HeaderItem("Media Details" + (ms.getContainer() != null ? " (" + ms.getContainer() + ")" : ""));
+                    HeaderItem header = new HeaderItem(getMediaDetailsHeader(ms));
                     ArrayObjectAdapter infoAdapter = new ArrayObjectAdapter(new InfoCardPresenter());
                     for (MediaStream stream : ms.getMediaStreams()) {
                         infoAdapter.add(stream);
@@ -679,6 +679,27 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 }
             }
         }
+    }
+
+    private String getMediaDetailsHeader(MediaSourceInfo mediaSource) {
+        String header = "Media Details" + (mediaSource.getContainer() != null ? " (" + mediaSource.getContainer() + ")" : "");
+        String fileName = getFileName(mediaSource.getPath());
+
+        return fileName != null ? fileName + "\n" + header : header;
+    }
+
+    @Nullable
+    private String getFileName(@Nullable String path) {
+        if (path == null) return null;
+
+        int separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        String fileName = path.substring(separator + 1).trim();
+        int query = fileName.indexOf('?');
+        if (query >= 0) fileName = fileName.substring(0, query);
+        int fragment = fileName.indexOf('#');
+        if (fragment >= 0) fileName = fileName.substring(0, fragment);
+
+        return fileName.isEmpty() ? null : fileName;
     }
 
     private void updateInfo(BaseItemDto item) {
