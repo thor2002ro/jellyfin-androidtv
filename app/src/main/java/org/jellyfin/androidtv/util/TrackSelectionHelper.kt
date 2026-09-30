@@ -85,9 +85,10 @@ object TrackSelectionHelper {
 
 	private fun buildTrackName(stream: MediaStream): String {
 		val parts = mutableListOf<String>()
+		val displayTitle = stream.displayTitle.withoutUndeterminedLanguagePrefix()
 
 		// Add language if available
-		stream.language?.let { parts.add(it) }
+		stream.language.toIso2LanguageDisplayOrSelf()?.let { parts.add(it) }
 
 		// Add codec if available
 		stream.codec?.let { parts.add(it.uppercase()) }
@@ -103,11 +104,11 @@ object TrackSelectionHelper {
 		}
 
 		// Add display title if available
-		stream.displayTitle?.let { parts.add(it) }
+		displayTitle?.let { parts.add(it) }
 
 		// Add title if no display title
-		if (stream.displayTitle == null) {
-			stream.title?.let { parts.add(it) }
+		if (displayTitle == null) {
+			stream.title.withoutUndeterminedLanguagePrefix()?.let { parts.add(it) }
 		}
 
 		// Add default/forced indicators

@@ -8,6 +8,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.androidtv.ui.playback.overlay.CustomPlaybackTransportControlGlue
 import org.jellyfin.androidtv.ui.playback.overlay.VideoPlayerAdapter
+import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 
 class SelectAudioAction(
 	context: Context,
@@ -33,7 +34,10 @@ class SelectAudioAction(
 		popup = PopupMenu(context, view, Gravity.END).apply {
 			with(menu) {
 				for (track in audioTracks) {
-					add(0, track.index, track.index, track.displayTitle).apply {
+					val label = track.displayTitle.withoutUndeterminedLanguagePrefix()
+						?: track.title.withoutUndeterminedLanguagePrefix()
+						?: "Track ${track.index}"
+					add(0, track.index, track.index, label).apply {
 						isChecked = currentAudioIndex == track.index
 					}
 				}
