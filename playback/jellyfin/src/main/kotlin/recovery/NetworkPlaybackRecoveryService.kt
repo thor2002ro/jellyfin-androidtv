@@ -31,8 +31,8 @@ class NetworkPlaybackRecoveryService(
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
 			override fun onPlaybackError(error: PlaybackError) {
 				val entry = manager.queue.entry.value
-				if (entry != null && !liveTvPlaybackPolicy.isLiveTv(entry) && error.isNetworkError()) {
-					startRecovery(entry, "Playback network error ${error.codeName}")
+				if (entry != null && !liveTvPlaybackPolicy.isLiveTv(entry)) {
+					startRecovery(entry, "Playback error ${error.codeName}")
 				}
 			}
 		})
@@ -47,7 +47,7 @@ class NetworkPlaybackRecoveryService(
 
 				val entry = manager.queue.entry.value
 				val playState = state.playState.value
-				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry) || playState == PlayState.STOPPED) {
+				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry)) {
 					disconnectedEntry = null
 					clearRecovering()
 					wasNetworkAvailable = isNetworkAvailable()
@@ -110,35 +110,25 @@ class NetworkPlaybackRecoveryService(
 				continue
 			}
 
-			val positionBeforeGrace = state.positionInfo.active
-			delay(NETWORK_RESTORE_GRACE_INTERVAL)
+			delay(PLAYBACK_RECOVERY_RETRY_INTERVAL)
 			if (!isCurrentRecoverableEntry(entry)) return
 			if (!isNetworkAvailable()) continue
 
-			val playState = state.playState.value
 			val positionAfterGrace = state.positionInfo.active
-			if (playState == PlayState.PLAYING && positionAfterGrace > positionBeforeGrace) {
-				Timber.i("Playback resumed after network returned")
-				return
-			}
-
-			val playWhenReady = playState.isActivePlayback || playState == PlayState.ERROR
 			Timber.i("$reason; reloading playback at $positionAfterGrace")
-			if (manager.reloadCurrentMediaStream(position = positionAfterGrace, playWhenReady = playWhenReady)) {
-				Timber.i("Reloaded playback after network returned")
+			if (manager.reloadCurrentMediaStream(position = positionAfterGrace, playWhenReady = true)) {
+				Timber.i("Reloaded playback after error")
 				return
 			}
 
-			Timber.w("Unable to reload playback after network returned; retrying")
-			delay(NETWORK_RECOVERY_CHECK_INTERVAL)
+			Timber.w("Unable to reload playback after error; retrying")
 		}
 	}
 
 	private fun isCurrentRecoverableEntry(entry: QueueEntry): Boolean {
 		val currentEntry = manager.queue.entry.value
 		return currentEntry === entry &&
-			!liveTvPlaybackPolicy.isLiveTv(entry) &&
-			state.playState.value != PlayState.STOPPED
+			!liveTvPlaybackPolicy.isLiveTv(entry)
 	}
 
 	private fun isNetworkAvailable(): Boolean {
@@ -159,15 +149,8 @@ class NetworkPlaybackRecoveryService(
 		_recovering.value = false
 	}
 
-	private fun PlaybackError.isNetworkError(): Boolean = when (codeName) {
-		"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
-		"ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT" -> true
-
-		else -> false
-	}
-
 	private companion object {
-		private val NETWORK_RECOVERY_CHECK_INTERVAL = 5.seconds
-		private val NETWORK_RESTORE_GRACE_INTERVAL = 2.seconds
+		private val NETWORK_RECOVERY_CHECK_INTERVAL = 3.seconds
+		private val PLAYBACK_RECOVERY_RETRY_INTERVAL = 3.seconds
 	}
 }
