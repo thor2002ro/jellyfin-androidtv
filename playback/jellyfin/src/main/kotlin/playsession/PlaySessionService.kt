@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
@@ -55,6 +56,7 @@ class PlaySessionService(
 
 	private var selectedAudioStreamIndex: Int? = null
 	private var selectedSubtitleStreamIndex: Int? = null
+	private var observedTrackSelection: Pair<Int?, Int?>? = null
 	private var stoppedPlaySessionId: String? = null
 	private var activePlaybackKey: String? = null
 	private var activeSession: ActivePlaybackSession? = null
@@ -95,6 +97,7 @@ class PlaySessionService(
 
 			selectedAudioStreamIndex = null
 			selectedSubtitleStreamIndex = null
+			observedTrackSelection = null
 			if (entry?.mediaStream?.identifier != stoppedPlaySessionId) stoppedPlaySessionId = null
 			activePlaybackKey = null
 			liveTvReportingState = null
@@ -106,6 +109,11 @@ class PlaySessionService(
 			.onEach { stream ->
 				stopActiveSessionIfChanged(manager.queue.entry.value, stream)
 			}.launchIn(coroutineScope)
+
+		state.trackRevision
+			.drop(1)
+			.onEach { reportTrackSelectionChange() }
+			.launchIn(coroutineScope)
 	}
 
 	private data class ActivePlaybackSession(
@@ -232,6 +240,18 @@ class PlaySessionService(
 		selectedAudioStreamIndex = audioStreamIndex
 		selectedSubtitleStreamIndex = subtitleStreamIndex
 		sendUpdateIfActive()
+	}
+
+	private suspend fun reportTrackSelectionChange() {
+		val audioStreamIndex = getSelectedAudioStreamIndex()
+		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
+		val selection = audioStreamIndex to subtitleStreamIndex
+		if (selection == observedTrackSelection) return
+
+		observedTrackSelection = selection
+		selectedAudioStreamIndex = audioStreamIndex
+		selectedSubtitleStreamIndex = subtitleStreamIndex
+		if (activeSession != null) sendStreamUpdate()
 	}
 
 	private suspend fun getSelectedAudioStreamIndex() = withContext(Dispatchers.Main) {
