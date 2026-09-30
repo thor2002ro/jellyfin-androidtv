@@ -1,36 +1,37 @@
 package org.jellyfin.androidtv.util
 
 import android.content.Context
+import android.util.Log
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.preference.UserPreferences
 import timber.log.Timber
 
 object AppLogging {
-	private var debugTree: Timber.Tree? = null
+	private var logcatTree: Timber.Tree? = null
 
 	fun configure(context: Context) {
 		val userPreferences = UserPreferences(context.applicationContext)
 		setVerboseLogging(
-			context = context,
 			enabled = userPreferences[UserPreferences.verboseLoggingEnabled],
 		)
 	}
 
 	fun setVerboseLogging(
-		context: Context,
 		enabled: Boolean,
 	) {
-		debugTree?.let(Timber::uproot)
-		debugTree = null
+		logcatTree?.let(Timber::uproot)
+		logcatTree = null
 
-		if (!enabled) return
-
-		Timber.DebugTree()
+		LogcatTree(minPriority = if (enabled) Log.VERBOSE else Log.INFO)
 			.also(Timber::plant)
-			.also { debugTree = it }
+			.also { logcatTree = it }
 
-		enableCloseGuard()
-		Timber.i("Debug tree planted")
+		if (enabled) {
+			enableCloseGuard()
+			Timber.i("Verbose app logging enabled")
+		} else {
+			Timber.i("App logging enabled")
+		}
 	}
 
 	private fun enableCloseGuard() {
@@ -44,5 +45,11 @@ object AppLogging {
 			@Suppress("TooGenericExceptionThrown")
 			throw RuntimeException(e)
 		}
+	}
+
+	private class LogcatTree(
+		private val minPriority: Int,
+	) : Timber.DebugTree() {
+		override fun isLoggable(tag: String?, priority: Int): Boolean = priority >= minPriority
 	}
 }

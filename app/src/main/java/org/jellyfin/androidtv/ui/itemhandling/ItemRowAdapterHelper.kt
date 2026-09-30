@@ -25,6 +25,8 @@ import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.api.client.extensions.videosApi
+import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemFilter
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SeriesTimerInfoDto
@@ -41,18 +43,22 @@ import org.jellyfin.sdk.model.api.request.GetSeasonsRequest
 import org.jellyfin.sdk.model.api.request.GetSimilarItemsRequest
 import org.jellyfin.sdk.model.api.request.GetUpcomingEpisodesRequest
 import timber.log.Timber
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.temporal.TemporalAdjusters
+import java.util.Locale
 import kotlin.math.min
 
 fun <T : Any> ItemRowAdapter.setItems(
 	items: Collection<T>,
 	transform: (T, Int) -> BaseRowItem?,
 ) {
-	Timber.i("Creating items from $itemsLoaded existing and ${items.size} new, adapter size is ${size()}")
+	Timber.d("Creating items from $itemsLoaded existing and ${items.size} new, adapter size is ${size()}")
 
 	val allItems = buildList {
 		// Add current items before loaded items
 		repeat(itemsLoaded) {
-			add(this@setItems.get(it))
+			this@setItems.get(it)?.let(::add)
 		}
 
 		// Add loaded items
@@ -63,7 +69,7 @@ fun <T : Any> ItemRowAdapter.setItems(
 
 		// Add current items after loaded items
 		repeat(min(totalItems, size()) - itemsLoaded - mappedItems.size) {
-			add(this@setItems.get(it + itemsLoaded + mappedItems.size))
+			this@setItems.get(it + itemsLoaded + mappedItems.size)?.let(::add)
 		}
 	}
 
@@ -347,32 +353,49 @@ fun ItemRowAdapter.retrieveTrailers(api: ApiClient, query: GetTrailersRequest) {
 
 fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 	api: ApiClient,
-	query: GetRecommendedProgramsRequest
+	query: GetRecommendedProgramsRequest,
+	selectAction: BaseRowItemSelectAction = BaseRowItemSelectAction.ShowDetails,
 ) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		runCatching {
-			val response = withContext(Dispatchers.IO) {
-				api.liveTvApi.getRecommendedPrograms(query).content
+			val items = withContext(Dispatchers.IO) {
+				val programs = api.liveTvApi.getRecommendedPrograms(query).content.items
+				if (programs.isEmpty() || programs.all { program -> program.channelPrimaryImageTag != null }) {
+					return@withContext programs
+				}
+
+				val channels = api.liveTvApi.getLiveTvChannels(GetLiveTvChannelsRequest()).content.items
+					.associateBy { channel -> channel.id }
+
+				programs.map { program -> program.withChannelImage(channels[program.channelId]) }
 			}
 
 			setItems(
-				items = response.items,
+				items = items,
 				transform = { item, _ ->
 					BaseItemDtoBaseRowItem(
 						item,
 						false,
 						isStaticHeight,
+						selectAction,
 					)
 				}
 			)
 
-			if (response.items.isEmpty()) removeRow()
+			if (items.isEmpty()) removeRow()
+			else addRowToParentIfResultsReceived()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
 		)
 	}
 }
+
+private fun BaseItemDto.withChannelImage(channel: BaseItemDto?) = copy(
+	channelName = channelName ?: channel?.name,
+	channelNumber = channelNumber ?: channel?.number,
+	channelPrimaryImageTag = channelPrimaryImageTag ?: channel?.imageTags?.get(ImageType.PRIMARY),
+)
 
 fun ItemRowAdapter.retrieveLiveTvRecordings(api: ApiClient, query: GetRecordingsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
@@ -479,9 +502,18 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 				).content
 			}
 
-			totalItems = response.totalRecordCount
+			val filterToCurrentWeek = query.isRecentlyPlayedChannelsRequest()
+			val items = if (filterToCurrentWeek) {
+				val weekStart = currentWeekStart()
+				response.items.filter { item -> item.wasPlayedSince(weekStart) }
+			} else {
+				response.items
+			}
+			val reachedOlderItems = filterToCurrentWeek && items.size < response.items.size
+
+			totalItems = if (reachedOlderItems) startIndex + items.size else response.totalRecordCount
 			setItems(
-				items = response.items,
+				items = items,
 				transform = { item, _ ->
 					BaseItemDtoBaseRowItem(
 						item,
@@ -491,13 +523,27 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 				},
 			)
 
-			if (response.items.isEmpty()) removeRow()
+			if (itemsLoaded == 0) removeRow()
+			else addRowToParentIfResultsReceived()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
 		)
 	}
 }
+
+private fun GetLiveTvChannelsRequest.isRecentlyPlayedChannelsRequest() =
+	sortBy?.contains(ItemSortBy.DATE_PLAYED) == true && isFavorite == null
+
+private fun currentWeekStart(): LocalDateTime {
+	val firstDayOfWeek = java.time.temporal.WeekFields.of(Locale.getDefault()).firstDayOfWeek
+	return LocalDate.now()
+		.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+		.atStartOfDay()
+}
+
+private fun BaseItemDto.wasPlayedSince(startDate: LocalDateTime) =
+	userData?.lastPlayedDate?.let { lastPlayedDate -> !lastPlayedDate.isBefore(startDate) } == true
 
 fun ItemRowAdapter.retrieveAlbumArtists(
 	api: ApiClient,

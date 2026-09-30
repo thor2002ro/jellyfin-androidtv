@@ -110,7 +110,6 @@
     <string name="pref_live_tv_cat">Truyền hình trực tiếp</string>
     <string name="lbl_recorded_tv">Đã ghi lại TV</string>
     <string name="lbl_live_tv_guide">Hướng dẫn TV trực tiếp</string>
-    <string name="lbl_no_recordings">Không có bản ghi nào</string>
     <string name="msg_burn_sub_warning">Ghi phụ đề. Điều này có thể mất một vài giây…</string>
     <string name="msg_unable_load_subs">Không thể tải phụ đề</string>
     <string name="msg_subtitles_loading">Đang tải phụ đề…</string>
@@ -369,7 +368,6 @@
     <string name="pref_subtitles_size">Cỡ chữ</string>
     <string name="pref_subtitles_background_summary">Hiển thị nền đen đằng sau phụ đề</string>
     <string name="pref_subtitles_background_title">Bật nền</string>
-    <string name="server_issue_ssl_handshake">Bắt tay SSL không thành công</string>
     <string name="server_issue_timeout">Kết nối quá hạn</string>
     <string name="server_issue_outdated_version">Máy chủ sử dụng phiên bản không được hỗ trợ %1$s. Vui lòng cập nhật lên %2$s hoặc mới hơn</string>
     <string name="server_issue_unsupported_version">Máy chủ sử dụng phiên bản %1$s không được hỗ trợ</string>

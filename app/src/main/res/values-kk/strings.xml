@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Subtitrler jüktelude…</string>
     <string name="msg_unable_load_subs">Subtitrlerdı jükteu mümkın emes</string>
     <string name="msg_burn_sub_warning">Subtitrler oiyp berılude. Būl bırneşe sekunt aluy mümkın…</string>
-    <string name="lbl_no_recordings">Jazbalar qol jetımdı emes</string>
     <string name="lbl_live_tv_guide">Efirlık telegid</string>
     <string name="lbl_recorded_tv">Jazylğan TD</string>
     <string name="pref_live_tv_cat">Efir</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">Subtitrlerdıñ artynda qara öñ körsetu</string>
     <string name="pref_subtitles_background_title">Öñdı qosu</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">SSL rastamasy sätsız aiaqtaldy</string>
     <string name="server_issue_timeout">Qosylu waqyty aiaqtaldy</string>
     <string name="server_issue_outdated_version">Server %1$s nusqasyn paydalanady, bıraq ol %2$s nemese odan jañasyn qajet etedı</string>
     <string name="server_issue_unsupported_version">Server qoldau körsetılmeitın %1$s nusqasyn paydalanady</string>

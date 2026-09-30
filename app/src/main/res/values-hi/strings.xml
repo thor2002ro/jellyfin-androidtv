@@ -165,7 +165,6 @@
     <string name="too_many_errors">बहुत सारी त्रुटियां</string>
     <string name="sum_enable_cinema_mode">मूवी शुरू करने से पहले उपलब्ध इंट्रो और प्रीव्यू चलाएं</string>
     <string name="msg_item_added">" आइटम जोड़े गए"</string>
-    <string name="lbl_no_recordings">कोई रिकॉर्डिंग उपलब्ध नहीं</string>
     <string name="lbl_song">गाना</string>
     <string name="lbl_songs">गाने</string>
     <string name="msg_items_added">" आइटम जोड़े गए"</string>
@@ -317,7 +316,6 @@
     <string name="enable_playback_module_description">यह एक प्रयोगात्मक सुविधा है। कोई सहायता नहीं मिलेगी।</string>
     <string name="license_description">विवरण</string>
     <string name="license_version">संस्करण</string>
-    <string name="server_issue_ssl_handshake">एसएसएल हैंडशेक फेल</string>
     <string name="home_section_library_small">मेरा मीडिया (छोटा)</string>
     <string name="pref_libraries">लाइब्रेरीज़</string>
     <string name="login_connect_to">%1$s से कनेक्ट हो रहा है</string>

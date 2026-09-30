@@ -119,7 +119,6 @@
     <string name="pref_live_tv_cat">Live TV</string>
     <string name="lbl_recorded_tv">Recorded TV</string>
     <string name="lbl_live_tv_guide">Live TV guide</string>
-    <string name="lbl_no_recordings">No recordings available</string>
     <string name="msg_burn_sub_warning">Burning in subtitles. This may take a few seconds…</string>
     <string name="msg_unable_load_subs">Unable to load subtitle</string>
     <string name="msg_subtitles_loading">Subtitles loading…</string>
@@ -375,7 +374,6 @@
     <string name="home_sections">Home sections</string>
     <string name="home_prefs">Home</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">SSL handshake failed</string>
     <string name="server_issue_timeout">Connection timed out</string>
     <string name="server_issue_outdated_version">Server uses unsupported version %1$s. Please update to %2$s or newer</string>
     <string name="server_issue_unsupported_version">Server uses version %1$s which is not supported</string>

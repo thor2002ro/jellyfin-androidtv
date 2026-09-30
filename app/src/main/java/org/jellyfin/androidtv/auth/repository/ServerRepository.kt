@@ -16,6 +16,7 @@ import org.jellyfin.androidtv.auth.model.Server
 import org.jellyfin.androidtv.auth.model.ServerAdditionState
 import org.jellyfin.androidtv.auth.model.UnableToConnectState
 import org.jellyfin.androidtv.auth.store.AuthenticationStore
+import org.jellyfin.androidtv.util.getLogSummary
 import org.jellyfin.androidtv.util.sdk.toServer
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
@@ -171,6 +172,15 @@ class ServerRepositoryImpl(
 			val addressCandidatesWithIssues = (badRecommendations + goodRecommendations)
 				.groupBy { it.address }
 				.mapValues { (_, entry) -> entry.flatMap { server -> server.issues } }
+			if (addressCandidatesWithIssues.isEmpty()) {
+				Timber.w("Unable to connect to server %s: no recommended address candidates", address)
+			} else addressCandidatesWithIssues.forEach { (candidate, issues) ->
+				Timber.w(
+					"Unable to connect to server candidate %s: %s",
+					candidate,
+					issues.joinToString { it.getLogSummary() }
+				)
+			}
 			emit(UnableToConnectState(addressCandidatesWithIssues))
 		}
 	}.flowOn(Dispatchers.IO)
@@ -185,7 +195,7 @@ class ServerRepositoryImpl(
 
 			updateServerInternal(id, server, forceUpdate)
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to update server")
+			Timber.e(err, "Unable to update server ${server.address}")
 			null
 		}
 
@@ -199,7 +209,7 @@ class ServerRepositoryImpl(
 		return try {
 			updateServerInternal(server.id, serverInfo, force) != null
 		} catch (err: ApiClientException) {
-			Timber.e(err, "Unable to update server")
+			Timber.e(err, "Unable to update server ${server.address}")
 
 			false
 		}

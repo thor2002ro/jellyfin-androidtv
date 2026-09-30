@@ -38,11 +38,11 @@ fun FragmentActivity.applyTheme() {
 
 	if (viewModel.theme != theme) {
 		if (viewModel.theme != null) {
-			Timber.i("Recreating activity to apply theme")
+			Timber.d("Recreating activity to apply theme")
 			viewModel.theme = null
 			recreate()
 		} else {
-			Timber.i("Applying theme $theme")
+			Timber.d("Applying theme $theme")
 			viewModel.theme = theme
 			setTheme(theme.style)
 		}

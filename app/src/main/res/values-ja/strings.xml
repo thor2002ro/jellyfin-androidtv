@@ -332,7 +332,6 @@
     <string name="action_connect">接続</string>
     <string name="pref_theme">テーマ</string>
     <string name="input_username">ユーザー名</string>
-    <string name="server_issue_ssl_handshake">SSLハンドシェイク失敗しました</string>
     <string name="lbl_unknown_key">不明(%1s)</string>
     <string name="license_repository">リポジトリ</string>
     <string name="input_password">パスワード</string>

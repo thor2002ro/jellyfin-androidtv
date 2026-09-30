@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.plugin.PlayerService
+import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.sockets.subscribe
@@ -36,10 +37,12 @@ class PlaySessionSocketService(
 		// Player control
 		api.webSocket.subscribe<PlaystateMessage>().onEach { message ->
 			coroutineScope.launch(Dispatchers.Main) {
+				val playPauseEnabled = manager.queue.entry.value?.isLiveTv != true
+
 				when (message.data?.command) {
 					PlaystateCommand.STOP -> state.stop()
-					PlaystateCommand.PAUSE -> state.pause()
-					PlaystateCommand.UNPAUSE -> state.unpause()
+					PlaystateCommand.PAUSE -> if (playPauseEnabled) state.pause()
+					PlaystateCommand.UNPAUSE -> if (playPauseEnabled) state.unpause()
 					PlaystateCommand.NEXT_TRACK -> manager.queue.next()
 					PlaystateCommand.PREVIOUS_TRACK -> manager.queue.previous()
 					PlaystateCommand.SEEK -> {
@@ -49,9 +52,13 @@ class PlaySessionSocketService(
 
 					PlaystateCommand.REWIND -> state.rewind()
 					PlaystateCommand.FAST_FORWARD -> state.fastForward()
-					PlaystateCommand.PLAY_PAUSE -> when (state.playState.value) {
-						PlayState.PLAYING -> state.pause()
-						else -> state.unpause()
+					PlaystateCommand.PLAY_PAUSE -> if (playPauseEnabled) {
+						when (state.playState.value) {
+							PlayState.PLAYING,
+							PlayState.BUFFERING -> state.pause()
+
+							else -> state.unpause()
+						}
 					}
 
 					// Do nothing
