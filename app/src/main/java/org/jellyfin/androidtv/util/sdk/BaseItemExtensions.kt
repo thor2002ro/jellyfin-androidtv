@@ -15,6 +15,8 @@ import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.PlayAccess
 import java.time.LocalDateTime
 
+private const val VIRTUAL_CHAPTER_INTERVAL_TICKS = 5 * 60 * 10_000_000L
+
 fun BaseItemDto.getSeasonEpisodeName(context: Context): String {
 	val seasonNumber = when {
 		type == BaseItemKind.EPISODE
@@ -180,7 +182,7 @@ fun BaseItemDto.getSubName(context: Context): String? = when (type) {
 
 fun BaseItemDto.buildChapterItems(): List<ChapterItemInfo> {
 	val images = chapterImages
-	return chapters?.mapIndexed { i, dto ->
+	val realChapters = chapters?.mapIndexed { i, dto ->
 		ChapterItemInfo(
 			itemId = id,
 			name = dto.name,
@@ -188,4 +190,26 @@ fun BaseItemDto.buildChapterItems(): List<ChapterItemInfo> {
 			image = images.getOrNull(i)?.takeIf { it.tag.isNotEmpty() },
 		)
 	}.orEmpty()
+
+	if (realChapters.isNotEmpty()) return realChapters
+
+	val runtime = runTimeTicks?.takeIf { it > 0 } ?: return emptyList()
+	if (isLiveTv() || type !in VIRTUAL_CHAPTER_ITEM_TYPES) return emptyList()
+
+	return (0L until runtime step VIRTUAL_CHAPTER_INTERVAL_TICKS).mapIndexed { i, start ->
+		ChapterItemInfo(
+			itemId = id,
+			name = "Chapter ${i + 1}",
+			startPositionTicks = start,
+			image = null,
+		)
+	}
 }
+
+private val VIRTUAL_CHAPTER_ITEM_TYPES = setOf(
+	BaseItemKind.EPISODE,
+	BaseItemKind.MOVIE,
+	BaseItemKind.MUSIC_VIDEO,
+	BaseItemKind.TRAILER,
+	BaseItemKind.VIDEO,
+)
