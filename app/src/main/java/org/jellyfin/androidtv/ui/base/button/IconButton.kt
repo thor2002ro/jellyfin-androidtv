@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
+import org.jellyfin.androidtv.ui.base.Tooltip
 
 object IconButtonDefaults {
 	val Shape: Shape = ButtonDefaults.Shape
@@ -46,21 +48,30 @@ fun IconButton(
 	colors: ButtonColors = ButtonDefaults.colors(),
 	contentPadding: PaddingValues = IconButtonDefaults.ContentPadding,
 	interactionSource: MutableInteractionSource? = null,
+	tooltip: String? = null,
 	content: @Composable BoxScope.() -> Unit
 ) {
-	ButtonBase(
-		onClick = onClick,
-		modifier = modifier,
-		onLongClick = onLongClick,
+	val buttonInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
+
+	Tooltip(
+		text = tooltip,
+		interactionSource = buttonInteractionSource,
 		enabled = enabled,
-		shape = shape,
-		colors = colors,
-		interactionSource = interactionSource,
 	) {
-		Box(
-			modifier = Modifier
-				.padding(contentPadding),
-			content = content,
-		)
+		ButtonBase(
+			onClick = onClick,
+			modifier = modifier,
+			onLongClick = onLongClick,
+			enabled = enabled,
+			shape = shape,
+			colors = colors,
+			interactionSource = buttonInteractionSource,
+		) {
+			Box(
+				modifier = Modifier
+					.padding(contentPadding),
+				content = content,
+			)
+		}
 	}
 }

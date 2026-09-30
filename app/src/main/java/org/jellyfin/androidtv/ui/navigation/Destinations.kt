@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.navigation
 import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.constant.Extras
 import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment
+import org.jellyfin.androidtv.ui.browsing.BrowseLiveTvChannelsFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseRecordingsFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseScheduleFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseViewFragment
@@ -109,6 +110,7 @@ object Destinations {
 	}
 
 	// Live TV
+	val liveTvChannels = fragmentDestination<BrowseLiveTvChannelsFragment>()
 	val liveTvGuide = fragmentDestination<LiveTvGuideFragment>()
 	val liveTvSchedule = fragmentDestination<BrowseScheduleFragment>()
 	val liveTvRecordings = fragmentDestination<BrowseRecordingsFragment>()
@@ -144,6 +146,6 @@ object Destinations {
 	}
 
 	fun stillWatching(item: UUID) = fragmentDestination<StillWatchingFragment> {
-		putString(NextUpFragment.ARGUMENT_ITEM_ID, item.toString())
+		putString(StillWatchingFragment.ARGUMENT_ITEM_ID, item.toString())
 	}
 }
