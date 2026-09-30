@@ -361,7 +361,6 @@
     <string name="welcome_title">Вітаємо в Jellyfin!</string>
     <string name="saved_servers">Збережені сервери</string>
     <string name="press_to_close">Натисніть для закриття</string>
-    <string name="no_network_permissions">Jellyfin вимагає дозволів мережі для функціонування</string>
     <string name="pref_theme_muted_purple">Приглушена (фіолетова)</string>
     <string name="lbl_switch_user">Переключити обліковий запис</string>
     <string name="user_picker_last_user_summary">Використовувати останній активний обліковий запис</string>
