@@ -71,7 +71,8 @@ private fun buildPlaybackDebugInfo(
 	stream: MediaStream,
 ): String = buildString {
 	val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
-	val audioTrack = stream.tracks.filterIsInstance<MediaStreamAudioTrack>().firstOrNull()
+	// Keep every audio stream available because the selected stream may not be the first item.
+	val audioTracks = stream.tracks.filterIsInstance<MediaStreamAudioTrack>()
 	val trackSelection = playbackManager.trackSelection
 	val selectedAudio = trackSelection
 		?.getAvailableTracks(TrackType.AUDIO)
@@ -82,7 +83,7 @@ private fun buildPlaybackDebugInfo(
 
 	appendStatusPart(stream.conversionMethod.displayName())
 	appendStatusPart(videoTrack.videoSummary())
-	appendStatusPart(audioTrack.audioSummary(selectedAudio))
+	appendStatusPart(audioTracks.audioSummary(selectedAudio))
 	appendStatusPart(selectedSubtitle.subtitleSummary())
 }
 
@@ -96,14 +97,16 @@ private fun MediaStreamVideoTrack?.videoSummary(): String? {
 	}
 }
 
-private fun MediaStreamAudioTrack?.audioSummary(selectedTrack: PlayerTrack?): String {
-	if (this == null && selectedTrack == null) return "Audio: unknown"
+internal fun List<MediaStreamAudioTrack>.audioSummary(playerTrack: PlayerTrack?): String {
+	// Match the backend selection by Jellyfin stream index so codec and channels stay paired.
+	val mediaStream = selectedTrack(playerTrack)
+	if (mediaStream == null && playerTrack == null) return "Audio: unknown"
 
 	return buildString {
 		append("Audio:")
-		appendInline(selectedTrack?.codec?.uppercase() ?: this@audioSummary?.codec?.uppercase())
-		this@audioSummary?.channels?.takeIf { it > 0 }?.let { appendInline("${it}ch") }
-		appendInline(selectedTrack?.language.toIso2LanguageDisplayOrSelf())
+		appendInline(playerTrack?.codec?.uppercase() ?: mediaStream?.codec?.uppercase())
+		mediaStream?.channels?.takeIf { it > 0 }?.let { appendInline("${it}ch") }
+		appendInline(playerTrack?.language.toIso2LanguageDisplayOrSelf())
 	}
 }
 
