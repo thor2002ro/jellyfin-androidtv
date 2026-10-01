@@ -5,6 +5,7 @@ import kotlin.math.roundToLong
 import kotlin.time.Duration
 
 private const val CACHE_BITRATE_HEADROOM = 1.25
+private const val DEFAULT_MAX_CACHE_BYTES = 64L * 1024 * 1024
 
 /**
  * MPV exposes cache capacity plus startup/rebuffer thresholds rather than ExoPlayer's
@@ -28,6 +29,9 @@ internal fun LibMPVBufferConfiguration.cappedToBytes(bitrate: Long, maximum: Lon
 		rebufferWaitSeconds = rebufferWaitSeconds?.coerceAtMost(cappedCacheSeconds),
 	)
 }
+
+internal fun PlaybackBufferOptions.libMPVMaxCacheBytes(): Long =
+	maxBufferBytes ?: DEFAULT_MAX_CACHE_BYTES
 
 internal fun PlaybackBufferOptions.toLibMPVBufferConfiguration(isLiveTv: Boolean): LibMPVBufferConfiguration {
 	val liveTvSeconds = liveTvBufferDuration.positiveFiniteSeconds().takeIf { isLiveTv }
