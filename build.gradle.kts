@@ -21,16 +21,6 @@ fun customMediaOutputProperty(fileName: String, propertyName: String): String {
 	}
 }
 
-val customMedia3FfmpegDecoderAarFile = run {
-	val files = customMediaOutputDir.listFiles { file ->
-		file.isFile && file.name.matches(Regex("""media3-ffmpeg-decoder-.+\.aar"""))
-	}.orEmpty()
-
-	require(files.size == 1) {
-		"Expected exactly one custom Media3 FFmpeg decoder AAR in $customMediaOutputDir, found ${files.size}"
-	}
-	files.single()
-}
 val customMedia3Version = customMediaOutputProperty("version-media3.txt", "source_version")
 val customMedia3MavenVersion = customMediaOutputProperty("version-media3.txt", "maven_version")
 val customMedia3FfmpegDecoderVersion = customMedia3Version
@@ -41,9 +31,6 @@ val customLibyuvVersion = run {
 	"$version+$sourceRevision"
 }
 
-if (!customMedia3FfmpegDecoderAarFile.isFile || customMedia3FfmpegDecoderAarFile.length() == 0L) {
-	throw GradleException("Missing custom Media3 FFmpeg decoder at $customMedia3FfmpegDecoderAarFile")
-}
 val customMedia3MavenAarFile = customMediaOutputDir.resolve(
 	"maven/androidx/media3/media3-extractor/$customMedia3MavenVersion/" +
 		"media3-extractor-$customMedia3MavenVersion.aar"
@@ -55,7 +42,6 @@ if (!customMedia3MavenAarFile.isFile || customMedia3MavenAarFile.length() == 0L)
 	)
 }
 
-extra["customMedia3FfmpegDecoderAarFile"] = customMedia3FfmpegDecoderAarFile
 extra["customMedia3Version"] = customMedia3Version
 extra["customMedia3FfmpegDecoderVersion"] = customMedia3FfmpegDecoderVersion
 extra["customFfmpegVersion"] = customFfmpegVersion
@@ -110,6 +96,12 @@ tasks.withType<Test> {
 }
 
 subprojects {
+	configurations.configureEach {
+		resolutionStrategy.eachDependency {
+			if (requested.group == "androidx.media3") useVersion(customMedia3MavenVersion)
+		}
+	}
+
 	val media3ConsumerProjects = setOf(
 		":app",
 		":playback:core",
