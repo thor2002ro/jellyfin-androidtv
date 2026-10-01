@@ -694,6 +694,10 @@ class LibMPVBackend(
 		currentStream = stream
 		playbackErrorOrigin = stream.errorOrigin
 		playbackErrorOrigin?.activate()
+		// The backend can be reused without onActivated(), including after visiting
+		// settings. Refresh before creating or configuring the next native player.
+		videoDecoder = videoDecoderProvider?.invoke() ?: videoDecoder
+		playbackOptions = playbackOptionsProvider?.invoke() ?: playbackOptions
 		ensureInstanceOptions(forceRecreate)
 		scrubbing.reset()
 		endReported = false
