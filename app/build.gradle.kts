@@ -41,6 +41,7 @@ android {
 	ndkVersion = libs.versions.android.ndk.get()
 
 	defaultConfig {
+		testInstrumentationRunner = "org.jellyfin.androidtv.test.PlaybackTestInstrumentation"
 		minSdk = libs.versions.android.minSdk.get().toInt()
 		targetSdk = libs.versions.android.targetSdk.get().toInt()
 
@@ -67,6 +68,8 @@ android {
 		compose = true
 		resValues = true
 	}
+
+	sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("generated/resumeTestAssets").get().asFile)
 
 	compileOptions {
 		isCoreLibraryDesugaringEnabled = true
@@ -152,6 +155,14 @@ android {
 	testOptions.unitTests.all {
 		it.useJUnitPlatform()
 	}
+}
+
+val prepareResumeTestAssets by tasks.registering(Copy::class) {
+	from(rootProject.file("dependencies/jellyfin-androidx-media/media/libraries/test_data/src/test/assets/media/mp4/silent-black-25s.mp4"))
+	into(layout.buildDirectory.dir("generated/resumeTestAssets"))
+}
+tasks.configureEach {
+	if (name == "mergeDebugAndroidTestAssets") dependsOn(prepareResumeTestAssets)
 }
 
 base.archivesName.set("jellyfin-androidtv-thor-$appVersionName")

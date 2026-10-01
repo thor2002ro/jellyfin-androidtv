@@ -127,6 +127,7 @@ internal fun createDoviPlaybackPlan(
 	retrySuppressed: Boolean,
 	bridge: DoviBridgeEvidence = currentDoviBridgeEvidence(),
 	displayHdrTypes: Set<Int>,
+	backendOverride: PlaybackBackend? = null,
 ): DoviPlaybackPlan? {
 	val (mediaSource, videoStream) = item.findDoviVideo(mediaSourceId) ?: return null
 	val codec = videoStream.toDoviVideoCodec()
@@ -153,7 +154,7 @@ internal fun createDoviPlaybackPlan(
 	return decideDoviPlayback(
 		DoviPlaybackRequest(
 			mode = userPreferences[UserPreferences.doviCompatibilityMode].mode,
-			backend = userPreferences[playerPreferences.playbackBackend].toDoviBackend(),
+			backend = (backendOverride ?: userPreferences[playerPreferences.playbackBackend]).toDoviBackend(),
 			codec = codec,
 			container = mediaSource.container,
 			sourceRangeType = videoStream.videoRangeType,
