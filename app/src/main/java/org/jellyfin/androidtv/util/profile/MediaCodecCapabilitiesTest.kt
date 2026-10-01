@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.util.profile.codec.Av1CodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.AvcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.HevcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
+import org.jellyfin.androidtv.util.profile.codec.Vp9CodecCapabilities
 
 @OptIn(UnstableApi::class)
 class MediaCodecCapabilitiesTest(
@@ -20,6 +21,7 @@ class MediaCodecCapabilitiesTest(
 	private val avc by lazy { AvcCodecCapabilities(codecQuery) }
 	private val hevc by lazy { HevcCodecCapabilities(codecQuery) }
 	private val av1 by lazy { Av1CodecCapabilities(codecQuery) }
+	private val vp9 by lazy { Vp9CodecCapabilities(codecQuery) }
 
 	fun supportsAV1(): Boolean = av1.supportsAv1()
 
@@ -71,17 +73,24 @@ class MediaCodecCapabilitiesTest(
 
 	fun supportsMpeg2(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_MPEG2)
 
+	fun supportsMpeg4Simple(): Boolean =
+		codecQuery.getDecoderLevel(MimeTypes.VIDEO_MP4V, CodecProfileLevel.MPEG4ProfileSimple) > 0
+
 	// DivX and Xvid require Advanced Simple Profile; a Simple Profile decoder is insufficient.
 	fun supportsMpeg4Asp(): Boolean =
 		codecQuery.getDecoderLevel(MimeTypes.VIDEO_MP4V, CodecProfileLevel.MPEG4ProfileAdvancedSimple) > 0
 
 	fun supportsVp8(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VP8)
 
-	fun supportsVp9(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VP9)
+	fun supportsVp9(): Boolean = vp9.supportsVp9()
 
-	fun supportsVp9Main10(): Boolean =
-		codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile2, CodecProfileLevel.VP9Level1) ||
-			codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile3, CodecProfileLevel.VP9Level1)
+	fun supportsVp9Main8(): Boolean = vp9.supportsVp9Main8()
+
+	fun supportsVp9Main10(): Boolean = vp9.supportsVp9Main10()
+
+	fun supportsVp9HDR(): Boolean = vp9.supportsVp9Hdr()
+
+	fun supportsVp9HDR10Plus(): Boolean = vp9.supportsVp9Hdr10Plus()
 
 	fun getMaxResolution(mime: String): Size = codecQuery.getMaxResolution(mime)
 }
