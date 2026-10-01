@@ -1,20 +1,24 @@
 name: App / Publish
 
 on:
-  push:
-    tags:
-      - v*
+  workflow_dispatch:
 
 jobs:
   publish:
     name: Publish
     runs-on: ubuntu-24.04
-    if: ${{ github.repository_owner == 'thor2002ro' }}
+    # Publishing is disabled, including manual runs.
+    if: ${{ false }}
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Update submodules from tracked branches
+        run: git submodule update --remote --recursive
 
       - name: Setup Java
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
