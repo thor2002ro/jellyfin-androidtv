@@ -70,6 +70,33 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 		}
 
 		item {
+			var cardSpacing by rememberPreference(libraryPreferences, LibraryPreferences.cardSpacing)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.library_card_spacing)) },
+				captionContent = { Text(stringResource(cardSpacing.nameRes)) },
+				onClick = {
+					router.push(
+						Routes.LIBRARIES_DISPLAY_SPACING,
+						mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId),
+					)
+				},
+				modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_SPACING),
+			)
+		}
+
+		item {
+			var showCardTitles by rememberPreference(libraryPreferences, LibraryPreferences.showCardTitles)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.library_show_card_titles)) },
+				trailingContent = { Checkbox(checked = showCardTitles) },
+				onClick = { showCardTitles = !showCardTitles },
+				modifier = Modifier.focusKey("library_show_card_titles"),
+			)
+		}
+
+		item {
 			var gridDirection by rememberPreference(libraryPreferences, LibraryPreferences.gridDirection)
 
 			ListButton(

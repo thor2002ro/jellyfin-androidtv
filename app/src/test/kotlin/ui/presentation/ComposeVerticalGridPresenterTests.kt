@@ -4,12 +4,17 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.jellyfin.androidtv.constant.ImageType
+import org.jellyfin.androidtv.constant.LibraryCardSpacing
 import org.jellyfin.androidtv.ui.itemhandling.BaseItemDtoBaseRowItem
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class ComposeVerticalGridPresenterTests : FunSpec({
+	test("relaxed card spacing only changes the gap between cards") {
+		resolveBrowseGridSpacing(8, LibraryCardSpacing.RELAXED) shouldBe 10
+	}
+
 	fun folder(aspectRatio: Double) = BaseItemDtoBaseRowItem(
 		BaseItemDto(
 			id = UUID.randomUUID(),
