@@ -2,6 +2,7 @@ package org.jellyfin.playback.exoplayer.dovi
 
 import android.net.Uri
 import androidx.media3.common.C
+import androidx.media3.common.DataReader
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Metadata
@@ -109,9 +110,14 @@ class DoviExtractorWrappersTests : FunSpec({
 		extractor.output!!.endTracks()
 		delegate.createdTrackIds shouldBe emptyList()
 
+		// H265Reader forwards TS payload before it has parsed the first SPS/PPS.
+		val payload = byteArrayOf(0, 0, 0, 1, 2, 1, 7)
+		video.sampleData(ParsableByteArray(payload), payload.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
 		video.format(Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H265).build())
 
 		delegate.createdTrackIds shouldBe listOf(1)
+		video.sampleMetadata(0, C.BUFFER_FLAG_KEY_FRAME, payload.size, 0, null)
+		delegate.recording(1).bytes.toByteArray().toList() shouldBe payload.toList()
 	}
 
 	test("multiple TS video tracks without an authoritative relation fail closed") {
@@ -128,6 +134,57 @@ class DoviExtractorWrappersTests : FunSpec({
 			second.format(Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H265).build())
 		}
 		delegate.createdTrackIds shouldBe emptyList()
+	}
+
+	test("initial track buffering is bounded before a format is available") {
+		val extractor = RecordingExtractor()
+		val wrapper = DoviExtractor(extractor, { context() }, passthroughTransformer())
+		wrapper.init(RecordingExtractorOutput())
+		val video = extractor.output!!.track(1, C.TRACK_TYPE_VIDEO)
+		val payload = ByteArray(1024 * 1024 + 1)
+		shouldThrow<DoviSampleTransformationException> {
+			video.sampleData(ParsableByteArray(payload), payload.size, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		}
+	}
+
+	test("initial buffering preserves interleaved main and supplemental sample parts") {
+		val extractor = RecordingExtractor()
+		val delegate = RecordingExtractorOutput()
+		var supplemental: ByteArray? = null
+		val wrapper = DoviExtractor(extractor, { context() }, DoviSampleTransformer { sample, _ ->
+			supplemental = sample.supplementalRpu
+			DoviTransformResult(sample.bytes, DoviPresentation.PROFILE_8_1, emptySet(), DoviPresentation.PROFILE_7_FEL)
+		})
+		wrapper.init(delegate)
+		val video = extractor.output!!.track(1, C.TRACK_TYPE_VIDEO)
+		extractor.output!!.endTracks()
+		video.sampleData(ParsableByteArray(byteArrayOf(0, 0, 0, 2)), 4, TrackOutput.SAMPLE_DATA_PART_SUPPLEMENTAL)
+		video.sampleData(ParsableByteArray(byteArrayOf(1, 2)), 2, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		video.sampleData(ParsableByteArray(byteArrayOf(3, 4)), 2, TrackOutput.SAMPLE_DATA_PART_SUPPLEMENTAL)
+		video.format(doviFormat())
+		video.sampleMetadata(0, C.BUFFER_FLAG_HAS_SUPPLEMENTAL_DATA, 8, 0, null)
+		supplemental?.toList() shouldBe listOf<Byte>(3, 4)
+		delegate.recording(1).bytes.toByteArray().toList() shouldBe listOf<Byte>(1, 2)
+	}
+
+	test("seek discards initial bytes and DataReader payload survives late format") {
+		val extractor = RecordingExtractor()
+		val delegate = RecordingExtractorOutput()
+		val wrapper = DoviExtractor(extractor, { context() }, passthroughTransformer())
+		wrapper.init(delegate)
+		val video = extractor.output!!.track(1, C.TRACK_TYPE_VIDEO)
+		extractor.output!!.endTracks()
+		video.sampleData(ParsableByteArray(byteArrayOf(99)), 1, TrackOutput.SAMPLE_DATA_PART_MAIN)
+		wrapper.seek(0, 0)
+		val payload = annexBNal(1, 0, 7)
+		val reader = DataReader { buffer, offset, _ ->
+			System.arraycopy(payload, 0, buffer, offset, payload.size)
+			payload.size
+		}
+		video.sampleData(reader, payload.size + 4, false, TrackOutput.SAMPLE_DATA_PART_MAIN) shouldBe payload.size
+		video.format(Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H265).build())
+		video.sampleMetadata(0, C.BUFFER_FLAG_KEY_FRAME, payload.size, 0, null)
+		delegate.recording(1).bytes.toByteArray().toList() shouldBe payload.toList()
 	}
 
 	test("HLS recreation keeps the item-scoped request and output wrapper") {

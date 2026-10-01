@@ -148,7 +148,10 @@ class JellyfinMediaStreamResolver(
 				// Transcode
 				mediaInfo.mediaSource.supportsTranscoding && mediaInfo.mediaSource.transcodingUrl != null -> mediaInfo.toStream(
 					queueEntry = queueEntry,
-					conversionMethod = MediaConversionMethod.Transcode,
+					conversionMethod = if (
+						!forceTranscoding && profileRequest.protectsDoviHlsVideoCopy &&
+							requestedDoviDecision?.request != null && mediaInfo.mediaSource.isDoviVideoCopyCandidate()
+					) MediaConversionMethod.Remux else MediaConversionMethod.Transcode,
 					url = api.createUrl(requireNotNull(mediaInfo.mediaSource.transcodingUrl), ignorePathParameters = true),
 					mediaStreamOptions = mediaStreamOptions,
 				)
