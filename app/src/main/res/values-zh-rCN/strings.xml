@@ -126,7 +126,6 @@
     <string name="no_program_data">无可用节目数据</string>
     <string name="msg_record_entire_series">录制整个节目?</string>
     <string name="lbl_just_this_once">就这一次</string>
-    <string name="lbl_select_date">选择日期</string>
     <string name="lbl_in_x_days">在 %d 天里</string>
     <string name="desc_premieres">为你所观看的任何电视节目展示一排新的试播集</string>
     <string name="lbl_show_premieres">剧季首映</string>
@@ -171,7 +170,6 @@
     <string name="lbl_live_tv_guide">电视节目指南</string>
     <string name="msg_unable_load_subs">字幕加载失败</string>
     <string name="msg_subtitles_loading">加载字幕中……</string>
-    <string name="lbl_filters">过滤器</string>
     <string name="lbl_ended">已完结</string>
     <string name="lbl__continuing">正在继续</string>
     <string name="lbl_display_preferences">显示偏好</string>
@@ -236,8 +234,6 @@
     <string name="no_player_message">你似乎没有安装可播放视频的应用。此选项需要您安装第三方应用来播放视频内容。</string>
     <string name="no_player">无播放器</string>
     <string name="mark_watched">标记为已观看</string>
-    <string name="lbl_tv_filter_status">接下来的 %1$d 小时</string>
-    <string name="lbl_tv_channel_status">%2$d 个频道中的第 %1$d 个</string>
     <string name="just_one">只选此项</string>
     <string name="turn_off">将此选项关闭</string>
     <string name="audio_error">无法播放音频%1$s</string>
@@ -246,13 +242,10 @@
     <string name="too_many_errors">发生太多错误。放弃操作</string>
     <string name="player_error">发生播放错误。即将重试……</string>
     <string name="seek_error">无法查找</string>
-    <string name="lbl_load_guide_data">加载指南数据</string>
     <string name="episode_missing_message_2">库中缺失当前剧集。播放将终止。</string>
     <string name="episode_missing_message">库内不包含该剧集。是否跳过并继续观看下一集？</string>
     <string name="episode_missing">剧集缺失</string>
     <string name="mark_watched_message">此项目似乎没有播放完毕。是否标记为已观看？</string>
-    <string name="msg_live_tv_prev">加载上一个 %1$d 小时？</string>
-    <string name="msg_live_tv_next">加载下一个 %1$d 小时？</string>
     <string name="lbl_subtitle_track">选择字幕轨道</string>
     <string name="lbl_audio_track">选择音轨</string>
     <string name="lbl_pause">暂停</string>

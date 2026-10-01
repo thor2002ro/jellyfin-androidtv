@@ -155,7 +155,6 @@
     <string name="lbl_show_premieres">Onyesha mwanzo wa misimu</string>
     <string name="desc_premieres">Onyesha safu ya vipindi vya kwanza za msimu kwa mfululizo wowote unaotazama</string>
     <string name="lbl_in_x_days">Baada ya siku %d</string>
-    <string name="lbl_select_date">Chagua tarehe</string>
     <string name="lbl_just_this_once">Kwa mara hii tu</string>
     <string name="msg_record_entire_series">Rekodi mfululizo wote?</string>
     <string name="no_program_data">Data ya vipindi haipatikani</string>
@@ -188,8 +187,6 @@
     <string name="lbl_next_episode">Kipindi kinachofuata</string>
     <string name="lbl_album_name">Jina la albamu</string>
     <string name="lbl_song_title">Jina la wimbo</string>
-    <string name="lbl_tv_channel_status">Chaneli %1$d kati ya %2$d</string>
-    <string name="lbl_tv_filter_status">Kwa saa %1$d zijazo</string>
     <string name="lbl_news">Habari</string>
     <string name="lbl_new_only">Mapya pekee</string>
     <string name="lbl_subtitle_delay">Kuchelewa kwa manukuu</string>
@@ -206,7 +203,6 @@
     <string name="lbl_display_preferences">Mapendekezo ya mwonekano</string>
     <string name="lbl__continuing">INAENDELEA</string>
     <string name="lbl_ended">IMEKWISHA</string>
-    <string name="lbl_filters">Vichujio vya Live TV</string>
     <string name="msg_subtitles_loading">Maelezo mafupi yanapakia…</string>
     <string name="msg_unable_load_subs">Imeshindwa kupakia maelezo mafupi</string>
     <string name="msg_burn_sub_warning">Inajumuisha maelezo mafupi kwenye video. Hii inaweza kuchukua sekunde chache…</string>
@@ -272,9 +268,6 @@
     <string name="episode_missing">Kipindi kinakosekana</string>
     <string name="episode_missing_message">Kipindi hiki kinakosekana. Je, unataka kukiruka na kwenda kwenye kipindi kinachofuata?</string>
     <string name="episode_missing_message_2">Kipindi hiki kinakosekana kwenye maktaba. Video itakatika hapa.</string>
-    <string name="lbl_load_guide_data">Pakia data ya mwongozo</string>
-    <string name="msg_live_tv_next">Pakia saa %1$d zijazo?</string>
-    <string name="msg_live_tv_prev">Pakia saa %1$d zilizopita?</string>
     <string name="seek_error">Imeshindikana kusogeza</string>
     <string name="player_error">Hitilafu ya kicheza video imetokea. Inajaribu tena…</string>
     <string name="too_many_errors">Hitilafu ni nyingi mno. Inasitisha majaribio</string>

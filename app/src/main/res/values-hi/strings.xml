@@ -138,7 +138,6 @@
     <string name="lbl_display_preferences">प्राथमिकताएं दिखाए</string>
     <string name="lbl__continuing">जारी है</string>
     <string name="lbl_ended">समाप्त हो चुका है</string>
-    <string name="lbl_filters">लाइव टीवी फ़िल्टर</string>
     <string name="msg_error_live_stream">लाइव टीवी स्ट्रीमिंग में दिक्कत। दोबारा प्रयास करेंगे…</string>
     <string name="lbl_goto_now_playing">अभी चल रहे पर जाएं</string>
     <string name="lbl_bitstream_ac3">बिट्सरीम डॉल्बी डिजिटल ऑडियो</string>
@@ -158,9 +157,7 @@
     <string name="msg_no_items">चलाने के लिए कोई आइटम नहीं</string>
     <string name="pref_button_remapping_description">सौंपने के लिए टीवी रिमोट पर कोई भी बटन दबाए</string>
     <string name="mark_watched_message">आइटम अपनी अवधि के अनुसार नहीं चला। देखा गया मार्क करें?</string>
-    <string name="msg_live_tv_next">अगले %1$d घंटे दिखाएं?</string>
     <string name="episode_missing_message">यह एपिसोड आपके संग्रह से गायब है। क्या आप इसे छोड़कर अगले एपिसोड पर जाना चाहेंगे?</string>
-    <string name="msg_live_tv_prev">पिछले %1$d घंटे दिखाएं?</string>
     <string name="too_many_errors">बहुत सारी त्रुटियां</string>
     <string name="sum_enable_cinema_mode">मूवी शुरू करने से पहले उपलब्ध इंट्रो और प्रीव्यू चलाएं</string>
     <string name="msg_item_added">" आइटम जोड़े गए"</string>
@@ -214,7 +211,6 @@
     <string name="lbl_album_name">एल्बम का नाम</string>
     <string name="lbl_next_episode">अगला एपिसोड</string>
     <string name="server_connecting">%1$s से जोड़ा जा रहा</string>
-    <string name="lbl_tv_channel_status">%2$d में से %1$d चैनल</string>
     <string name="lbl_repeat_episodes">एपिसोड दोहराएं</string>
     <string name="lbl_live_broadcasts">लाइव ब्रॉडकास्ट</string>
     <string name="pref_theme_emerald">क्लासिक एमरल्ड</string>
@@ -228,13 +224,11 @@
     <string name="audio_error">%1$s ऑडियो चलाने में असमर्थ</string>
     <string name="lbl_just_this_once">बस इस बार</string>
     <string name="lbl_new_episodes">नए एपिसोड</string>
-    <string name="lbl_tv_filter_status">अगले %1$d घंटों के लिए</string>
     <string name="lbl_premieres">कई प्रीमियर</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
     <string name="watch_now">अभी देखें</string>
     <string name="no_player_message">आपके पास वीडियो सक्षम ऐप इंस्टॉल नहीं है। तृतीय पक्ष एप्लीकेशन को इंस्टॉल करना होगा।</string>
     <string name="episode_missing_message_2">यह एपिसोड आपके संग्रह से गायब है। प्लेबैक बंद हो जाएगा।</string>
-    <string name="lbl_load_guide_data">गाइड डाटा लोड करें</string>
     <string name="turn_off">यह विकल्प बंद करें</string>
     <string name="lbl_unknown_key">अज्ञात (%1s)</string>
     <string name="watch_count_overflow">99+</string>
@@ -261,7 +255,6 @@
     <string name="lbl_stretch">खींचे</string>
     <string name="btn_got_it">हो गया</string>
     <string name="lbl_clear_queue">कतार मिटाएं</string>
-    <string name="lbl_select_date">तारीख चुनें</string>
     <string name="lbl_recent_recordings">हाल ही की रिकॉर्डिंग</string>
     <string name="no_program_data">कार्यक्रम का डाटा उपलब्ध नहीं</string>
     <string name="lbl_repeat">दोबारा चलाएं</string>

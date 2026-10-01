@@ -164,7 +164,6 @@
     <string name="no_program_data">Nincs elérhető műsorinformáció</string>
     <string name="msg_record_entire_series">Az egész sorozat rögzítésre kerüljön\?</string>
     <string name="lbl_just_this_once">Csak most az egyszer</string>
-    <string name="lbl_select_date">Dátum kiválasztása</string>
     <string name="lbl_in_x_days">%d nap múlva</string>
     <string name="lbl_show_premieres">A show évadjainak premierjei</string>
     <string name="lbl_refresh_switching">Frissítési ráta módosítása</string>
@@ -206,7 +205,6 @@
     <string name="msg_burn_sub_warning">Feliratok beégetése. Ez eltarthat pár másodpercig…</string>
     <string name="msg_unable_load_subs">Feliratok betöltése sikertelen</string>
     <string name="msg_subtitles_loading">Feliratok betöltése…</string>
-    <string name="lbl_filters">TV csatorna szűrők</string>
     <string name="lbl_ended">VÉGET ÉRT</string>
     <string name="lbl__continuing">ÚJ RÉSZEK VÁRHATÓAK</string>
     <string name="lbl_display_preferences">Megjelenítési beállítások</string>
@@ -236,8 +234,6 @@
     <string name="no_player_message">Úgy tűnik, hogy nincs telepítve videot támogató alkalmazás. Ez az opció megköveteli egy harmadik féltől származó videotartalom-lejátszó alkalmazás telepítését.</string>
     <string name="no_player">Nincs elérhető lejátszó</string>
     <string name="mark_watched">Nézettnek jelöl</string>
-    <string name="lbl_tv_filter_status">a következő %1$d órában</string>
-    <string name="lbl_tv_channel_status">%1$d a %2$d csatornából</string>
     <string name="lbl_subtitle_track">Feliratsáv kiválasztása</string>
     <string name="lbl_audio_track">Hangsáv kiválasztása</string>
     <string name="lbl_pause">Szünet</string>
@@ -247,9 +243,6 @@
     <string name="too_many_errors">Túl sok hiba. Feladom</string>
     <string name="player_error">Lejátszási hiba történt. Újrapróbálkozás…</string>
     <string name="seek_error">Nem lehet keresni</string>
-    <string name="msg_live_tv_prev">Betöltöd az előző %1$d órát?</string>
-    <string name="msg_live_tv_next">Betöltöd a következő %1$d órát?</string>
-    <string name="lbl_load_guide_data">Útmutató adatok betöltése</string>
     <string name="episode_missing_message_2">Ez az epizód hiányzik a könyvtáradból. A lejátszás megáll.</string>
     <string name="episode_missing_message">Ez az epizód hiányzik a könyvtáradból. Szeretnéd kihagyni, és folytatni az azután következővel\?</string>
     <string name="episode_missing">Hiányzó epizód</string>

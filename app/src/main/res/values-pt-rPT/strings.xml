@@ -122,7 +122,6 @@
     <string name="lbl_display_preferences">Preferências de visualização</string>
     <string name="lbl__continuing">A Continuar</string>
     <string name="lbl_ended">TERMINADO</string>
-    <string name="lbl_filters">Filtros TV ao Vivo</string>
     <string name="msg_subtitles_loading">A carregar as legendas…</string>
     <string name="msg_unable_load_subs">Não foi possível carregar as legendas</string>
     <string name="msg_burn_sub_warning">Legendas embutidas podem demorar alguns minutos. Por favor, aguarde…</string>
@@ -203,7 +202,6 @@
     <string name="no_program_data">Não há informação do programa disponível</string>
     <string name="msg_record_entire_series">Gravar série inteira\?</string>
     <string name="lbl_just_this_once">Apenas este</string>
-    <string name="lbl_select_date">Selecionar data</string>
     <string name="lbl_in_x_days">Em %d dias</string>
     <string name="lbl_show_premieres">Mostrar estreias de temporadas no ecrã inicial</string>
     <string name="lbl_open">Aberto</string>
@@ -242,9 +240,6 @@
     <string name="too_many_errors">Demasiados erros. Não serão feitas mais tentativas</string>
     <string name="player_error">Ocorreu um erro no leitor. A tentar novamente…</string>
     <string name="seek_error">Impossível saltar</string>
-    <string name="msg_live_tv_prev">Carregar as %1$d horas anteriores?</string>
-    <string name="msg_live_tv_next">Carregar as próximas %1$d horas?</string>
-    <string name="lbl_load_guide_data">Carregar programação</string>
     <string name="episode_missing_message_2">Este episódio está em falta na sua biblioteca. A reprodução irá parar.</string>
     <string name="episode_missing_message">Este episódio está em falta na tua biblioteca. Desejas saltar este episódio e passar ao seguinte?</string>
     <string name="episode_missing">Episódio em falta</string>
@@ -265,8 +260,6 @@
     <string name="lbl_playback_control_ends">Termina às %1$s</string>
     <string name="lbl_sign_in">Por Favor autentique-se</string>
     <string name="no_player">Nenhum leitor encontrado</string>
-    <string name="lbl_tv_filter_status">pelas próximas %1$d horas</string>
-    <string name="lbl_tv_channel_status">%1$d de %2$d canais</string>
     <string name="lbl_subtitle_track">Selecionar faixa de legendas</string>
     <string name="lbl_audio_track">Selecionar faixa de áudio</string>
     <string name="lbl_pause">Pausar</string>

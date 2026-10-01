@@ -6,12 +6,15 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -30,6 +33,8 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.times
+
+private const val HeldSeekIntervalMs = 250L
 
 @Immutable
 data class SeekbarColors(
@@ -69,6 +74,7 @@ fun Seekbar(
 	seekRewindAmount: Duration = duration / 100,
 	onScrubbing: ((scrubbing: Boolean) -> Unit)? = null,
 	onSeek: ((progress: Duration) -> Unit)? = null,
+	onPreviewSeek: ((progress: Duration?) -> Unit)? = null,
 	enabled: Boolean = true,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
 	markers: List<Duration> = emptyList(),
@@ -94,6 +100,9 @@ fun Seekbar(
 		seekRewindAmount = seekRewindPercentage,
 		onScrubbing = onScrubbing,
 		onSeek = if (onSeek == null) null else { progress -> onSeek(progress.toDouble() * duration) },
+		onPreviewSeek = if (onPreviewSeek == null) null else { progress ->
+			onPreviewSeek(progress?.let { it.toDouble() * duration })
+		},
 		enabled = enabled,
 		colors = colors,
 		markers = markerPercentages,
@@ -110,6 +119,7 @@ fun Seekbar(
 	seekRewindAmount: Float = 0.01f,
 	onScrubbing: ((scrubbing: Boolean) -> Unit)? = null,
 	onSeek: ((progress: Float) -> Unit)? = null,
+	onPreviewSeek: ((progress: Float?) -> Unit)? = null,
 	enabled: Boolean = true,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
 	markers: List<Float> = emptyList(),
@@ -120,10 +130,34 @@ fun Seekbar(
 	val visibleProgress = progressOverride ?: progress
 	val knobAlpha by animateFloatAsState(if (focused) 1f else 0f)
 	var scrubCancelJob by remember { mutableStateOf<Job?>(null) }
+	var lastHeldSeekAt by remember { mutableStateOf(0L) }
+	val scrubbingActive = remember { mutableStateOf(false) }
+	val currentOnScrubbing = rememberUpdatedState(onScrubbing)
+	val currentOnPreviewSeek = rememberUpdatedState(onPreviewSeek)
 	val markerPercentages = remember(markers) {
 		markers
 			.filter { marker -> marker > 0f && marker < 1f }
 			.distinct()
+	}
+
+	fun finishScrubbing() {
+		scrubCancelJob?.cancel()
+		scrubCancelJob = null
+		if (endSeekbarScrubbing(scrubbingActive.value, currentOnScrubbing.value, currentOnPreviewSeek.value)) {
+			scrubbingActive.value = false
+			progressOverride = null
+		}
+	}
+
+	LaunchedEffect(focused, enabled) {
+		if (shouldFinishSeekbarScrubbing(scrubbingActive.value, focused, enabled)) finishScrubbing()
+	}
+
+	DisposableEffect(Unit) {
+		onDispose {
+			scrubCancelJob?.cancel()
+			endSeekbarScrubbing(scrubbingActive.value, currentOnScrubbing.value, currentOnPreviewSeek.value)
+		}
 	}
 
 	Box(
@@ -131,34 +165,50 @@ fun Seekbar(
 			.onKeyEvent {
 				if (!enabled) return@onKeyEvent false
 
+				val nativeEvent = it.nativeKeyEvent
 				val isForward = it.key == Key.DirectionRight
 				val isRewind = it.key == Key.DirectionLeft
 				val isScrubbing = isForward || isRewind
 				val isKeyUp = it.type == KeyEventType.KeyUp
 				val isKeyDown = it.type == KeyEventType.KeyDown
+				val handleSeekKeyDown = isKeyDown && isScrubbing && shouldHandleHeldSeek(
+					repeatCount = nativeEvent.repeatCount,
+					eventTime = nativeEvent.eventTime,
+					lastHandledAt = lastHeldSeekAt,
+				)
+				if (handleSeekKeyDown) lastHeldSeekAt = nativeEvent.eventTime
+				if (isKeyUp && isScrubbing) lastHeldSeekAt = 0L
 
 				val newProgress = when {
-					isKeyDown && isForward -> (visibleProgress + seekForwardAmount).coerceAtMost(1f)
-					isKeyDown && isRewind -> (visibleProgress - seekRewindAmount).coerceAtLeast(0f)
+					handleSeekKeyDown && isForward -> (visibleProgress + seekForwardAmount).coerceAtMost(1f)
+					handleSeekKeyDown && isRewind -> (visibleProgress - seekRewindAmount).coerceAtLeast(0f)
 					else -> visibleProgress
 				}
+				val progressChanged = visibleProgress != newProgress
 
-				if (isScrubbing && isKeyDown && onScrubbing != null) {
+				if (shouldStartSeekbarScrubbing(
+						isScrubbingKey = isScrubbing,
+						isKeyDown = handleSeekKeyDown,
+						progressChanged = progressChanged,
+						hasScrubCallbacks = onScrubbing != null || onPreviewSeek != null,
+					)
+				) {
 					scrubCancelJob?.cancel()
-					onScrubbing(true)
+					scrubbingActive.value = true
+					onScrubbing?.invoke(true)
 				}
 
-				if (visibleProgress != newProgress) {
+				if (progressChanged) {
 					progressOverride = newProgress
+					onPreviewSeek?.invoke(newProgress)
 					if (onSeek != null) onSeek(newProgress)
 				}
 
-				if (isScrubbing && isKeyUp && onScrubbing != null) {
+				if (scrubbingActive.value && isScrubbing && isKeyUp && (onScrubbing != null || onPreviewSeek != null)) {
 					scrubCancelJob?.cancel()
 					scrubCancelJob = coroutineScope.launch {
 						delay(300.milliseconds)
-						onScrubbing(false)
-						progressOverride = null
+						finishScrubbing()
 					}
 				}
 
@@ -225,4 +275,31 @@ fun Seekbar(
 				)
 			}
 	)
+}
+
+internal fun shouldHandleHeldSeek(repeatCount: Int, eventTime: Long, lastHandledAt: Long): Boolean =
+	repeatCount == 0 || eventTime - lastHandledAt >= HeldSeekIntervalMs
+
+internal fun shouldStartSeekbarScrubbing(
+	isScrubbingKey: Boolean,
+	isKeyDown: Boolean,
+	progressChanged: Boolean,
+	hasScrubCallbacks: Boolean,
+) = isScrubbingKey && isKeyDown && progressChanged && hasScrubCallbacks
+
+internal fun shouldFinishSeekbarScrubbing(
+	active: Boolean,
+	focused: Boolean,
+	enabled: Boolean,
+) = active && (!focused || !enabled)
+
+internal fun endSeekbarScrubbing(
+	active: Boolean,
+	onScrubbing: ((Boolean) -> Unit)?,
+	onPreviewSeek: ((Float?) -> Unit)?,
+): Boolean {
+	if (!active) return false
+	onScrubbing?.invoke(false)
+	onPreviewSeek?.invoke(null)
+	return true
 }
