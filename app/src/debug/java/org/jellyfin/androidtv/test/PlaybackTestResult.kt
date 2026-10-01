@@ -12,9 +12,10 @@ data class PlaybackTestArguments(
 	val scenario: String?,
 	val testUser: String,
 	val testFolder: String,
+	val soakIterations: Int,
 ) {
 	companion object {
-		private val allSuites = setOf("resume", "server", "transcode", "backend")
+		private val allSuites = setOf("resume", "server", "transcode", "backend", "soak", "recovery", "hdmi-audio")
 
 		fun from(values: Map<String, String?>): PlaybackTestArguments {
 			fun value(key: String) = values[key]?.trim()?.takeIf(String::isNotEmpty)
@@ -25,6 +26,7 @@ data class PlaybackTestArguments(
 				scenario = value("scenario"),
 				testUser = value("testUser") ?: "androidtv-playback-test",
 				testFolder = value("testFolder") ?: "Test Videos",
+				soakIterations = value("soakIterations")?.toIntOrNull()?.coerceIn(2, 50) ?: 3,
 			)
 		}
 	}

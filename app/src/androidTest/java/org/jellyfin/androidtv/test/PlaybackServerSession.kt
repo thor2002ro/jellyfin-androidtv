@@ -1,12 +1,14 @@
 package org.jellyfin.androidtv.test
 
 import org.jellyfin.androidtv.auth.repository.SessionRepository
+import org.jellyfin.androidtv.util.sdk.stopEncodingProcess
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
 import org.jellyfin.sdk.api.client.extensions.authenticationApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
+import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.api.client.extensions.userDataApi
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.api.client.extensions.userViewApi
@@ -20,6 +22,7 @@ import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.UpdateUserPassword
 import org.jellyfin.sdk.model.api.UserDto
 import org.koin.core.context.GlobalContext
+import kotlinx.coroutines.delay
 
 data class ServerPlaybackFixture(
 	val item: BaseItemDto,
@@ -149,8 +152,12 @@ class PlaybackServerSession private constructor(
 		val discovered = discoverMedia(folderName)
 		val fixtures = discovered.associateBy { it.descriptor.id }
 		val selection = PlaybackMediaCatalog.select(discovered.map(ServerPlaybackFixture::descriptor))
+		val passthroughCodecs = setOf("ac3", "eac3", "eac3_joc", "dts", "dts_hd", "dtshd", "truehd", "ac4")
+		val guarded = (selection.fixtures.values + discovered.map(ServerPlaybackFixture::descriptor).filter { descriptor ->
+			descriptor.audioStreams.any { it.codec?.lowercase() in passthroughCodecs }
+		}).distinctBy(PlaybackMediaDescriptor::id)
 		val watchedBefore = buildMap {
-			for (descriptor in selection.fixtures.values.distinctBy(PlaybackMediaDescriptor::id)) {
+			for (descriptor in guarded) {
 				val fixture = fixtures.getValue(descriptor.id)
 				put(PlaybackWatchKey("normal", descriptor.id), watchState(normalUser.id, fixture.item))
 				put(PlaybackWatchKey("test", descriptor.id), watchState(testUser.id, fixture.item))
@@ -171,11 +178,23 @@ class PlaybackServerSession private constructor(
 			lastPlayed = data.lastPlayedDate?.toString(),
 		)
 	}
+
+	suspend fun stopEncodingAndAwait(playSessionId: String) {
+		testApi.stopEncodingProcess(testApi.deviceInfo.id, playSessionId)
+		repeat(20) {
+			val active = normalApi.sessionApi.getSessions(deviceId = testApi.deviceInfo.id).content
+				.any { it.transcodingInfo != null }
+			if (!active) return
+			delay(250)
+		}
+		error("Jellyfin still reports an active transcode after stop for session $playSessionId")
+	}
 }
 
 private fun MediaSourceInfo.toFixture(item: BaseItemDto): ServerPlaybackFixture? {
 	val streams = mediaStreams.orEmpty()
 	val video = streams.firstOrNull { it.type == MediaStreamType.VIDEO } ?: return null
+	val audio = streams.filter { it.type == MediaStreamType.AUDIO }
 	val descriptor = PlaybackMediaDescriptor(
 		id = "${item.id}:${id.orEmpty()}",
 		name = item.name ?: item.id.toString(),
@@ -189,7 +208,25 @@ private fun MediaSourceInfo.toFixture(item: BaseItemDto): ServerPlaybackFixture?
 		videoRange = video.videoRangeType.serialName,
 		doviProfile = video.dvProfile,
 		subtitleCodecs = streams.filter { it.type == MediaStreamType.SUBTITLE }.mapNotNullTo(sortedSetOf()) { it.codec },
-		audioCodecs = streams.filter { it.type == MediaStreamType.AUDIO }.mapNotNullTo(sortedSetOf()) { it.codec },
+		audioCodecs = audio.mapNotNullTo(sortedSetOf()) { it.codec },
+		videoFrameRate = video.referenceFrameRate,
+		videoRefFrames = video.refFrames,
+		videoInterlaced = video.isInterlaced,
+		videoAnamorphic = video.isAnamorphic,
+		videoBitrate = video.bitRate,
+		containerBitrate = bitrate ?: streams.mapNotNull { it.bitRate }.sum().takeIf { it > 0 },
+		videoStreamCount = streams.count { it.type == MediaStreamType.VIDEO },
+		audioStreamCount = audio.size,
+		audioStreams = audio.map { stream ->
+			PlaybackAudioDescriptor(
+				codec = stream.codec,
+				profile = stream.profile,
+				channels = stream.channels,
+				sampleRate = stream.sampleRate,
+				bitDepth = stream.bitDepth,
+				bitrate = stream.bitRate,
+			)
+		},
 	)
 	return ServerPlaybackFixture(item, this, descriptor)
 }
