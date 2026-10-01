@@ -710,8 +710,8 @@ class LibMPVOptionsTest : StringSpec({
 		) shouldBe LibMPVSubtitleOverlayUpdate.Clear(changeId = 8)
 	}
 
-	"visible native subtitle overlay preserves its crop and pixels" {
-		val pixels = byteArrayOf(0, 0, -1, -1, 0, -1, 0, -1)
+	"visible native subtitle overlay converts BGRA pixels for Android" {
+		val bgraPixels = byteArrayOf(0, 0, -1, -1, -1, 0, 0, -1)
 		val update = parseLibMPVSubtitleOverlay(
 			MPVNode.MapNode(
 				mapOf(
@@ -724,7 +724,7 @@ class LibMPVOptionsTest : StringSpec({
 					"h" to MPVNode.IntNode(1),
 					"stride" to MPVNode.IntNode(8),
 					"format" to MPVNode.StringNode("bgra"),
-					"data" to MPVNode.ByteArrayNode(pixels),
+					"data" to MPVNode.ByteArrayNode(bgraPixels),
 				)
 			),
 			previousChangeId = 7,
@@ -737,7 +737,7 @@ class LibMPVOptionsTest : StringSpec({
 		update.y shouldBe 900
 		update.width shouldBe 2
 		update.height shouldBe 1
-		update.pixels.toList() shouldContainExactly pixels.toList()
+		update.pixels.toList() shouldContainExactly listOf(-1, 0, 0, -1, 0, 0, -1, -1)
 	}
 
 	"malformed native subtitle overlay is rejected" {

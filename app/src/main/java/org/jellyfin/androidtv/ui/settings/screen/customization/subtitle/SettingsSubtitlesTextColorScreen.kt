@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.settings.screen.customization.subtitle
 
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -18,20 +19,41 @@ import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.composable.SubtitleColorPresetsControl
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.composable.SubtitleStylePreview
 import org.jellyfin.androidtv.ui.settings.util.ListColorChannelRangeControl
+import org.jellyfin.preference.Preference
 import org.koin.compose.koinInject
 
 @Composable
 fun SettingsSubtitlesTextColorScreen() {
+	SettingsSubtitlesTextColorScreen(
+		preference = UserPreferences.subtitlesTextColor,
+		title = R.string.lbl_subtitle_text_color,
+	)
+}
+
+@Composable
+fun SettingsSubtitlesHdrTextColorScreen() {
+	SettingsSubtitlesTextColorScreen(
+		preference = UserPreferences.subtitlesHdrTextColor,
+		title = R.string.lbl_subtitle_hdr_text_color,
+	)
+}
+
+@Composable
+private fun SettingsSubtitlesTextColorScreen(
+	preference: Preference<Long>,
+	@StringRes title: Int,
+) {
 	val userPreferences = koinInject<UserPreferences>()
 
-	var subtitlesTextColor by rememberPreference(userPreferences, UserPreferences.subtitlesTextColor)
+	var subtitlesTextColor by rememberPreference(userPreferences, preference)
 	val colorValue = Color(subtitlesTextColor).convert(ColorSpaces.Srgb)
+	val updateColor: (Color) -> Unit = { subtitlesTextColor = it.toArgb().toLong() }
 
 	SettingsColumn {
 		item {
 			ListSection(
 				overlineContent = { Text(stringResource(R.string.pref_subtitles).uppercase()) },
-				headingContent = { Text(stringResource(R.string.lbl_subtitle_text_color)) },
+				headingContent = { Text(stringResource(title)) },
 			)
 		}
 
@@ -49,7 +71,7 @@ fun SettingsSubtitlesTextColorScreen() {
 			SubtitleColorPresetsControl(
 				presets = SubtitleTextColorPresets,
 				value = colorValue,
-				onValueChange = { subtitlesTextColor = it.toArgb().toLong() }
+				onValueChange = updateColor
 			)
 		}
 
@@ -62,7 +84,7 @@ fun SettingsSubtitlesTextColorScreen() {
 				headingContent = { Text(stringResource(R.string.color_red)) },
 				channel = Color.Red,
 				value = colorValue,
-				onValueChange = { subtitlesTextColor = it.toArgb().toLong() },
+				onValueChange = updateColor,
 				modifier = Modifier.focusKey("custom_red")
 			)
 		}
@@ -72,7 +94,7 @@ fun SettingsSubtitlesTextColorScreen() {
 				headingContent = { Text(stringResource(R.string.color_green)) },
 				channel = Color.Green,
 				value = colorValue,
-				onValueChange = { subtitlesTextColor = it.toArgb().toLong() },
+				onValueChange = updateColor,
 				modifier = Modifier.focusKey("custom_green")
 			)
 		}
@@ -82,7 +104,7 @@ fun SettingsSubtitlesTextColorScreen() {
 				headingContent = { Text(stringResource(R.string.color_blue)) },
 				channel = Color.Blue,
 				value = colorValue,
-				onValueChange = { subtitlesTextColor = it.toArgb().toLong() },
+				onValueChange = updateColor,
 				modifier = Modifier.focusKey("custom_blue")
 			)
 		}
