@@ -2,6 +2,7 @@ package org.jellyfin.playback.mpv
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.floats.plusOrMinus
 import io.kotest.matchers.shouldBe
 import java.io.File
 import org.jellyfin.playback.core.PlaybackBufferOptions
@@ -340,16 +341,37 @@ class LibMPVOptionsTest : StringSpec({
 		isLibMPVVulkanSupported((1 shl 22) or (2 shl 12)) shouldBe true
 	}
 
-	"plain subtitle padding maps to MPV 720p margins" {
-		mpvSubtitleMarginY(0.08f) shouldBe 58
-		mpvSubtitleMarginY(-1f) shouldBe 0
-		mpvSubtitleMarginY(1f) shouldBe 600
+	"plain subtitle padding preserves the fraction of the rendered height" {
+		mpvSubtitleMarginY(0.08f, 720) shouldBe 58
+		mpvSubtitleMarginY(0.08f, 1080) shouldBe 86
+		mpvSubtitleMarginY(0.08f, 2160) shouldBe 173
+		mpvSubtitleMarginY(-1f, 1080) shouldBe 0
+		mpvSubtitleMarginY(1f, 1080) shouldBe 1080
+		mpvSubtitleMarginY(0.8f, 2160) shouldBe 1728
 	}
 
-	"app subtitle size maps its default to MPV default scale" {
-		mpvSubtitleFontSize(24f) shouldBe 38f
-		mpvSubtitleFontSize(4f) shouldBe 8f
-		mpvSubtitleFontSize(100f) shouldBe 96f
+	"subtitle outline converts a centered Android stroke to the libass outer radius" {
+		mpvSubtitleOutlineSize(1f) shouldBe 1f
+		mpvSubtitleOutlineSize(2f) shouldBe 2f
+		mpvSubtitleOutlineSize(2.625f) shouldBe 2.5f
+	}
+
+	"subtitle size preserves Android dp and the font's actual line height" {
+		// Noto Sans has a 1362-unit ascender/descender span per 1000-unit em.
+		mpvSubtitleFontSize(24f, 2f, 1.362f) shouldBe (65.376f plusOrMinus 0.001f)
+		mpvSubtitleFontSize(24f, 1f, 1.362f) shouldBe (32.688f plusOrMinus 0.001f)
+		mpvSubtitleFontSize(32f, 2f, 1.362f) shouldBe (87.168f plusOrMinus 0.001f)
+	}
+
+	"subtitle size remains valid when metrics are temporarily unavailable" {
+		mpvSubtitleFontSize(24f, 0f, 0f) shouldBe 24f
+		mpvSubtitleFontSize(Float.NaN, 2f, 1.362f) shouldBe (65.376f plusOrMinus 0.001f)
+		mpvSubtitleFontSize(10000f, 3f, 2f) shouldBe 9000f
+	}
+
+	"raw options cannot override the shared subtitle pixel sizing policy" {
+		isLibMPVOptionManagedByJellyfin("sub-scale-by-window") shouldBe true
+		isLibMPVOptionManagedByJellyfin("sub-scale-with-window") shouldBe true
 	}
 
 	"Jellyfin MPV defaults produce the complete managed profile" {
