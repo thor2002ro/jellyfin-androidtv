@@ -163,9 +163,9 @@ private fun Scope.createLibMPVBackend(): LibMPVBackend {
 	)
 }
 
-private fun UserPreferences.detectedMPVPlaybackOptions(context: Context) = mpvPlaybackOptions(
-	supportedPassthroughMimes = getSupportedMPVPassthroughAudioMimes(context, managedAudioPassthroughMimeTypes),
-)
+private fun UserPreferences.detectedMPVPlaybackOptions(context: Context) = mpvPlaybackOptions {
+	getSupportedMPVPassthroughAudioMimes(context, managedAudioPassthroughMimeTypes)
+}
 
 fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val activityIntent = Intent(get(), MainActivity::class.java)
