@@ -62,10 +62,6 @@ class JellyfinMediaStreamResolver(
 		if (!supportedMediaTypes.contains(mediaType)) return null
 
 		val preferDirectPlay = isLiveTv && queueEntry.forceTranscoding == false
-		if (preferDirectPlay) {
-			queueEntry.liveStreamTargetOffset = LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
-			queueEntry.forceTranscoding = null
-		}
 
 		val playbackOptions = liveTvPlaybackPolicy.getPlaybackOptions(baseItem)
 		var forceTranscoding = queueEntry.forceTranscoding == true
@@ -92,15 +88,12 @@ class JellyfinMediaStreamResolver(
 			)
 
 			val liveTvSourceBitrate = mediaInfo.mediaSource.liveTvSourceBitrate()
-			if (
+			val forceLiveTvTranscoding =
 				isLiveTv &&
 				!preferDirectPlay &&
 				!forceTranscoding &&
 				shouldForceLiveTvTranscoding(profile.maxStreamingBitrate, liveTvSourceBitrate)
-			) {
-				queueEntry.forceTranscoding = true
-				queueEntry.forceTranscodingRecoveryAttempts = null
-				queueEntry.forceTranscodingSourceBitrate = liveTvSourceBitrate
+			if (forceLiveTvTranscoding) {
 				forceTranscoding = true
 				Timber.i("Forcing Live TV transcoding because source bitrate %s exceeds configured bitrate %s", liveTvSourceBitrate, profile.maxStreamingBitrate)
 				mediaInfo = getPlaybackInfo(
@@ -160,13 +153,23 @@ class JellyfinMediaStreamResolver(
 				else -> null
 			}
 
-			if (stream != null) {
-				queueEntry.mediaSourceId = mediaInfo.mediaSource.id
-				queueEntry.liveStreamId = mediaInfo.mediaSource.liveStreamId
-			}
 			negotiation.finish(mediaInfo.mediaSource, stream?.conversionMethod)
 
-			stream
+			val acceptedMediaSourceId = mediaInfo.mediaSource.id
+			val acceptedLiveStreamId = mediaInfo.mediaSource.liveStreamId
+			stream?.copy(onAccepted = {
+				queueEntry.mediaSourceId = acceptedMediaSourceId
+				queueEntry.liveStreamId = acceptedLiveStreamId
+				if (preferDirectPlay) {
+					queueEntry.liveStreamTargetOffset = LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
+					queueEntry.forceTranscoding = null
+				}
+				if (forceLiveTvTranscoding) {
+					queueEntry.forceTranscoding = true
+					queueEntry.forceTranscodingRecoveryAttempts = null
+					queueEntry.forceTranscodingSourceBitrate = liveTvSourceBitrate
+				}
+			})
 		}
 	}
 
