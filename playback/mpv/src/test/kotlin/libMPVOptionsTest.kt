@@ -372,6 +372,7 @@ class LibMPVOptionsTest : StringSpec({
 			"ao" to "",
 			"audio-channels" to "auto-safe",
 			"audio-spdif" to "",
+			"audiotrack-pcm-float" to "yes",
 			"audio-pitch-correction" to "yes",
 			"replaygain" to "no",
 			"vd-lavc-threads" to "0",
@@ -379,6 +380,8 @@ class LibMPVOptionsTest : StringSpec({
 			"sub-ass-override" to "no",
 			"sub-use-margins" to "yes",
 		)
+		LibMPVPlaybackOptions(audioTrackPcmFloat = false)
+			.managedOptions()["audiotrack-pcm-float"] shouldBe "no"
 	}
 
 	"all built-in presets apply their upstream options" {
@@ -634,6 +637,7 @@ class LibMPVOptionsTest : StringSpec({
 		isLibMPVOptionManagedByJellyfin("vo") shouldBe true
 		isLibMPVOptionManagedByJellyfin("hwdec") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-ass-override") shouldBe true
+		isLibMPVOptionManagedByJellyfin("audiotrack-pcm-float") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-max-bytes") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-max-back-bytes") shouldBe true
 	}
