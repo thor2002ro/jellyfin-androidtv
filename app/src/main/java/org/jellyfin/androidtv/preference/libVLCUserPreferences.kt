@@ -10,7 +10,7 @@ import org.jellyfin.preference.enumPreference
 import org.jellyfin.preference.floatPreference
 import org.jellyfin.preference.intPreference
 
-private val libVLCDecoderPreference = enumPreference("libvlc_decoder", LibVLCDecoder.DISABLED)
+private val libVLCDecoderPreference = enumPreference("libvlc_decoder", LibVLCDecoder.AUTOMATIC)
 private val libVLCVideoOutputPreference = enumPreference("libvlc_video_output", LibVLCVideoOutput.AUTOMATIC)
 private val libVLCAudioOutputPreference = enumPreference("libvlc_audio_output", LibVLCAudioOutput.AAUDIO)
 private val libVLCReplayGainPreference = booleanPreference("libvlc_replay_gain", false)
