@@ -93,4 +93,27 @@ class BackendServiceTests : FunSpec({
 		verify { backend.reset() }
 	}
 
+	test("listener removal during notification does not skip remaining listeners") {
+		val service = BackendService()
+		val notifications = mutableListOf<String>()
+		service.addListener(object : PlayerBackendEventListener() {
+			override fun onSubtitleTimingOffsetSupportChange(supported: Boolean, resetTimingOnUnsupported: Boolean) {
+				notifications += "self-removing"
+				service.removeListener(this)
+			}
+		})
+		service.addListener(object : PlayerBackendEventListener() {
+			override fun onSubtitleTimingOffsetSupportChange(supported: Boolean, resetTimingOnUnsupported: Boolean) {
+				notifications += "remaining"
+			}
+		})
+
+		service.BackendEventListener().onSubtitleTimingOffsetSupportChange(
+			supported = false,
+			resetTimingOnUnsupported = true,
+		)
+
+		notifications shouldBe listOf("self-removing", "remaining")
+	}
+
 })

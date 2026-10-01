@@ -154,5 +154,5 @@ class BackendService {
 
 	private fun <T> callListeners(
 		body: PlayerBackendEventListener.() -> T
-	): List<T> = listeners.map { listener -> listener.body() }
+	): List<T> = listeners.toList().map { listener -> listener.body() }
 }
