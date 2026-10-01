@@ -122,6 +122,52 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		(Codec.Audio.AC3 in profile.announcedAudioCodecs()) shouldBe true
 	}
 
+	test("EAC3 JOC decoder keeps the Server 12 EAC3 family available") {
+		val profile = deviceProfile(
+			eac3 = false,
+			supportedAudioMimes = setOf(MimeTypes.AUDIO_E_AC3_JOC),
+			passthroughAudioCodecs = emptySet(),
+		)
+
+		(Codec.Audio.EAC3 in profile.announcedAudioCodecs()) shouldBe true
+	}
+
+	test("DTS Express decoder keeps the Server 12 DTS family available") {
+		val profile = deviceProfile(
+			dts = false,
+			supportedAudioMimes = setOf(MimeTypes.AUDIO_DTS_EXPRESS),
+			passthroughAudioCodecs = emptySet(),
+		)
+		val announcedAudioCodecs = profile.announcedAudioCodecs()
+
+		(Codec.Audio.DCA in announcedAudioCodecs) shouldBe true
+		(Codec.Audio.DTS in announcedAudioCodecs) shouldBe true
+	}
+
+	test("DTS HD decoder keeps the Server 12 DTS family available") {
+		val profile = deviceProfile(
+			dts = false,
+			supportedAudioMimes = setOf(MimeTypes.AUDIO_DTS_HD),
+			passthroughAudioCodecs = emptySet(),
+		)
+		val announcedAudioCodecs = profile.announcedAudioCodecs()
+
+		(Codec.Audio.DCA in announcedAudioCodecs) shouldBe true
+		(Codec.Audio.DTS in announcedAudioCodecs) shouldBe true
+	}
+
+	test("DTS UHD decoder alone does not advertise the broader Server 12 DTS family") {
+		val profile = deviceProfile(
+			dts = false,
+			supportedAudioMimes = setOf(MimeTypes.AUDIO_DTS_UHD_P2),
+			passthroughAudioCodecs = emptySet(),
+		)
+		val announcedAudioCodecs = profile.announcedAudioCodecs()
+
+		(Codec.Audio.DCA in announcedAudioCodecs) shouldBe false
+		(Codec.Audio.DTS in announcedAudioCodecs) shouldBe false
+	}
+
 	test("unavailable and undecodable passthrough codecs are omitted") {
 		val profile = deviceProfile(passthroughAudioCodecs = setOf(Codec.Audio.AC3))
 		val announcedAudioCodecs = profile.announcedAudioCodecs()
