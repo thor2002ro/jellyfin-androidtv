@@ -15,7 +15,7 @@ data class PlaybackTestArguments(
 	val soakIterations: Int,
 ) {
 	companion object {
-		private val allSuites = setOf("resume", "server", "transcode", "backend", "soak", "recovery", "hdmi-audio")
+		private val allSuites = setOf("resume", "server", "transcode", "backend", "soak", "recovery", "hdmi-audio", "updater")
 
 		fun from(values: Map<String, String?>): PlaybackTestArguments {
 			fun value(key: String) = values[key]?.trim()?.takeIf(String::isNotEmpty)
