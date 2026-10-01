@@ -7,6 +7,8 @@
 	<string name="preference_mpv_section_general">General</string>
 	<string name="preference_mpv_section_video">Video rendering</string>
 	<string name="preference_mpv_section_audio">Audio</string>
+	<string name="preference_mpv_shared_audio">Channel layout and passthrough</string>
+	<string name="preference_mpv_shared_audio_description">Uses the shared playback audio mode and detected per-codec passthrough settings. Return to Advanced playback settings to change them.</string>
 	<string name="preference_mpv_section_decoder">Decoder</string>
 	<string name="preference_mpv_section_subtitles">Subtitles</string>
 	<string name="preference_mpv_section_expert">All libMPV options</string>
@@ -57,17 +59,6 @@
 	<string name="preference_mpv_all_options_loaded">%1$d options reported by the bundled libMPV. Some changes require the next media item or may be unsupported by this Android build.</string>
 	<string name="preference_mpv_all_options_loading">Reading the option catalog from libMPV…</string>
 	<string name="preference_mpv_all_options_override_precedence">One name=value entry per line. Only unmanaged options are applied after the typed libMPV profile. Typed libMPV and universal Jellyfin controls are removed from the expert override list.</string>
-	<string name="preference_mpv_audio_channels">Audio channels</string>
-	<string name="preference_mpv_audio_channels_5_1">5.1 surround</string>
-	<string name="preference_mpv_audio_channels_5_1_description">Request a six-channel 5.1 layout.</string>
-	<string name="preference_mpv_audio_channels_7_1">7.1 surround</string>
-	<string name="preference_mpv_audio_channels_7_1_description">Request an eight-channel 7.1 layout.</string>
-	<string name="preference_mpv_audio_channels_auto_description">Send the layout accepted by the output device, preferring the source layout.</string>
-	<string name="preference_mpv_audio_channels_auto_safe">Auto safe</string>
-	<string name="preference_mpv_audio_channels_auto_safe_description">Prefer layouts considered safe for common speakers and receivers.</string>
-	<string name="preference_mpv_audio_channels_description">Control channel-layout negotiation and downmixing.</string>
-	<string name="preference_mpv_audio_channels_stereo">Stereo</string>
-	<string name="preference_mpv_audio_channels_stereo_description">Force a two-channel stereo downmix.</string>
 	<string name="preference_mpv_audio_output">Audio output</string>
 	<string name="preference_mpv_audio_output_audiotrack">AudioTrack</string>
 	<string name="preference_mpv_audio_output_audiotrack_description">Use the Android AudioTrack output driver.</string>
@@ -79,17 +70,6 @@
 	<string name="preference_mpv_audio_output_opensles_description">Use the Android OpenSL ES output driver when compiled in.</string>
 	<string name="preference_mpv_audio_pitch_correction">Pitch correction</string>
 	<string name="preference_mpv_audio_pitch_correction_description">Preserve audio pitch when playback speed changes.</string>
-	<string name="preference_mpv_audio_spdif">Encoded audio passthrough</string>
-	<string name="preference_mpv_audio_spdif_ac3">AC-3</string>
-	<string name="preference_mpv_audio_spdif_ac3_description">Allow AC-3 passthrough.</string>
-	<string name="preference_mpv_audio_spdif_ac3_eac3">AC-3 and E-AC-3</string>
-	<string name="preference_mpv_audio_spdif_ac3_eac3_description">Allow AC-3 and E-AC-3 passthrough.</string>
-	<string name="preference_mpv_audio_spdif_ac3_eac3_dts">AC-3, E-AC-3, and DTS</string>
-	<string name="preference_mpv_audio_spdif_ac3_eac3_dts_description">Allow AC-3, E-AC-3, and core DTS passthrough.</string>
-	<string name="preference_mpv_audio_spdif_all">All common home-theater codecs</string>
-	<string name="preference_mpv_audio_spdif_all_description">Allow AC-3, E-AC-3, DTS, DTS-HD, and TrueHD passthrough.</string>
-	<string name="preference_mpv_audio_spdif_description">Select codecs libMPV may send as encoded IEC 61937 audio. Receiver and Android support still determine actual output.</string>
-	<string name="preference_mpv_audio_spdif_none_description">Decode all audio inside libMPV.</string>
 	<string name="preference_mpv_clear_overrides">Clear overrides</string>
 	<string name="preference_mpv_deband">Debanding</string>
 	<string name="preference_mpv_deband_description">Reduce visible color banding with the GPU deband filter.</string>

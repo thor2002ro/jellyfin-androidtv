@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCDecoder
 import org.jellyfin.androidtv.preference.mpvDecoder
@@ -30,6 +31,7 @@ import org.jellyfin.androidtv.util.profile.bindDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.getSupportedPassthroughAudioMimes
 import org.jellyfin.androidtv.util.profile.retainDoviPlaybackPlanFor
 import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.playback.dovi.doviDecision
@@ -233,7 +235,11 @@ class PlaybackBackendSuite(
 				LibMPVBackend(
 					context = context,
 					videoDecoderProvider = { preferences[UserPreferences.mpvDecoder].decoder },
-					playbackOptionsProvider = { preferences.mpvPlaybackOptions() },
+					playbackOptionsProvider = {
+						preferences.mpvPlaybackOptions(
+							getSupportedPassthroughAudioMimes(context, managedAudioPassthroughMimeTypes)
+						)
+					},
 					gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
 				)
 			},
