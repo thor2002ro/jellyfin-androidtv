@@ -30,7 +30,7 @@ require(libdoviVersions.size == 1) {
 }
 val libdoviVersion = libdoviVersions.single().take(12)
 val libassVersion = run {
-	val header = rootProject.file("dependencies/libass-android/lib_ass/src/main/cpp/libass-cmake/src/ass/libass/ass.h").readText()
+	val header = rootProject.file("dependencies/libass-android/lib_ass/src/main/cpp/include/ass/ass.h").readText()
 	val (major, minor, patch) = requireNotNull(Regex("""(?m)^#define\s+LIBASS_VERSION\s+0x([0-9])([0-9]{2})([0-9]{2})[0-9A-Fa-f]{3}\s*$""").find(header)) {
 		"LIBASS_VERSION not found in vendored libass header"
 	}.destructured
