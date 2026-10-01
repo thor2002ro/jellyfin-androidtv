@@ -23,6 +23,7 @@ fun customMediaOutputProperty(fileName: String, propertyName: String): String {
 
 val customMedia3Version = customMediaOutputProperty("version-media3.txt", "source_version")
 val customMedia3MavenVersion = customMediaOutputProperty("version-media3.txt", "maven_version")
+val customFfmpegProviderVersion = requireNotNull(libs.mpv.ffmpeg.provider.get().version)
 val customMedia3FfmpegDecoderVersion = customMedia3Version
 val customFfmpegVersion = customMediaOutputProperty("version-ffmpeg.txt", "version")
 val customLibyuvVersion = run {
@@ -99,6 +100,10 @@ subprojects {
 	configurations.configureEach {
 		resolutionStrategy.eachDependency {
 			if (requested.group == "androidx.media3") useVersion(customMedia3MavenVersion)
+			// MPV and Media3 share the FFmpeg libraries from the checked-out provider.
+			if (requested.group == "io.github.abdallahmehiz" && requested.name == "mpv-ffmpeg-android") {
+				useVersion(customFfmpegProviderVersion)
+			}
 		}
 	}
 
