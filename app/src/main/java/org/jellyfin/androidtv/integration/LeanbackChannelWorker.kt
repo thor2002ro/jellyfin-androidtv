@@ -30,6 +30,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.auth.repository.SessionRepository
+import org.jellyfin.androidtv.auth.repository.SessionRepositoryState
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.integration.provider.ImageProvider
@@ -64,6 +66,13 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
+
+internal fun canUpdateLeanbackChannels(
+	isSupported: Boolean,
+	apiUsable: Boolean,
+	sessionState: SessionRepositoryState,
+	hasSession: Boolean,
+) = isSupported && apiUsable && sessionState == SessionRepositoryState.READY && hasSession
 
 /**
  * Manages channels on the android tv home screen.
@@ -106,6 +115,7 @@ class LeanbackChannelWorker(
 	}
 
 	private val api by inject<ApiClient>()
+	private val sessionRepository by inject<SessionRepository>()
 	private val userPreferences by inject<UserPreferences>()
 	private val userSettingPreferences by inject<UserSettingPreferences>()
 	private val userViewsRepository by inject<UserViewsRepository>()
@@ -122,8 +132,13 @@ class LeanbackChannelWorker(
 			clearChannels()
 			Result.success()
 		}
-		// Retry later if no authenticated user is found
-		!api.isUsable -> Result.retry()
+		// Retry while authentication or its server-backed preferences are not ready.
+		!canUpdateLeanbackChannels(
+			isSupported = isAvailable(context),
+			apiUsable = api.isUsable,
+			sessionState = sessionRepository.state.value,
+			hasSession = sessionRepository.currentSession.value != null,
+		) -> Result.retry()
 		else -> try {
 			// Get next up episodes
 			val (resumeItems, nextUpItems) = getNextUpItems()
