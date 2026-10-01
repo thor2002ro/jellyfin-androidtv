@@ -15,6 +15,16 @@ import org.jellyfin.sdk.model.api.MediaStreamType
 import java.util.UUID
 
 class SeriesStreamBadgeAggregatorTests : FunSpec({
+	test("series badge enrichment includes every item in the retrieved page") {
+		val series = List(80) { index ->
+			BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.SERIES, name = "Series $index")
+		}
+
+		val candidates = series.seriesOrSeasonStreamBadgeCandidates()
+
+		candidates.map(BaseItemDto::id) shouldBe series.map(BaseItemDto::id)
+	}
+
 	test("grouped series badges enrich every series") {
 		val firstSeriesId = UUID.randomUUID()
 		val secondSeriesId = UUID.randomUUID()
@@ -363,6 +373,16 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 		DirectStreamBadgeCache.clear()
 	}
 
+	test("direct badge cache evicts least recently used entries") {
+		DirectStreamBadgeCache.clear()
+		val ids = List(513) { UUID.randomUUID() }
+		ids.forEach { id -> DirectStreamBadgeCache.save(id, emptyList()) }
+
+		DirectStreamBadgeCache.get(ids.first()) shouldBe null
+		DirectStreamBadgeCache.get(ids.last()) shouldBe emptyList()
+		DirectStreamBadgeCache.clear()
+	}
+
 	test("season badges use episode samples") {
 		val seasonId = UUID.randomUUID()
 
@@ -515,6 +535,18 @@ class SeriesStreamBadgeAggregatorTests : FunSpec({
 		SeriesStreamBadgeCache.save(seriesId, seriesId, listOf(completeBadgeEpisode(seriesId)))
 
 		SeriesStreamBadgeCache.get(seriesId)?.single()?.defaultAudioLanguage() shouldBe "eng"
+		SeriesStreamBadgeCache.clear()
+	}
+
+	test("series badge cache evicts least recently used entries") {
+		SeriesStreamBadgeCache.clear()
+		val seriesIds = List(513) { UUID.randomUUID() }
+		seriesIds.forEach { seriesId ->
+			SeriesStreamBadgeCache.save(seriesId, seriesId, listOf(completeBadgeEpisode(seriesId)))
+		}
+
+		SeriesStreamBadgeCache.get(seriesIds.first()) shouldBe null
+		SeriesStreamBadgeCache.get(seriesIds.last())?.single()?.defaultAudioLanguage() shouldBe "eng"
 		SeriesStreamBadgeCache.clear()
 	}
 
