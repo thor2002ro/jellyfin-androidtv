@@ -1,6 +1,8 @@
 package org.jellyfin.androidtv.preference.store
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jellyfin.preference.Preference
 import org.jellyfin.preference.PreferenceEnum
@@ -10,8 +12,6 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.extensions.displayPreferenceApi
 import org.jellyfin.sdk.model.api.DisplayPreferencesDto
-import org.jellyfin.sdk.model.api.ScrollDirection
-import org.jellyfin.sdk.model.api.SortOrder
 import timber.log.Timber
 
 @Suppress("TooManyFunctions")
@@ -22,38 +22,37 @@ abstract class DisplayPreferencesStore(
 ) : AsyncPreferenceStore<Unit, Unit>() {
 	private var displayPreferencesDto: DisplayPreferencesDto? = null
 	private var cachedPreferences: MutableMap<String, String?> = mutableMapOf()
+	private val commitMutex = Mutex()
 	override val shouldUpdate: Boolean
 		get() = displayPreferencesDto == null
 
-	override suspend fun commit(): Boolean {
-		if (displayPreferencesDto == null) return false
+	override suspend fun commit(): Boolean = commitMutex.withLock {
+		val preferencesDto = displayPreferencesDto ?: return@withLock false
 
 		try {
 			api.displayPreferenceApi.updateDisplayPreferences(
 				displayPreferencesId = displayPreferencesId,
 				client = app,
-				data = displayPreferencesDto!!.copy(
-					customPrefs = cachedPreferences
+				data = preferencesDto.copy(
+					customPrefs = cachedPreferences.toMap()
 				)
 			)
 		} catch (err: ApiClientException) {
 			Timber.e(err, "Unable to save displaypreferences. (displayPreferencesId=$displayPreferencesId, app=$app)")
-			return false
+			return@withLock false
 		}
 
-		return true
+		true
 	}
 
 	/**
 	 * Clear local copy of display preferences and require an update for new modifications.
 	 */
 	fun clearCache(): Boolean {
-		if (displayPreferencesDto == null) return false
-
+		val hadCachedValues = displayPreferencesDto != null || cachedPreferences.isNotEmpty()
 		displayPreferencesDto = null
 		cachedPreferences.clear()
-
-		return true
+		return hadCachedValues
 	}
 
 	override suspend fun update(): Boolean {
@@ -70,12 +69,6 @@ abstract class DisplayPreferencesStore(
 			return true
 		} catch (err: ApiClientException) {
 			Timber.e(err, "Unable to retrieve displaypreferences. (displayPreferencesId=$displayPreferencesId, app=$app)")
-
-			if (displayPreferencesDto == null) {
-				Timber.d("Creating an empty DisplayPreferencesDto for next commit.")
-				displayPreferencesDto = DisplayPreferencesDto.empty()
-			}
-
 			return false
 		}
 	}
@@ -138,19 +131,4 @@ abstract class DisplayPreferencesStore(
 	override fun runMigrations(body: MigrationContext<Unit, Unit>.() -> Unit) {
 		TODO("The DisplayPreferencesStore does not support migrations")
 	}
-
-	/**
-	 * Create an empty [DisplayPreferencesDto] with default values.
-	 */
-	private fun DisplayPreferencesDto.Companion.empty() = DisplayPreferencesDto(
-		primaryImageHeight = 0,
-		primaryImageWidth = 0,
-		customPrefs = emptyMap(),
-		rememberIndexing = false,
-		scrollDirection = ScrollDirection.HORIZONTAL,
-		rememberSorting = false,
-		showBackdrop = false,
-		showSidebar = false,
-		sortOrder = SortOrder.ASCENDING
-	)
 }
