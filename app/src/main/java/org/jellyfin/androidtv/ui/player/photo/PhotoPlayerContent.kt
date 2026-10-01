@@ -9,18 +9,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
 import org.jellyfin.androidtv.ui.composable.AsyncImage
-import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ImageType
-import org.koin.compose.koinInject
 
 @Composable
 fun PhotoPlayerContent(
 	item: BaseItemDto?,
 ) {
-	val api = koinInject<ApiClient>()
 	val resources = LocalResources.current
 
 	AnimatedContent(
@@ -32,12 +28,9 @@ fun PhotoPlayerContent(
 		val image = item?.itemImages[ImageType.PRIMARY]
 
 		AsyncImage(
-			url = image?.getUrl(
-				api = api,
-				maxWidth = resources.displayMetrics.widthPixels,
-				maxHeight = resources.displayMetrics.heightPixels,
-			),
-			blurHash = image?.blurHash,
+			image = image,
+			maxWidth = resources.displayMetrics.widthPixels,
+			maxHeight = resources.displayMetrics.heightPixels,
 			aspectRatio = image?.aspectRatio ?: 1f,
 			modifier = Modifier
 				.fillMaxSize()
