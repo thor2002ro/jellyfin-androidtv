@@ -1,17 +1,80 @@
 package org.jellyfin.androidtv.ui.presentation
 
-import android.view.KeyEvent
+import android.view.ViewGroup
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.leanback.widget.Presenter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
+import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
 
 class HorizontalGridPresenterTests : FunSpec({
-	test("up only leaves a horizontal grid from its top row") {
-		shouldForwardHorizontalGridKey(position = 0, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe true
-		shouldForwardHorizontalGridKey(position = 3, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe true
-		shouldForwardHorizontalGridKey(position = 1, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe false
-		shouldForwardHorizontalGridKey(position = 2, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe false
-		shouldForwardHorizontalGridKey(position = 1, rows = 3, KeyEvent.KEYCODE_DPAD_DOWN) shouldBe true
+	test("shared card grid selection notifies only when the selected item changes") {
+		val presenter = TestBrowseCardGridPresenter()
+		val selected = mutableListOf<Any?>()
+		presenter.setOnItemViewSelectedListener { _, item, _, _ -> selected += item }
+		val first = Any()
+		val replacement = Any()
+
+		presenter.select(position = 4, item = first)
+		presenter.select(position = 4, item = first)
+		presenter.select(position = 4, item = replacement)
+
+		selected.shouldBe(listOf(first, replacement))
+		presenter.getPosition().shouldBe(4)
+	}
+
+	test("vertical and horizontal card grids share selection position behavior") {
+		val presenters: List<BrowseCardGridPresenter> = listOf(
+			HorizontalGridPresenter(),
+			ComposeVerticalGridPresenter(),
+		)
+
+		presenters.forEach { presenter ->
+			presenter.setPosition(37)
+			presenter.setPosition(-1)
+			presenter.getPosition().shouldBe(37)
+		}
+	}
+
+	test("vertical and horizontal card grids share normalized layout configuration") {
+		val presenters: List<BrowseCardGridPresenter> = listOf(
+			HorizontalGridPresenter(),
+			ComposeVerticalGridPresenter(),
+		)
+
+		presenters.forEach { presenter ->
+			presenter.configure(
+				imageType = ImageType.POSTER,
+				cardHeight = 180,
+				spanCount = 0,
+				horizontalSpacing = 8,
+				verticalSpacing = 6,
+				showCardTitles = true,
+				paddingStart = 12,
+				paddingEnd = 14,
+				verticalPadding = 16,
+			)
+
+			presenter.getSpanCount().shouldBe(1)
+		}
+	}
+
+	test("only the focused item receives the restore focus requester") {
+		val requester = FocusRequester()
+
+		Modifier.restoreFocusRequesterWhen(focused = false, requester) shouldBe Modifier
+		Modifier.restoreFocusRequesterWhen(focused = true, requester) shouldNotBe Modifier
+	}
+
+	test("only cards in the actual top row leave a horizontal grid on up") {
+		val visibleTops = listOf(10, 260, 510, 10, 260, 510)
+
+		isTopHorizontalGridRow(selectedTop = 10, visibleTops) shouldBe true
+		isTopHorizontalGridRow(selectedTop = 260, visibleTops) shouldBe false
+		isTopHorizontalGridRow(selectedTop = 510, visibleTops) shouldBe false
 	}
 
 	test("compact card spacing only changes the gap between cards") {
@@ -67,30 +130,12 @@ class HorizontalGridPresenterTests : FunSpec({
 		syncs.shouldBe(1)
 	}
 
-	test("initial horizontal position starts at the restored item") {
-		findHorizontalGridInitialItemIndex(itemCount = 50, selectedPosition = 37).shouldBe(37)
-	}
-
-	test("initial horizontal position clamps a stale selection") {
-		findHorizontalGridInitialItemIndex(itemCount = 12, selectedPosition = 37).shouldBe(11)
-		findHorizontalGridInitialItemIndex(itemCount = 0, selectedPosition = 37).shouldBe(0)
-	}
-
 	test("repeated updates from the same adapter keep the existing grid attachment") {
 		val state = HorizontalGridPresenter.State()
 		val adapter = Any()
 
 		state.bindAdapter(adapter).shouldBe(true)
 		state.bindAdapter(adapter).shouldBe(false)
-	}
-
-	test("a new grid attachment receives the last requested position") {
-		val state = HorizontalGridPresenter.State()
-
-		state.setPosition(37)
-		state.position.shouldBe(37)
-		state.unbindAdapter()
-		state.position.shouldBe(37)
 	}
 
 	test("unbinding permits the same adapter to attach to a replacement grid") {
@@ -102,3 +147,11 @@ class HorizontalGridPresenterTests : FunSpec({
 		state.bindAdapter(adapter).shouldBe(true)
 	}
 })
+
+private class TestBrowseCardGridPresenter : BrowseCardGridPresenter() {
+	override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder = error("Not used")
+	override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) = Unit
+	override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder) = Unit
+
+	fun select(position: Int, item: Any) = notifyItemSelected(null, position, item)
+}
