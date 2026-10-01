@@ -33,21 +33,17 @@ class HomeFragmentHelper(
 		return HomeFragmentRecentlyReleasedRow(userRepository, userViews, itemLimit)
 	}
 
-	fun loadFavoriteVideos(): HomeFragmentRow {
-		return HomeFragmentFavoriteVideosRow(itemLimit)
-	}
-
 	fun loadResume(title: String, includeMediaTypes: Collection<MediaType>): HomeFragmentRow {
-		val query = GetResumeItemsRequest(
-			limit = effectiveHomeRowItemLimit(itemLimit, ITEM_LIMIT_RESUME),
-			fields = if (MediaType.VIDEO in includeMediaTypes) ItemRepository.streamBadgeFields else ItemRepository.browseFields,
-			imageTypeLimit = 1,
-			enableTotalRecordCount = false,
-			mediaTypes = includeMediaTypes,
-			excludeItemTypes = setOf(BaseItemKind.AUDIO_BOOK),
-		)
+		val query = createHomeResumeRequest(includeMediaTypes)
 
-		return HomeFragmentBrowseRowDefRow(BrowseRowDef(title, query, 0, false, true, arrayOf(ChangeTriggerType.TvPlayback, ChangeTriggerType.MoviePlayback)))
+		return HomeFragmentBrowseRowDefRow(BrowseRowDef(
+			header = title,
+			query = query,
+			chunkSize = 0,
+			preferParentThumb = MediaType.VIDEO in includeMediaTypes,
+			staticHeight = true,
+			changeTriggers = arrayOf(ChangeTriggerType.TvPlayback, ChangeTriggerType.MoviePlayback),
+		))
 	}
 
 	fun loadResumeVideo(combineWithNextUp: Boolean = false): HomeFragmentRow {
@@ -58,12 +54,12 @@ class HomeFragmentHelper(
 		val query = createHomeNextUpRequest(
 			itemLimit = itemLimit,
 			includeRewatching = includeNextUpRewatching,
-			includeResumable = true,
 		)
 		return HomeFragmentBrowseRowDefRow(
 			BrowseRowDef(
 				context.getString(R.string.home_combined_continue_watching_next_up),
 				query,
+				createHomeResumeRequest(listOf(MediaType.VIDEO)),
 				arrayOf(ChangeTriggerType.TvPlayback, ChangeTriggerType.MoviePlayback),
 			)
 		)
@@ -91,6 +87,15 @@ class HomeFragmentHelper(
 
 		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_next_up), query, arrayOf(ChangeTriggerType.TvPlayback)))
 	}
+
+	private fun createHomeResumeRequest(includeMediaTypes: Collection<MediaType>) = GetResumeItemsRequest(
+		limit = effectiveHomeRowItemLimit(itemLimit, ITEM_LIMIT_RESUME),
+		fields = if (MediaType.VIDEO in includeMediaTypes) ItemRepository.streamBadgeFields else ItemRepository.browseFields,
+		imageTypeLimit = 1,
+		enableTotalRecordCount = false,
+		mediaTypes = includeMediaTypes,
+		excludeItemTypes = setOf(BaseItemKind.AUDIO_BOOK),
+	)
 
 	fun loadOnNow(onLongClick: ((item: Any?, view: View) -> Boolean)? = null): HomeFragmentRow {
 		val query = GetRecommendedProgramsRequest(
@@ -121,11 +126,11 @@ internal fun effectiveHomeRowItemLimit(configuredLimit: Int, maximum: Int) =
 internal fun createHomeNextUpRequest(
 	itemLimit: Int,
 	includeRewatching: Boolean,
-	includeResumable: Boolean = false,
 ) = GetNextUpRequest(
 	imageTypeLimit = 1,
 	limit = effectiveHomeRowItemLimit(itemLimit, maximum = ITEM_LIMIT_NEXT_UP),
-	enableResumable = includeResumable,
+	enableTotalRecordCount = false,
+	enableResumable = false,
 	enableRewatching = includeRewatching,
 	fields = ItemRepository.streamBadgeFields,
 )
