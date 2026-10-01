@@ -125,6 +125,11 @@ class BrowseGridFragmentTests : FunSpec({
 		BrowseGridFragment.pixelsToDp(100, 2f) shouldBe 50
 	}
 
+	test("horizontal card titles fit inside every grid row") {
+		BrowseGridFragment.getHorizontalBrowseCardHeight(124, false) shouldBe 124
+		BrowseGridFragment.getHorizontalBrowseCardHeight(124, true) shouldBe 98
+	}
+
 	test("browse grid keeps the appropriate bottom control band clear of cards") {
 		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.HORIZONTAL) shouldBe 35
 		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.VERTICAL) shouldBe 24

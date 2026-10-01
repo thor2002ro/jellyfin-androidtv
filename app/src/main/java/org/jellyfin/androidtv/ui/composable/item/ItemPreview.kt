@@ -80,11 +80,12 @@ fun ItemPreviewLayout(
 	SubcomposeLayout(
 		modifier = modifier,
 	) { constraints ->
-		val cardPlaceables = subcompose("card", card).map { it.measure(constraints) }
+		val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+		val cardPlaceables = subcompose("card", card).map { it.measure(looseConstraints) }
 		val cardWidth = cardPlaceables.maxOf { it.width }
 		val cardHeight = cardPlaceables.maxOf { it.height }
 
-		val childConstraints = constraints.copy(minWidth = cardWidth, maxWidth = cardWidth)
+		val childConstraints = looseConstraints.copy(minWidth = cardWidth, maxWidth = cardWidth)
 		val metadataPlaceables = subcompose("metadata", metadata).map { it.measure(childConstraints) }
 		val metadataHeight = metadataPlaceables.maxOf { it.height }
 

@@ -146,6 +146,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final double CARD_SPACING_HORIZONTAL_BANNER_PCT = 0.5; // 50% allow horizontal card overlapping for banners, otherwise spacing is too large
     private final int VIEW_SELECT_UPDATE_DELAY = 250; // delay in ms until we update the top-row info for a selected item
     private final int SELECTION_RESTORE_WINDOW_MS = 1500;
+    private static final int BROWSE_CARD_TITLE_HEIGHT_DP = 26;
     private static final int OVERLAY_FOCUS_NONE = 0;
     private static final int OVERLAY_FOCUS_FILTERS = 1;
     private static final int OVERLAY_FOCUS_SETTINGS = 2;
@@ -350,6 +351,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     static int pixelsToDp(int pixels, float density) {
         return Math.round(pixels / density);
+    }
+
+    static int getHorizontalBrowseCardHeight(int rowHeight, boolean showCardTitles) {
+        return Math.max(rowHeight - (showCardTitles ? BROWSE_CARD_TITLE_HEIGHT_DP : 0), 1);
     }
 
     static boolean shouldShowAlphabetPicker(GridDirection pickerDirection, GridDirection gridDirection) {
@@ -882,16 +887,17 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
             double wastedSpacePct = paddingPct + spacingPct;
             double usableCardSpace = mGridHeight / (1.0 + wastedSpacePct); // decrease size
-            double cardHeight = usableCardSpace / numRows;
+            double rowHeight = usableCardSpace / numRows;
 
             // fix any rounding errors and make pixel perfect
-            cardHeightInt = (int) Math.round(cardHeight);
-            double cardPaddingTopBottomAdj = cardHeightInt * cardScaling;
+            int rowHeightInt = (int) Math.round(rowHeight);
+            cardHeightInt = getHorizontalBrowseCardHeight(rowHeightInt, mShowCardTitles);
+            double cardPaddingTopBottomAdj = rowHeightInt * cardScaling;
             spacingVerticalInt = Math.max((int) (Math.round((cardPaddingTopBottomAdj / 2.0) * CARD_SPACING_PCT)), 0); // round spacing
-            int paddingTopBottomInt = mGridHeight - ((cardHeightInt * numRows) + (spacingVerticalInt * (numRows - 1)));
+            int paddingTopBottomInt = mGridHeight - ((rowHeightInt * numRows) + (spacingVerticalInt * (numRows - 1)));
             paddingTopInt = Math.max(paddingTopBottomInt / 2, 0);
 
-            int sumSize = (cardHeightInt * numRows) + (spacingVerticalInt * (numRows - 1)) + (paddingTopInt * 2);
+            int sumSize = (rowHeightInt * numRows) + (spacingVerticalInt * (numRows - 1)) + (paddingTopInt * 2);
             if (Math.abs(sumSize - mGridHeight) > 2) {
                 Timber.w("setAutoCardGridValues calculation delta > 2, something is off GridHeight <%s> sumSize <%s>!", mGridHeight, sumSize);
             }
