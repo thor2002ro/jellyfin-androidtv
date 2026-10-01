@@ -65,6 +65,7 @@ import org.jellyfin.androidtv.util.apiclient.EmptyResponse;
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage;
 import org.jellyfin.androidtv.util.apiclient.Response;
 import org.jellyfin.androidtv.util.sdk.BaseItemExtensionsKt;
+import org.jellyfin.androidtv.util.sdk.VideoRangeFormatter;
 import org.jellyfin.sdk.model.api.MediaSourceInfo;
 import org.jellyfin.sdk.model.api.MediaStream;
 import org.jellyfin.sdk.model.api.MediaStreamType;
@@ -1414,7 +1415,7 @@ public class CustomPlaybackOverlayFragment extends Fragment implements View.OnKe
 			summary.append(stream.getWidth()).append("x").append(stream.getHeight());
 		}
 		appendInline(summary, stream.getCodec() == null ? null : stream.getCodec().toUpperCase());
-		appendInline(summary, stream.getVideoRange() == null ? null : stream.getVideoRange().toString());
+		appendInline(summary, VideoRangeFormatter.formatVideoRange(stream.getVideoRangeType(), stream.getVideoRange()));
 		return summary.toString();
 	}
 
