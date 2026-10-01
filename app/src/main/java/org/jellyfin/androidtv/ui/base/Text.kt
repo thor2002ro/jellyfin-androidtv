@@ -8,8 +8,6 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -46,7 +44,7 @@ fun Text(
 
 	BasicText(
 		text = text,
-		modifier = modifier.graphicsLayer { this.compositingStrategy = CompositingStrategy.Offscreen },
+		modifier = modifier,
 		style = style.merge(
 			color = textColor,
 			fontSize = fontSize,
@@ -91,7 +89,7 @@ fun Text(
 
 	BasicText(
 		text = text,
-		modifier = modifier.graphicsLayer { this.compositingStrategy = CompositingStrategy.Offscreen },
+		modifier = modifier,
 		style =
 			style.merge(
 				color = textColor,
