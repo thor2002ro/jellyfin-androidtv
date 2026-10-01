@@ -74,6 +74,7 @@ private const val DefaultPlaybackSpeed = 1.0
 @Composable
 fun VideoPlayerControls(
 	playbackManager: PlaybackManager = koinInject(),
+	onPlayPauseClick: () -> Unit,
 	initialFocusRequester: FocusRequester,
 	item: BaseItemDto? = null,
 	mediaSourceId: String? = null,
@@ -188,8 +189,8 @@ fun VideoPlayerControls(
 					}
 			) {
 				PlayPauseButton(
-					playbackManager = playbackManager,
 					playState = playState,
+					onClick = onPlayPauseClick,
 					enabled = playPauseEnabled,
 					modifier = if (playPauseEnabled) initialFocusModifier else Modifier,
 				)
@@ -377,8 +378,8 @@ fun VideoPlayerSeekControls(
 
 @Composable
 private fun PlayPauseButton(
-	playbackManager: PlaybackManager,
 	playState: PlayState,
+	onClick: () -> Unit,
 	enabled: Boolean = true,
 	modifier: Modifier = Modifier,
 ) {
@@ -393,16 +394,7 @@ private fun PlayPauseButton(
 		}
 	)
 	IconButton(
-		onClick = {
-			when (playState) {
-				PlayState.STOPPED,
-				PlayState.ERROR -> playbackManager.state.play()
-
-				PlayState.PLAYING -> playbackManager.state.pause()
-				PlayState.BUFFERING -> playbackManager.state.pause()
-				PlayState.PAUSED -> playbackManager.state.unpause()
-			}
-		},
+		onClick = onClick,
 		modifier = modifier,
 		enabled = enabled,
 		colors = IconButtonDefaults.colors(

@@ -102,7 +102,7 @@ fun VideoPlayerOverlay(
 	var overlayWakeKeyCode by remember { mutableStateOf<Int?>(null) }
 	var nextUpPromptKeyCode by remember { mutableStateOf<Int?>(null) }
 	var skipPromptKeyCode by remember { mutableStateOf<Int?>(null) }
-	var centerShortcutKeyCode by remember { mutableStateOf<Int?>(null) }
+	val centerShortcutState = remember { CenterShortcutState() }
 	var seekPauseOverlaySuppressed by remember { mutableStateOf(false) }
 	var seekOverlayVisible by remember { mutableStateOf(false) }
 	var seekOverlayJob by remember { mutableStateOf<Job?>(null) }
@@ -117,8 +117,6 @@ fun VideoPlayerOverlay(
 	var backToStopDeadline by remember { mutableStateOf(0L) }
 	var backToStopKeyCode by remember { mutableStateOf<Int?>(null) }
 	var lastBackRequestAt by remember { mutableStateOf(0L) }
-	var centerLongPressTriggered by remember { mutableStateOf(false) }
-	var centerLongPressJob by remember { mutableStateOf<Job?>(null) }
 	var previousPlayState by remember { mutableStateOf(playState) }
 	var showLiveTvGuide by remember { mutableStateOf(false) }
 	var nextUpStartInProgress by remember { mutableStateOf(false) }
@@ -218,7 +216,7 @@ fun VideoPlayerOverlay(
 		if (nextIndex <= 0 || nextIndex > videoQueueManager.getCurrentVideoQueue().lastIndex) return
 
 		nextUpStartInProgress = true
-		centerShortcutKeyCode = null
+		centerShortcutState.keyCode = null
 		coroutineScope.launch {
 			val nextEntry = playbackManager.queue.peekNext(usePlaybackOrder = false, useRepeatMode = false)
 			if (nextEntry == null) {
@@ -310,9 +308,9 @@ fun VideoPlayerOverlay(
 	}
 
 	fun clearCenterLongPress() {
-		centerLongPressJob?.cancel()
-		centerLongPressJob = null
-		centerLongPressTriggered = false
+		centerShortcutState.longPressJob?.cancel()
+		centerShortcutState.longPressJob = null
+		centerShortcutState.longPressTriggered = false
 	}
 
 	fun showSeekOverlay() {
@@ -459,7 +457,7 @@ fun VideoPlayerOverlay(
 				if (promptTarget != null && !(endingSkipPromptVisible && shouldHandleNextUpPrompt())) {
 					if (keyEvent.action == KeyEvent.ACTION_DOWN) {
 						clearCenterLongPress()
-						centerShortcutKeyCode = null
+						centerShortcutState.keyCode = null
 						skipPromptKeyCode = keyCode
 						playbackManager.state.seek(promptTarget)
 						skipPromptTarget = null
@@ -473,7 +471,7 @@ fun VideoPlayerOverlay(
 					KeyEvent.ACTION_DOWN -> {
 						if (keyEvent.repeatCount == 0) {
 							clearCenterLongPress()
-							centerShortcutKeyCode = null
+							centerShortcutState.keyCode = null
 							nextUpPromptKeyCode = keyCode
 							startNextItemNow()
 						}
@@ -487,13 +485,12 @@ fun VideoPlayerOverlay(
 				}
 			}
 
-			if (keyEvent.action == KeyEvent.ACTION_UP && centerShortcutKeyCode == keyCode) {
-				val shouldTogglePlayback = !centerLongPressTriggered
-				centerShortcutKeyCode = null
+			if (keyEvent.action == KeyEvent.ACTION_UP && centerShortcutState.keyCode == keyCode) {
+				val shouldTogglePlayback = !centerShortcutState.longPressTriggered
+				centerShortcutState.keyCode = null
 				clearCenterLongPress()
 				if (shouldTogglePlayback) {
 					togglePlayback()
-					visibilityState.show()
 				}
 				return@handler true
 			}
@@ -528,12 +525,12 @@ fun VideoPlayerOverlay(
 				when (keyEvent.action) {
 					KeyEvent.ACTION_DOWN -> {
 						if (keyEvent.repeatCount == 0) {
-							centerShortcutKeyCode = keyCode
-							centerLongPressTriggered = false
-							centerLongPressJob?.cancel()
-							centerLongPressJob = coroutineScope.launch {
+							centerShortcutState.keyCode = keyCode
+							centerShortcutState.longPressTriggered = false
+							centerShortcutState.longPressJob?.cancel()
+							centerShortcutState.longPressJob = coroutineScope.launch {
 								delay(CenterLongPressDuration)
-								centerLongPressTriggered = true
+								centerShortcutState.longPressTriggered = true
 								showPlaybackInfo = !showPlaybackInfo
 							}
 						}
@@ -574,7 +571,7 @@ fun VideoPlayerOverlay(
 
 	DisposableEffect(Unit) {
 		onDispose {
-			centerLongPressJob?.cancel()
+			centerShortcutState.longPressJob?.cancel()
 			cancelPendingSeek()
 			currentOnRemoteKeyEventHandlerChanged(null)
 		}
@@ -601,6 +598,7 @@ fun VideoPlayerOverlay(
 			controls = {
 				VideoPlayerControls(
 					playbackManager = playbackManager,
+					onPlayPauseClick = ::togglePlayback,
 					initialFocusRequester = initialControlsFocusRequester,
 					item = item,
 					mediaSourceId = entry?.mediaSourceId,
@@ -762,6 +760,13 @@ fun VideoPlayerOverlay(
 
 		MediaToasts(mediaToastRegistry)
 	}
+}
+
+// These input-only fields do not affect rendering, so keep them outside Compose snapshot state.
+private class CenterShortcutState {
+	var keyCode: Int? = null
+	var longPressTriggered = false
+	var longPressJob: Job? = null
 }
 
 internal fun isPendingSeekCurrent(

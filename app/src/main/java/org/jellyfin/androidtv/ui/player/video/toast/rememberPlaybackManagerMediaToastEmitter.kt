@@ -2,17 +2,11 @@ package org.jellyfin.androidtv.ui.player.video.toast
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
-import kotlin.time.Duration.Companion.milliseconds
-
-private val PauseToastDelay = 750.milliseconds
 
 @Composable
 fun rememberPlaybackManagerMediaToastEmitter(
@@ -20,44 +14,45 @@ fun rememberPlaybackManagerMediaToastEmitter(
 	mediaToastRegistry: MediaToastRegistry,
 ) {
 	LaunchedEffect(playbackManager) {
-		var active = false
-		var pauseToastJob: Job? = null
-		var pauseToastEmitted = false
+		val toastState = PlaybackMediaToastState()
 
 		playbackManager.state.playState
 			.collect { playState ->
-				if (!active) {
-					active = playState.isActivePlayback
-					return@collect
-				}
-
-				when (playState) {
-					PlayState.PLAYING,
-					PlayState.BUFFERING -> {
-						if (pauseToastJob?.isActive == true) {
-							pauseToastJob?.cancel()
-						} else if (pauseToastEmitted) {
-							if (mediaToastRegistry.current.value == null) mediaToastRegistry.emit(R.drawable.ic_play)
-						}
-
-						pauseToastJob = null
-						pauseToastEmitted = false
-					}
-
-					PlayState.PAUSED -> {
-						pauseToastJob?.cancel()
-						pauseToastEmitted = false
-						pauseToastJob = launch {
-							delay(PauseToastDelay)
-							if (mediaToastRegistry.current.value == null) {
-								mediaToastRegistry.emit(R.drawable.ic_pause)
-								pauseToastEmitted = true
-							}
-						}
-					}
-
-					else -> Unit
-				}
+				toastState.update(playState)?.let { icon -> mediaToastRegistry.emit(icon) }
 			}
+	}
+}
+
+// Track pause and resume independently from buffering so each user action emits feedback once.
+internal class PlaybackMediaToastState {
+	private var active = false
+	private var paused = false
+
+	fun update(playState: PlayState): Int? {
+		if (!active) {
+			active = playState.isActivePlayback
+			return null
+		}
+
+		return when (playState) {
+			PlayState.PAUSED -> if (paused) null else {
+				paused = true
+				R.drawable.ic_pause
+			}
+
+			PlayState.PLAYING -> if (paused) {
+				paused = false
+				R.drawable.ic_play
+			} else null
+
+			PlayState.STOPPED,
+			PlayState.ERROR -> {
+				active = false
+				paused = false
+				null
+			}
+
+			PlayState.BUFFERING -> null
+		}
 	}
 }
