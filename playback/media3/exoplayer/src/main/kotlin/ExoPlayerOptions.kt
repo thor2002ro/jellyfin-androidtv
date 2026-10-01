@@ -6,6 +6,7 @@ import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlin.time.Duration
 
 data class ExoPlayerOptions(
+	val isAudioPassthroughEnabled: (String) -> Boolean = { true },
 	val preferFfmpegAudio: () -> Boolean = { false },
 	val preferFfmpegAudioForLiveTv: () -> Boolean = { false },
 	val preferFfmpegVideo: () -> Boolean = { false },
