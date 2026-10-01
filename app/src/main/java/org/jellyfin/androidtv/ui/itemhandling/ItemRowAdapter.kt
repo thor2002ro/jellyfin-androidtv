@@ -52,6 +52,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var query: GetItemsRequest? = null
 	private var nextUpQuery: GetNextUpRequest? = null
 	internal var nextUpQueryProvider: (() -> GetNextUpRequest)? = null
+	internal var combinedResumeQuery: GetResumeItemsRequest? = null
 	private var seasonQuery: GetSeasonsRequest? = null
 	private var upcomingQuery: GetUpcomingEpisodesRequest? = null
 	private var similarQuery: GetSimilarItemsRequest? = null
@@ -66,6 +67,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var albumArtistsQuery: GetAlbumArtistsRequest? = null
 	private var latestQuery: GetLatestMediaRequest? = null
 	private var resumeQuery: GetResumeItemsRequest? = null
+	internal var initialUserViews: Collection<BaseItemDto>? = null
 
 	var queryType: QueryType = QueryType.Items
 		private set
@@ -709,11 +711,19 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 				}
 			}
 
-			QueryType.NextUp -> retrieveNextUpItems(api, nextUpQueryProvider?.invoke() ?: requireNotNull(nextUpQuery))
+			QueryType.NextUp -> retrieveNextUpItems(
+				api = api,
+				query = nextUpQueryProvider?.invoke() ?: requireNotNull(nextUpQuery),
+				combinedResumeQuery = combinedResumeQuery,
+			)
 			QueryType.LatestItems -> retrieveLatestMedia(api, requireNotNull(latestQuery))
 			QueryType.Upcoming -> retrieveUpcomingEpisodes(api, requireNotNull(upcomingQuery))
 			QueryType.Season -> retrieveSeasons(api, requireNotNull(seasonQuery))
-			QueryType.Views -> retrieveUserViews(api, userViewsRepository)
+			QueryType.Views -> retrieveUserViews(
+				api = api,
+				userViewsRepository = userViewsRepository,
+				initialViews = initialUserViews.also { initialUserViews = null },
+			)
 			QueryType.SimilarSeries,
 			QueryType.SimilarMovies -> retrieveSimilarItems(api, requireNotNull(similarQuery))
 

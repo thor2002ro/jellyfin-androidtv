@@ -467,8 +467,6 @@
     <string name="home_recently_released">Recently released rows</string>
     <string name="home_recently_released_description">Show library rows ordered by release date</string>
     <string name="lbl_recently_released_in">Recently released in %1$s</string>
-    <string name="home_favorite_videos">Favorite videos row</string>
-    <string name="home_favorite_videos_description">Show favorite movies, shows, and videos on Home</string>
     <string name="home_appearance">Appearance</string>
     <string name="home_wide_cards">Use wide media cards</string>
     <string name="home_wide_cards_description">Use landscape artwork for Next up, Recently added, and recording rows</string>

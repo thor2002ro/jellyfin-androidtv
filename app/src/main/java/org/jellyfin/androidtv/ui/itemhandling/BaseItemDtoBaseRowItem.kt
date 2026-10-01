@@ -142,10 +142,17 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 			baseItem?.type == BaseItemKind.AUDIO -> baseItem.albumPrimaryImage
 			else -> null
 		} ?: baseItem?.itemImages[ImageType.PRIMARY]
+		val preferredThumb = when {
+			preferParentThumb && baseItem?.type == BaseItemKind.EPISODE -> baseItem.parentImages[ImageType.THUMB]
+				?: baseItem.seriesThumbImage
+			preferParentThumb && baseItem?.type == BaseItemKind.SEASON -> baseItem.parentImages[ImageType.THUMB]
+				?: baseItem.seriesThumbImage
+			else -> null
+		}
 
 		return when (imageType) {
 			BaseRowImageType.BANNER -> baseItem?.itemImages[ImageType.BANNER] ?: primaryImage
-			BaseRowImageType.THUMB -> baseItem?.itemImages[ImageType.THUMB] ?: primaryImage
+			BaseRowImageType.THUMB -> preferredThumb ?: baseItem?.itemImages[ImageType.THUMB] ?: primaryImage
 			else -> primaryImage
 		}
 	}
