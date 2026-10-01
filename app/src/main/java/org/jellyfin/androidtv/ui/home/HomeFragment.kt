@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -23,11 +25,14 @@ import androidx.fragment.compose.content
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.auth.repository.SessionRepository
+import org.jellyfin.androidtv.constant.CustomMessage
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbarActiveButton
@@ -37,6 +42,7 @@ class HomeFragment : Fragment() {
 	private val sessionRepository by inject<SessionRepository>()
 	private val serverRepository by inject<ServerRepository>()
 	private val notificationRepository by inject<NotificationsRepository>()
+	private val customMessageRepository by inject<CustomMessageRepository>()
 
 	override fun onCreateView(
 		inflater: LayoutInflater,
@@ -45,6 +51,14 @@ class HomeFragment : Fragment() {
 	) = content {
 		val rowsFocusRequester = remember { FocusRequester() }
 		LaunchedEffect(rowsFocusRequester) { rowsFocusRequester.requestFocus() }
+		var homeRowsGeneration by remember { mutableIntStateOf(0) }
+		LaunchedEffect(customMessageRepository) {
+			customMessageRepository.message
+				.drop(1)
+				.collect { message ->
+					if (shouldRecreateHomeRows(message)) homeRowsGeneration++
+				}
+		}
 
 		Column {
 			MainToolbar(MainToolbarActiveButton.Home)
@@ -52,27 +66,29 @@ class HomeFragment : Fragment() {
 			// The leanback code has its own awful focus handling that doesn't work properly with Compose view inteop to workaround this
 			// issue we add custom behavior that only allows focus exit when the current selected row is the first one. Additionally when
 			// we do switch the focus, we reset the leanback state so it won't cause weird behavior when focus is regained
-			var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
-			AndroidFragment<HomeRowsFragment>(
-				modifier = Modifier
-					.focusGroup()
-					.focusRequester(rowsFocusRequester)
-					.focusProperties {
-						onExit = {
-							val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
-							if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {
-								cancelFocusChange()
-							} else {
-								rowsSupportFragment?.selectedPosition = 0
-								rowsSupportFragment?.verticalGridView?.clearFocus()
+			key(homeRowsGeneration) {
+				var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
+				AndroidFragment<HomeRowsFragment>(
+					modifier = Modifier
+						.focusGroup()
+						.focusRequester(rowsFocusRequester)
+						.focusProperties {
+							onExit = {
+								val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
+								if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {
+									cancelFocusChange()
+								} else {
+									rowsSupportFragment?.selectedPosition = 0
+									rowsSupportFragment?.verticalGridView?.clearFocus()
+								}
 							}
 						}
+						.fillMaxSize(),
+					onUpdate = { fragment ->
+						rowsSupportFragment = fragment
 					}
-					.fillMaxSize(),
-				onUpdate = { fragment ->
-					rowsSupportFragment = fragment
-				}
-			)
+				)
+			}
 		}
 	}
 
@@ -91,3 +107,6 @@ class HomeFragment : Fragment() {
 			.launchIn(viewLifecycleOwner.lifecycleScope)
 	}
 }
+
+internal fun shouldRecreateHomeRows(message: CustomMessage?) =
+	message == CustomMessage.RefreshHomeConfiguration

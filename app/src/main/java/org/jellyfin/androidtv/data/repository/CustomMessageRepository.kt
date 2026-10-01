@@ -1,23 +1,25 @@
 package org.jellyfin.androidtv.data.repository
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.jellyfin.androidtv.constant.CustomMessage
 
 interface CustomMessageRepository {
-	val message: StateFlow<CustomMessage?>
+	val message: SharedFlow<CustomMessage?>
 	fun pushMessage(message: CustomMessage)
 }
 
 class CustomMessageRepositoryImpl : CustomMessageRepository {
-	private val _message = MutableStateFlow<CustomMessage?>(null)
-	override val message get() = _message.asStateFlow()
+	private val _message = MutableSharedFlow<CustomMessage?>(
+		replay = 1,
+		extraBufferCapacity = 1,
+		onBufferOverflow = BufferOverflow.DROP_OLDEST,
+	).apply { tryEmit(null) }
+	override val message get() = _message.asSharedFlow()
 
 	override fun pushMessage(message: CustomMessage) {
-		// Make sure to re-emit the same message if requested
-		if (_message.value == message) _message.value = null
-
-		_message.value = message
+		_message.tryEmit(message)
 	}
 }

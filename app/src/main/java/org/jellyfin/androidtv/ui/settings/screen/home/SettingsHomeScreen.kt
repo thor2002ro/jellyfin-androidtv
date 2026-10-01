@@ -8,10 +8,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
 import org.jellyfin.androidtv.constant.distinctHomeSections
 import org.jellyfin.androidtv.constant.hasSameHomeContentAs
-import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
@@ -28,8 +29,8 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingsHomeScreen() {
 	val router = LocalRouter.current
-	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val customMessageRepository = koinInject<CustomMessageRepository>()
 	val sections = compactHomeSections(userSettingPreferences.homesections.map(userSettingPreferences::get))
 	val activeSections = sections.filterNot { it == HomeSectionType.NONE }
 
@@ -66,14 +67,14 @@ fun SettingsHomeScreen() {
 			ListSection(headingContent = { Text(stringResource(R.string.home_additional_rows)) })
 		}
 
-		item { HomeRecentlyReleasedPreference(userSettingPreferences) }
+		item { HomeRecentlyReleasedPreference(userSettingPreferences, customMessageRepository) }
 
 		item {
 			ListSection(headingContent = { Text(stringResource(R.string.home_appearance)) })
 		}
 
 		item {
-			HomeWideCardsPreference(userSettingPreferences)
+			HomeWideCardsPreference(userSettingPreferences, customMessageRepository)
 		}
 
 		item {
@@ -86,40 +87,56 @@ fun SettingsHomeScreen() {
 			)
 		}
 
-		item { HomeCombineContinueWatchingNextUpPreference(userSettingPreferences) }
+		item { HomeCombineContinueWatchingNextUpPreference(userSettingPreferences, customMessageRepository) }
 
 		item {
-			HomeNextUpRewatchingPreference(userSettingPreferences)
+			HomeNextUpRewatchingPreference(userSettingPreferences, customMessageRepository)
 		}
 
 		item {
-			HomeNextUpCutoffPreference(userPreferences)
+			HomeNextUpCutoffPreference(userSettingPreferences)
 		}
 	}
 }
 
 @Composable
-private fun HomeWideCardsPreference(userSettingPreferences: UserSettingPreferences) {
-	var homeWideCards by rememberPreference(userSettingPreferences, UserSettingPreferences.homeWideCards)
+private fun HomeWideCardsPreference(
+	userSettingPreferences: UserSettingPreferences,
+	customMessageRepository: CustomMessageRepository,
+) {
+	var homeWideCards by rememberPreference(
+		userSettingPreferences,
+		UserSettingPreferences.homeWideCards,
+	) { customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration) }
 
 	ListButton(
 		headingContent = { Text(stringResource(R.string.home_wide_cards)) },
 		captionContent = { Text(stringResource(R.string.home_wide_cards_description)) },
 		trailingContent = { Checkbox(checked = homeWideCards) },
-		onClick = { homeWideCards = !homeWideCards },
+		onClick = {
+			homeWideCards = !homeWideCards
+		},
 		modifier = Modifier.focusKey("home_wide_cards")
 	)
 }
 
 @Composable
-private fun HomeRecentlyReleasedPreference(userSettingPreferences: UserSettingPreferences) {
-	var recentlyReleased by rememberPreference(userSettingPreferences, UserSettingPreferences.homeRecentlyReleased)
+private fun HomeRecentlyReleasedPreference(
+	userSettingPreferences: UserSettingPreferences,
+	customMessageRepository: CustomMessageRepository,
+) {
+	var recentlyReleased by rememberPreference(
+		userSettingPreferences,
+		UserSettingPreferences.homeRecentlyReleased,
+	) { customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration) }
 
 	ListButton(
 		headingContent = { Text(stringResource(R.string.home_recently_released)) },
 		captionContent = { Text(stringResource(R.string.home_recently_released_description)) },
 		trailingContent = { Checkbox(checked = recentlyReleased) },
-		onClick = { recentlyReleased = !recentlyReleased },
+		onClick = {
+			recentlyReleased = !recentlyReleased
+		},
 		modifier = Modifier.focusKey("home_recently_released")
 	)
 }
@@ -127,7 +144,7 @@ private fun HomeRecentlyReleasedPreference(userSettingPreferences: UserSettingPr
 @Composable
 private fun HomeRowItemLimitPreference(userSettingPreferences: UserSettingPreferences) {
 	val router = LocalRouter.current
-	val homeRowItemLimit by rememberPreference(userSettingPreferences, UserSettingPreferences.homeRowItemLimit)
+	val homeRowItemLimit = userSettingPreferences[UserSettingPreferences.homeRowItemLimit]
 	val effectiveItemLimit = effectiveHomeRowItemLimit(homeRowItemLimit, maximum = 50)
 
 	ListButton(
@@ -139,22 +156,30 @@ private fun HomeRowItemLimitPreference(userSettingPreferences: UserSettingPrefer
 }
 
 @Composable
-private fun HomeNextUpRewatchingPreference(userSettingPreferences: UserSettingPreferences) {
-	var includeRewatching by rememberPreference(userSettingPreferences, UserSettingPreferences.homeNextUpRewatching)
+private fun HomeNextUpRewatchingPreference(
+	userSettingPreferences: UserSettingPreferences,
+	customMessageRepository: CustomMessageRepository,
+) {
+	var includeRewatching by rememberPreference(
+		userSettingPreferences,
+		UserSettingPreferences.homeNextUpRewatching,
+	) { customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration) }
 
 	ListButton(
 		headingContent = { Text(stringResource(R.string.home_next_up_rewatching)) },
 		captionContent = { Text(stringResource(R.string.home_next_up_rewatching_description)) },
 		trailingContent = { Checkbox(checked = includeRewatching) },
-		onClick = { includeRewatching = !includeRewatching },
+		onClick = {
+			includeRewatching = !includeRewatching
+		},
 		modifier = Modifier.focusKey("home_next_up_rewatching")
 	)
 }
 
 @Composable
-private fun HomeNextUpCutoffPreference(userPreferences: UserPreferences) {
+private fun HomeNextUpCutoffPreference(userSettingPreferences: UserSettingPreferences) {
 	val router = LocalRouter.current
-	val homeNextUpMaxDays by rememberPreference(userPreferences, UserPreferences.homeNextUpMaxDays)
+	val homeNextUpMaxDays = userSettingPreferences[UserSettingPreferences.homeNextUpMaxDays]
 	val options = getNextUpCutoffOptions()
 	val selectedCaption = options.firstOrNull { it.first == homeNextUpMaxDays }?.second
 		?: stringResource(R.string.home_next_up_max_days_disabled)
@@ -168,7 +193,9 @@ private fun HomeNextUpCutoffPreference(userPreferences: UserPreferences) {
 }
 
 internal fun compactHomeSections(sections: List<HomeSectionType>): List<HomeSectionType> {
-	val active = sections.filterNot { it == HomeSectionType.NONE }.distinctHomeSections()
+	val active = sections
+		.filterNot { it == HomeSectionType.NONE || it == HomeSectionType.RESUME_BOOK }
+		.distinctHomeSections()
 	return active + List(sections.size - active.size) { HomeSectionType.NONE }
 }
 
