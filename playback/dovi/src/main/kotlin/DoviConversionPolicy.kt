@@ -7,10 +7,12 @@ import io.github.thor2002ro.libdovi.DoviRepair
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.github.thor2002ro.libdovi.DoviTransformObservation
 import io.github.thor2002ro.libdovi.DoviTransformRequest
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
 
 enum class DoviCompatibilityMode {
 	AUTO,
+	FAST_HDR,
 	ALWAYS,
 	COMPATIBILITY,
 	OFF,
@@ -104,6 +106,7 @@ sealed interface DoviRoute {
 
 	data class SourceBase(
 		val request: DoviTransformRequest,
+		val strategy: DoviTransformStrategy = DoviTransformStrategy.LIBDOVI,
 	) : DoviRoute
 
 	data object ServerFallback : DoviRoute
@@ -210,11 +213,19 @@ object DoviCompatibilityPolicy {
 
 		return when (input.mode) {
 			DoviCompatibilityMode.AUTO -> decideAuto(input)
+			DoviCompatibilityMode.FAST_HDR -> decideFastHdr(input)
 			DoviCompatibilityMode.ALWAYS -> decideAlways(input)
 			DoviCompatibilityMode.COMPATIBILITY -> decideCompatibility(input)
 			DoviCompatibilityMode.OFF -> error("Handled above")
 		}.withTransformEvidence(input.source)
 	}
+
+	private fun decideFastHdr(input: Input): DoviDecision =
+		if (input.isFastHdrEligible()) {
+			input.sourceBaseDecision(DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK)
+		} else {
+			decideAuto(input)
+		}
 
 	private fun DoviDecision.withTransformEvidence(source: DoviSource): DoviDecision =
 		if (request == null) this else copy(
@@ -240,9 +251,22 @@ object DoviCompatibilityPolicy {
 		) {
 			transform(DoviTarget.PROFILE_8_1, reason = DoviDecisionReason.PROFILE_8_1)
 		} else {
-			input.sourceBaseDecision()
+			input.sourceBaseDecision(input.autoSourceBaseStrategy())
 		}
 	}
+
+	private fun Input.autoSourceBaseStrategy(): DoviTransformStrategy =
+		if (isFastHdrEligible()) {
+			DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+		} else {
+			DoviTransformStrategy.LIBDOVI
+		}
+
+	private fun Input.isFastHdrEligible(): Boolean =
+		backend == DoviPlaybackBackend.MEDIA3 &&
+			codec == DoviVideoCodec.HEVC &&
+			source.profile == DoviSourceProfile.PROFILE_8_1 &&
+			source.sourceBasePresentation in setOf(DoviPresentation.HDR10, DoviPresentation.HDR10_PLUS)
 
 	private fun decideAlways(input: Input): DoviDecision {
 		if (!input.source.profile.isProfile5Or7()) {
@@ -360,7 +384,9 @@ object DoviCompatibilityPolicy {
 		}
 	}
 
-	private fun Input.sourceBaseDecision(): DoviDecision {
+	private fun Input.sourceBaseDecision(
+		strategy: DoviTransformStrategy = DoviTransformStrategy.LIBDOVI,
+	): DoviDecision {
 		val baseSupported = when (source.sourceBasePresentation) {
 			DoviPresentation.HDR10 -> device.supportsHdr10
 			DoviPresentation.HDR10_PLUS -> device.supportsHdr10Plus
@@ -374,7 +400,10 @@ object DoviCompatibilityPolicy {
 			supports(DoviTarget.SOURCE_BASE_PRESENTATION)
 		) {
 			DoviDecision(
-				route = DoviRoute.SourceBase(DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION)),
+				route = DoviRoute.SourceBase(
+					request = DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
+					strategy = strategy,
+				),
 				reason = DoviDecisionReason.SOURCE_BASE,
 			)
 		} else {
