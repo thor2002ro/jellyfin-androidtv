@@ -1896,6 +1896,14 @@ class ExoPlayerBackend(
 		maxRenderMs = maxRenderMs,
 		lastRenderMs = lastRenderMs,
 		openGlMode = openGlMode,
+		metadataReuseCount = metadataReuseCount,
+		incrementalAtlasUpdateCount = incrementalAtlasUpdateCount,
+		completeAtlasReplacementCount = completeAtlasReplacementCount,
+		nativeCopiedMaskBytes = nativeCopiedMaskBytes,
+		glUploadedMaskBytes = glUploadedMaskBytes,
+		glUploadSubmissionMs = glUploadSubmissionMs,
+		activeSurfacePixels = activeSurfacePixels,
+		allocatedSurfacePixels = allocatedSurfacePixels,
 	)
 
 	private fun currentTsExtractorFlags(): Int? {
