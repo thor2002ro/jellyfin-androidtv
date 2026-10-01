@@ -19,6 +19,7 @@ import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.appendInline
 import org.jellyfin.androidtv.ui.playback.appendStatusPart
 import org.jellyfin.androidtv.ui.playback.displayName
+import org.jellyfin.androidtv.util.sdk.formatVideoRange
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
@@ -91,7 +92,7 @@ private fun MediaStreamVideoTrack?.videoSummary(): String? {
 	return buildString {
 		if (width > 0 && height > 0) append("${width}x$height")
 		appendInline(codec.uppercase())
-		appendInline(videoRange)
+		appendInline(videoRange.formatVideoRange())
 	}
 }
 
