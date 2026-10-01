@@ -6,6 +6,8 @@ import androidx.leanback.widget.Presenter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import org.jellyfin.androidtv.data.model.FilterOptions
+import org.jellyfin.androidtv.data.model.PlaybackFilter
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.constant.GridDirection
 import org.jellyfin.androidtv.ui.presentation.ComposeVerticalGridPresenter
@@ -41,6 +43,30 @@ class BrowseGridFragmentTests : FunSpec({
 
 	test("horizontal browse uses the Compose grid presenter") {
 		BrowseGridFragment.createGridPresenter(GridDirection.HORIZONTAL).javaClass shouldBe HorizontalGridPresenter::class.java
+	}
+
+	test("fresh sort and filter queries choose only valid positions") {
+		BrowseGridFragment.nextSelectionAfterQueryChange(50) shouldBe 0
+		BrowseGridFragment.nextSelectionAfterQueryChange(0) shouldBe -1
+	}
+
+	test("empty results keep filter clearing reachable") {
+		BrowseGridFragment.shouldKeepToolbarFocusable(0, true) shouldBe true
+		BrowseGridFragment.shouldKeepToolbarFocusable(0, false) shouldBe false
+	}
+
+	test("watched filter removes an item refreshed as unplayed") {
+		val filters = FilterOptions(playback = PlaybackFilter.WATCHED)
+
+		BrowseGridFragment.shouldRemoveFilteredItem(filters, true, false) shouldBe true
+		BrowseGridFragment.shouldRemoveFilteredItem(filters, true, true) shouldBe false
+	}
+
+	test("unchanged filters do not start another library query") {
+		val current = FilterOptions(playback = PlaybackFilter.UNWATCHED)
+
+		BrowseGridFragment.shouldApplyLibraryFilters(current, current.copy()) shouldBe false
+		BrowseGridFragment.shouldApplyLibraryFilters(current, FilterOptions()) shouldBe true
 	}
 
 	test("vertical browse keeps the alphabet rail compact while horizontal stays edge aligned") {

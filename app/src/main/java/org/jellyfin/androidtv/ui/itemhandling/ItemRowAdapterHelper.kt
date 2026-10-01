@@ -1470,12 +1470,13 @@ fun ItemRowAdapter.refreshItem(
 	api: ApiClient,
 	lifecycleOwner: LifecycleOwner,
 	currentBaseRowItem: BaseRowItem,
-	callback: () -> Unit = {}
+	callback: (BaseRowItem?) -> Unit = {},
 ) {
 	if (currentBaseRowItem !is BaseItemDtoBaseRowItem || currentBaseRowItem is AudioQueueBaseRowItem) return
 	val currentBaseItem = currentBaseRowItem.baseItem ?: return
 
 	lifecycleOwner.lifecycleScope.launch {
+		var refreshedRowItem: BaseRowItem? = null
 		runCatching {
 			withContext(Dispatchers.IO) {
 				api.libraryApi.getItem(itemId = currentBaseItem.id).content
@@ -1486,9 +1487,10 @@ fun ItemRowAdapter.refreshItem(
 				// Item could be removed while API was loading, check if the index is valid first
 				if (index == -1) return@fold
 
+				refreshedRowItem = currentBaseRowItem.copyWithItem(refreshedBaseItem)
 				set(
 					index = index,
-					element = currentBaseRowItem.copyWithItem(refreshedBaseItem)
+					element = requireNotNull(refreshedRowItem),
 				)
 			},
 			onFailure = { err ->
@@ -1497,6 +1499,6 @@ fun ItemRowAdapter.refreshItem(
 			}
 		)
 
-		callback()
+		callback(refreshedRowItem)
 	}
 }
