@@ -56,9 +56,9 @@ object TrackSelectionResolver {
 	): Int? {
 		val itemIds = item.trackSelectionIds()
 		val streamIndex = TrackSelectionManager.getSelectedAudioTrack(itemIds) ?: return null
-		if (item.isLiveTv()) return streamIndex
-		if (mediaSource == null) return null
+		if (mediaSource == null) return streamIndex.takeIf { item.isLiveTv() }
 		if (mediaSource.hasMediaStream(MediaStreamType.AUDIO, streamIndex)) return streamIndex
+		if (item.isLiveTv() && mediaSource.mediaStreamsOfType(MediaStreamType.AUDIO).isEmpty()) return streamIndex
 
 		TrackSelectionManager.setSelectedAudioTracks(itemIds, null)
 		return null
@@ -73,9 +73,10 @@ object TrackSelectionResolver {
 		val selection = TrackSelectionManager.getSelectedSubtitleTrackSelection(itemIds)
 		if (!selection.hasSelection) return selection
 		if (selection.trackIndex == -1) return selection
-		if (item.isLiveTv()) return selection
-		if (mediaSource == null) return TrackSelectionManager.TrackSelection(hasSelection = false, trackIndex = null)
+		if (mediaSource == null) return selection.takeIf { item.isLiveTv() }
+			?: TrackSelectionManager.TrackSelection(hasSelection = false, trackIndex = null)
 		if (selection.trackIndex != null && mediaSource.hasMediaStream(MediaStreamType.SUBTITLE, selection.trackIndex)) return selection
+		if (item.isLiveTv() && mediaSource.mediaStreamsOfType(MediaStreamType.SUBTITLE).isEmpty()) return selection
 
 		TrackSelectionManager.setSelectedSubtitleTracks(itemIds, null)
 		return TrackSelectionManager.TrackSelection(hasSelection = false, trackIndex = null)
