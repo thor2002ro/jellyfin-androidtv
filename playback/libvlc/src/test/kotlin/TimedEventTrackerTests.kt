@@ -10,6 +10,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamContainer
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.timedevent.TimedEvent
@@ -226,6 +227,33 @@ class TimedEventTrackerTests : StringSpec({
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 12) shouldBe 0
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 9) shouldBe 1
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 4) shouldBe 2
+
+		for (conversionMethod in listOf(MediaConversionMethod.Remux, MediaConversionMethod.Transcode)) {
+			val hlsStream = stream.copy(
+				conversionMethod = conversionMethod,
+				url = "http://example.test/master.m3u8",
+				selectedSubtitleStreamIndex = 9,
+			)
+			val deliveredSubtitles = hlsStream.libVLCSourceTracks(TrackType.SUBTITLE, embeddedSubtitleCount = 0)
+			deliveredSubtitles.map { it.index } shouldBe listOf(9, 4)
+			hlsStream.sourceTrackIndex(TrackType.SUBTITLE, 12, embeddedSubtitleCount = 0) shouldBe null
+			hlsStream.sourceTrackIndex(TrackType.SUBTITLE, 9, embeddedSubtitleCount = 0) shouldBe 0
+			hlsStream.sourceTrackIndex(TrackType.SUBTITLE, 4, embeddedSubtitleCount = 0) shouldBe 1
+			hlsStream.allowsLocalTrackSelection(TrackType.SUBTITLE, deliveredSubtitles.first()) shouldBe true
+			hlsStream.copy(selectedSubtitleStreamIndex = 12)
+				.libVLCSourceTracks(TrackType.SUBTITLE, embeddedSubtitleCount = 0)
+				.map { it.index } shouldBe listOf(9, 4)
+		}
+		stream.copy(conversionMethod = MediaConversionMethod.Remux, selectedSubtitleStreamIndex = 12)
+			.libVLCSourceTracks(TrackType.SUBTITLE, embeddedSubtitleCount = 1)
+			.map { it.index } shouldBe listOf(12, 9, 4)
+		val anotherEmbedded = MediaStreamSubtitleTrack(20, "webvtt", "it", "Italian", isExternal = false)
+		stream.copy(
+			conversionMethod = MediaConversionMethod.Remux,
+			selectedSubtitleStreamIndex = 20,
+			tracks = stream.tracks + anotherEmbedded,
+		).libVLCSourceTracks(TrackType.SUBTITLE, embeddedSubtitleCount = 1)
+			.map { it.index } shouldBe listOf(20, 9, 4)
 	}
 
 	"libVLC buffer details clamp invalid progress and do not claim cache speed" {

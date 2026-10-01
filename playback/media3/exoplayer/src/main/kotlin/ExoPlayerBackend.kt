@@ -88,6 +88,8 @@ import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
+import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
+import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.mediastream.mediatype.MediaType
@@ -321,6 +323,20 @@ internal fun canPreloadNextItem(libassEnabled: Boolean) = !libassEnabled
 
 internal fun canMeasureLibassPerformance(libassEnabled: Boolean, renderType: AssRenderType) =
 	libassEnabled && renderType != AssRenderType.CUES
+
+internal fun PlayableMediaStream.initialLocalSubtitleStreamIndex(): Int? =
+	selectedSubtitleStreamIndex?.takeIf { streamIndex ->
+		if (streamIndex < 0) {
+			allowsLocalSubtitleDisable()
+		} else {
+			subtitleTrack(streamIndex)
+				?.let { track -> allowsLocalTrackSelection(TrackType.SUBTITLE, track) } == true
+		}
+	}
+
+private fun PlayableMediaStream.subtitleTrack(streamIndex: Int) = tracks
+	.filterIsInstance<MediaStreamSubtitleTrack>()
+	.firstOrNull { track -> track.index == streamIndex }
 
 internal fun Throwable.doviTransformationPlaybackErrorCode(): String? {
 	var current: Throwable? = this
@@ -2276,11 +2292,17 @@ class ExoPlayerBackend(
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
 		return getSourceTracks(type).mapIndexed { index, track ->
-			val supportedTrack = if (currentStream?.conversionMethod == MediaConversionMethod.None) {
+			val usesLocalSelection = currentStream?.allowsLocalTrackSelection(type, track) == true
+			val supportedTrack = if (usesLocalSelection) {
 				findSupportedTrack(type, index, track)
 			} else null
-			val isSelected = supportedTrack?.groupInfo?.isTrackSelected(supportedTrack.trackIndex)
-				?: isSelectedSourceTrack(type, track.index)
+			// Client-owned tracks must reflect Media3's current selection; the source index
+			// does not change when the user switches an external subtitle locally.
+			val isSelected = if (usesLocalSelection) {
+				supportedTrack?.groupInfo?.isTrackSelected(supportedTrack.trackIndex) == true
+			} else {
+				isSelectedSourceTrack(type, track.index)
+			}
 
 			PlayerTrack(
 				index = index,
@@ -2301,7 +2323,7 @@ class ExoPlayerBackend(
 
 		// Handle subtitle disable
 		if (type == TrackType.SUBTITLE && index == -1) {
-			if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
+			if (currentStream?.allowsLocalSubtitleDisable() != true) return false
 
 			val params = exoPlayer.trackSelectionParameters.buildUpon()
 				.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -2310,9 +2332,8 @@ class ExoPlayerBackend(
 			return true
 		}
 
-		if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
-
 		val sourceTrack = getSourceTracks(type).getOrNull(index)
+		if (sourceTrack == null || currentStream?.allowsLocalTrackSelection(type, sourceTrack) != true) return false
 		val match = findSupportedTrack(type, index, sourceTrack)
 		if (match == null) {
 			Timber.w("Could not find track with index $index")
@@ -2430,13 +2451,18 @@ class ExoPlayerBackend(
 	}
 
 	private fun PlayableMediaStream.initialTrackSelection(): PendingInitialTrackSelection? {
-		if (conversionMethod != MediaConversionMethod.None) return null
-		if (selectedAudioStreamIndex == null && selectedSubtitleStreamIndex == null) return null
+		// Remuxed or transcoded audio is selected by the server. External subtitles remain
+		// selectable in Media3 and are handled independently above.
+		val audioStreamIndex = selectedAudioStreamIndex.takeIf {
+			conversionMethod == MediaConversionMethod.None
+		}
+		val subtitleStreamIndex = initialLocalSubtitleStreamIndex()
+		if (audioStreamIndex == null && subtitleStreamIndex == null) return null
 
 		return PendingInitialTrackSelection(
 			stream = this,
-			audioStreamIndex = selectedAudioStreamIndex,
-			subtitleStreamIndex = selectedSubtitleStreamIndex,
+			audioStreamIndex = audioStreamIndex,
+			subtitleStreamIndex = subtitleStreamIndex,
 		)
 	}
 
