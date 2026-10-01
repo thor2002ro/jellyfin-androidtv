@@ -40,9 +40,21 @@ import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.androidtv.util.AndroidVersion
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
+import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
+import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
+import org.jellyfin.androidtv.util.profile.DoviWorkaroundProvider
+import org.jellyfin.androidtv.util.profile.DoviWorkaroundRuleSource
+import org.jellyfin.androidtv.util.profile.DoviPlaybackNegotiationStore
+import org.jellyfin.androidtv.util.profile.retainsDoviDecision
+import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.playback.core.playbackManager
+import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.dovi.doviConversionSuppressed
 import org.jellyfin.playback.core.plugin.playbackPlugin
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
+import org.jellyfin.playback.jellyfin.JellyfinDeviceProfileRequest
+import org.jellyfin.playback.jellyfin.queue.baseItem
+import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamOptions
 import org.jellyfin.playback.libvlc.LibVLCBackend
 import org.jellyfin.playback.libvlc.LibVLCInstanceOptions
@@ -62,6 +74,9 @@ import kotlin.time.Duration.Companion.milliseconds
 import org.jellyfin.androidtv.ui.playback.PlaybackManager as LegacyPlaybackManager
 
 val playbackModule = module {
+	single<DoviWorkaroundRuleSource> { DoviWorkaroundRuleSource.Empty }
+	single { DoviWorkaroundProvider(ruleSource = get()) }
+	single { DoviPlaybackNegotiationStore() }
 	single { LegacyPlaybackManager(get()) }
 	single { VideoQueueManager(get()) }
 	single<MediaManager> { RewriteMediaManager(get(), get()) }
@@ -104,7 +119,10 @@ private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
 		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
 		baseDataSourceFactory = get<HttpDataSource.Factory>(),
 	)
-	return ExoPlayerBackend(androidContext(), exoPlayerOptions)
+	return ExoPlayerBackend(
+		context = androidContext(),
+		exoPlayerOptions = exoPlayerOptions,
+	)
 }
 
 private fun Scope.createLibVLCBackend(): LibVLCBackend {
@@ -163,7 +181,26 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	)
 	install(media3SessionPlugin(get(), mediaSessionOptions))
 
-	val deviceProfileBuilder = { createDeviceProfile(androidContext(), userPreferences, get()) }
+	val doviMediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled])
+	val doviWorkaroundProvider = get<DoviWorkaroundProvider>()
+	val doviNegotiations = get<DoviPlaybackNegotiationStore>()
+	val deviceProfileBuilder = { queueEntry: QueueEntry ->
+		val doviPlan = queueEntry.baseItem?.let { item ->
+			createDoviPlaybackPlan(
+				item = item,
+				mediaSourceId = queueEntry.mediaSourceId,
+				userPreferences = userPreferences,
+				mediaTest = doviMediaTest,
+				retrySuppressed = queueEntry.doviConversionSuppressed == true,
+				workarounds = doviWorkaroundProvider.resolve(),
+				displayHdrTypes = getSupportedDisplayHdrTypes(androidContext()),
+			)
+		}
+		val (profile, token) = doviNegotiations.prepare(queueEntry, doviPlan) {
+			createDeviceProfile(androidContext(), userPreferences, get(), doviPlan)
+		}
+		JellyfinDeviceProfileRequest(profile, token)
+	}
 	val videoQueueManager = get<VideoQueueManager>()
 	install(jellyfinPlugin(
 		api = get(),
@@ -179,6 +216,16 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 		lifecycle = ProcessLifecycleOwner.get().lifecycle,
 		liveTvDirectPlayEnabled = { userPreferences[UserPreferences.liveTvDirectPlayEnabled] },
 		networkAvailable = { androidContext().isNetworkAvailable() },
+		doviDecisionValidator = { queueEntry, token, mediaSource, conversionMethod, expectedDecision ->
+			if (
+				mediaSource == null ||
+				!conversionMethod.retainsDoviDecision()
+			) {
+				doviNegotiations.cancel(queueEntry, token)
+			} else {
+				doviNegotiations.complete(queueEntry, token, mediaSource, expectedDecision)
+			}
+		},
 	))
 
 	// Options
