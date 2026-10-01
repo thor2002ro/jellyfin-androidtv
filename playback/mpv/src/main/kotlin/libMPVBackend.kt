@@ -1463,7 +1463,7 @@ class LibMPVBackend(
 			}
 			"error" -> {
 				val fileError = data["file_error"]?.asString() ?: "unknown MPV file error"
-				handlePlaybackError(fileError)
+				handlePlaybackError(fileError, mpvPlaybackErrorCode(fileError))
 			}
 			else -> handlePlaybackError("MPV ended playback for reason: $reason")
 		}
@@ -1755,6 +1755,11 @@ class LibMPVBackend(
 		}
 		if (Looper.myLooper() == Looper.getMainLooper()) guardedBlock() else handler.post(guardedBlock)
 	}
+}
+
+internal fun mpvPlaybackErrorCode(message: String): String = when {
+	message.contains("http", ignoreCase = true) -> "MPV_HTTP_ERROR"
+	else -> "MPV_ERROR"
 }
 
 private val TrackType.selectionProperty: String
