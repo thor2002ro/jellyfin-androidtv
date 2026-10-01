@@ -240,15 +240,22 @@ class LibMPVBackend(
 	private val effectiveVideoDecoderValue: String
 		get() = effectiveVideoDecoder.mpvValue
 	private val effectiveVideoOutput: String
-		get() = effectiveLibMPVVideoOutput(
-			configured = playbackOptions.videoOutput,
-			decoder = effectiveVideoDecoder,
-			videoRange = currentStream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()?.videoRange,
-		)
+		get() {
+			val videoTrack = currentStream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()
+			return effectiveLibMPVVideoOutput(
+				configured = playbackOptions.videoOutput,
+				decoder = effectiveVideoDecoder,
+				videoRange = videoTrack?.videoRange,
+				videoWidth = videoTrack?.width ?: 0,
+				videoHeight = videoTrack?.height ?: 0,
+				videoFrameRate = videoTrack?.realFrameRate,
+				videoMetadataDescribesOutput = currentStream?.conversionMethod != MediaConversionMethod.Transcode,
+			)
+		}
 	private val usesNativeSubtitleOverlay: Boolean
 		get() = shouldUseNativeSubtitleOverlay(
-			videoRange = currentStream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()?.videoRange,
 			videoOutput = effectiveVideoOutput,
+			hasSelectedSubtitle = tracks.any { track -> track.type == TrackType.SUBTITLE && track.isSelected },
 		)
 
 	override val videoDecoderOptions = LibMPVVideoDecoder.entries.map { decoder ->
@@ -1142,11 +1149,18 @@ class LibMPVBackend(
 				?: throw IllegalArgumentException("Unknown MPV decoder option: ${candidate.id}")
 		}
 		if (forcedVideoDecoder == decoder) return
+		val previousVideoOutput = effectiveVideoOutput
 		forcedVideoDecoder = decoder
 		val canRecreateImmediately = currentStream == null ||
 			terminalState == PlayState.STOPPED ||
 			terminalState == PlayState.ERROR
-		if (canRecreateImmediately) ensureInstanceOptions() else applyVideoDecoder()
+		if (canRecreateImmediately) {
+			ensureInstanceOptions()
+		} else {
+			val videoOutput = effectiveVideoOutput
+			if (videoOutput != previousVideoOutput) setOption("vo", videoOutput)
+			applyVideoDecoder()
+		}
 		updateNativeSubtitleOverlayMode()
 	}
 
@@ -1246,6 +1260,8 @@ class LibMPVBackend(
 			number("total-avsync-change", " ms", 1_000.0)?.let { put("A/V sync correction", it) }
 			count("mistimed-frame-count")?.let { put("Mistimed frames", it) }
 			count("vo-delayed-frame-count")?.let { put("Delayed frames", it) }
+			put("Decoder drops", decoderDropped.toString())
+			put("Output drops", outputDropped.toString())
 			string("video-frame-info/picture-type")?.let { put("Picture type", it) }
 			string("video-frame-info/tff")?.let { put("Top field first", it) }
 			string("video-frame-info/repeat")?.let { put("Repeated frame", it) }
@@ -1595,6 +1611,7 @@ class LibMPVBackend(
 	private fun updateTracks(node: MPVNode, notify: Boolean = true) {
 		val updatedTracks = parseTracks(node)
 		tracks = updatedTracks
+		updateNativeSubtitleOverlayMode()
 		if (notify && updatedTracks != notifiedTracks) {
 			notifiedTracks = updatedTracks
 			notifyTracksChanged()
