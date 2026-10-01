@@ -414,7 +414,14 @@ private object NewPlayerStreamStatusBuilder {
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod) ?: frameStats.videoCodec)
-					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
+					row(
+						"HDR mode",
+						streamingHdrMode(
+							playerHdrMode = frameStats.videoHdrMode,
+							streamHdrMode = videoTrack?.videoRange?.toVideoRangeType()?.workaroundLabel(),
+							isVideoDirect = transcodingInfo?.isVideoDirect,
+						),
+					)
 					row("Dolby Vision", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
 					row("Audio decoder", frameStats.audioDecoderLabel())
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec))
@@ -566,16 +573,6 @@ private object NewPlayerStreamStatusBuilder {
 			else -> source
 		}
 	}
-
-	private fun streamingHdrMode(
-		hdrMode: String?,
-		track: MediaStreamVideoTrack?,
-		transcodingInfo: TranscodingInfo?,
-	): String? = hdrMode ?: track
-			?.videoRange
-			?.toVideoRangeType()
-			?.takeIf { transcodingInfo?.isVideoDirect != false }
-			?.workaroundLabel()
 
 	private fun streamingAudioCodec(
 		track: MediaStreamAudioTrack?,
@@ -782,6 +779,18 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
 
+}
+
+internal fun streamingHdrMode(
+	playerHdrMode: String?,
+	streamHdrMode: String?,
+	isVideoDirect: Boolean?,
+): String? {
+	val directStreamHdrMode = streamHdrMode?.takeIf { isVideoDirect != false }
+	return when {
+		directStreamHdrMode == "HDR10+" -> directStreamHdrMode
+		else -> playerHdrMode ?: directStreamHdrMode
+	}
 }
 
 internal fun decoderModeDiagnostic(
