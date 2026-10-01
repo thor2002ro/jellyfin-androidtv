@@ -44,7 +44,7 @@ internal class DoviPlaybackNegotiationStore {
 	private inline fun finish(
 		entry: QueueEntry,
 		token: Long,
-		apply: (Pending) -> Unit,
+		crossinline apply: (Pending) -> Unit,
 	): Boolean {
 		var finished = false
 		entries.computeIfPresent(entry) { _, request ->

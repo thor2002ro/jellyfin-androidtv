@@ -57,7 +57,9 @@ import org.jellyfin.playback.core.timedevent.TimedEventTracker
 import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
+import org.jellyfin.playback.dovi.DOVI_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.dovi.doviDecision
+import org.jellyfin.playback.dovi.requiresHardwareVideoDecoder
 import org.jellyfin.playback.dovi.toPlaybackDoviTransformStats
 import timber.log.Timber
 import java.util.Locale
@@ -90,6 +92,32 @@ internal fun libMPVCommandSucceeded(result: MPVNode?): Boolean = result != null
 
 internal fun doviMpvPlaybackErrorCode(status: DoviStatus): String? =
 	status.takeUnless { it == DoviStatus.OK }?.let { "DOVI_TRANSFORMATION_FAILED_${it.name}" }
+
+internal fun shouldRejectDoviMpvSoftwareFallback(
+	hasActiveDoviDecision: Boolean,
+	videoLoaded: Boolean,
+	hardwareDecoder: String?,
+): Boolean = hasActiveDoviDecision &&
+	videoLoaded &&
+	hardwareDecoder.equals("no", ignoreCase = true)
+
+internal fun isDoviMpvVideoDecoderErrorLog(prefix: String, level: Int): Boolean =
+	level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_ERROR &&
+		(prefix.equals("vd", ignoreCase = true) || prefix.startsWith("vd/", ignoreCase = true))
+
+internal fun retainDoviMpvDecoderFailureObservation(observed: Boolean, hardwareDecoder: String?): Boolean =
+	observed && (hardwareDecoder.isNullOrBlank() || hardwareDecoder.equals("no", ignoreCase = true))
+
+internal fun shouldReportDoviMpvDecoderFailureOnEnd(
+	hasActiveDoviDecision: Boolean,
+	reason: String,
+	decoderFailureObserved: Boolean,
+	hardwareDecoder: String?,
+): Boolean = hasActiveDoviDecision &&
+	reason == "error" && (
+		hardwareDecoder.equals("no", ignoreCase = true) ||
+			retainDoviMpvDecoderFailureObservation(decoderFailureObserved, hardwareDecoder)
+		)
 
 internal class DoviMpvRequestSession(
 	private val isAvailable: () -> Boolean,
@@ -204,7 +232,7 @@ class LibMPVBackend(
 			softwareForLiveTv = playbackOptions.softwareDecodingForLiveTv,
 			isLiveTv = currentStream?.queueEntry?.isLiveTv == true,
 			videoPreset = playbackOptions.videoPreset,
-		)
+		).forDoviPlayback(hasActiveDoviHardwareRoute())
 	private var playbackOptions = playbackOptionsProvider?.invoke() ?: LibMPVPlaybackOptions.DEFAULT
 	private val vulkanSupported = isLibMPVVulkanSupported(context)
 	private val requestedGpuApi: String
@@ -251,6 +279,12 @@ class LibMPVBackend(
 				level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_INFO -> Timber.i("MPV %s%s", source, message)
 				else -> Timber.d("MPV %s%s", source, message)
 			}
+			if (isDoviMpvVideoDecoderErrorLog(prefix, level)) {
+				val generation = playerGeneration
+				onPlayerEvent(generation) {
+					if (hasActiveDoviHardwareRoute()) doviVideoDecoderFailureObserved = true
+				}
+			}
 		}
 	}
 	@Volatile
@@ -281,6 +315,8 @@ class LibMPVBackend(
 	private var activePlaylistEntryId: Long? = null
 	private var fileLoaded = false
 	private var playbackRestarted = false
+	private var doviVideoDecoderFailureObserved = false
+	private var doviHardwareFailureReported = false
 	private var isPaused = true
 	private var pausedForCache = false
 	private var seeking = false
@@ -436,7 +472,8 @@ class LibMPVBackend(
 		override fun eventProperty(property: String, value: Boolean) =
 			handleEventProperty(generation, property, value)
 
-		override fun eventProperty(property: String, value: String) = Unit
+		override fun eventProperty(property: String, value: String) =
+			handleEventProperty(generation, property, value)
 
 		override fun eventProperty(property: String, value: Double) = Unit
 
@@ -452,6 +489,7 @@ class LibMPVBackend(
 		target.observeProperty("seeking", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
+		target.observeProperty("hwdec-current", MPV.mpvFormat.MPV_FORMAT_STRING)
 	}
 
 	override fun supportsStream(stream: MediaStream): PlaySupportReport = object : PlaySupportReport {
@@ -648,6 +686,8 @@ class LibMPVBackend(
 		activePlaylistEntryId = null
 		fileLoaded = false
 		playbackRestarted = false
+		doviVideoDecoderFailureObserved = false
+		doviHardwareFailureReported = false
 		isPaused = false
 		pausedForCache = false
 		seeking = false
@@ -1256,6 +1296,16 @@ class LibMPVBackend(
 		publishPlayState()
 	}
 
+	private fun handleEventProperty(generation: Long, property: String, value: String) = onPlayerEvent(generation) {
+		if (property == "hwdec-current") {
+			doviVideoDecoderFailureObserved = retainDoviMpvDecoderFailureObservation(
+				doviVideoDecoderFailureObserved,
+				value,
+			)
+			rejectDoviSoftwareFallback(value)
+		}
+	}
+
 	private fun handleEventProperty(generation: Long, property: String, value: MPVNode) = onPlayerEvent(generation) {
 		when (property) {
 			"track-list" -> {
@@ -1276,6 +1326,8 @@ class LibMPVBackend(
 				activePlaylistEntryId = data["playlist_entry_id"]?.asInt()
 				fileLoaded = false
 				playbackRestarted = false
+				doviVideoDecoderFailureObserved = false
+				doviHardwareFailureReported = false
 				terminalState = null
 				pausedForCache = false
 				seeking = false
@@ -1287,6 +1339,7 @@ class LibMPVBackend(
 				applyShieldFallbackIfNeeded()
 				addExternalSubtitles()
 				refreshTracks()
+				if (rejectDoviSoftwareFallback(currentHardwareDecoder())) return@onPlayerEvent
 				applyInitialTrackSelection()
 				applySubtitleStyle(subtitleStyle)
 				applySubtitleTiming()
@@ -1379,6 +1432,7 @@ class LibMPVBackend(
 			handlePlaybackError("MPV Dolby Vision conversion failed", doviErrorCode)
 			return
 		}
+		if (reportDoviHardwareFailureOnEnd(reason)) return
 
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		fileLoaded = false
@@ -1422,6 +1476,56 @@ class LibMPVBackend(
 		terminalState = PlayState.ERROR
 		listener?.onPlaybackError(PlaybackError(codeName, origin = playbackErrorOrigin))
 		publishPlayState(force = true)
+	}
+
+	private fun currentHardwareDecoder(): String? = runCatching {
+		player.getPropertyString("hwdec-current")
+	}.getOrNull()
+
+	private fun hasActiveDoviHardwareRoute(): Boolean =
+		currentStream?.queueEntry?.doviDecision?.requiresHardwareVideoDecoder == true
+
+	private fun rejectDoviSoftwareFallback(hardwareDecoder: String?): Boolean {
+		if (doviHardwareFailureReported || !shouldRejectDoviMpvSoftwareFallback(
+			hasActiveDoviDecision = hasActiveDoviHardwareRoute(),
+			videoLoaded = fileLoaded,
+			hardwareDecoder = hardwareDecoder,
+		)) return false
+
+		reportDoviHardwareFailure("MPV fell back to software video decoding", stopLocalPlayback = true)
+		return true
+	}
+
+	private fun reportDoviHardwareFailureOnEnd(reason: String): Boolean {
+		val hasActiveDoviDecision = hasActiveDoviHardwareRoute()
+		val hardwareDecoder = currentHardwareDecoder()
+		val message = when {
+			shouldRejectDoviMpvSoftwareFallback(
+				hasActiveDoviDecision,
+				fileLoaded,
+				hardwareDecoder,
+			) -> "MPV fell back to software video decoding"
+			shouldReportDoviMpvDecoderFailureOnEnd(
+				hasActiveDoviDecision,
+				reason,
+				doviVideoDecoderFailureObserved,
+				hardwareDecoder,
+			) -> "MPV hardware video decoder failed"
+			else -> return false
+		}
+
+		reportDoviHardwareFailure(message, stopLocalPlayback = false)
+		return true
+	}
+
+	private fun reportDoviHardwareFailure(message: String, stopLocalPlayback: Boolean) {
+		if (doviHardwareFailureReported) return
+		doviHardwareFailureReported = true
+		if (stopLocalPlayback) {
+			loadRequested = true
+			runCommand("stop")
+		}
+		handlePlaybackError(message, DOVI_VIDEO_DECODER_ERROR_CODE)
 	}
 
 	private fun clearVideoGeometry() {
