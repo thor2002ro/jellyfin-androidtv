@@ -10,6 +10,14 @@ import android.view.View
 import `is`.xyz.mpv.MPVNode
 import java.nio.ByteBuffer
 
+internal fun readLibMPVSubtitleOverlay(
+	playerLock: Any,
+	isActive: () -> Boolean,
+	read: () -> MPVNode?,
+): MPVNode? = synchronized(playerLock) {
+	if (isActive()) read() else null
+}
+
 internal sealed interface LibMPVSubtitleOverlayUpdate {
 	data object Unchanged : LibMPVSubtitleOverlayUpdate
 	data class Clear(val changeId: Long) : LibMPVSubtitleOverlayUpdate
