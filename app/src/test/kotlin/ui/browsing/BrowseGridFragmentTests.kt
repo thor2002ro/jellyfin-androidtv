@@ -15,9 +15,30 @@ import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import java.util.UUID
 
 class BrowseGridFragmentTests : FunSpec({
+	test("selecting active sort reverses its direction") {
+		selectSort(
+			LibrarySortState(ItemSortBy.SORT_NAME, SortOrder.ASCENDING),
+			LibrarySortOption(ItemSortBy.SORT_NAME, SortOrder.ASCENDING),
+		) shouldBe LibrarySortState(ItemSortBy.SORT_NAME, SortOrder.DESCENDING)
+	}
+
+	test("selecting another field uses its natural direction") {
+		selectSort(
+			LibrarySortState(ItemSortBy.SORT_NAME, SortOrder.DESCENDING),
+			LibrarySortOption(ItemSortBy.DATE_CREATED, SortOrder.DESCENDING),
+		) shouldBe LibrarySortState(ItemSortBy.DATE_CREATED, SortOrder.DESCENDING)
+	}
+
+	test("sort direction renders a compact menu arrow") {
+		SortOrder.ASCENDING.menuArrow shouldBe "↑"
+		SortOrder.DESCENDING.menuArrow shouldBe "↓"
+	}
+
 	test("safe selected position never returns invalid leanback positions") {
 		BrowseGridFragment.getSafeSelectedPosition(-1, -1, -1, 125) shouldBe 0
 		BrowseGridFragment.getSafeSelectedPosition(21, 6, 6, 80) shouldBe 21
