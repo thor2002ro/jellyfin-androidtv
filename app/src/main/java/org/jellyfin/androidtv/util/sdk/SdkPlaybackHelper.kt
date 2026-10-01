@@ -17,11 +17,10 @@ import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.androidtv.util.apiclient.Response
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.instantMixApi
-import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
-import org.jellyfin.sdk.api.client.extensions.tvShowsApi
-import org.jellyfin.sdk.api.client.extensions.userLibraryApi
-import org.jellyfin.sdk.api.client.extensions.videosApi
+import org.jellyfin.sdk.api.client.extensions.showApi
+import org.jellyfin.sdk.api.client.extensions.videoApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFilter
@@ -76,7 +75,7 @@ class SdkPlaybackHelper(
 			BaseItemKind.EPISODE -> {
 				val seriesId = mainItem.seriesId
 				if (userPreferences[UserPreferences.mediaQueuingEnabled] && seriesId != null) {
-					val response by api.tvShowsApi.getEpisodes(
+					val response by api.showApi.getEpisodes(
 						seriesId = seriesId,
 						startItemId = mainItem.id,
 						isMissing = false,
@@ -91,7 +90,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.SERIES -> {
-				val response by api.tvShowsApi.getEpisodes(
+				val response by api.showApi.getEpisodes(
 					seriesId = mainItem.id,
 					isMissing = false,
 					sortBy = if (shuffle) ItemSortBy.RANDOM else ItemSortBy.SORT_NAME,
@@ -102,7 +101,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.SEASON -> {
-				val response by api.tvShowsApi.getEpisodes(
+				val response by api.showApi.getEpisodes(
 					seriesId = requireNotNull(mainItem.seriesId),
 					seasonId = mainItem.id,
 					isMissing = false,
@@ -114,7 +113,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.FOLDER -> {
-				val response by api.itemsApi.getItems(
+				val response by api.libraryApi.getItems(
 					parentId = mainItem.id,
 					isMissing = false,
 					includeItemTypes = listOf(
@@ -132,7 +131,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.BOX_SET -> {
-				val response by api.itemsApi.getItems(
+				val response by api.libraryApi.getItems(
 					parentId = mainItem.id,
 					isMissing = false,
 					includeItemTypes = listOf(
@@ -150,7 +149,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.MUSIC_ALBUM -> {
-				val response by api.itemsApi.getItems(
+				val response by api.libraryApi.getItems(
 					isMissing = false,
 					mediaTypes = listOf(MediaType.AUDIO),
 					filters = listOf(ItemFilter.IS_NOT_FOLDER),
@@ -170,7 +169,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.MUSIC_ARTIST -> {
-				val response by api.itemsApi.getItems(
+				val response by api.libraryApi.getItems(
 					isMissing = false,
 					mediaTypes = listOf(MediaType.AUDIO),
 					filters = listOf(ItemFilter.IS_NOT_FOLDER),
@@ -190,7 +189,7 @@ class SdkPlaybackHelper(
 			}
 
 			BaseItemKind.PLAYLIST -> {
-				val response by api.itemsApi.getItems(
+				val response by api.libraryApi.getItems(
 					parentId = mainItem.id,
 					isMissing = false,
 					sortBy = if (shuffle) listOf(ItemSortBy.RANDOM) else null,
@@ -206,7 +205,7 @@ class SdkPlaybackHelper(
 			BaseItemKind.TV_PROGRAM,
 			BaseItemKind.LIVE_TV_PROGRAM -> {
 				val channelId = requireNotNull(mainItem.parentId ?: mainItem.channelId)
-				val channel by api.userLibraryApi.getItem(channelId)
+				val channel by api.libraryApi.getItem(channelId)
 				val channelWithProgramMetadata = channel.copy(
 					startDate = mainItem.startDate,
 					premiereDate = mainItem.premiereDate,
@@ -244,7 +243,7 @@ class SdkPlaybackHelper(
 				val addIntros = allowIntros && userPreferences[UserPreferences.cinemaModeEnabled]
 
 				if (addIntros) {
-					val intros = runCatching { api.userLibraryApi.getIntros(mainItem.id).content.items }.getOrNull()
+					val intros = runCatching { api.libraryApi.getIntros(mainItem.id).content.items }.getOrNull()
 						.orEmpty()
 						// Force the type to be trailer as the legacy playback UI uses it to determine if it should show the next up screen
 						.map { it.copy(type = BaseItemKind.TRAILER) }
@@ -262,7 +261,7 @@ class SdkPlaybackHelper(
 
 		val partCount = item.partCount
 		if (partCount != null && partCount > 1) {
-			val response by api.videosApi.getAdditionalPart(item.id)
+			val response by api.videoApi.getAdditionalPart(item.id)
 			addAll(response.items)
 		}
 	}
@@ -274,7 +273,7 @@ class SdkPlaybackHelper(
 					?: Duration.ZERO
 
 			val item = withContext(Dispatchers.IO) {
-				val response by api.userLibraryApi.getItem(itemId)
+				val response by api.libraryApi.getItem(itemId)
 				response
 			}
 
@@ -301,7 +300,7 @@ class SdkPlaybackHelper(
 					?: Duration.ZERO
 
 			val items = withContext(Dispatchers.IO) {
-				val response by api.itemsApi.getItems(
+				val response by api.libraryApi.getItems(
 					ids = itemIds,
 					fields = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS),
 				)

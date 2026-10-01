@@ -10,7 +10,7 @@ import org.jellyfin.androidtv.ui.asTimerInfoDto
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
-import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -23,7 +23,7 @@ fun CustomPlaybackOverlayFragment.refreshSelectedProgram() {
 	lifecycleScope.launch {
 		runCatching {
 			val item = withContext(Dispatchers.IO) {
-				api.userLibraryApi.getItem(mSelectedProgram.id).content
+				api.libraryApi.getItem(mSelectedProgram.id).content
 			}
 			mSelectedProgram = item
 		}.onFailure { error ->
@@ -41,7 +41,7 @@ fun CustomPlaybackOverlayFragment.playChannel(id: UUID) {
 	lifecycleScope.launch {
 		runCatching {
 			withContext(Dispatchers.IO) {
-				api.userLibraryApi.getItem(id).content
+				api.libraryApi.getItem(id).content
 			}
 		}.fold(
 			onSuccess = { channel ->

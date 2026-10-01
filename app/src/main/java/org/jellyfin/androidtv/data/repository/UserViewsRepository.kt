@@ -9,7 +9,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.LiveTvOption
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.api.client.extensions.userViewApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
@@ -30,7 +30,7 @@ class UserViewsRepositoryImpl(
 	private val userRepository: UserRepository,
 ) : UserViewsRepository {
 	override val views = flow {
-		val views by api.userViewsApi.getUserViews()
+		val views by api.userViewApi.getUserViews()
 		val filteredViews = withSpecialViews(views.items)
 		emit(filteredViews)
 	}.flowOn(Dispatchers.IO)

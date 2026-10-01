@@ -854,6 +854,7 @@ private fun doviMediaSource(
 		type = MediaStreamType.VIDEO,
 		index = 0,
 		isExternal = false,
+		isOriginal = true,
 		isTextSubtitleStream = false,
 		supportsExternalStream = false,
 		videoRangeType = range,

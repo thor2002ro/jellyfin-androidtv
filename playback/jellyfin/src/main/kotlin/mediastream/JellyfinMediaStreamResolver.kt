@@ -21,7 +21,7 @@ import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.audioApi
 import org.jellyfin.sdk.api.client.extensions.mediaInfoApi
-import org.jellyfin.sdk.api.client.extensions.videosApi
+import org.jellyfin.sdk.api.client.extensions.videoApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.MediaSourceInfo
@@ -241,7 +241,7 @@ class JellyfinMediaStreamResolver(
 
 	private fun MediaInfo.getDirectPlayVideoUrl(item: BaseItemDto): String = when {
 		mediaSource.isRemote && mediaSource.path != null -> mediaSource.path!!
-		else -> api.videosApi.getVideoStreamUrl(
+		else -> api.videoApi.getVideoStreamUrl(
 			itemId = item.id,
 			container = mediaSource.container,
 			mediaSourceId = mediaSource.id,
