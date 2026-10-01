@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.leanback.widget.RowPresenter
@@ -33,7 +34,13 @@ class MyDetailsOverviewRowPresenter(
 			binding.infoTitle3.text = row.infoItem3?.label
 			binding.infoValue3.text = row.infoItem3?.value
 
-			binding.mainImage.load(row.imageDrawable, null, null, 1.0, 0)
+
+			binding.mainImage.load(
+				image = row.image,
+				aspectRatio = row.imageAspectRatio,
+				maxWidth = row.imageMaxWidth,
+				fillHeight = row.imageFillHeight,
+			)
 
 			setSummary(row.summary)
 
@@ -62,6 +69,7 @@ class MyDetailsOverviewRowPresenter(
 		fun setInfoValue3(text: String?) {
 			binding.infoValue3.text = text
 		}
+
 	}
 
 	var viewHolder: ViewHolder? = null

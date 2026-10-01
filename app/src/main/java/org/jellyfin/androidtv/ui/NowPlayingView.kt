@@ -44,13 +44,11 @@ import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
-import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.ImageType
 import org.koin.compose.koinInject
 
@@ -59,7 +57,6 @@ fun NowPlayingComposable(
 	modifier: Modifier = Modifier,
 	onFocusableChange: (focusable: Boolean) -> Unit,
 ) {
-	val api = koinInject<ApiClient>()
 	val playbackManager = koinInject<PlaybackManager>()
 	val navigationRepository = koinInject<NavigationRepository>()
 
@@ -95,8 +92,7 @@ fun NowPlayingComposable(
 						val progressFillColor = JellyfinTheme.colorScheme.rangeControlFill
 
 						AsyncImage(
-							url = image?.getUrl(api),
-							blurHash = image?.blurHash,
+							image = image,
 							placeholder = ContextCompat.getDrawable(LocalContext.current, R.drawable.ic_album),
 							aspectRatio = image?.aspectRatio ?: 1f,
 							modifier = Modifier
