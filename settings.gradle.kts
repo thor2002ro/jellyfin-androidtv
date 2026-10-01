@@ -105,6 +105,14 @@ dependencyResolutionManagement {
 			version("libass-android-local", libassProperties.getProperty("VERSION_NAME"))
 			library("libass-media3", "io.github.peerless2012", "ass-media")
 				.versionRef("libass-android-local")
+			val libassProviderProperties = Properties().apply {
+				file("dependencies/libass-android/OUTPUT/libass-provider.properties").inputStream().use(::load)
+			}
+			library(
+				"libass-provider",
+				libassProviderProperties.getProperty("group"),
+				libassProviderProperties.getProperty("artifact")
+			).version(libassProviderProperties.getProperty("version"))
 
 			val mpvVersion = latestLocalMavenVersion(
 				"dependencies/mpv-android-lib/OUTPUT/maven/io/github/abdallahmehiz/mpv-android-lib"
@@ -122,6 +130,14 @@ dependencyResolutionManagement {
 			}
 			filter {
 				includeGroup("androidx.media3")
+			}
+		}
+		exclusiveContent {
+			forRepository {
+				maven(rootDir.resolve("dependencies/libass-android/OUTPUT/maven"))
+			}
+			filter {
+				includeModule("io.github.peerless2012", "libass-android-provider")
 			}
 		}
 		exclusiveContent {
