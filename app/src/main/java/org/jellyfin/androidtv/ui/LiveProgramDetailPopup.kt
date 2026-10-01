@@ -15,6 +15,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -23,7 +24,6 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.util.Utils
-import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.androidtv.util.sdk.compat.copyWithSeriesTimerId
 import org.jellyfin.androidtv.util.sdk.compat.copyWithTimerId
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -35,7 +35,7 @@ class LiveProgramDetailPopup(
 	context: Context,
 	lifecycleOwner: LifecycleOwner,
 	private val onFavoriteChanged: (UUID, Boolean) -> Unit,
-	private val tuneAction: EmptyResponse?,
+	private val tuneAction: (() -> Unit)?,
 ) {
 	val mContext: Context = context
 	val lifecycle: Lifecycle = lifecycleOwner.lifecycle
@@ -117,7 +117,7 @@ class LiveProgramDetailPopup(
 							selectedGridView.setRecTimer(null)
 							this.program = this.program.copyWithTimerId(null)
 							dismiss()
-							Utils.showToast(mContext, R.string.msg_recording_cancelled)
+							Toast.makeText(mContext, R.string.msg_recording_cancelled, Toast.LENGTH_LONG).show()
 						}
 					}
 					recordInfo.text = if (program.startDate?.isBefore(now) == true) {
@@ -133,7 +133,7 @@ class LiveProgramDetailPopup(
 							selectedProgramView.setRecSeriesTimer(updatedProgram.seriesTimerId)
 							selectedProgramView.setRecTimer(updatedProgram.timerId)
 							seriesSettingsButton?.visibility = View.VISIBLE
-							Utils.showToast(mContext, R.string.msg_set_to_record)
+							Toast.makeText(mContext, R.string.msg_set_to_record, Toast.LENGTH_LONG).show()
 							dismiss()
 						}
 					}
@@ -154,7 +154,7 @@ class LiveProgramDetailPopup(
 										this.program = this.program.copyWithSeriesTimerId(null)
 										seriesSettingsButton?.visibility = View.GONE
 										dismiss()
-										Utils.showToast(mContext, R.string.msg_recording_cancelled)
+										Toast.makeText(mContext, R.string.msg_recording_cancelled, Toast.LENGTH_LONG).show()
 									}
 								}
 								.show()
@@ -167,7 +167,7 @@ class LiveProgramDetailPopup(
 								selectedProgramView.setRecSeriesTimer(updatedProgram.seriesTimerId)
 								selectedProgramView.setRecTimer(updatedProgram.timerId)
 								seriesSettingsButton?.visibility = View.VISIBLE
-								Utils.showToast(mContext, R.string.msg_set_to_record)
+								Toast.makeText(mContext, R.string.msg_set_to_record, Toast.LENGTH_LONG).show()
 								dismiss()
 							}
 						}
@@ -195,7 +195,7 @@ class LiveProgramDetailPopup(
 	fun createTuneButton(): Button {
 		val tune = addButton(buttonRow, R.string.lbl_tune_to_channel, R.drawable.ic_play)
 		tune.setOnClickListener {
-			tuneAction?.onResponse()
+			if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) tuneAction?.invoke()
 			popup.dismiss()
 		}
 
