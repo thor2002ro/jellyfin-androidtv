@@ -53,6 +53,20 @@ class HomeSectionEditorTests : FunSpec({
 		)
 	}
 
+	test("compacting removes the unsupported continue reading section") {
+		compactHomeSections(
+			listOf(
+				HomeSectionType.RESUME,
+				HomeSectionType.RESUME_BOOK,
+				HomeSectionType.NEXT_UP,
+			)
+		) shouldBe listOf(
+			HomeSectionType.RESUME,
+			HomeSectionType.NEXT_UP,
+			HomeSectionType.NONE,
+		)
+	}
+
 	test("moving an active section swaps it with its neighbor and compacts gaps") {
 		moveHomeSection(
 			sections = listOf(
@@ -146,5 +160,14 @@ class HomeSectionEditorTests : FunSpec({
 
 		(HomeSectionType.LIBRARY_TILES_SMALL in choices) shouldBe false
 		(HomeSectionType.LIBRARY_BUTTONS in choices) shouldBe false
+	}
+
+	test("section choices do not offer unsupported continue reading") {
+		val choices = availableHomeSectionTypes(
+			sections = listOf(HomeSectionType.RESUME, HomeSectionType.NONE),
+			activeIndex = 1,
+		)
+
+		(HomeSectionType.RESUME_BOOK in choices) shouldBe false
 	}
 })

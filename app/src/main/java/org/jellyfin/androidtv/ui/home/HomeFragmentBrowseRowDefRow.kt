@@ -9,7 +9,7 @@ import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
-import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
@@ -22,21 +22,21 @@ class HomeFragmentBrowseRowDefRow(
 	private val browseRowDef: BrowseRowDef,
 	private val channelCardLongClick: ((item: Any?, view: View) -> Boolean)? = null,
 ) : HomeFragmentRow, KoinComponent {
-	private val userPreferences by inject<UserPreferences>()
+	private val userSettingPreferences by inject<UserSettingPreferences>()
 
 	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
 		val header = HeaderItem(browseRowDef.headerText)
-		val preferParentThumb = userPreferences[UserPreferences.seriesThumbnailsEnabled]
+		val preferParentThumb = userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled]
 
 		// Some of these members are probably never used and could be removed
 		val rowAdapter = when (browseRowDef.queryType) {
 			QueryType.NextUp -> ItemRowAdapter(context, browseRowDef.nextUpQuery, preferParentThumb, cardPresenter, rowsAdapter).apply {
 				combinedResumeQuery = browseRowDef.supplementalResumeQuery
 				nextUpQueryProvider = {
-					browseRowDef.nextUpQuery.withHomeNextUpCutoff(userPreferences[UserPreferences.homeNextUpMaxDays])
+					browseRowDef.nextUpQuery.withHomeNextUpCutoff(userSettingPreferences[UserSettingPreferences.homeNextUpMaxDays])
 				}
 			}
-			QueryType.LatestItems -> ItemRowAdapter(context, browseRowDef.latestItemsQuery, userPreferences[UserPreferences.seriesThumbnailsEnabled], cardPresenter, rowsAdapter)
+			QueryType.LatestItems -> ItemRowAdapter(context, browseRowDef.latestItemsQuery, preferParentThumb, cardPresenter, rowsAdapter)
 			QueryType.Views -> ItemRowAdapter(context, GetUserViewsRequest, cardPresenter, rowsAdapter)
 			QueryType.SimilarSeries -> ItemRowAdapter(context, browseRowDef.similarQuery, QueryType.SimilarSeries, cardPresenter, rowsAdapter)
 			QueryType.SimilarMovies -> ItemRowAdapter(context, browseRowDef.similarQuery, QueryType.SimilarMovies, cardPresenter, rowsAdapter)

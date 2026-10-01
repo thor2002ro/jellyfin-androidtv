@@ -2,13 +2,17 @@ package org.jellyfin.androidtv.ui.settings.screen.home
 
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
 import org.jellyfin.androidtv.constant.hasSameHomeContentAs
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -17,6 +21,9 @@ import org.jellyfin.androidtv.ui.base.list.ListMessage
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.navigation.focus.focusKey
+import org.jellyfin.androidtv.ui.settings.compat.commitEnumPreferenceChanges
+import org.jellyfin.androidtv.ui.settings.compat.PreferenceSaveGuard
+import org.jellyfin.androidtv.ui.settings.compat.showPreferenceSaveFailure
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.koin.compose.koinInject
 
@@ -24,7 +31,10 @@ import org.koin.compose.koinInject
 fun SettingsHomeSectionScreen(index: Int) {
 	val router = LocalRouter.current
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val customMessageRepository = koinInject<CustomMessageRepository>()
 	val scope = rememberCoroutineScope()
+	val context = LocalContext.current
+	val saveGuard = remember { PreferenceSaveGuard() }
 	val sections = compactHomeSections(userSettingPreferences.homesections.map(userSettingPreferences::get))
 	val activeSections = sections.filterNot { it == HomeSectionType.NONE }
 	val selectedSection = activeSections.getOrNull(index)
@@ -39,13 +49,23 @@ fun SettingsHomeSectionScreen(index: Int) {
 		return
 	}
 
-	val saveSections: (List<HomeSectionType>) -> Unit = { updatedSections ->
-		userSettingPreferences.homesections.forEachIndexed { preferenceIndex, preference ->
-			userSettingPreferences[preference] = updatedSections[preferenceIndex]
-		}
+	val saveSections: (List<HomeSectionType>) -> Unit = saveSections@{ updatedSections ->
+		if (!saveGuard.tryStart()) return@saveSections
 		scope.launch {
-			userSettingPreferences.commit()
-			router.back()
+			try {
+				val succeeded = commitEnumPreferenceChanges(
+					store = userSettingPreferences,
+					changes = userSettingPreferences.homesections.zip(updatedSections),
+				)
+				if (succeeded) {
+					customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration)
+					router.back()
+				} else {
+					showPreferenceSaveFailure(context)
+				}
+			} finally {
+				saveGuard.finish()
+			}
 		}
 	}
 
@@ -114,7 +134,7 @@ internal fun availableHomeSectionTypes(
 ): List<HomeSectionType> {
 	val active = sections.filterNot { it == HomeSectionType.NONE }
 	return HomeSectionType.entries.filter { section ->
-		section != HomeSectionType.NONE && active.withIndex().none { (index, existing) ->
+		section != HomeSectionType.NONE && section != HomeSectionType.RESUME_BOOK && active.withIndex().none { (index, existing) ->
 			index != activeIndex && existing.hasSameHomeContentAs(section)
 		}
 	}

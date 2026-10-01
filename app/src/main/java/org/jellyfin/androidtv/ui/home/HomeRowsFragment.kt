@@ -57,7 +57,9 @@ import org.jellyfin.androidtv.util.KeyProcessor
 import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.sockets.subscribe
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.LibraryChangedMessage
 import org.jellyfin.sdk.model.api.UserDataChangedMessage
 import org.koin.android.ext.android.inject
@@ -197,18 +199,19 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			sections = homesections,
 			combineContinueWatchingAndNextUp = combineContinueWatchingAndNextUp,
 		)
-		val userViews = when {
-			layout.sections.any(::homeSectionUsesUserViews) || includeRecentlyReleased -> userViewsRepository.views.first()
-			else -> emptyList()
+		val userViews = loadHomeUserViews(
+			required = layout.sections.any(::homeSectionUsesUserViews) || includeRecentlyReleased,
+		) {
+			userViewsRepository.views.first()
 		}
 
 		for (section in layout.sections) when (section) {
-			HomeSectionType.LATEST_MEDIA -> add(helper.loadRecentlyAdded(userViews))
-			HomeSectionType.LIBRARY_TILES_SMALL -> add(HomeFragmentViewsRow(small = false, initialViews = userViews))
-			HomeSectionType.LIBRARY_BUTTONS -> add(HomeFragmentViewsRow(small = true, initialViews = userViews))
+			HomeSectionType.LATEST_MEDIA -> userViews?.let { add(helper.loadRecentlyAdded(it)) }
+			HomeSectionType.LIBRARY_TILES_SMALL -> userViews?.let { add(HomeFragmentViewsRow(small = false, initialViews = it)) }
+			HomeSectionType.LIBRARY_BUTTONS -> userViews?.let { add(HomeFragmentViewsRow(small = true, initialViews = it)) }
 			HomeSectionType.RESUME -> add(helper.loadResumeVideo(layout.combineContinueWatchingAndNextUp))
 			HomeSectionType.RESUME_AUDIO -> add(helper.loadResumeAudio())
-			HomeSectionType.RESUME_BOOK -> Unit // Books are not (yet) supported
+			HomeSectionType.RESUME_BOOK -> Unit // Kept for compatibility with values stored by other Jellyfin clients.
 			HomeSectionType.ACTIVE_RECORDINGS -> add(helper.loadLatestLiveTvRecordings())
 			HomeSectionType.NEXT_UP -> add(helper.loadNextUp())
 			HomeSectionType.LIVE_TV -> if (liveTvEnabled) {
@@ -219,7 +222,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			HomeSectionType.NONE -> Unit
 		}
 
-		if (includeRecentlyReleased) {
+		if (includeRecentlyReleased && userViews != null) {
 			add(helper.loadRecentlyReleased(userViews))
 		}
 	}
@@ -397,3 +400,16 @@ private fun homeSectionUsesUserViews(section: HomeSectionType) = section in setO
 	HomeSectionType.LIBRARY_TILES_SMALL,
 	HomeSectionType.LIBRARY_BUTTONS,
 )
+
+internal suspend fun loadHomeUserViews(
+	required: Boolean,
+	loader: suspend () -> Collection<BaseItemDto>,
+): Collection<BaseItemDto>? {
+	if (!required) return emptyList()
+	return try {
+		loader()
+	} catch (err: ApiClientException) {
+		Timber.w(err, "Unable to load User Views; skipping dependent Home rows")
+		null
+	}
+}

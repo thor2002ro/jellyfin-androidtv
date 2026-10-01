@@ -24,10 +24,16 @@ class UserSettingPreferences(
 		val homeNextUpRewatching = booleanPreference("androidtvHomeNextUpRewatching", false)
 		val homeRecentlyReleased = booleanPreference("androidtvHomeRecentlyReleased", false)
 
+		/** Whether Home episode rows use series artwork. Stored per Jellyfin user. */
+		val seriesThumbnailsEnabled = booleanPreference("pref_enable_series_thumbnails", true)
+
+		/** Maximum age in days for Next Up items, or 0 for no cutoff. Stored per Jellyfin user. */
+		val homeNextUpMaxDays = intPreference("home_next_up_max_days", 0)
+
 		val homesection0 = enumPreference("homesection0", HomeSectionType.LIBRARY_TILES_SMALL)
 		val homesection1 = enumPreference("homesection1", HomeSectionType.RESUME)
 		val homesection2 = enumPreference("homesection2", HomeSectionType.RESUME_AUDIO)
-		val homesection3 = enumPreference("homesection3", HomeSectionType.RESUME_BOOK)
+		val homesection3 = enumPreference("homesection3", HomeSectionType.NONE)
 		val homesection4 = enumPreference("homesection4", HomeSectionType.LIVE_TV)
 		val homesection5 = enumPreference("homesection5", HomeSectionType.NEXT_UP)
 		val homesection6 = enumPreference("homesection6", HomeSectionType.LATEST_MEDIA)
@@ -52,6 +58,6 @@ class UserSettingPreferences(
 	val activeHomesections
 		get() = homesections
 			.map(::get)
-			.filterNot { it == HomeSectionType.NONE }
+			.filterNot { it == HomeSectionType.NONE || it == HomeSectionType.RESUME_BOOK }
 			.distinctHomeSections()
 }
