@@ -8,16 +8,46 @@ class AppUpdatePromptTests : FunSpec({
 	test("update popup remains eligible when its dialog takes window focus") {
 		val update = testUpdate()
 
-		appUpdatePrompt(update, isPlayback = false) shouldBe update
-		appUpdatePrompt(update, isPlayback = false) shouldBe update
+		val openedPrompt = appUpdatePrompt(
+			update = update,
+			currentPrompt = null,
+			isPlayback = false,
+			hostWindowFocused = true,
+		)
+		appUpdatePrompt(
+			update = update,
+			currentPrompt = openedPrompt,
+			isPlayback = false,
+			hostWindowFocused = false,
+		) shouldBe update
+	}
+
+	test("update popup waits while another window owns focus") {
+		appUpdatePrompt(
+			update = testUpdate(),
+			currentPrompt = null,
+			isPlayback = false,
+			hostWindowFocused = false,
+		) shouldBe null
 	}
 
 	test("update popup stays hidden during playback") {
-		appUpdatePrompt(testUpdate(), isPlayback = true) shouldBe null
+		val update = testUpdate()
+		appUpdatePrompt(
+			update = update,
+			currentPrompt = update,
+			isPlayback = true,
+			hostWindowFocused = false,
+		) shouldBe null
 	}
 
 	test("update popup stays hidden without an available update") {
-		appUpdatePrompt(null, isPlayback = false) shouldBe null
+		appUpdatePrompt(
+			update = null,
+			currentPrompt = testUpdate(),
+			isPlayback = false,
+			hostWindowFocused = true,
+		) shouldBe null
 	}
 })
 
