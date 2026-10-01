@@ -21,6 +21,7 @@ import org.jellyfin.androidtv.preference.constant.LibassMaxRenderPixels
 import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
+import org.jellyfin.androidtv.preference.constant.PlayerHeaderLayout
 import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior
 import org.jellyfin.androidtv.preference.constant.WatchedIndicatorBehavior
@@ -122,6 +123,9 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Enable trickplay thumbnails while seeking.
 		 */
 		var trickPlayEnabled = booleanPreference("pref_enable_trickplay", true)
+
+		/** Controls how item and channel logos appear in the current player interface. */
+		var playerHeaderLayout = enumPreference("player_header_layout", PlayerHeaderLayout.LOGO_BESIDE_DETAILS)
 
 		/**
 		 * User defined AVC level override. AUTO uses device-reported capabilities.

@@ -122,6 +122,17 @@ fun SettingsCustomizationScreen() {
 			)
 		}
 
+		item {
+			val playerHeaderLayout by rememberPreference(userPreferences, UserPreferences.playerHeaderLayout)
+			ListButton(
+				leadingContent = { Icon(painterResource(R.drawable.ic_player_header), contentDescription = null) },
+				headingContent = { Text(stringResource(R.string.pref_player_header_layout)) },
+				captionContent = { Text(stringResource(playerHeaderLayout.nameRes)) },
+				onClick = { router.push(Routes.PLAYBACK_PLAYER_HEADER_LAYOUT) },
+				modifier = Modifier.focusKey(Routes.PLAYBACK_PLAYER_HEADER_LAYOUT)
+			)
+		}
+
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_browsing)) }) }
 
 		item {
