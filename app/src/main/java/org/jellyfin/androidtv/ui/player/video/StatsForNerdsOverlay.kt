@@ -63,6 +63,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoGeometry
@@ -405,7 +406,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod) ?: frameStats.videoCodec)
 					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
-					row("libdovi", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
+					row("Dolby Vision", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
 					row("Audio decoder", frameStats.audioDecoderLabel())
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
@@ -962,8 +963,14 @@ internal fun libdoviConversionDiagnostic(
 	failure: DoviStatus?,
 ): String? = when {
 	failure != null -> "failed — ${failure.name}"
-	observed != null -> "${observed.inputPresentation} → ${observed.outputPresentation}"
+	observed != null -> "${observed.processor.diagnosticLabel()} — " +
+		"${observed.inputPresentation} → ${observed.outputPresentation}"
 	else -> null
+}
+
+private fun PlaybackDoviTransformProcessor.diagnosticLabel() = when (this) {
+	PlaybackDoviTransformProcessor.LIBDOVI -> "libdovi"
+	PlaybackDoviTransformProcessor.FAST_HDR_BASE -> "Fast HDR"
 }
 
 internal fun formatConversionReason(
