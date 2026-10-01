@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.util.profile.codec
 
 import android.media.MediaCodecInfo.CodecProfileLevel
 import androidx.media3.common.MimeTypes
+import android.media.MediaFormat
 import org.jellyfin.androidtv.util.AndroidVersion
 
 class HevcCodecCapabilities(
@@ -27,6 +28,7 @@ class HevcCodecCapabilities(
 
 		private const val MIME_HEVC = MimeTypes.VIDEO_H265
 		private const val MIME_DOLBY_VISION = MimeTypes.VIDEO_DOLBY_VISION
+		private const val COLOR_TRANSFER_HLG = 7
 	}
 
 	fun supportsHevc(): Boolean = query.hasCodecForMime(MIME_HEVC)
@@ -89,6 +91,15 @@ class HevcCodecCapabilities(
 				CodecProfileLevel.HEVCProfileMain10HDR10Plus,
 				CodecProfileLevel.HEVCMainTierLevel4,
 			)
+
+	/** Require a decoder to accept an HEVC Main10 format explicitly signaled as HLG. */
+	fun supportsHevcHlg(): Boolean = AndroidVersion.isAtLeastN && query.hasDecoderForFormat(
+		MIME_HEVC,
+		MediaFormat.createVideoFormat(MIME_HEVC, 1920, 1080).apply {
+			setInteger(MediaFormat.KEY_PROFILE, CodecProfileLevel.HEVCProfileMain10)
+			setInteger(MediaFormat.KEY_COLOR_TRANSFER, COLOR_TRANSFER_HLG)
+		},
+	)
 
 	fun getMainLevel(): Int = getLevel(CodecProfileLevel.HEVCProfileMain)
 
