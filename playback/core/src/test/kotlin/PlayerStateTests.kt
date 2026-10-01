@@ -25,6 +25,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
@@ -185,6 +186,26 @@ class PlayerStateTests : FunSpec({
 		state.stop()
 
 		state.scrubbing.value shouldBe false
+	}
+
+	test("backend geometry events update shared player state atomically") {
+		val backendService = BackendService()
+		val state = playerState(backend(), QueueEntry(), backendService = backendService)
+		val geometry = VideoGeometry(720, 576, 16f / 9f)
+
+		backendService.BackendEventListener().onVideoGeometryChange(geometry)
+
+		state.videoGeometry.value shouldBe geometry
+	}
+
+	test("stopping clears shared video geometry") {
+		val backendService = BackendService()
+		val state = playerState(backend(), QueueEntry(), backendService = backendService)
+		backendService.BackendEventListener().onVideoGeometryChange(VideoGeometry(1920, 800, 2.4f))
+
+		state.stop()
+
+		state.videoGeometry.value shouldBe VideoGeometry.EMPTY
 	}
 
 	listOf(PlayState.STOPPED, PlayState.ERROR).forEach { terminalState ->
