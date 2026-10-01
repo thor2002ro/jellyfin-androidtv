@@ -17,7 +17,7 @@ import org.jellyfin.sdk.model.api.VideoRangeType
 import java.util.UUID
 
 class PlaybackLauncherTests : FunSpec({
-	test("player selection follows the current queue item's HDR preferences") {
+	test("HDR player selection follows the video player by default") {
 		val userPreferences = mockk<UserPreferences>()
 		val normalPreferences = UserPreferences.playbackPlayerPreferences(hdr = false)
 		val hdrPreferences = UserPreferences.playbackPlayerPreferences(hdr = true)
@@ -26,7 +26,7 @@ class PlaybackLauncherTests : FunSpec({
 		every { userPreferences[normalPreferences.playbackBackend] } returns PlaybackBackend.LIBVLC
 		every { userPreferences[hdrPreferences.useExternalPlayer] } returns false
 		every { userPreferences[hdrPreferences.playbackRewriteVideoEnabled] } returns true
-		every { userPreferences[hdrPreferences.playbackBackend] } returns PlaybackBackend.MPV
+		every { userPreferences[hdrPreferences.playbackBackend] } returns PlaybackBackend.SAME_VIDEO_PLAYER
 
 		val launcher = PlaybackLauncher(
 			mediaManager = mockk(relaxed = true),
@@ -41,6 +41,26 @@ class PlaybackLauncherTests : FunSpec({
 			backend = PlaybackBackend.LIBVLC,
 		)
 		launcher.getVideoPlayerSelection(queue, 1) shouldBe PlaybackLauncher.VideoPlayerSelection(
+			player = PlaybackLauncher.VideoPlayer.NEW,
+			backend = PlaybackBackend.LIBVLC,
+		)
+	}
+
+	test("HDR player selection can use dedicated preferences") {
+		val userPreferences = mockk<UserPreferences>()
+		val hdrPreferences = UserPreferences.playbackPlayerPreferences(hdr = true)
+		every { userPreferences[hdrPreferences.useExternalPlayer] } returns false
+		every { userPreferences[hdrPreferences.playbackRewriteVideoEnabled] } returns true
+		every { userPreferences[hdrPreferences.playbackBackend] } returns PlaybackBackend.MPV
+
+		val launcher = PlaybackLauncher(
+			mediaManager = mockk(relaxed = true),
+			videoQueueManager = mockk(relaxed = true),
+			navigationRepository = mockk<NavigationRepository>(relaxed = true),
+			userPreferences = userPreferences,
+		)
+
+		launcher.getVideoPlayerSelection(listOf(videoItem(VideoRangeType.HDR10)), 0) shouldBe PlaybackLauncher.VideoPlayerSelection(
 			player = PlaybackLauncher.VideoPlayer.NEW,
 			backend = PlaybackBackend.MPV,
 		)

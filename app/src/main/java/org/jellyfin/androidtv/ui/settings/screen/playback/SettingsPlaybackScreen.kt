@@ -284,14 +284,19 @@ internal fun playerResourceIds(
 	useExternalPlayer: Boolean,
 	playbackRewriteVideoEnabled: Boolean,
 	playbackBackend: PlaybackBackend,
-) = if (useExternalPlayer) {
-	R.drawable.ic_tv_play to R.string.video_player_external
-} else if (!playbackRewriteVideoEnabled) {
-	R.mipmap.app_icon to R.string.app_name
-} else when (playbackBackend) {
-	PlaybackBackend.EXOPLAYER -> R.drawable.ic_exoplayer to R.string.playback_backend_exoplayer_name
-	PlaybackBackend.LIBVLC -> R.drawable.ic_libvlc to R.string.playback_backend_libvlc_name
-	PlaybackBackend.MPV -> R.drawable.ic_mpv to R.string.playback_backend_mpv_name
+): Pair<Int, Int> {
+	val backendResources = when (playbackBackend) {
+		PlaybackBackend.SAME_VIDEO_PLAYER -> R.drawable.ic_tv_play to R.string.playback_hdr_follow_video_player
+		PlaybackBackend.EXOPLAYER -> R.drawable.ic_exoplayer to R.string.playback_backend_exoplayer_name
+		PlaybackBackend.LIBVLC -> R.drawable.ic_libvlc to R.string.playback_backend_libvlc_name
+		PlaybackBackend.MPV -> R.drawable.ic_mpv to R.string.playback_backend_mpv_name
+	}
+	return when {
+		playbackBackend == PlaybackBackend.SAME_VIDEO_PLAYER -> backendResources
+		useExternalPlayer -> R.drawable.ic_tv_play to R.string.video_player_external
+		!playbackRewriteVideoEnabled -> R.mipmap.app_icon to R.string.app_name
+		else -> backendResources
+	}
 }
 
 @Composable

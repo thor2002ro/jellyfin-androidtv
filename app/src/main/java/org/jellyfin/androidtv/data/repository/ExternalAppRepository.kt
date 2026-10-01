@@ -8,6 +8,7 @@ import android.content.pm.ResolveInfo
 import androidx.core.net.toUri
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.playbackPlayerPreferences
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.util.componentName
 
@@ -35,7 +36,8 @@ class ExternalAppRepository(
 		hdr: Boolean = false,
 		externalApps: List<ResolveInfo>? = null,
 	): ActivityInfo? {
-		val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr)
+		val effectiveHdr = hdr && userPreferences[UserPreferences.playbackPlayerPreferences(hdr).playbackBackend] != PlaybackBackend.SAME_VIDEO_PLAYER
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(effectiveHdr)
 
 		// Validate if external app should be used at all
 		val useExternalPlayer = userPreferences[playerPreferences.useExternalPlayer]
@@ -56,7 +58,7 @@ class ExternalAppRepository(
 			.let { compatibleApps -> compatibleApps.find { it.isDefault } ?: compatibleApps.firstOrNull() }
 			?.activityInfo
 
-		setExternalPlayerapp(fallback, hdr)
+		setExternalPlayerapp(fallback, effectiveHdr)
 		return fallback
 	}
 
