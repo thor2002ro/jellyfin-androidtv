@@ -65,7 +65,10 @@ class JellyfinMediaStreamResolver(
 
 		val playbackOptions = liveTvPlaybackPolicy.getPlaybackOptions(baseItem)
 		var forceTranscoding = queueEntry.forceTranscoding == true
-		val mediaStreamOptions = mediaStreamOptionsProvider(baseItem, queueEntry.mediaSourceId)
+		// Live TV tracks may be incomplete before PlaybackInfo opens and probes the stream.
+		// Preserve saved indexes until the returned source can validate them.
+		val mediaStreamOptionsItem = if (isLiveTv) baseItem.copy(mediaSources = null) else baseItem
+		val mediaStreamOptions = mediaStreamOptionsProvider(mediaStreamOptionsItem, queueEntry.mediaSourceId)
 		val playbackInfoMediaSourceId = queueEntry.mediaSourceId.takeUnless { isLiveTv }
 		val profileRequest = deviceProfileBuilder(queueEntry)
 		val profile = profileRequest.profile
@@ -93,33 +96,64 @@ class JellyfinMediaStreamResolver(
 				!preferDirectPlay &&
 				!forceTranscoding &&
 				shouldForceLiveTvTranscoding(profile.maxStreamingBitrate, liveTvSourceBitrate)
+			var resolvedMediaStreamOptions = mediaStreamOptionsProvider(
+				baseItem.copy(mediaSources = listOf(mediaInfo.mediaSource)),
+				mediaInfo.mediaSource.id,
+			)
+			val directPlayAvailable =
+				!forceTranscoding &&
+				playbackOptions.enableDirectPlay &&
+				mediaInfo.mediaSource.supportsDirectPlay
+			val serverOutputAvailable =
+				mediaInfo.mediaSource.transcodingUrl != null &&
+				(
+					(!forceTranscoding && playbackOptions.enableDirectStream && mediaInfo.mediaSource.supportsDirectStream) ||
+						mediaInfo.mediaSource.supportsTranscoding
+				)
 			if (forceLiveTvTranscoding) {
 				forceTranscoding = true
 				Timber.i("Forcing Live TV transcoding because source bitrate %s exceeds configured bitrate %s", liveTvSourceBitrate, profile.maxStreamingBitrate)
+			}
+			// Server-generated URLs encode track choices, so renegotiate once when the
+			// returned track list changes the requested selection.
+			val renegotiateServerOutput =
+				!directPlayAvailable && serverOutputAvailable && resolvedMediaStreamOptions != mediaStreamOptions
+			if (forceLiveTvTranscoding || renegotiateServerOutput) {
+				val openedMediaSource = mediaInfo.mediaSource
+				// Reuse the opened source so this request cannot open another tuner session.
 				mediaInfo = getPlaybackInfo(
 					item = baseItem,
-					mediaSourceId = playbackInfoMediaSourceId,
+					mediaSourceId = openedMediaSource.id,
+					liveStreamId = openedMediaSource.liveStreamId,
 					startPosition = startPosition,
 					playbackOptions = playbackOptions,
-					forceTranscoding = true,
-					mediaStreamOptions = mediaStreamOptions,
+					forceTranscoding = forceTranscoding,
+					mediaStreamOptions = resolvedMediaStreamOptions,
 					profile = profile,
 				)
+				resolvedMediaStreamOptions = mediaStreamOptionsProvider(
+					baseItem.copy(mediaSources = listOf(mediaInfo.mediaSource)),
+					mediaInfo.mediaSource.id,
+				)
 			}
+			val serverMediaStreamOptions = JellyfinMediaStreamOptions(
+				audioStreamIndex = mediaInfo.mediaSource.defaultAudioStreamIndex,
+				subtitleStreamIndex = mediaInfo.mediaSource.defaultSubtitleStreamIndex,
+			)
 			val stream = when {
 				// Direct play video
 				!forceTranscoding && playbackOptions.enableDirectPlay && mediaInfo.mediaSource.supportsDirectPlay && mediaType == MediaType.VIDEO -> mediaInfo.toStream(
 					queueEntry = queueEntry,
 					conversionMethod = MediaConversionMethod.None,
 					url = mediaInfo.getDirectPlayVideoUrl(baseItem),
-					mediaStreamOptions = mediaStreamOptions,
+					mediaStreamOptions = resolvedMediaStreamOptions,
 				)
 
 				// Direct play audio
 				!forceTranscoding && playbackOptions.enableDirectPlay && mediaInfo.mediaSource.supportsDirectPlay && mediaType == MediaType.AUDIO -> mediaInfo.toStream(
 					queueEntry = queueEntry,
 					conversionMethod = MediaConversionMethod.None,
-					mediaStreamOptions = mediaStreamOptions,
+					mediaStreamOptions = resolvedMediaStreamOptions,
 					url = api.audioApi.getAudioStreamUrl(
 						itemId = baseItem.id,
 						container = mediaInfo.mediaSource.container,
@@ -135,7 +169,7 @@ class JellyfinMediaStreamResolver(
 					queueEntry = queueEntry,
 					conversionMethod = MediaConversionMethod.Remux,
 					url = api.createUrl(requireNotNull(mediaInfo.mediaSource.transcodingUrl), ignorePathParameters = true),
-					mediaStreamOptions = mediaStreamOptions,
+					mediaStreamOptions = serverMediaStreamOptions,
 				)
 
 				// Transcode
@@ -146,7 +180,7 @@ class JellyfinMediaStreamResolver(
 							requestedDoviDecision?.request != null && mediaInfo.mediaSource.isDoviVideoCopyCandidate()
 					) MediaConversionMethod.Remux else MediaConversionMethod.Transcode,
 					url = api.createUrl(requireNotNull(mediaInfo.mediaSource.transcodingUrl), ignorePathParameters = true),
-					mediaStreamOptions = mediaStreamOptions,
+					mediaStreamOptions = serverMediaStreamOptions,
 				)
 
 				// No compatible stream found
@@ -176,6 +210,7 @@ class JellyfinMediaStreamResolver(
 	private suspend fun getPlaybackInfo(
 		item: BaseItemDto,
 		mediaSourceId: String? = null,
+		liveStreamId: String? = null,
 		startPosition: Duration? = null,
 		playbackOptions: LiveTvPlaybackPolicy.PlaybackOptions,
 		forceTranscoding: Boolean,
@@ -186,6 +221,7 @@ class JellyfinMediaStreamResolver(
 			itemId = item.id,
 			data = PlaybackInfoDto(
 				mediaSourceId = mediaSourceId,
+				liveStreamId = liveStreamId,
 				startTimeTicks = startPosition?.inWholeTicks,
 				deviceProfile = profile,
 				maxStreamingBitrate = profile.maxStreamingBitrate,
