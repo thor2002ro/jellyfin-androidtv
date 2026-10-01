@@ -239,7 +239,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
             ItemRowAdapter rowAdapter;
             switch (def.getQueryType()) {
                 case NextUp:
-                    rowAdapter = new ItemRowAdapter(requireContext(), def.getNextUpQuery(), true, mCardPresenter, mRowsAdapter);
+                    rowAdapter = new ItemRowAdapter(requireContext(), def.getNextUpQuery(), true, cardPresenterForRow(def.getQueryType(), mCardPresenter), mRowsAdapter);
                     break;
                 case LatestItems:
                     rowAdapter = new ItemRowAdapter(requireContext(), def.getLatestItemsQuery(), true, mCardPresenter, mRowsAdapter);
@@ -288,6 +288,11 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         addAdditionalRows(mRowsAdapter);
 
         if (mRowsFragment != null) mRowsFragment.setAdapter(mRowsAdapter);
+    }
+
+    static CardPresenter cardPresenterForRow(QueryType queryType, CardPresenter defaultPresenter) {
+        if (queryType != QueryType.NextUp) return defaultPresenter;
+        return new CardPresenter(false, ImageType.THUMB, 120);
     }
 
     protected void onRowAdapterCreated(BrowseRowDef rowDef, ItemRowAdapter rowAdapter) {
