@@ -239,6 +239,53 @@ class LibMPVOptionsTest : StringSpec({
 		}
 	}
 
+	"4K video at 50 fps or faster bypasses the MPV GPU path" {
+		effectiveLibMPVVideoOutput(
+			configured = "gpu-next",
+			decoder = LibMPVVideoDecoder.AUTOMATIC,
+			videoRange = "SDR",
+			videoWidth = 3840,
+			videoHeight = 2160,
+			videoFrameRate = 50f,
+		) shouldBe "mediacodec_embed"
+
+		effectiveLibMPVVideoOutput(
+			configured = "gpu-next",
+			decoder = LibMPVVideoDecoder.MEDIACODEC,
+			videoRange = "SDR",
+			videoWidth = 3840,
+			videoHeight = 2160,
+			videoFrameRate = 59.94f,
+			videoMetadataDescribesOutput = false,
+		) shouldBe "gpu-next"
+
+		effectiveLibMPVVideoOutput(
+			configured = "gpu-next",
+			decoder = LibMPVVideoDecoder.MEDIACODEC,
+			videoRange = "HDR10",
+			videoWidth = 3840,
+			videoHeight = 2160,
+			videoFrameRate = 59.94f,
+			videoMetadataDescribesOutput = false,
+		) shouldBe "mediacodec_embed"
+
+		listOf(
+			LibMPVVideoDecoder.SOFTWARE to Triple(3840, 2160, 59.94f),
+			LibMPVVideoDecoder.MEDIACODEC_COPY to Triple(3840, 2160, 59.94f),
+			LibMPVVideoDecoder.MEDIACODEC to Triple(1920, 1080, 59.94f),
+			LibMPVVideoDecoder.MEDIACODEC to Triple(3840, 2160, 49.94f),
+		).forEach { (decoder, dimensions) ->
+			effectiveLibMPVVideoOutput(
+				configured = "gpu-next",
+				decoder = decoder,
+				videoRange = "SDR",
+				videoWidth = dimensions.first,
+				videoHeight = dimensions.second,
+				videoFrameRate = dimensions.third,
+			) shouldBe "gpu-next"
+		}
+	}
+
 	"mpv HDR mode reports dynamic metadata before transfer characteristics" {
 		mpvHdrMode("pq", 8, hasHdr10Plus = true) shouldBe "Dolby Vision (Profile 8)"
 		mpvHdrMode("pq", null, hasHdr10Plus = true) shouldBe "HDR10+"
@@ -588,12 +635,10 @@ class LibMPVOptionsTest : StringSpec({
 		formatLibMPVBufferDetails(1_048_576, true, false, 2_097_152.0) shouldBe "1.00 MiB, paused, 2.00 MiB/s"
 	}
 
-	"native subtitle overlay requires HDR direct MediaCodec output" {
-		shouldUseNativeSubtitleOverlay("HDR10", "mediacodec_embed") shouldBe true
-		shouldUseNativeSubtitleOverlay("DolbyVision", "mediacodec_embed") shouldBe true
-		shouldUseNativeSubtitleOverlay("SDR", "mediacodec_embed") shouldBe false
-		shouldUseNativeSubtitleOverlay("UNKNOWN", "mediacodec_embed") shouldBe false
-		shouldUseNativeSubtitleOverlay("HDR10", "gpu-next") shouldBe false
+	"native subtitle overlay requires direct MediaCodec output and a selected subtitle" {
+		shouldUseNativeSubtitleOverlay("mediacodec_embed", hasSelectedSubtitle = true) shouldBe true
+		shouldUseNativeSubtitleOverlay("mediacodec_embed", hasSelectedSubtitle = false) shouldBe false
+		shouldUseNativeSubtitleOverlay("gpu-next", hasSelectedSubtitle = true) shouldBe false
 	}
 
 	"unchanged native subtitle overlay omits pixels" {
