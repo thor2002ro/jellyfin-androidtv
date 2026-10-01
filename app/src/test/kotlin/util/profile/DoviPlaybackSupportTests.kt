@@ -6,6 +6,8 @@ import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.unmockkConstructor
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -43,11 +45,13 @@ import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class DoviPlaybackSupportTests : FunSpec({
 	val nativeCapabilities = DoviCapability.entries.toSet()
 	val bridge = DoviBridgeEvidence(true, nativeCapabilities)
+	afterTest { unmockkConstructor(Size::class) }
 
 	fun request(
 		mode: DoviCompatibilityMode = DoviCompatibilityMode.AUTO,
@@ -260,6 +264,9 @@ class DoviPlaybackSupportTests : FunSpec({
 	}
 
 	test("device profile removes only the exact selected HEVC range and leaves AV1 reporting unchanged") {
+		mockkConstructor(Size::class)
+		every { anyConstructed<Size>().width } returns 3840
+		every { anyConstructed<Size>().height } returns 2160
 		val size = mockk<Size> {
 			every { width } returns 3840
 			every { height } returns 2160
@@ -323,7 +330,7 @@ class DoviPlaybackSupportTests : FunSpec({
 		profile(fallback, capabilities = supportedMediaTest)
 			.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe true
 		profile(plan, setOf(VideoRangeType.DOVI_WITH_EL))
-			.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe true
+			.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe false
 	}
 
 	test("binding a new request clears a stale queue-entry decision") {
@@ -348,11 +355,11 @@ class DoviPlaybackSupportTests : FunSpec({
 	test("ambiguous media sources require an explicit source id") {
 		val first = doviMediaSource("a", "mkv")
 		val second = doviMediaSource("b", "mp4")
-		val item = BaseItemDto(id = UUID.randomUUID(), mediaSources = listOf(first, second))
+		val item = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE, mediaSources = listOf(first, second))
 
 		item.findDoviVideo(null) shouldBe null
 		item.findDoviVideo("b")?.first shouldBe second
-		BaseItemDto(id = UUID.randomUUID(), mediaSources = listOf(first))
+		BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE, mediaSources = listOf(first))
 			.findDoviVideo(null)?.first shouldBe first
 	}
 
@@ -371,6 +378,16 @@ class DoviPlaybackSupportTests : FunSpec({
 			source = profile7,
 			device = DoviDeviceCapabilities(supportsProfile7 = true),
 		)).decision.route shouldBe DoviRoute.Native
+	}
+
+	test("Profile 7 production metadata without a compatibility id converts to Profile 8.1") {
+		val source = doviMediaSource("p7", "mkv", VideoRangeType.DOVI_WITH_EL, dvProfile = 7)
+			.mediaStreams.orEmpty().single().toDoviSource()
+
+		decideDoviPlayback(request(
+			source = source,
+			device = DoviDeviceCapabilities(supportsProfile8 = true),
+		)).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 	}
 
 	test("Profile 5 production metadata converts only with explicit compatibility id base evidence") {
@@ -413,7 +430,14 @@ class DoviPlaybackSupportTests : FunSpec({
 			createDoviPlaybackPlan(
 				item = BaseItemDto(
 					id = UUID.randomUUID(),
-					mediaSources = listOf(doviMediaSource("p5", "mp4", range, 5, compatibilityId)),
+					type = BaseItemKind.MOVIE,
+					mediaSources = listOf(doviMediaSource(
+						id = "p5",
+						container = "mp4",
+						range = range,
+						dvProfile = 5,
+						compatibilityId = compatibilityId,
+					)),
 				),
 				mediaSourceId = "p5",
 				userPreferences = preferences,
@@ -428,6 +452,46 @@ class DoviPlaybackSupportTests : FunSpec({
 		create(0)?.decision?.route shouldBe DoviRoute.ServerFallback
 		create(1)?.decision?.request?.target shouldBe DoviTarget.PROFILE_8_1
 		create(1, VideoRangeType.DOVI_WITH_HDR10_PLUS)?.decision?.request?.target shouldBe DoviTarget.PROFILE_8_1
+	}
+
+	test("disabling native Profile 7 still permits its HDR10 base route") {
+		val preferences = mockk<UserPreferences>()
+		val hdrPlayer = UserPreferences.playbackPlayerPreferences(hdr = true)
+		every { preferences[UserPreferences.doviCompatibilityMode] } returns AppDoviCompatibilityMode.AUTO
+		every { preferences[hdrPlayer.useExternalPlayer] } returns false
+		every { preferences[hdrPlayer.playbackRewriteVideoEnabled] } returns true
+		every { preferences[hdrPlayer.playbackBackend] } returns PlaybackBackend.MPV
+		HdrFormat.entries.forEach { format ->
+			every { preferences[format.preference] } returns if (format == HdrFormat.DOVI_PROFILE_7) {
+				HdrOverrideMode.DISABLE
+			} else {
+				HdrOverrideMode.AUTO
+			}
+		}
+		val plan = createDoviPlaybackPlan(
+			item = BaseItemDto(
+				id = UUID.randomUUID(),
+				type = BaseItemKind.MOVIE,
+				mediaSources = listOf(doviMediaSource(
+					id = "p7",
+					container = "mkv",
+					range = VideoRangeType.DOVI_WITH_EL,
+					dvProfile = 7,
+					compatibilityId = 6,
+				)),
+			),
+			mediaSourceId = "p7",
+			userPreferences = preferences,
+			mediaTest = mockk(relaxed = true),
+			retrySuppressed = false,
+			bridge = bridge,
+			workarounds = DoviWorkarounds(),
+			displayHdrTypes = setOf(DISPLAY_HDR_TYPE_HDR10),
+		)
+
+		plan?.decision?.route shouldBe DoviRoute.SourceBase(
+			io.github.thor2002ro.libdovi.DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
+		)
 	}
 
 	test("expected decision mismatch clears a returned source match") {
@@ -457,7 +521,7 @@ class DoviPlaybackSupportTests : FunSpec({
 		).resolve() shouldBe workaround
 	}
 
-	test("source-base fallback requires both codec and display HDR support") {
+	test("source-base fallback requires effective HDR output support") {
 		val source = DoviSource(DoviPresentation.PROFILE_7_FEL, DoviPresentation.HDR10)
 		val noDisplay = decideDoviPlayback(
 			request(
@@ -478,6 +542,155 @@ class DoviPlaybackSupportTests : FunSpec({
 		supportedDisplay.decision.route shouldBe DoviRoute.SourceBase(
 			io.github.thor2002ro.libdovi.DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
 		)
+	}
+
+	test("source-base playback remains attemptable when decoder HDR reporting is false") {
+		val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true)
+		val capabilities = effectiveDoviDeviceCapabilities(
+			mediaTest,
+			enabled = emptySet(),
+			disabled = emptySet(),
+			displayHdrTypes = setOf(
+				DISPLAY_HDR_TYPE_HDR10,
+				DISPLAY_HDR_TYPE_HDR10_PLUS,
+				DISPLAY_HDR_TYPE_HLG,
+			),
+		)
+
+		capabilities.supportsHdr10 shouldBe true
+		capabilities.supportsHdr10Plus shouldBe true
+		capabilities.supportsHlg shouldBe true
+		decideDoviPlayback(request(
+			source = DoviSource(DoviPresentation.PROFILE_7_FEL, DoviPresentation.HDR10),
+			device = capabilities,
+		)).decision.route shouldBe DoviRoute.SourceBase(
+			io.github.thor2002ro.libdovi.DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
+		)
+	}
+
+	test("selected optimistic Dolby Vision route advertises HEVC Main 10 to Jellyfin") {
+		mockkConstructor(Size::class)
+		every { anyConstructed<Size>().width } returns 0
+		every { anyConstructed<Size>().height } returns 0
+		val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
+			every { getMaxResolution(any()) } returns Size(0, 0)
+			every { supportsHevc() } returns false
+			every { supportsHevcMain10() } returns false
+		}
+		val plan = decideDoviPlayback(request(
+			mode = DoviCompatibilityMode.ALWAYS,
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		))
+		val profile = createDeviceProfile(
+			mediaTest = mediaTest,
+			maxBitrate = 100_000_000,
+			maxResolution = PlaybackResolution.NATIVE,
+			isAC3PrefEnabled = true,
+			isEAC3PrefEnabled = true,
+			isDTSPrefEnabled = true,
+			isTrueHDPrefEnabled = true,
+			downMixAudio = false,
+			assDirectPlay = true,
+			pgsDirectPlay = true,
+			userAVCLevel = null,
+			userHEVCLevel = null,
+			forceEnabledHdr = emptySet(),
+			forceDisabledHdr = emptySet(),
+			doviPlaybackPlan = plan,
+		)
+
+		profile.codecProfiles
+			.asSequence()
+			.filter { it.codec == Codec.Video.HEVC }
+			.flatMap { it.conditions.asSequence() }
+			.filter { it.property == ProfileConditionValue.VIDEO_PROFILE }
+			.flatMap { it.value.orEmpty().split('|').asSequence() }
+			.any { it == "main 10" } shouldBe true
+		profile.codecProfiles
+			.asSequence()
+			.filter { it.codec == Codec.Video.HEVC }
+			.flatMap { it.conditions.asSequence() }
+			.none { condition ->
+				condition.property == ProfileConditionValue.WIDTH ||
+					condition.property == ProfileConditionValue.HEIGHT
+			} shouldBe true
+	}
+
+	test("selected optimistic Dolby Vision route preserves the explicit HEVC resolution limit") {
+		mockkConstructor(Size::class)
+		every { anyConstructed<Size>().width } returns 0
+		every { anyConstructed<Size>().height } returns 0
+		val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
+			every { getMaxResolution(any()) } returns Size(0, 0)
+			every { supportsHevc() } returns false
+			every { supportsHevcMain10() } returns false
+		}
+		val plan = decideDoviPlayback(request(
+			mode = DoviCompatibilityMode.ALWAYS,
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		))
+		val profile = createDeviceProfile(
+			mediaTest = mediaTest,
+			maxBitrate = 100_000_000,
+			maxResolution = PlaybackResolution.FULL_HD_1080,
+			isAC3PrefEnabled = true,
+			isEAC3PrefEnabled = true,
+			isDTSPrefEnabled = true,
+			isTrueHDPrefEnabled = true,
+			downMixAudio = false,
+			assDirectPlay = true,
+			pgsDirectPlay = true,
+			userAVCLevel = null,
+			userHEVCLevel = null,
+			forceEnabledHdr = emptySet(),
+			forceDisabledHdr = emptySet(),
+			doviPlaybackPlan = plan,
+		)
+
+		profile.codecProfiles
+			.asSequence()
+			.filter { it.codec == Codec.Video.HEVC }
+			.flatMap { it.conditions.asSequence() }
+			.filter { condition ->
+				condition.property == ProfileConditionValue.WIDTH ||
+					condition.property == ProfileConditionValue.HEIGHT
+			}
+			.associate { it.property to it.value } shouldBe mapOf(
+			ProfileConditionValue.WIDTH to "1920",
+			ProfileConditionValue.HEIGHT to "1080",
+		)
+	}
+
+	test("Main10 decoding keeps source-base playback attemptable on SDR displays for both backends") {
+		val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
+			every { supportsHevcMain10() } returns true
+		}
+		val capabilities = effectiveDoviDeviceCapabilities(
+			mediaTest,
+			enabled = emptySet(),
+			disabled = emptySet(),
+			displayHdrTypes = emptySet(),
+		)
+
+		listOf(
+			DoviPresentation.HDR10 to DoviDeviceCapabilities::supportsHdr10,
+			DoviPresentation.HDR10_PLUS to DoviDeviceCapabilities::supportsHdr10Plus,
+			DoviPresentation.HLG to DoviDeviceCapabilities::supportsHlg,
+		).forEach { (basePresentation, isSupported) ->
+			isSupported(capabilities) shouldBe true
+			DoviPlaybackBackend.entries
+				.filter { it != DoviPlaybackBackend.OTHER }
+				.forEach { backend ->
+					decideDoviPlayback(request(
+						mode = DoviCompatibilityMode.ALWAYS,
+						backend = backend,
+						source = DoviSource(DoviPresentation.PROFILE_7_FEL, basePresentation),
+						device = capabilities,
+					)).decision.route shouldBe DoviRoute.SourceBase(
+						io.github.thor2002ro.libdovi.DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
+					)
+				}
+		}
 	}
 
 	test("HLG capability requires positive decoder format and display evidence") {
@@ -502,13 +715,13 @@ class DoviPlaybackSupportTests : FunSpec({
 		negative.supportsHlg shouldBe false
 		negative.supportsProfile84 shouldBe false
 
-		val hlgSource = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HLG)
+		val hlgSource = DoviSource(DoviPresentation.PROFILE_8_4, DoviPresentation.HLG)
 		decideDoviPlayback(request(
 			mode = DoviCompatibilityMode.COMPATIBILITY,
 			range = VideoRangeType.DOVI_WITH_HLG,
 			source = hlgSource,
 			device = positive,
-		)).decision.request?.target shouldBe DoviTarget.PROFILE_8_4
+		)).decision.route shouldBe DoviRoute.Native
 		decideDoviPlayback(request(
 			mode = DoviCompatibilityMode.COMPATIBILITY,
 			range = VideoRangeType.DOVI_WITH_HLG,

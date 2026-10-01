@@ -102,13 +102,15 @@ private fun UserPreferences.isBitstreamAudioEnabled(context: Context, format: Bi
 		BitstreamAudioMode.DISABLE -> false
 	}
 
-fun createDeviceProfile(
+@JvmOverloads
+internal fun createDeviceProfile(
 	context: Context,
 	userPreferences: UserPreferences,
 	serverVersion: ServerVersion,
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
+	softwareCodecsEnabled: Boolean = userPreferences[UserPreferences.softwareCodecsEnabled],
+	mediaTest: MediaCodecCapabilitiesTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled),
 ): DeviceProfile {
-	val mediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled])
 	return createDeviceProfile(
 		mediaTest = mediaTest,
 		maxBitrate = userPreferences.getMaxBitrate(),
@@ -128,7 +130,7 @@ fun createDeviceProfile(
 	)
 }
 
-fun createDeviceProfile(
+internal fun createDeviceProfile(
 	mediaTest: MediaCodecCapabilitiesTest,
 	maxBitrate: Int,
 	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
@@ -162,6 +164,10 @@ fun createDeviceProfile(
 
 	val supportsHevc = mediaTest.supportsHevc()
 	val supportsHevcMain10 = mediaTest.supportsHevcMain10()
+	val attemptSelectedHevcSource =
+		doviPlaybackPlan?.codec == DoviVideoCodec.HEVC &&
+			doviPlaybackPlan.decision.route != DoviRoute.ServerFallback
+	val advertiseHevcMain10 = supportsHevcMain10 || attemptSelectedHevcSource
 	val hevcMainLevel = userHEVCLevel ?: mediaTest.getHevcMainLevel()
 	val hevcMain10Level = userHEVCLevel ?: mediaTest.getHevcMain10Level()
 	val supportsAVC = mediaTest.supportsAVC()
@@ -173,6 +179,8 @@ fun createDeviceProfile(
 	val supportsVC1 = mediaTest.supportsVc1()
 	val maxResolutionAVC = mediaTest.getMaxResolution(MimeTypes.VIDEO_H264).capTo(maxResolution)
 	val maxResolutionHevc = mediaTest.getMaxResolution(MimeTypes.VIDEO_H265).capTo(maxResolution)
+	val maxHevcWidth = if (attemptSelectedHevcSource) maxResolution.maxWidth else maxResolutionHevc.width
+	val maxHevcHeight = if (attemptSelectedHevcSource) maxResolution.maxHeight else maxResolutionHevc.height
 	val maxResolutionAV1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_AV1).capTo(maxResolution)
 	val maxResolutionVC1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VC1).capTo(maxResolution)
 
@@ -366,11 +374,12 @@ fun createDeviceProfile(
 
 		conditions {
 			when {
-				!supportsHevc -> ProfileConditionValue.VIDEO_PROFILE equals "none"
-				else -> ProfileConditionValue.VIDEO_PROFILE inCollection listOfNotNull(
-					"main",
-					if (supportsHevcMain10) "main 10" else null
+				advertiseHevcMain10 -> ProfileConditionValue.VIDEO_PROFILE inCollection listOfNotNull(
+					if (supportsHevc) "main" else null,
+					"main 10",
 				)
+				!supportsHevc -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+				else -> ProfileConditionValue.VIDEO_PROFILE equals "main"
 			}
 		}
 	}
@@ -443,13 +452,15 @@ fun createDeviceProfile(
 	}
 
 	// HEVC
-	codecProfile {
-		type = CodecType.VIDEO
-		codec = Codec.Video.HEVC
+	if (maxHevcWidth != null && maxHevcHeight != null) {
+		codecProfile {
+			type = CodecType.VIDEO
+			codec = Codec.Video.HEVC
 
-		conditions {
-			ProfileConditionValue.WIDTH lowerThanOrEquals maxResolutionHevc.width
-			ProfileConditionValue.HEIGHT lowerThanOrEquals maxResolutionHevc.height
+			conditions {
+				ProfileConditionValue.WIDTH lowerThanOrEquals maxHevcWidth
+				ProfileConditionValue.HEIGHT lowerThanOrEquals maxHevcHeight
+			}
 		}
 	}
 
@@ -507,7 +518,7 @@ fun createDeviceProfile(
 		is DoviRoute.SourceBase,
 		is DoviRoute.Transform,
 		-> baselineUnsupportedRangeTypesHevc -
-			doviPlaybackPlan.advertisedHevcRangeTypes + forceDisabledHdr
+			doviPlaybackPlan.advertisedHevcRangeTypes
 		DoviRoute.ServerFallback -> error("Handled above")
 		}
 	}
