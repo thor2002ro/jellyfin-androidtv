@@ -77,6 +77,7 @@ import io.github.peerless2012.ass.media.widget.AssSubtitleView;
 import timber.log.Timber;
 
 import static org.jellyfin.androidtv.preference.ExoPlayerUserPreferencesKt.getPreferExoPlayerFfmpeg;
+import static org.jellyfin.androidtv.preference.AudioPassthroughPreferences.isAudioPassthroughEnabled;
 
 @OptIn(markerClass = UnstableApi.class)
 public class VideoManager {
@@ -279,7 +280,8 @@ public class VideoManager {
             SubtitleTimingOffsetRenderersFactory rendererFactory = new SubtitleTimingOffsetRenderersFactory(
                     context,
                     subtitleTimingOffsetState,
-                    subtitleParserFactory
+                    subtitleParserFactory,
+                    mimeType -> isAudioPassthroughEnabled(userPreferences, mimeType)
             );
             rendererFactory.setEnableDecoderFallback(true);
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
@@ -295,7 +297,8 @@ public class VideoManager {
             SubtitleTimingOffsetRenderersFactory rendererFactory = new SubtitleTimingOffsetRenderersFactory(
                     context,
                     subtitleTimingOffsetState,
-                    defaultSubtitleParserFactory
+                    defaultSubtitleParserFactory,
+                    mimeType -> isAudioPassthroughEnabled(userPreferences, mimeType)
             );
             rendererFactory.setEnableDecoderFallback(true);
             rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());

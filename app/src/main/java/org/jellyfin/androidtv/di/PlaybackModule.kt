@@ -18,6 +18,7 @@ import org.jellyfin.androidtv.preference.LibVLCBackendSettings
 import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
+import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCDecoder
 import org.jellyfin.androidtv.preference.mpvDecoder
@@ -103,6 +104,7 @@ val playbackModule = module {
 private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
 	val userPreferences = get<UserPreferences>()
 	val exoPlayerOptions = ExoPlayerOptions(
+		isAudioPassthroughEnabled = userPreferences::isAudioPassthroughEnabled,
 		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
 		preferFfmpegAudioForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] },
 		preferFfmpegVideo = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] },
