@@ -88,6 +88,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
@@ -1584,12 +1585,14 @@ class ExoPlayerBackend(
 		ensureRendererPreferences()
 		resetPlaybackStats()
 		setPendingInitialTrackSelection(stream.initialTrackSelection())
+		val startPositionMs = item.startPosition?.inWholeMilliseconds
 
-		if (exoPlayerOptions.enableLibass) {
+		if (exoPlayerOptions.enableLibass || exoPlayer.mediaItemCount == 0) {
+			val initialPositionMs = startPositionMs ?: C.TIME_UNSET
 			if (item.liveStreamTargetOffset != null) {
-				exoPlayer.setMediaSource(item.createMediaSource(stream))
+				exoPlayer.setMediaSource(item.createMediaSource(stream), initialPositionMs)
 			} else {
-				exoPlayer.setMediaItem(item.toMediaItem(stream))
+				exoPlayer.setMediaItem(item.toMediaItem(stream), initialPositionMs)
 			}
 			exoPlayer.prepare()
 		} else {
@@ -1604,11 +1607,12 @@ class ExoPlayerBackend(
 			}
 
 			// Seek to prepared media item
-			when (preparedItemIndex) {
-				exoPlayer.currentMediaItemIndex - 1 -> exoPlayer.seekToPreviousMediaItem()
-				exoPlayer.currentMediaItemIndex + 1 -> exoPlayer.seekToNextMediaItem()
-				exoPlayer.currentMediaItemIndex -> Unit
-				else -> exoPlayer.seekTo(preparedItemIndex, 0)
+			when {
+				startPositionMs != null -> exoPlayer.seekTo(preparedItemIndex, startPositionMs)
+				preparedItemIndex == exoPlayer.currentMediaItemIndex - 1 -> exoPlayer.seekToPreviousMediaItem()
+				preparedItemIndex == exoPlayer.currentMediaItemIndex + 1 -> exoPlayer.seekToNextMediaItem()
+				preparedItemIndex == exoPlayer.currentMediaItemIndex -> Unit
+				else -> exoPlayer.seekToDefaultPosition(preparedItemIndex)
 			}
 		}
 		schedulePendingInitialTrackSelectionRetry()
