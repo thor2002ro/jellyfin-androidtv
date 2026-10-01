@@ -55,10 +55,6 @@ internal class DoviExtractorsFactory(
 		delegate.experimentalSetCodecsToParseWithinGopSampleDependencies(codecs)
 	}
 
-	override fun setParseHagcMetadata(parseHagcMetadata: Boolean): ExtractorsFactory = apply {
-		delegate.setParseHagcMetadata(parseHagcMetadata)
-	}
-
 	private fun Array<Extractor>.wrapped(): Array<Extractor> {
 		return map { extractor -> DoviExtractor(extractor, { context }, transformer) }.toTypedArray()
 	}
