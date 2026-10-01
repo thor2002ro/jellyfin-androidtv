@@ -180,7 +180,6 @@ object DoviCompatibilityPolicy {
 		val nativeCapabilities: Set<DoviCapability>,
 		val workarounds: DoviWorkarounds = DoviWorkarounds(),
 		val builtInPlayerSelected: Boolean = true,
-		val externalPlayerSelected: Boolean = false,
 		val retrySuppressed: Boolean = false,
 	)
 
@@ -204,7 +203,7 @@ object DoviCompatibilityPolicy {
 				serverFallback(DoviDecisionReason.DISABLED_BY_USER)
 			}
 		}
-		if (!input.builtInPlayerSelected || input.externalPlayerSelected || !input.backend.isSupported()) {
+		if (!input.builtInPlayerSelected || !input.backend.isSupported()) {
 			return serverFallback(DoviDecisionReason.BACKEND_UNSUPPORTED)
 		}
 		if (input.container?.lowercase() !in supportedContainers) {
