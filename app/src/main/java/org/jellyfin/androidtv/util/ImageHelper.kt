@@ -84,7 +84,17 @@ class ImageHelper(
 		maxWidth: Int? = null
 	): String? = getLogoImage(item)?.getUrl(api, maxWidth = maxWidth)
 
-	fun getLogoImage(item: BaseItemDto?): JellyfinImage? = item?.itemImages?.get(ImageType.LOGO) ?: item?.parentImages?.get(ImageType.LOGO)
+	fun getLogoImage(item: BaseItemDto?): JellyfinImage? = item?.let {
+		val itemImages = it.itemImages
+		itemImages[ImageType.LOGO]
+			?: it.parentImages[ImageType.LOGO]
+			// Live TV channels expose their station mark as PRIMARY rather than LOGO.
+			?: when (it.type) {
+				BaseItemKind.TV_CHANNEL,
+				BaseItemKind.LIVE_TV_CHANNEL -> itemImages[ImageType.PRIMARY]
+				else -> null
+			}
+	}
 
 	/**
 	 * A utility to return a URL reference to an image resource

@@ -52,6 +52,7 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackHEVCLe
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackInactivityPromptScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackMaxBitrateScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPhotoPlayerScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPlayerHeaderLayoutScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPlayerScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPreferredLanguageScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPrerollsScreen
@@ -116,6 +117,7 @@ object Routes {
 	const val PLAYBACK_HDR_PLAYER = "/playback/hdr-player"
 	const val PLAYBACK_AUDIO_LANGUAGE = "/playback/audio-language"
 	const val PLAYBACK_SUBTITLE_LANGUAGE = "/playback/subtitle-language"
+	const val PLAYBACK_PLAYER_HEADER_LAYOUT = "/playback/player-header-layout"
 	const val PLAYBACK_NEXT_UP = "/playback/next-up"
 	const val PLAYBACK_NEXT_UP_BEHAVIOR = "/playback/next-up/behavior"
 	const val PLAYBACK_INACTIVITY_PROMPT = "/playback/inactivity-prompt"
@@ -282,6 +284,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.PLAYBACK_SUBTITLE_LANGUAGE to {
 		SettingsPlaybackPreferredLanguageScreen(PreferredLanguageType.SUBTITLE)
+	},
+	Routes.PLAYBACK_PLAYER_HEADER_LAYOUT to {
+		SettingsPlaybackPlayerHeaderLayoutScreen()
 	},
 	Routes.PLAYBACK_NEXT_UP to {
 		SettingsPlaybackNextUpScreen()

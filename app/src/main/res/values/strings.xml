@@ -665,6 +665,10 @@
     <string name="color_alpha">Transparency</string>
     <string name="playback_video_player">Video player</string>
     <string name="playback_hdr_player">HDR player</string>
+    <string name="pref_player_header_layout">Player header layout</string>
+    <string name="pref_player_header_layout_text_only">Text only</string>
+    <string name="pref_player_header_layout_logo_above">Logo above details</string>
+    <string name="pref_player_header_layout_logo_beside">Logo beside details</string>
     <string name="playback_hdr_follow_video_player">Follow video player setting</string>
     <string name="playback_hdr_follow_video_player_description">Use the same player selected for non-HDR videos.</string>
     <string name="video_player_internal">Built-in video player</string>
