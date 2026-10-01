@@ -209,6 +209,8 @@
     <string name="dovi_compatibility_title">Dolby Vision compatibility</string>
     <string name="dovi_compatibility_description">Choose metadata-only compatibility for built-in player playback</string>
     <string name="dovi_compatibility_auto">Auto</string>
+    <string name="dovi_compatibility_fast_hdr">Fast HDR</string>
+    <string name="dovi_compatibility_fast_hdr_description">Uses the HDR10 or HDR10+ base layer for faster Dolby Vision playback. Works only with ExoPlayer.</string>
     <string name="dovi_compatibility_always">Always</string>
     <string name="dovi_compatibility_mode">Compatibility</string>
     <string name="dovi_compatibility_off">Off</string>
