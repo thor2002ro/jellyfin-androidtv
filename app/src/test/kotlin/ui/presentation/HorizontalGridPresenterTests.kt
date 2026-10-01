@@ -1,10 +1,19 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.view.KeyEvent
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
 
 class HorizontalGridPresenterTests : FunSpec({
+	test("up only leaves a horizontal grid from its top row") {
+		shouldForwardHorizontalGridKey(position = 0, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe true
+		shouldForwardHorizontalGridKey(position = 3, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe true
+		shouldForwardHorizontalGridKey(position = 1, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe false
+		shouldForwardHorizontalGridKey(position = 2, rows = 3, KeyEvent.KEYCODE_DPAD_UP) shouldBe false
+		shouldForwardHorizontalGridKey(position = 1, rows = 3, KeyEvent.KEYCODE_DPAD_DOWN) shouldBe true
+	}
+
 	test("compact card spacing only changes the gap between cards") {
 		resolveBrowseGridSpacing(8, LibraryCardSpacing.COMPACT) shouldBe 6
 	}
