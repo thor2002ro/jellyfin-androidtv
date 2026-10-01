@@ -4,13 +4,11 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.leanback.widget.BaseGridView
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.lifecycle.Lifecycle
@@ -62,7 +60,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 	private var adapter: ItemRowAdapter? = null
 	private var gridPresenter: HorizontalGridPresenter? = null
 	private var gridViewHolder: HorizontalGridPresenter.ViewHolder? = null
-	private var gridView: BaseGridView? = null
+	private var gridView: View? = null
 	private var currentItem: BaseRowItem? = null
 	private var selectedPosition = -1
 	private var pendingSelectedPosition: Int? = null
@@ -127,7 +125,9 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 	override fun onDestroyView() {
 		handler.removeCallbacksAndMessages(null)
-		gridView?.adapter = null
+		val presenter = gridPresenter
+		val holder = gridViewHolder
+		if (presenter != null && holder != null) presenter.onUnbindViewHolder(holder)
 		gridView = null
 		gridViewHolder = null
 		gridPresenter = null
@@ -150,42 +150,38 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		val metrics = calculateGridMetrics()
 		val presenter = HorizontalGridPresenter().apply {
 			setNumberOfRows(metrics.rows)
-			setShadowEnabled(false)
-			enableChildRoundedCorners(false)
 			setOnItemViewClickedListener(onItemClicked)
 			setOnItemViewSelectedListener(onItemSelected)
+			setOnItemLongClickedListener(liveTvActions::onLongClick)
+			setOnKeyListener(this@LiveTvChannelsFragment)
+			configure(
+				imageType = ImageType.THUMB,
+				cardHeight = pxToDp(metrics.cardHeightPx),
+				rows = metrics.rows,
+				horizontalSpacing = pxToDp(metrics.horizontalSpacingPx),
+				verticalSpacing = pxToDp(metrics.verticalSpacingPx),
+				paddingStart = pxToDp(metrics.horizontalPaddingPx),
+				paddingEnd = pxToDp(metrics.horizontalPaddingPx),
+				verticalPadding = pxToDp(metrics.verticalPaddingPx),
+				showInfo = false,
+				uniformAspect = true,
+			)
 		}
 
 		val viewHolder = presenter.onCreateViewHolder(viewBinding.rowsFragment)
-		val horizontalGridView = viewHolder.gridView
+		val horizontalGrid = viewHolder.gridView
 		pageJumpSize = metrics.pageJumpSize
 		holdJumpSize = metrics.holdJumpSize
 		viewBinding.rowsFragment.clipChildren = false
 		viewBinding.rowsFragment.clipToPadding = false
-		horizontalGridView.setGravity(Gravity.CENTER_VERTICAL)
-		horizontalGridView.clipChildren = false
-		horizontalGridView.clipToPadding = false
-		horizontalGridView.setPadding(
-			metrics.horizontalPaddingPx,
-			metrics.verticalPaddingPx,
-			metrics.horizontalPaddingPx,
-			metrics.verticalPaddingPx,
-		)
-		horizontalGridView.setRowHeight(metrics.cardHeightPx)
-		horizontalGridView.setHorizontalSpacing(metrics.horizontalSpacingPx)
-		horizontalGridView.setVerticalSpacing(metrics.verticalSpacingPx)
-		horizontalGridView.isFocusable = true
-		horizontalGridView.setInitialPrefetchItemCount(metrics.pageJumpSize)
-		horizontalGridView.setSmoothScrollMaxPendingMoves(CHANNEL_MAX_PENDING_DPAD_MOVES)
-		horizontalGridView.setSmoothScrollSpeedFactor(CHANNEL_SCROLL_SPEED_FACTOR)
-		horizontalGridView.setOnKeyInterceptListener { event -> handleChannelNavigationKey(event) }
+		horizontalGrid.isFocusable = true
 
 		viewBinding.rowsFragment.removeAllViews()
 		viewBinding.rowsFragment.addView(viewHolder.view)
 
 		gridPresenter = presenter
 		gridViewHolder = viewHolder
-		gridView = horizontalGridView
+		gridView = horizontalGrid
 
 		buildAdapter(metrics)
 	}
@@ -222,6 +218,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		viewBinding.counter.text = "$position | $total"
 
 		val grid = gridView ?: return
+		val presenter = gridPresenter ?: return
 		if (rowAdapter.itemsLoaded == 0) {
 			grid.isFocusable = false
 			viewBinding.title.text = folder?.name ?: getString(R.string.channels)
@@ -234,7 +231,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			val position = pendingPosition.coerceAtMost(rowAdapter.itemsLoaded - 1)
 			if (position >= 0) {
 				selectedPosition = position
-				grid.selectedPosition = position
+				presenter.setPosition(position)
 			}
 			if (position == pendingPosition || rowAdapter.itemsLoaded >= rowAdapter.totalItems) {
 				pendingSelectedPosition = null
@@ -260,7 +257,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			selectedPosition = if (rowItem == null) {
 				-1
 			} else {
-				gridView?.selectedPosition?.takeIf { it >= 0 } ?: rowAdapter.indexOf(rowItem)
+				gridPresenter?.getPosition()?.takeIf { it >= 0 } ?: rowAdapter.indexOf(rowItem)
 			}
 			if (selectedPosition >= 0) rowAdapter.loadMoreItemsIfNeeded(selectedPosition)
 			if (selectedPosition == pendingSelectedPosition) pendingSelectedPosition = null
@@ -311,7 +308,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		if (!refreshed && restorePosition != null) {
 			pendingSelectedPosition = null
 			if (rowAdapter.itemsLoaded > 0) {
-				gridView?.selectedPosition = restorePosition.coerceAtMost(rowAdapter.itemsLoaded - 1)
+				gridPresenter?.setPosition(restorePosition.coerceAtMost(rowAdapter.itemsLoaded - 1))
 				keepGridFocused()
 			}
 		}
@@ -354,13 +351,13 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 	private fun moveChannels(forward: Boolean, distance: Int): Boolean {
 		val rowAdapter = adapter ?: return true
-		val grid = gridView ?: return true
+		val presenter = gridPresenter ?: return true
 		val total = rowAdapter.totalItems.takeIf { it > 0 } ?: rowAdapter.itemsLoaded
 		if (total <= 0) return true
 
 		val currentPosition = selectedPosition
 			.takeIf { it >= 0 }
-			?: grid.selectedPosition.takeIf { it >= 0 }
+			?: presenter.getPosition().takeIf { it >= 0 }
 			?: 0
 		val nextPosition = (currentPosition + if (forward) distance else -distance)
 			.coerceIn(0, total - 1)
@@ -370,11 +367,11 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 		if (nextPosition < rowAdapter.itemsLoaded) {
 			pendingSelectedPosition = null
-			grid.selectedPosition = nextPosition
+			presenter.setPosition(nextPosition)
 			rowAdapter.loadMoreItemsIfNeeded(nextPosition)
 		} else {
 			pendingSelectedPosition = nextPosition
-			grid.selectedPosition = (rowAdapter.itemsLoaded - 1).coerceAtLeast(0)
+			presenter.setPosition((rowAdapter.itemsLoaded - 1).coerceAtLeast(0))
 			rowAdapter.loadMoreItemsIfNeeded(rowAdapter.itemsLoaded - 1)
 		}
 		keepGridFocused()
@@ -508,8 +505,6 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		const val MIN_CHANNEL_HOLD_JUMP_SIZE = 3
 		const val MAX_CHANNEL_PAGE_CHUNK_SIZE = 120
 		const val HELD_DPAD_SCROLL_INTERVAL_MS = 90L
-		const val CHANNEL_MAX_PENDING_DPAD_MOVES = 2
-		const val CHANNEL_SCROLL_SPEED_FACTOR = 0.65f
 		val DELAYED_ITEM_TOKEN = Any()
 	}
 }

@@ -309,15 +309,24 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 	)
 }
 
+internal fun BaseRowItem.browseCardAspectRatio(imageType: ImageType, uniformAspect: Boolean): Float {
+	val displayConfig = getDisplayConfig(imageType, uniformAspect)
+	return displayConfig.aspectRatio.takeIf { it >= 0.1f }
+		?: displayConfig.image?.aspectRatio?.takeIf { it >= 0.1f }
+		?: 1f
+}
+
 @Composable
 @Stable
-private fun CardViewHolderContent(
+internal fun CardViewHolderContent(
 	item: BaseRowItem?,
 	focused: Boolean,
 	showInfo: Boolean,
 	imageType: ImageType,
 	staticHeight: Int,
 	uniformAspect: Boolean,
+	modifier: Modifier = Modifier,
+	fillAvailableWidth: Boolean = false,
 ) {
 	val context = LocalContext.current
 	val localDensity = LocalDensity.current
@@ -329,8 +338,7 @@ private fun CardViewHolderContent(
 	if (item == null || displayConfig == null) return
 
 	val image = displayConfig.image
-	val aspectRatio = displayConfig.aspectRatio.takeIf { it >= 0.1f }
-		?: image?.aspectRatio?.takeIf { it >= 0.1f } ?: 1f
+	val aspectRatio = item.browseCardAspectRatio(imageType, uniformAspect)
 
 	val size = when (item.staticHeight) {
 		true -> DpSize(staticHeight.dp * aspectRatio, staticHeight.dp)
@@ -339,6 +347,14 @@ private fun CardViewHolderContent(
 	}
 
 	val usePreview = if (liveTvText != null) false else displayConfig.overrideShowInfo ?: showInfo
+
+	val cardModifier = if (fillAvailableWidth) {
+		modifier
+			.fillMaxWidth()
+			.height(size.height)
+	} else {
+		modifier.size(size)
+	}
 
 	val card = @Composable {
 		ItemCard(
@@ -415,8 +431,7 @@ private fun CardViewHolderContent(
 					)
 				}
 			},
-			modifier = Modifier
-				.size(size)
+			modifier = cardModifier
 		)
 	}
 
