@@ -46,6 +46,8 @@ data class PlayableMediaStream(
 	val selectedAudioStreamIndex: Int? = null,
 	val selectedSubtitleStreamIndex: Int? = null,
 	val errorOrigin: PlaybackErrorOrigin? = null,
+	/** Publish resolver metadata only when this candidate is accepted into its queue entry. */
+	val onAccepted: (() -> Unit)? = null,
 ) : MediaStream
 
 data class ExternalSubtitle(
