@@ -2,8 +2,10 @@ package org.jellyfin.androidtv.test
 
 import android.app.Activity
 import android.app.Instrumentation
-import android.os.SystemClock
+import android.net.Uri
+import android.os.Bundle
 import android.os.Debug
+import android.os.SystemClock
 import android.widget.FrameLayout
 import androidx.media3.datasource.HttpDataSource
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +30,9 @@ import org.jellyfin.androidtv.util.profile.bindDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.retainDoviPlaybackPlanFor
+import org.jellyfin.androidtv.util.profile.retainsDoviDecision
+import org.jellyfin.playback.dovi.doviDecision
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerBackend
@@ -85,6 +90,7 @@ class PlaybackBackendSuite(
 			BackendCase("hdr10", "4k-hdr10-hevc"),
 			BackendCase("dolby-5", "4k-dv5"),
 			BackendCase("dolby-7", "4k-dv7"),
+			BackendCase("dolby-7-transcode", "4k-dv7", variant = PlaybackProfileVariant.VIDEO_TRANSCODE),
 			BackendCase("dolby-8", "4k-dv8"),
 		)
 		val hdmiSupport = detectHdmiAudioSupport(context).takeIf { hdmiAudioOnly }
@@ -238,6 +244,18 @@ class PlaybackBackendSuite(
 		testCase: BackendCase,
 	): String {
 		val (stream, doviPlan) = runBlocking { resolve(fixture, backendName, testCase) }
+		instrumentation.sendStatus(0, Bundle().apply {
+			val uri = Uri.parse(stream.url)
+			val videoOptions = uri.queryParameterNames.filter {
+				it.startsWith("hevc-", ignoreCase = true) || it.lowercase() in setOf(
+					"videocodec", "videobitrate", "maxwidth", "maxheight", "allowvideostreamcopy", "enableautostreamcopy",
+					"subtitlemethod", "subtitlestreamindex", "maxframerate", "framerate", "requirenonanamorphic", "requireavc", "deinterlace",
+				)
+			}.associateWith(uri::getQueryParameter)
+			putString("stream", "NEGOTIATED $backendName/${testCase.id} method=${stream.conversionMethod} " +
+				"reasons=${transcodeReasons(stream.url)} requestedRoute=${doviPlan?.decision?.route} " +
+				"activeRoute=${stream.queueEntry.doviDecision?.route} options=$videoOptions\n")
+		})
 		var activeStream = stream
 		lateinit var backend: PlayerBackend
 		lateinit var manager: PlaybackManager
@@ -337,6 +355,11 @@ class PlaybackBackendSuite(
 				stats.healthSample(),
 				requireAudioDecoder = fixture.descriptor.audioStreamCount > 0,
 			)
+			instrumentation.sendStatus(0, Bundle().apply {
+				putString("stream", "OBSERVED $backendName/${testCase.id} positionMs=" +
+					onMain { backend.getPositionInfo().active.inWholeMilliseconds } +
+					" frames=${stats.videoDecodedFrames}/${stats.droppedFrames} dovi=${stats.doviTransform}\n")
+			})
 			check(health.failures.isEmpty()) { health.failures.joinToString("; ") }
 			testCase.expectedPassthroughCodec?.let { expectedCodec ->
 				check(stream.conversionMethod != org.jellyfin.playback.core.mediastream.MediaConversionMethod.Transcode) {
@@ -354,7 +377,8 @@ class PlaybackBackendSuite(
 			return "method=${stream.conversionMethod} tracks=${audioTracks.size}/${subtitleTracks.size} " +
 				"frames=${stats.videoDecodedFrames}/${stats.droppedFrames} decoder=${stats.videoDecoderName}/${stats.videoDecoderType} " +
 				"audioDecoder=${stats.audioDecoderName}/${stats.audioDecoderType} codec=${stats.videoCodec} range=${stats.videoRange} " +
-				"doviRoute=${doviPlan?.decision?.route}/${doviPlan?.decision?.reason} " +
+				"requestedDoviRoute=${doviPlan?.decision?.route}/${doviPlan?.decision?.reason} " +
+				"activeDoviRoute=${activeStream.queueEntry.doviDecision?.route} " +
 				"doviTransform=${stats.doviTransform} libass=${stats.libass?.renderCount}"
 		} finally {
 			if (createdManager != null || createdBackend != null) {
@@ -367,8 +391,8 @@ class PlaybackBackendSuite(
 					activity.setContentView(FrameLayout(activity))
 				}
 			}
-			if (stream.conversionMethod == org.jellyfin.playback.core.mediastream.MediaConversionMethod.Transcode) {
-				runBlocking { environment.session.stopEncodingAndAwait(stream.identifier) }
+			if (stream.conversionMethod != org.jellyfin.playback.core.mediastream.MediaConversionMethod.None) {
+				runBlocking { environment.session.stopEncoding(stream.identifier) }
 			}
 		}
 	}
@@ -428,7 +452,7 @@ class PlaybackBackendSuite(
 		val stream = requireNotNull(
 			JellyfinMediaStreamResolver(
 				environment.session.testApi,
-				{ JellyfinDeviceProfileRequest(configured.profile, 0) },
+				{ JellyfinDeviceProfileRequest(configured.profile, 0, protectsDoviHlsVideoCopy = backendName.startsWith("ExoPlayer")) },
 				mediaStreamOptionsProvider = { _, _ ->
 					JellyfinMediaStreamOptions(
 						audioStreamIndex = audioIndex,
@@ -436,10 +460,17 @@ class PlaybackBackendSuite(
 						alwaysBurnInSubtitleWhenTranscoding = configured.burnSubtitles,
 					)
 				},
+				doviDecisionValidator = { queued, _, source, method, expected ->
+					if (source != null && method.retainsDoviDecision()) queued.retainDoviPlaybackPlanFor(plan, source, expected)
+					else queued.bindDoviPlaybackPlan(null)
+				},
 			).getStream(entry, null)
 		) { "Server returned no playable stream" }
 		check(stream.conversionMethod in configured.expectedMethods) {
 			"Expected ${configured.expectedMethods}, got ${stream.conversionMethod}"
+		}
+		if (configured.forceTranscoding) check(stream.queueEntry.doviDecision == null) {
+			"Forced video transcoding retained a local Dolby transform"
 		}
 		val requiredReason = when (testCase.variant) {
 			PlaybackProfileVariant.AUDIO_TRANSCODE -> "AudioCodecNotSupported"

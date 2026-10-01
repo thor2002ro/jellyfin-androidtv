@@ -162,7 +162,9 @@ val prepareResumeTestAssets by tasks.registering(Copy::class) {
 	into(layout.buildDirectory.dir("generated/resumeTestAssets"))
 }
 tasks.configureEach {
-	if (name == "mergeDebugAndroidTestAssets") dependsOn(prepareResumeTestAssets)
+	if (name in setOf("mergeDebugAndroidTestAssets", "generateDebugAndroidTestLintModel", "lintAnalyzeDebugAndroidTest")) {
+		dependsOn(prepareResumeTestAssets)
+	}
 }
 
 base.archivesName.set("jellyfin-androidtv-thor-$appVersionName")
