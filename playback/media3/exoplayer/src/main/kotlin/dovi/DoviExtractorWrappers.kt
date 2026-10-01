@@ -406,7 +406,8 @@ internal class DoviExtractor(
 	}
 
 	override fun release() {
-		output?.reset(abandonPending = false, clearTracks = true)
+		// Cancellation can interrupt a valid pair; only end-of-input validates completeness.
+		output?.reset(abandonPending = true, clearTracks = true)
 		output = null
 		delegate.release()
 	}
