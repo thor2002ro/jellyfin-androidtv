@@ -65,6 +65,7 @@ fun ItemCardBaseItemOverlay(
 	item: BaseItemDto,
 	streamBadgeItem: BaseItemDto = item,
 	showRemainingTimeBadge: Boolean = false,
+	showFavoriteIndicator: Boolean = true,
 	footer: (@Composable () -> Unit)? = null,
 ) = Box(
 	modifier = Modifier
@@ -75,6 +76,7 @@ fun ItemCardBaseItemOverlay(
 
 	StateIndicator(
 		item = item,
+		showFavoriteIndicator = showFavoriteIndicator,
 		modifier = Modifier.align(Alignment.TopStart),
 	)
 
@@ -147,9 +149,10 @@ private fun TopEndIndicator(
 @Stable
 private fun StateIndicator(
 	item: BaseItemDto,
+	showFavoriteIndicator: Boolean,
 	modifier: Modifier = Modifier,
 ) {
-	val isFavorited = item.userData?.isFavorite == true
+	val isFavorited = showFavoriteIndicator && item.userData?.isFavorite == true
 	val recordingItem = item.recordingStateItem()
 	val recordingIcon = when {
 		recordingItem?.seriesTimerId != null -> R.drawable.ic_record_series
