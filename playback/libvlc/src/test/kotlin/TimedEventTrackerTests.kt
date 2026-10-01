@@ -3,6 +3,7 @@ package org.jellyfin.playback.libvlc
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
@@ -15,12 +16,15 @@ import org.jellyfin.playback.core.timedevent.TimedEvent
 import org.jellyfin.playback.core.timedevent.TimedEventTracker
 import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
 import org.videolan.libvlc.util.VLCUtil
+import org.videolan.libvlc.interfaces.IMedia
 import kotlin.time.Duration.Companion.seconds
 
 class TimedEventTrackerTests : StringSpec({
-	"only completed buffering restores playing state" {
-		bufferingPlayState(99f) shouldBe null
-		bufferingPlayState(100f) shouldBe PlayState.PLAYING
+	"buffer fill updates do not report rebuffering while libVLC is still playing" {
+		bufferingPlayState(99f, playbackActive = false, playerIsPlaying = false) shouldBe null
+		bufferingPlayState(99f, playbackActive = true, playerIsPlaying = true) shouldBe null
+		bufferingPlayState(99f, playbackActive = true, playerIsPlaying = false) shouldBe PlayState.BUFFERING
+		bufferingPlayState(100f, playbackActive = true, playerIsPlaying = false) shouldBe PlayState.PLAYING
 	}
 
 	"buffer size estimate uses demux bytes per second and configured duration" {
@@ -29,9 +33,36 @@ class TimedEventTrackerTests : StringSpec({
 
 	"libVLC descriptions follow media track IDs with unmatched slaves appended" {
 		orderedLibVLCTrackIds(
-			mediaTrackIds = listOf(7, 3),
-			descriptionTrackIds = listOf(-1, 3, 7, 9),
-		) shouldBe listOf(7, 3, 9)
+			mediaTrackIds = listOf("audio/7", "audio/3"),
+			descriptionTrackIds = listOf("", "audio/3", "audio/7", "audio/9"),
+		) shouldBe listOf("audio/7", "audio/3", "audio/9")
+	}
+
+	"libVLC 4 track metadata takes precedence over server metadata" {
+		val source = MediaStreamAudioTrack(
+			index = 7,
+			codec = "aac",
+			bitrate = 128_000,
+			channels = 2,
+			sampleRate = 48_000,
+			language = "en",
+			title = "Server English",
+		)
+		val track = IMedia.AudioTrack(
+			"audio/0", "VLC English", true, "mp4a", null, 0, 0, 0,
+			128_000, "eng", null, 2, 48_000,
+		)
+
+		libVLCPlayerTrack(0, TrackType.AUDIO, track, source) shouldBe PlayerTrack(
+			index = 0,
+			type = TrackType.AUDIO,
+			label = "VLC English",
+			language = "eng",
+			codec = "mp4a",
+			isSelected = true,
+			streamIndex = 7,
+			trackIndex = 0,
+		)
 	}
 
 	"fires an instant event once when playback crosses it" {
