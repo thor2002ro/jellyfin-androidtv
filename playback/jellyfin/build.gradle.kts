@@ -33,6 +33,7 @@ dependencies {
 
 	// Jellyfin
 	implementation(projects.playback.core)
+	implementation(projects.playback.dovi)
 	implementation(libs.jellyfin.sdk) {
 		// Change version if desired
 		val sdkVersion = findProperty("sdk.version")?.toString()
