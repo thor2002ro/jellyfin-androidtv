@@ -14,12 +14,7 @@ import org.jellyfin.sdk.model.api.request.GetResumeItemsRequest
 
 class HomeFragmentBrowseRowDefRowTests : FunSpec({
 	test("resume home row uses the configured wide card presenter") {
-		val cardPresenter = CardPresenter(
-			showInfo = true,
-			imageType = ImageType.THUMB,
-			staticHeight = 120,
-			uniformAspect = false,
-		)
+		val cardPresenter = createHomeCardPresenter(useWideCards = true)
 		val browseRowDef = BrowseRowDef(
 			header = "Continue Watching",
 			query = GetResumeItemsRequest(),

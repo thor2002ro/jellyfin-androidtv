@@ -24,6 +24,7 @@ import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.Settings
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitlesScreen
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitlesTextColorScreen
 import org.jellyfin.androidtv.ui.settings.screen.home.SettingsHomeNextUpCutoffScreen
+import org.jellyfin.androidtv.ui.settings.screen.home.SettingsHomeRowItemLimitScreen
 import org.jellyfin.androidtv.ui.settings.screen.home.SettingsHomeScreen
 import org.jellyfin.androidtv.ui.settings.screen.home.SettingsHomeSectionScreen
 import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesDisplayGridScreen
@@ -100,6 +101,7 @@ object Routes {
 	const val LIBRARIES_DISPLAY_GRID = "/libraries/display/{itemId}/{displayPreferencesId}/grid"
 	const val HOME = "/home"
 	const val HOME_SECTION = "/home/section/{index}"
+	const val HOME_ROW_ITEM_LIMIT = "/home/row-item-limit"
 	const val HOME_NEXT_UP_CUTOFF = "/home/next-up-cutoff"
 	const val LIVETV_GUIDE_FILTERS = "/livetv/guide/filters"
 	const val LIVETV_GUIDE_OPTIONS = "/livetv/guide/options"
@@ -231,6 +233,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.HOME_SECTION to { context ->
 		SettingsHomeSectionScreen(context.parameters["index"]?.toInt()!!)
+	},
+	Routes.HOME_ROW_ITEM_LIMIT to {
+		SettingsHomeRowItemLimitScreen()
 	},
 	Routes.HOME_NEXT_UP_CUTOFF to {
 		SettingsHomeNextUpCutoffScreen()
