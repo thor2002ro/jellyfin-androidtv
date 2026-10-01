@@ -117,7 +117,6 @@
     <string name="lbl_critic_rating">เรตติ้ง นักวิจารณ์</string>
     <string name="lbl_community_rating">เรตติ้ง ผู้รับชม</string>
     <string name="lbl_display_preferences">การตั้งค่าหน้าจอ</string>
-    <string name="lbl_filters">กรอง ช่องโทรทัศน์</string>
     <string name="msg_burn_sub_warning">กำลังฝังคำบรรยายลงในภาพ โปรดรอสักครู่…</string>
     <string name="pref_live_tv_cat">โทรทัศน์</string>
     <string name="lbl_songs">เพลง</string>
@@ -168,7 +167,6 @@
     <string name="lbl_auto_crop">ครอปอัตโนมัติ</string>
     <string name="lbl_playback_speed">ความเร็วการเล่น</string>
     <string name="lbl_guest_stars">ดารารับเชิญ</string>
-    <string name="lbl_select_date">เลือกวัน</string>
     <string name="lbl_on_schedule">ตามกำหนดเวลา</string>
     <string name="desc_debug">ระบุข้อมูลเพิ่มเติมสำหรับ debug</string>
     <string name="lbl_subtitle_track">เลือกคำบรรยาย</string>
@@ -240,8 +238,6 @@
     <string name="lbl_next_episode">ตอนถัดไป</string>
     <string name="lbl_album_name">ชื่ออัลบั้ม</string>
     <string name="lbl_song_title">ชื่อเพลง</string>
-    <string name="lbl_tv_channel_status">%1$d จาก \\%2$d ช่อง</string>
-    <string name="lbl_tv_filter_status">สำหรับ %1$d ชั่วโมงถัดไป</string>
     <string name="lbl_news">ข่าวสาร</string>
     <string name="lbl_new_only">เฉพาะรายการใหม่</string>
     <string name="lbl_subtitle_delay">ความหน่วงคำบรรยาย</string>
@@ -282,9 +278,6 @@
     <string name="episode_missing">ไม่พบตอน</string>
     <string name="episode_missing_message">ไม่พบตอนนี้ในคลังของคุณ คุณต้องการข้ามตอนนี้และเล่นตอนถัดไปหรือไม่?</string>
     <string name="episode_missing_message_2">ไม่พบตอนนี้ในคลังของคุณ การเล่นจะหยุดลง</string>
-    <string name="lbl_load_guide_data">โหลดข้อมูลผังรายการ</string>
-    <string name="msg_live_tv_next">โหลดอีก %1$d ชั่วโมงถัดไปหรือไม่?</string>
-    <string name="msg_live_tv_prev">โหลด %1$d ชั่วโมงก่อนหน้าหรือไม่?</string>
     <string name="seek_error">ไม่สามารถข้ามไปยังเวลาที่เลือกได้</string>
     <string name="player_error">เกิดข้อผิดพลาดกับเครื่องเล่นสื่อ กำลังลองใหม่อีกครั้ง…</string>
     <string name="too_many_errors">เกิดข้อผิดพลาดมากเกินไป ยุติการทำงาน</string>

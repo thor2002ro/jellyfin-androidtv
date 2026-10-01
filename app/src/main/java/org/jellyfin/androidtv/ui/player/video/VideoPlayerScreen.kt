@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,11 +32,17 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.toBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.preference.UserPreferences
@@ -45,6 +53,8 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSubtitles
 import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
+import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
+import org.jellyfin.androidtv.util.apiclient.TrickplayTileSheet
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
@@ -53,14 +63,17 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
+import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
+import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.compose.koinInject
+import timber.log.Timber
 
-private const val DefaultVideoAspectRatio = 16f / 9f
 private const val BufferingBlockCount = 5
 
 @Composable
@@ -72,6 +85,8 @@ fun VideoPlayerScreen(
 	val playbackManager = koinInject<PlaybackManager>()
 	val userPreferences = koinInject<UserPreferences>()
 	var zoomMode by remember { mutableStateOf(userPreferences[UserPreferences.playerZoomMode]) }
+	val initialZoomStatus = stringResource(zoomMode.nameRes)
+	var zoomStatus by remember { mutableStateOf(initialZoomStatus) }
 
 	val backgroundService = koinInject<BackgroundService>()
 	LaunchedEffect(backgroundService) {
@@ -79,61 +94,217 @@ fun VideoPlayerScreen(
 	}
 
 	val playState by playbackManager.state.playState.collectAsState()
-	val networkRecoveryService = remember(playbackManager) {
-		playbackManager.getService<NetworkPlaybackRecoveryService>()
-	}
-	val networkRecovering by networkRecoveryService?.recovering?.collectAsState()
-		?: remember { mutableStateOf(false) }
-	LiveTvTrackCacheUpdater(playbackManager)
 	val playing = playState.isActivePlayback
+	TrickplayTileSheetPrefetcher(
+		playbackManager = playbackManager,
+		enabled = userPreferences[UserPreferences.trickPlayEnabled],
+	)
+	ChapterThumbnailPrefetcher(playbackManager = playbackManager)
 	ScreensaverLock(
 		enabled = playing,
 	)
-
-	val videoSize by playbackManager.state.videoSize.collectAsState()
-	val aspectRatio = videoSize.aspectRatio.takeIf { !it.isNaN() && it > 0f } ?: DefaultVideoAspectRatio
 
 	val coroutineScope = rememberCoroutineScope()
 	val mediaToastRegistry = remember { MediaToastRegistry(coroutineScope) }
 	rememberPlaybackManagerMediaToastEmitter(playbackManager, mediaToastRegistry)
 
-	BoxWithConstraints(
+	Box(
 		modifier = Modifier
 			.background(Color.Black)
 			.fillMaxSize()
 			.clipToBounds()
 	) {
-		val viewportSize = remember(maxWidth, maxHeight, aspectRatio, zoomMode) {
-			calculateVideoViewportSize(maxWidth, maxHeight, aspectRatio, zoomMode)
-		}
-		val videoModifier = Modifier
-			.requiredSize(viewportSize.width, viewportSize.height)
-			.align(Alignment.Center)
-
-		PlayerSurface(
+		PlayerVideoOutput(
 			playbackManager = playbackManager,
-			modifier = videoModifier
-		)
-
-		PlayerSubtitles(
-			playbackManager = playbackManager,
-			modifier = videoModifier
-		)
-
-		VideoBufferingIndicator(
-			visible = playState == PlayState.BUFFERING || networkRecovering,
-			modifier = Modifier.align(Alignment.Center),
+			zoomMode = zoomMode,
+			onZoomStatusChanged = { zoomStatus = it },
+			modifier = Modifier.fillMaxSize(),
 		)
 
 		VideoPlayerOverlay(
 			playbackManager = playbackManager,
 			mediaToastRegistry = mediaToastRegistry,
 			zoomMode = zoomMode,
+			zoomStatus = zoomStatus,
 			onZoomModeSelected = { zoomMode = it },
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
 			openLiveTvGuideOnStart = openLiveTvGuideOnStart,
 		)
+	}
+}
+
+@Composable
+internal fun PlayerVideoOutput(
+	playbackManager: PlaybackManager,
+	zoomMode: ZoomMode,
+	onZoomStatusChanged: (String) -> Unit = {},
+	allowOutputTransform: Boolean = true,
+	modifier: Modifier = Modifier,
+	showBufferingIndicator: Boolean = true,
+) {
+	val playState by playbackManager.state.playState.collectAsState()
+	val videoGeometry by playbackManager.state.videoGeometry.collectAsState()
+	val currentEntry by playbackManager.queue.entry.collectAsState()
+	val networkRecoveryService = remember(playbackManager) {
+		playbackManager.getService<NetworkPlaybackRecoveryService>()
+	}
+	val networkRecovering by networkRecoveryService?.recovering?.collectAsState()
+		?: remember { mutableStateOf(false) }
+	val currentOnZoomStatusChanged by rememberUpdatedState(onZoomStatusChanged)
+	val selectedZoomLabel = stringResource(zoomMode.nameRes)
+	val stretchZoomLabel = stringResource(ZoomMode.STRETCH.nameRes)
+
+	LiveTvTrackCacheUpdater(playbackManager)
+
+	BoxWithConstraints(modifier = modifier.clipToBounds()) {
+		val density = LocalDensity.current
+		val container = with(density) {
+			IntSize(maxWidth.roundToPx(), maxHeight.roundToPx())
+		}
+		val sourceAspect = videoGeometry.aspectRatioFor(zoomMode)
+		val videoReady = allowOutputTransform &&
+			container.width > 0 && container.height > 0 &&
+			sourceAspect.isFinite() && sourceAspect > 0f
+		val viewportContainer = if (videoReady) container else IntSize.Zero
+		val viewport = remember(playbackManager, currentEntry, viewportContainer, sourceAspect, zoomMode) {
+			if (videoReady) calculateVideoViewport(container, videoGeometry, zoomMode) else null
+		}
+		LaunchedEffect(zoomMode, viewport, selectedZoomLabel, stretchZoomLabel) {
+			currentOnZoomStatusChanged(
+				videoZoomStatus(
+					zoomMode = zoomMode,
+					viewport = viewport,
+					selectedZoomLabel = selectedZoomLabel,
+					stretchZoomLabel = stretchZoomLabel,
+				)
+			)
+		}
+		val appliedViewport = viewport ?: VideoViewport(container.width, container.height, null)
+		val outputTransform = remember(videoReady, appliedViewport.aspectRatioOverride) {
+			if (videoReady) VideoOutputTransform(appliedViewport.aspectRatioOverride)
+			else VideoOutputTransform.NONE
+		}
+		val surfaceWidth = with(density) { appliedViewport.width.toDp() }
+		val surfaceHeight = with(density) { appliedViewport.height.toDp() }
+
+		LaunchedEffect(playbackManager, currentEntry, outputTransform) {
+			playbackManager.setVideoOutputTransform(outputTransform)
+		}
+		DisposableEffect(playbackManager) {
+			onDispose {
+				playbackManager.setVideoOutputTransform(VideoOutputTransform.NONE)
+			}
+		}
+
+		PlayerSurface(
+			playbackManager = playbackManager,
+			modifier = Modifier
+				.requiredSize(surfaceWidth, surfaceHeight)
+				.align(Alignment.Center)
+		)
+
+		PlayerSubtitles(
+			playbackManager = playbackManager,
+			modifier = Modifier.fillMaxSize()
+		)
+
+		VideoBufferingIndicator(
+			visible = showBufferingIndicator && (playState == PlayState.BUFFERING || networkRecovering),
+			modifier = Modifier.align(Alignment.Center),
+		)
+	}
+}
+
+@Composable
+private fun ChapterThumbnailPrefetcher(
+	playbackManager: PlaybackManager,
+	api: ApiClient = koinInject(),
+	imageLoader: ImageLoader = koinInject(),
+) {
+	val context = LocalContext.current
+	val density = LocalDensity.current
+	val thumbnailWidth = with(density) { ChapterThumbnailWidth.roundToPx() }
+	val thumbnailHeight = with(density) { ChapterThumbnailHeight.roundToPx() }
+	val entry by playbackManager.queue.entry.collectAsState()
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val thumbnailUrls = remember(item?.id, item?.chapters, api.accessToken, thumbnailWidth, thumbnailHeight) {
+		item?.getChapterThumbnailUrls(api, thumbnailWidth, thumbnailHeight).orEmpty()
+	}
+
+	DisposableEffect(thumbnailUrls) {
+		onDispose {
+			val stats = PlayerThumbnailMemoryCache.clear(thumbnailUrls)
+			if (stats.count > 0) {
+				Timber.i("Cleared chapter thumbnail memory cache: ${stats.count} thumbnails, ${"%.1f".format(stats.mib)} MiB")
+			}
+		}
+	}
+
+	LaunchedEffect(thumbnailUrls) {
+		withContext(Dispatchers.IO) {
+			thumbnailUrls.forEach { url ->
+				val bitmap = imageLoader.execute(
+					buildPlayerThumbnailRequest(context, url, thumbnailWidth, thumbnailHeight)
+				).image?.toBitmap()
+				if (bitmap != null) PlayerThumbnailMemoryCache.put(url, bitmap)
+			}
+		}
+		val stats = PlayerThumbnailMemoryCache.stats(thumbnailUrls)
+		if (stats.count > 0) {
+			Timber.i("Prefetched chapter thumbnail memory cache: ${stats.count}/${thumbnailUrls.size} thumbnails, ${"%.1f".format(stats.mib)} MiB")
+		}
+	}
+}
+
+@Composable
+private fun TrickplayTileSheetPrefetcher(
+	playbackManager: PlaybackManager,
+	enabled: Boolean,
+	api: ApiClient = koinInject(),
+	imageLoader: ImageLoader = koinInject(),
+) {
+	val context = LocalContext.current
+	val entry by playbackManager.queue.entry.collectAsState()
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val mediaSourceId = entry?.mediaSourceId
+	val sheets = remember(enabled, item?.id, item?.trickplay, mediaSourceId, api.accessToken) {
+		if (enabled && item != null) item.getTrickplayTileSheets(api, mediaSourceId)
+		else emptyList()
+	}
+
+	DisposableEffect(sheets) {
+		onDispose {
+			val stats = PlayerThumbnailMemoryCache.clear(sheets.map { sheet -> sheet.url })
+			if (stats.count > 0) {
+				Timber.i("Cleared trickplay memory cache: ${stats.count} sheets, ${"%.1f".format(stats.mib)} MiB")
+			}
+		}
+	}
+
+	LaunchedEffect(sheets) {
+		withContext(Dispatchers.IO) {
+			selectTrickplaySheetsToPrefetch(sheets).forEach { sheet ->
+				val bitmap = imageLoader.execute(sheet.buildPlayerThumbnailRequest(context)).image?.toBitmap()
+				if (bitmap != null) PlayerThumbnailMemoryCache.put(sheet, bitmap)
+			}
+		}
+		val stats = PlayerThumbnailMemoryCache.stats(sheets.map { sheet -> sheet.url })
+		if (stats.count > 0) {
+			Timber.i("Prefetched trickplay memory cache: ${stats.count}/${sheets.size} sheets, ${"%.1f".format(stats.mib)} MiB")
+		}
+	}
+}
+
+internal fun selectTrickplaySheetsToPrefetch(
+	sheets: List<TrickplayTileSheet>,
+): List<TrickplayTileSheet> {
+	var remainingBytes = PLAYER_THUMBNAIL_CACHE_MAX_BYTES.toLong()
+	return sheets.takeWhile { sheet ->
+		val estimatedBytes = sheet.decodeWidth.toLong() * sheet.decodeHeight * 2
+		(estimatedBytes <= remainingBytes).also { fits ->
+			if (fits) remainingBytes -= estimatedBytes
+		}
 	}
 }
 
@@ -246,36 +417,4 @@ private fun VideoBufferingIndicator(
 			}
 		}
 	}
-}
-
-private data class VideoViewportSize(
-	val width: Dp,
-	val height: Dp,
-)
-
-private fun calculateVideoViewportSize(
-	containerWidth: Dp,
-	containerHeight: Dp,
-	videoAspectRatio: Float,
-	zoomMode: ZoomMode,
-): VideoViewportSize {
-	if (containerWidth <= 0.dp || containerHeight <= 0.dp || videoAspectRatio <= 0f) {
-		return VideoViewportSize(containerWidth, containerHeight)
-	}
-
-	if (zoomMode == ZoomMode.STRETCH) {
-		return VideoViewportSize(containerWidth, containerHeight)
-	}
-
-	val containerAspectRatio = containerWidth.value / containerHeight.value
-	val matchContainerWidth = when (zoomMode) {
-		ZoomMode.FIT -> videoAspectRatio >= containerAspectRatio
-		ZoomMode.AUTO_CROP -> videoAspectRatio < containerAspectRatio
-		ZoomMode.STRETCH -> true
-	}
-
-	val width = if (matchContainerWidth) containerWidth else (containerHeight.value * videoAspectRatio).dp
-	val height = if (matchContainerWidth) (containerWidth.value / videoAspectRatio).dp else containerHeight
-
-	return VideoViewportSize(width, height)
 }
