@@ -1,9 +1,7 @@
 package org.jellyfin.androidtv.preference
 
-import org.jellyfin.androidtv.preference.constant.LibMPVAudioChannels
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioOutput
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioPresetOption
-import org.jellyfin.androidtv.preference.constant.LibMPVAudioSpdif
 import org.jellyfin.androidtv.preference.constant.LibMPVDecoder
 import org.jellyfin.androidtv.preference.constant.LibMPVDeinterlace
 import org.jellyfin.androidtv.preference.constant.LibMPVFrameDrop
@@ -32,8 +30,6 @@ private val mpvDeinterlacePreference = enumPreference("mpv_deinterlace", LibMPVD
 private val mpvScalerPreference = enumPreference("mpv_scaler", LibMPVScaler.BILINEAR)
 private val mpvToneMappingPreference = enumPreference("mpv_tone_mapping", LibMPVToneMapping.AUTO)
 private val mpvAudioOutputPreference = enumPreference("mpv_audio_output", LibMPVAudioOutput.AUTO)
-private val mpvAudioChannelsPreference = enumPreference("mpv_audio_channels", LibMPVAudioChannels.AUTO_SAFE)
-private val mpvAudioSpdifPreference = enumPreference("mpv_audio_spdif", LibMPVAudioSpdif.NONE)
 private val mpvReplayGainPreference = enumPreference("mpv_replay_gain", LibMPVReplayGain.DISABLED)
 private val mpvLoopFilterPreference = enumPreference("mpv_loop_filter", LibMPVLoopFilter.DEFAULT)
 private val mpvSubtitleAssOverridePreference = enumPreference("mpv_sub_ass_override", LibMPVSubtitleAssOverride.NO)
@@ -58,8 +54,6 @@ val UserPreferences.Companion.mpvDeinterlace get() = mpvDeinterlacePreference
 val UserPreferences.Companion.mpvScaler get() = mpvScalerPreference
 val UserPreferences.Companion.mpvToneMapping get() = mpvToneMappingPreference
 val UserPreferences.Companion.mpvAudioOutput get() = mpvAudioOutputPreference
-val UserPreferences.Companion.mpvAudioChannels get() = mpvAudioChannelsPreference
-val UserPreferences.Companion.mpvAudioSpdif get() = mpvAudioSpdifPreference
 val UserPreferences.Companion.mpvReplayGain get() = mpvReplayGainPreference
 val UserPreferences.Companion.mpvLoopFilter get() = mpvLoopFilterPreference
 val UserPreferences.Companion.mpvSubtitleAssOverride get() = mpvSubtitleAssOverridePreference
