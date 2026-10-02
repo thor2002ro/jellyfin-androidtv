@@ -6,6 +6,10 @@ import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.preference.constant.PlayerHeaderLayout
 
 class PlaybackUserPreferencesTests : FunSpec({
+	test("fMP4 HLS is preferred by default") {
+		UserPreferences.preferFmp4HlsContainer.defaultValue shouldBe true
+	}
+
 	test("player header defaults to a logo beside its details") {
 		UserPreferences.playerHeaderLayout.defaultValue shouldBe PlayerHeaderLayout.LOGO_BESIDE_DETAILS
 	}

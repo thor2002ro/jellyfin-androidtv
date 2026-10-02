@@ -188,6 +188,18 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
+			var preferFmp4HlsContainer by rememberPreference(userPreferences, UserPreferences.preferFmp4HlsContainer)
+
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_prefer_fmp4_hls_container)) },
+				captionContent = { Text(stringResource(R.string.preference_prefer_fmp4_hls_container_description)) },
+				trailingContent = { Checkbox(checked = preferFmp4HlsContainer) },
+				onClick = { preferFmp4HlsContainer = !preferFmp4HlsContainer },
+				modifier = Modifier.focusKey("prefer_fmp4_hls_container")
+			)
+		}
+
+		item {
 			var refreshRateSwitchingBehavior by rememberPreference(userPreferences, UserPreferences.refreshRateSwitchingBehavior)
 
 			ListButton(

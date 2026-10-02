@@ -168,6 +168,7 @@ internal fun createDeviceProfile(
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
+		preferFmp4HlsContainer = userPreferences[UserPreferences.preferFmp4HlsContainer],
 	)
 }
 
@@ -194,6 +195,7 @@ internal fun createDeviceProfile(
 	enableFfmpegAudio: Boolean = false,
 	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
+	preferFmp4HlsContainer: Boolean = true,
 ) = buildDeviceProfile {
 	val canMixAudioLocally = enableFfmpegAudio || enableMpvAudio
 	val supportsOpus = mediaTest.supportsOpus() || enableMpvAudio ||
@@ -290,16 +292,16 @@ internal fun createDeviceProfile(
 
 	val videoTranscodeProfiles = listOf(
 		Triple(
-			Codec.Container.TS,
-			hlsMpegTsVideoCodecs,
-			hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
-		),
-		Triple(
 			Codec.Container.MP4,
 			hlsFmp4VideoCodecs,
 			hlsFmp4AudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
 		),
-	)
+		Triple(
+			Codec.Container.TS,
+			hlsMpegTsVideoCodecs,
+			hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
+		),
+	).let { profiles -> if (preferFmp4HlsContainer) profiles else profiles.asReversed() }
 	// Separate fallback profiles let the server select conversion without removing stream-copy codecs.
 	val fallbackVideoTranscodeProfiles = if (transcodeMultichannelAudio) videoTranscodeProfiles.mapNotNull { (container, video, audio) ->
 		val fallbackAudio = surroundTranscodeAudioCodecs.filter(audio::contains).toTypedArray()
