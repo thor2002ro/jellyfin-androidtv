@@ -21,6 +21,38 @@ class HomeSectionEditorTests : FunSpec({
 		)
 	}
 
+	test("compacting removes duplicate active sections") {
+		compactHomeSections(
+			listOf(
+				HomeSectionType.RESUME,
+				HomeSectionType.RESUME,
+				HomeSectionType.NEXT_UP,
+				HomeSectionType.NONE,
+			)
+		) shouldBe listOf(
+			HomeSectionType.RESUME,
+			HomeSectionType.NEXT_UP,
+			HomeSectionType.NONE,
+			HomeSectionType.NONE,
+		)
+	}
+
+	test("compacting keeps only one library row presentation") {
+		compactHomeSections(
+			listOf(
+				HomeSectionType.LIBRARY_TILES_SMALL,
+				HomeSectionType.LIBRARY_BUTTONS,
+				HomeSectionType.RESUME,
+				HomeSectionType.NONE,
+			)
+		) shouldBe listOf(
+			HomeSectionType.LIBRARY_TILES_SMALL,
+			HomeSectionType.RESUME,
+			HomeSectionType.NONE,
+			HomeSectionType.NONE,
+		)
+	}
+
 	test("moving an active section swaps it with its neighbor and compacts gaps") {
 		moveHomeSection(
 			sections = listOf(
@@ -83,5 +115,36 @@ class HomeSectionEditorTests : FunSpec({
 			HomeSectionType.NEXT_UP,
 			HomeSectionType.LATEST_MEDIA,
 		)
+	}
+
+	test("setting a section cannot create a duplicate row") {
+		val sections = listOf(HomeSectionType.RESUME, HomeSectionType.NEXT_UP, HomeSectionType.NONE)
+
+		setHomeSection(sections, activeIndex = 1, HomeSectionType.RESUME) shouldBe sections
+	}
+
+	test("section choices contain the current row and unused row types only") {
+		val choices = availableHomeSectionTypes(
+			sections = listOf(
+				HomeSectionType.RESUME,
+				HomeSectionType.NEXT_UP,
+				HomeSectionType.NONE,
+			),
+			activeIndex = 1,
+		)
+
+		(HomeSectionType.NEXT_UP in choices) shouldBe true
+		(HomeSectionType.RESUME in choices) shouldBe false
+		(HomeSectionType.NONE in choices) shouldBe false
+	}
+
+	test("section choices do not offer a second library row presentation") {
+		val choices = availableHomeSectionTypes(
+			sections = listOf(HomeSectionType.LIBRARY_TILES_SMALL, HomeSectionType.RESUME, HomeSectionType.NONE),
+			activeIndex = 1,
+		)
+
+		(HomeSectionType.LIBRARY_TILES_SMALL in choices) shouldBe false
+		(HomeSectionType.LIBRARY_BUTTONS in choices) shouldBe false
 	}
 })
