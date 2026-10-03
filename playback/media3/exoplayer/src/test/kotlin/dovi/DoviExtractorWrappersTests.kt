@@ -517,7 +517,7 @@ class DoviExtractorWrappersTests : FunSpec({
 		}
 		val factory = DoviMediaSourceFactory(
 			progressiveFactory = ::recordingFactory,
-			hlsFactory = ::recordingFactory,
+			hlsFactory = { context, _ -> recordingFactory(context) },
 			context = { item -> item.localConfiguration?.tag as? DoviTransformContext },
 		)
 		val uri = mockk<Uri>(relaxed = true)

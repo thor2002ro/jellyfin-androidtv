@@ -11,7 +11,7 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 @UnstableApi
 internal class DoviMediaSourceFactory(
 	private val progressiveFactory: (DoviTransformContext?) -> MediaSource.Factory,
-	private val hlsFactory: (DoviTransformContext?) -> MediaSource.Factory,
+	private val hlsFactory: (DoviTransformContext?, MediaItem) -> MediaSource.Factory,
 	private val context: (MediaItem) -> DoviTransformContext?,
 ) : MediaSource.Factory {
 	private var drmSessionManagerProvider: DrmSessionManagerProvider? = null
@@ -32,7 +32,7 @@ internal class DoviMediaSourceFactory(
 		val contentType = local?.let { Util.inferContentTypeForUriAndMimeType(it.uri, it.mimeType) }
 		val sourceContext = context(mediaItem)
 		val factory = if (contentType == C.CONTENT_TYPE_HLS) {
-			hlsFactory(sourceContext)
+			hlsFactory(sourceContext, mediaItem)
 		} else {
 			progressiveFactory(sourceContext)
 		}
