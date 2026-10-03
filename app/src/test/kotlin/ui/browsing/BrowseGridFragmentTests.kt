@@ -51,6 +51,16 @@ class BrowseGridFragmentTests : FunSpec({
 		BrowseGridFragment.getSafeSelectedPosition(-1, -1, -1, 0) shouldBe -1
 	}
 
+	test("returning to a populated library reuses its loaded items") {
+		BrowseGridFragment.shouldRetrieveGrid(false, false, 80) shouldBe false
+	}
+
+	test("initial empty rebuilt and query-changed libraries retrieve items") {
+		BrowseGridFragment.shouldRetrieveGrid(false, false, 0) shouldBe true
+		BrowseGridFragment.shouldRetrieveGrid(true, false, 80) shouldBe true
+		BrowseGridFragment.shouldRetrieveGrid(false, true, 80) shouldBe true
+	}
+
 	test("browse grid loads lightweight fields before stream badges") {
 		val library = BaseItemDto(
 			id = UUID.randomUUID(),

@@ -1,5 +1,12 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+
+internal fun Modifier.restoreFocusRequesterWhen(focused: Boolean, requester: FocusRequester): Modifier =
+	if (focused) focusRequester(requester) else this
+
 internal class GridSelectionNotificationTracker {
 	private var position = -1
 	private var item: Any? = null
