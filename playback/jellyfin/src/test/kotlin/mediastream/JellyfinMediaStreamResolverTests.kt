@@ -1,5 +1,7 @@
 package org.jellyfin.playback.jellyfin.mediastream
 
+import io.github.thor2002ro.libdovi.DoviTarget
+import io.github.thor2002ro.libdovi.DoviTransformRequest
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
@@ -7,7 +9,12 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.dovi.DoviDecision
+import org.jellyfin.playback.dovi.DoviDecisionReason
+import org.jellyfin.playback.dovi.DoviRoute
+import org.jellyfin.playback.dovi.doviDecision
 import org.jellyfin.playback.jellyfin.JellyfinDeviceProfileRequest
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.sdk.api.client.ApiClient
@@ -22,10 +29,51 @@ import org.jellyfin.sdk.model.api.MediaSourceType
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PlaybackInfoResponse
+import org.jellyfin.sdk.model.api.VideoRangeType
 import java.util.UUID
 
 class JellyfinMediaStreamResolverTests : FunSpec({
+	suspend fun resolveVideo(transcodeUrl: String, decision: DoviDecision? = null): MediaConversionMethod? {
+		val item = BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.MOVIE,
+			mediaType = MediaType.VIDEO,
+		)
+		val mediaSource = source(
+			hdrVideoStream(),
+			supportsDirectPlay = false,
+			supportsDirectStream = false,
+			supportsTranscoding = true,
+			transcodingUrl = transcodeUrl,
+			transcodingSubProtocol = MediaStreamProtocol.HLS,
+			protocol = MediaProtocol.FILE,
+			isRemote = false,
+		)
+		val api = mockk<ApiClient>()
+		val mediaInfoApi = mockk<MediaInfoApi>()
+		every { api.getOrCreateApi(MediaInfoApi::class, any()) } returns mediaInfoApi
+		every { api.createUrl(any(), any(), any(), true) } returns "https://example.invalid$transcodeUrl"
+		coEvery { mediaInfoApi.getPostedPlaybackInfo(any(), any()) } returns playbackInfoResponse(mediaSource, "session")
+		val resolver = JellyfinMediaStreamResolver(
+			api = api,
+			deviceProfileBuilder = {
+				JellyfinDeviceProfileRequest(
+					profile = mockk<DeviceProfile>(relaxed = true),
+					requestToken = 0,
+					protectsHlsVideoCopy = true,
+				)
+			},
+		)
+		val entry = QueueEntry().apply {
+			baseItem = item
+			doviDecision = decision
+		}
+
+		return resolver.getStream(entry, null)?.conversionMethod
+	}
+
 	test("audio and subtitle options are resolved from the awaited media source") {
 		runBlocking {
 			val item = BaseItemDto(
@@ -166,6 +214,37 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 			stream?.selectedSubtitleStreamIndex shouldBe 4
 		}
 	}
+
+	test("HDR playback preserves video when the server converts only audio") {
+		runBlocking {
+			val transcodeUrl = "/Videos/item/master.m3u8?VideoCodec=hevc,h264&TranscodeReasons=AudioCodecNotSupported"
+			resolveVideo(transcodeUrl) shouldBe MediaConversionMethod.Remux
+		}
+	}
+
+	test("libdovi source-base conversion keeps the original video") {
+		runBlocking {
+			val transcodeUrl = "/Videos/item/master.m3u8?VideoCodec=hevc,h264&hevc-rangetype=SDR&TranscodeReasons=AudioCodecNotSupported"
+			val decision = DoviDecision(
+				route = DoviRoute.SourceBase(DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION)),
+				reason = DoviDecisionReason.SOURCE_BASE,
+			)
+
+			resolveVideo(transcodeUrl, decision) shouldBe MediaConversionMethod.Remux
+		}
+	}
+
+	test("decoder policy does not override an audio-only HLS video copy") {
+		runBlocking {
+			val transcodeUrl = "/Videos/item/master.m3u8?VideoCodec=hevc,h264&TranscodeReasons=AudioCodecNotSupported"
+			val decision = DoviDecision(
+				route = DoviRoute.ServerFallback,
+				reason = DoviDecisionReason.NO_COMPATIBLE_ROUTE,
+			)
+
+			resolveVideo(transcodeUrl, decision) shouldBe MediaConversionMethod.Remux
+		}
+	}
 })
 
 private fun playbackInfoResponse(source: MediaSourceInfo, sessionId: String) = Response(
@@ -186,15 +265,18 @@ private fun source(
 	supportsDirectStream: Boolean = true,
 	supportsTranscoding: Boolean = false,
 	transcodingUrl: String? = null,
+	transcodingSubProtocol: MediaStreamProtocol = MediaStreamProtocol.HTTP,
 	liveStreamId: String? = null,
 	defaultAudioStreamIndex: Int? = null,
+	protocol: MediaProtocol = MediaProtocol.HTTP,
+	isRemote: Boolean = true,
 ) = MediaSourceInfo(
-	protocol = MediaProtocol.HTTP,
+	protocol = protocol,
 	id = "live-source",
 	path = "https://example.invalid/live.ts",
 	type = MediaSourceType.DEFAULT,
 	container = "ts",
-	isRemote = true,
+	isRemote = isRemote,
 	readAtNativeFramerate = false,
 	ignoreDts = false,
 	ignoreIndex = false,
@@ -210,7 +292,7 @@ private fun source(
 	supportsProbing = false,
 	mediaStreams = streams.toList(),
 	transcodingUrl = transcodingUrl,
-	transcodingSubProtocol = MediaStreamProtocol.HTTP,
+	transcodingSubProtocol = transcodingSubProtocol,
 	defaultAudioStreamIndex = defaultAudioStreamIndex,
 	defaultSubtitleStreamIndex = -1,
 	hasSegments = false,
@@ -225,6 +307,21 @@ private fun stream(index: Int, language: String, type: MediaStreamType) = MediaS
 	isHearingImpaired = false,
 	type = type,
 	index = index,
+	isExternal = false,
+	isOriginal = true,
+	isTextSubtitleStream = false,
+	supportsExternalStream = false,
+)
+
+private fun hdrVideoStream() = MediaStream(
+	codec = "hevc",
+	videoRangeType = VideoRangeType.HDR10,
+	isInterlaced = false,
+	isDefault = true,
+	isForced = false,
+	isHearingImpaired = false,
+	type = MediaStreamType.VIDEO,
+	index = 0,
 	isExternal = false,
 	isOriginal = true,
 	isTextSubtitleStream = false,
