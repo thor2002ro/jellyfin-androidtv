@@ -37,6 +37,13 @@ class PlaybackNegotiationSuite(
 					selectedAudioCodec = testCase.selectedAudioCodec,
 					selectedSubtitleCodec = testCase.selectedSubtitleCodec,
 				)
+			} + PlaybackCapabilityMatrix.plan(environment.fixtures.values.map(ServerPlaybackFixture::descriptor)).map { capability ->
+				NegotiationCase(
+					id = capability.id,
+					descriptorId = capability.descriptorId,
+					variant = PlaybackProfileVariant.PRODUCTION,
+					capability = capability,
+				)
 			}
 		} else buildList {
 			for ((fixtureId, descriptor) in environment.selection.fixtures.toSortedMap()) {
@@ -64,7 +71,15 @@ class PlaybackNegotiationSuite(
 		fixture: ServerPlaybackFixture,
 		production: org.jellyfin.sdk.model.api.DeviceProfile,
 	): PlaybackTestResult = try {
-		val configured = testCase.variant.configure(
+		val configured = testCase.capability?.configure(production, fixture.descriptor.container)
+			?: if (testCase.capability != null) {
+				return PlaybackTestResult(
+					PlaybackTestStatus.SKIP,
+					"transcode",
+					scenario = testCase.id,
+					detail = "${testCase.capability.cause.reason} cannot be isolated by the current Jellyfin DeviceProfile schema",
+				)
+			} else testCase.variant.configure(
 			production = production,
 			sourceContainer = fixture.descriptor.container,
 			sourceVideoCodec = fixture.descriptor.videoCodec,
@@ -104,7 +119,7 @@ class PlaybackNegotiationSuite(
 			},
 		)
 		val stream = requireNotNull(resolver.getStream(entry, null)) { "Server returned no playable stream" }
-		val requiredReason = testCase.variant.requiredTranscodeReason()
+		val requiredReason = testCase.capability?.cause?.reason ?: testCase.variant.requiredTranscodeReason()
 		check(requiredReason == null || requiredReason in transcodeReasons(stream.url)) {
 			"Expected reason $requiredReason, got ${transcodeReasons(stream.url)}"
 		}
@@ -113,7 +128,7 @@ class PlaybackNegotiationSuite(
 		val expected = configured.expectedMethods.joinToString("|") { it.label() }
 		PlaybackTestResult(
 			status = status,
-			suite = if (testCase.variant.isForcedTranscoding()) "transcode" else "negotiation",
+			suite = if (testCase.capability != null || testCase.variant.isForcedTranscoding()) "transcode" else "negotiation",
 			scenario = testCase.id,
 			detail = "expected=$expected ${stream.observation(fixture)}",
 		)
@@ -128,6 +143,7 @@ private data class NegotiationCase(
 	val variant: PlaybackProfileVariant,
 	val selectedAudioCodec: String? = null,
 	val selectedSubtitleCodec: String? = null,
+	val capability: PlaybackCapabilityCase? = null,
 )
 
 private fun PlaybackProfileVariant.isForcedTranscoding() = this == PlaybackProfileVariant.VIDEO_TRANSCODE ||
