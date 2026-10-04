@@ -1,12 +1,14 @@
 package org.jellyfin.androidtv.preference.constant
 
+import androidx.annotation.OptIn
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
-import org.jellyfin.androidtv.preference.mpvAudioChannels
+import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
-import org.jellyfin.androidtv.preference.mpvAudioSpdif
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
@@ -192,22 +194,6 @@ enum class LibMPVAudioPresetOption(
 	),
 }
 
-enum class LibMPVAudioChannels(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
-	AUTO_SAFE(R.string.preference_mpv_audio_channels_auto_safe, R.string.preference_mpv_audio_channels_auto_safe_description, "auto-safe"),
-	AUTO(R.string.preference_mpv_value_auto, R.string.preference_mpv_audio_channels_auto_description, "auto"),
-	STEREO(R.string.preference_mpv_audio_channels_stereo, R.string.preference_mpv_audio_channels_stereo_description, "stereo"),
-	SURROUND_5_1(R.string.preference_mpv_audio_channels_5_1, R.string.preference_mpv_audio_channels_5_1_description, "5.1"),
-	SURROUND_7_1(R.string.preference_mpv_audio_channels_7_1, R.string.preference_mpv_audio_channels_7_1_description, "7.1"),
-}
-
-enum class LibMPVAudioSpdif(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
-	NONE(R.string.preference_mpv_value_disabled, R.string.preference_mpv_audio_spdif_none_description, ""),
-	AC3(R.string.preference_mpv_audio_spdif_ac3, R.string.preference_mpv_audio_spdif_ac3_description, "ac3"),
-	AC3_EAC3(R.string.preference_mpv_audio_spdif_ac3_eac3, R.string.preference_mpv_audio_spdif_ac3_eac3_description, "ac3,eac3"),
-	AC3_EAC3_DTS(R.string.preference_mpv_audio_spdif_ac3_eac3_dts, R.string.preference_mpv_audio_spdif_ac3_eac3_dts_description, "ac3,eac3,dts"),
-	ALL(R.string.preference_mpv_audio_spdif_all, R.string.preference_mpv_audio_spdif_all_description, "ac3,eac3,dts,dts-hd,truehd"),
-}
-
 enum class LibMPVReplayGain(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
 	DISABLED(R.string.preference_mpv_value_disabled, R.string.preference_mpv_replay_gain_disabled_description, "no"),
 	TRACK(R.string.preference_mpv_replay_gain_track, R.string.preference_mpv_replay_gain_track_description, "track"),
@@ -263,8 +249,6 @@ enum class LibMPVChoiceSetting(
 		R.string.preference_mpv_audio_preset_description,
 		setOf("audio-channels", "audio-spdif", "af"),
 	),
-	AUDIO_CHANNELS("audio-channels", R.string.preference_mpv_audio_channels, R.string.preference_mpv_audio_channels_description, setOf("audio-channels")),
-	AUDIO_SPDIF("audio-spdif", R.string.preference_mpv_audio_spdif, R.string.preference_mpv_audio_spdif_description, setOf("audio-spdif")),
 	REPLAY_GAIN("replay-gain", R.string.preference_mpv_replay_gain, R.string.preference_mpv_replay_gain_description, setOf("replaygain")),
 	LOOP_FILTER("loop-filter", R.string.preference_mpv_loop_filter, R.string.preference_mpv_loop_filter_description, setOf("vd-lavc-skiploopfilter")),
 	SUBTITLE_ASS_OVERRIDE("sub-ass-override", R.string.preference_mpv_sub_ass_override, R.string.preference_mpv_sub_ass_override_description, setOf("sub-ass-override")),
@@ -283,8 +267,6 @@ enum class LibMPVChoiceSetting(
 		TONE_MAPPING -> LibMPVToneMapping.entries
 		AUDIO_OUTPUT -> LibMPVAudioOutput.entries
 		AUDIO_PRESET -> LibMPVAudioPresetOption.entries
-		AUDIO_CHANNELS -> LibMPVAudioChannels.entries
-		AUDIO_SPDIF -> LibMPVAudioSpdif.entries
 		REPLAY_GAIN -> LibMPVReplayGain.entries
 		LOOP_FILTER -> LibMPVLoopFilter.entries
 		SUBTITLE_ASS_OVERRIDE -> LibMPVSubtitleAssOverride.entries
@@ -303,8 +285,6 @@ enum class LibMPVChoiceSetting(
 		TONE_MAPPING -> LibMPVToneMapping.AUTO
 		AUDIO_OUTPUT -> LibMPVAudioOutput.AUTO
 		AUDIO_PRESET -> LibMPVAudioPresetOption.OFF
-		AUDIO_CHANNELS -> LibMPVAudioChannels.AUTO_SAFE
-		AUDIO_SPDIF -> LibMPVAudioSpdif.NONE
 		REPLAY_GAIN -> LibMPVReplayGain.DISABLED
 		LOOP_FILTER -> LibMPVLoopFilter.DEFAULT
 		SUBTITLE_ASS_OVERRIDE -> LibMPVSubtitleAssOverride.NO
@@ -323,8 +303,6 @@ enum class LibMPVChoiceSetting(
 		TONE_MAPPING -> preferences[UserPreferences.mpvToneMapping]
 		AUDIO_OUTPUT -> preferences[UserPreferences.mpvAudioOutput]
 		AUDIO_PRESET -> preferences[UserPreferences.mpvAudioPreset]
-		AUDIO_CHANNELS -> preferences[UserPreferences.mpvAudioChannels]
-		AUDIO_SPDIF -> preferences[UserPreferences.mpvAudioSpdif]
 		REPLAY_GAIN -> preferences[UserPreferences.mpvReplayGain]
 		LOOP_FILTER -> preferences[UserPreferences.mpvLoopFilter]
 		SUBTITLE_ASS_OVERRIDE -> preferences[UserPreferences.mpvSubtitleAssOverride]
@@ -344,8 +322,6 @@ enum class LibMPVChoiceSetting(
 		TONE_MAPPING -> preferences[UserPreferences.mpvToneMapping] = option as LibMPVToneMapping
 		AUDIO_OUTPUT -> preferences[UserPreferences.mpvAudioOutput] = option as LibMPVAudioOutput
 		AUDIO_PRESET -> preferences[UserPreferences.mpvAudioPreset] = option as LibMPVAudioPresetOption
-		AUDIO_CHANNELS -> preferences[UserPreferences.mpvAudioChannels] = option as LibMPVAudioChannels
-		AUDIO_SPDIF -> preferences[UserPreferences.mpvAudioSpdif] = option as LibMPVAudioSpdif
 		REPLAY_GAIN -> preferences[UserPreferences.mpvReplayGain] = option as LibMPVReplayGain
 		LOOP_FILTER -> preferences[UserPreferences.mpvLoopFilter] = option as LibMPVLoopFilter
 		SUBTITLE_ASS_OVERRIDE -> preferences[UserPreferences.mpvSubtitleAssOverride] = option as LibMPVSubtitleAssOverride
@@ -356,33 +332,93 @@ enum class LibMPVChoiceSetting(
 	}
 }
 
-fun UserPreferences.mpvPlaybackOptions() = LibMPVPlaybackOptions(
-	videoOutput = this[UserPreferences.mpvVideoOutput].mpvValue,
-	gpuContext = this[UserPreferences.mpvGpuContext].mpvValue,
-	gpuApi = this[UserPreferences.mpvGpuApi].mpvValue,
-	videoSync = this[UserPreferences.mpvVideoSync].mpvValue,
-	frameDrop = this[UserPreferences.mpvFrameDrop].mpvValue,
-	deinterlace = this[UserPreferences.mpvDeinterlace].mpvValue,
-	interpolation = this[UserPreferences.mpvInterpolation],
-	scaler = this[UserPreferences.mpvScaler].mpvValue,
-	deband = this[UserPreferences.mpvDeband],
-	toneMapping = this[UserPreferences.mpvToneMapping].mpvValue,
-	audioOutput = this[UserPreferences.mpvAudioOutput].mpvValue,
-	audioChannels = this[UserPreferences.mpvAudioChannels].mpvValue,
-	audioSpdif = this[UserPreferences.mpvAudioSpdif].mpvValue,
-	audioPitchCorrection = this[UserPreferences.mpvAudioPitchCorrection],
-	replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
-	decoderThreads = this[UserPreferences.mpvDecoderThreads].coerceIn(0, 32),
-	skipLoopFilter = this[UserPreferences.mpvLoopFilter].mpvValue,
-	subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,
-	subtitleUseMargins = this[UserPreferences.mpvSubtitleUseMargins],
-	softwareDecodingForLiveTv = this[UserPreferences.mpvSoftwareDecodingForLiveTv],
-	nvidiaShieldWorkarounds = this[UserPreferences.mpvNvidiaShieldWorkarounds],
-	videoPreset = this[UserPreferences.mpvVideoPreset].preset,
-	audioPreset = this[UserPreferences.mpvAudioPreset].preset,
-	customOptions = parseLibMPVOptionOverrides(this[UserPreferences.mpvOptionOverrides]).values
-		.filterKeys { name -> !isLibMPVOptionManagedByJellyfin(name) },
+internal data class LibMPVAudioPolicy(
+	val audioOutput: String,
+	val audioChannels: String,
+	val audioSpdif: String,
+	val audioPreset: LibMPVAudioPreset,
 )
+
+@OptIn(UnstableApi::class)
+internal fun UserPreferences.mpvAudioPolicy(supportedPassthroughMimes: Set<String>): LibMPVAudioPolicy {
+	if (this[UserPreferences.audioBehaviour] == AudioBehavior.DOWNMIX_TO_STEREO) {
+		return LibMPVAudioPolicy(
+			audioOutput = this[UserPreferences.mpvAudioOutput].mpvValue,
+			audioChannels = "stereo",
+			audioSpdif = "",
+			audioPreset = LibMPVAudioPreset.OFF,
+		)
+	}
+
+	val passthroughCodecs = buildList {
+		if (this@mpvAudioPolicy.isAudioPassthroughEnabled(MimeTypes.AUDIO_AC3) && MimeTypes.AUDIO_AC3 in supportedPassthroughMimes) add("ac3")
+		if (
+			this@mpvAudioPolicy.isAudioPassthroughEnabled(MimeTypes.AUDIO_E_AC3) &&
+			supportedPassthroughMimes.any { mime -> mime == MimeTypes.AUDIO_E_AC3 || mime == MimeTypes.AUDIO_E_AC3_JOC }
+		) add("eac3")
+		if (this@mpvAudioPolicy.isAudioPassthroughEnabled(MimeTypes.AUDIO_DTS)) {
+			if (
+				MimeTypes.AUDIO_DTS in supportedPassthroughMimes ||
+				MimeTypes.AUDIO_DTS_EXPRESS in supportedPassthroughMimes
+			) add("dts")
+			if (
+				MimeTypes.AUDIO_DTS_HD in supportedPassthroughMimes ||
+				MimeTypes.AUDIO_DTS_UHD_P2 in supportedPassthroughMimes
+			) add("dts-hd")
+		}
+		if (this@mpvAudioPolicy.isAudioPassthroughEnabled(MimeTypes.AUDIO_TRUEHD) && MimeTypes.AUDIO_TRUEHD in supportedPassthroughMimes) add("truehd")
+	}
+	val audioPresetOption = this[UserPreferences.mpvAudioPreset]
+	val audioSpdif = if (audioPresetOption == LibMPVAudioPresetOption.CINEMA_SPATIAL) {
+		""
+	} else {
+		passthroughCodecs.joinToString(",")
+	}
+
+	return LibMPVAudioPolicy(
+		audioOutput = if (audioSpdif.isEmpty()) {
+			this[UserPreferences.mpvAudioOutput].mpvValue
+		} else {
+			LibMPVAudioOutput.AUDIOTRACK.mpvValue
+		},
+		audioChannels = "auto",
+		audioSpdif = audioSpdif,
+		audioPreset = audioPresetOption.preset,
+	)
+}
+
+fun UserPreferences.mpvPlaybackOptions(
+	supportedPassthroughMimes: Set<String>,
+) = mpvAudioPolicy(supportedPassthroughMimes).let { audioPolicy ->
+	LibMPVPlaybackOptions(
+		videoOutput = this[UserPreferences.mpvVideoOutput].mpvValue,
+		gpuContext = this[UserPreferences.mpvGpuContext].mpvValue,
+		gpuApi = this[UserPreferences.mpvGpuApi].mpvValue,
+		videoSync = this[UserPreferences.mpvVideoSync].mpvValue,
+		frameDrop = this[UserPreferences.mpvFrameDrop].mpvValue,
+		deinterlace = this[UserPreferences.mpvDeinterlace].mpvValue,
+		interpolation = this[UserPreferences.mpvInterpolation],
+		scaler = this[UserPreferences.mpvScaler].mpvValue,
+		deband = this[UserPreferences.mpvDeband],
+		toneMapping = this[UserPreferences.mpvToneMapping].mpvValue,
+		audioOutput = audioPolicy.audioOutput,
+		audioChannels = audioPolicy.audioChannels,
+		audioSpdif = audioPolicy.audioSpdif,
+		audioTrackPcmFloat = audioPolicy.audioSpdif.isEmpty(),
+		audioPitchCorrection = this[UserPreferences.mpvAudioPitchCorrection],
+		replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
+		decoderThreads = this[UserPreferences.mpvDecoderThreads].coerceIn(0, 32),
+		skipLoopFilter = this[UserPreferences.mpvLoopFilter].mpvValue,
+		subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,
+		subtitleUseMargins = this[UserPreferences.mpvSubtitleUseMargins],
+		softwareDecodingForLiveTv = this[UserPreferences.mpvSoftwareDecodingForLiveTv],
+		nvidiaShieldWorkarounds = this[UserPreferences.mpvNvidiaShieldWorkarounds],
+		videoPreset = this[UserPreferences.mpvVideoPreset].preset,
+		audioPreset = audioPolicy.audioPreset,
+		customOptions = parseLibMPVOptionOverrides(this@mpvPlaybackOptions[UserPreferences.mpvOptionOverrides]).values
+			.filterKeys { name -> !isLibMPVOptionManagedByJellyfin(name) },
+	)
+}
 
 fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvDecoder] = LibMPVDecoder.AUTOMATIC
@@ -395,8 +431,6 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvScaler] = LibMPVScaler.BILINEAR
 	this[UserPreferences.mpvToneMapping] = LibMPVToneMapping.AUTO
 	this[UserPreferences.mpvAudioOutput] = LibMPVAudioOutput.AUTO
-	this[UserPreferences.mpvAudioChannels] = LibMPVAudioChannels.AUTO_SAFE
-	this[UserPreferences.mpvAudioSpdif] = LibMPVAudioSpdif.NONE
 	this[UserPreferences.mpvReplayGain] = LibMPVReplayGain.DISABLED
 	this[UserPreferences.mpvLoopFilter] = LibMPVLoopFilter.DEFAULT
 	this[UserPreferences.mpvSubtitleAssOverride] = LibMPVSubtitleAssOverride.NO
