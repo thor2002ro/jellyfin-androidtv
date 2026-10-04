@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -57,9 +58,12 @@ import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
 import org.jellyfin.androidtv.util.apiclient.TrickplayTileSheet
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
+import org.jellyfin.androidtv.util.PlaybackDisplayMode
+import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
@@ -84,6 +88,7 @@ fun VideoPlayerScreen(
 ) {
 	val playbackManager = koinInject<PlaybackManager>()
 	val userPreferences = koinInject<UserPreferences>()
+	PlaybackDisplayModeUpdater(playbackManager, userPreferences)
 	var zoomMode by remember { mutableStateOf(userPreferences[UserPreferences.playerZoomMode]) }
 	val initialZoomStatus = stringResource(zoomMode.nameRes)
 	var zoomStatus by remember { mutableStateOf(initialZoomStatus) }
@@ -415,6 +420,37 @@ private fun VideoBufferingIndicator(
 					)
 				}
 			}
+		}
+	}
+}
+
+@Composable
+private fun PlaybackDisplayModeUpdater(playbackManager: PlaybackManager, preferences: UserPreferences) {
+	val activity = LocalActivity.current ?: return
+	val originalMode = remember(activity) { activity.windowManager.defaultDisplay.mode }
+	val originalPreference = remember(activity) { activity.window.attributes.preferredDisplayModeId }
+	val switchRefreshRate by rememberPreference(preferences, UserPreferences.refreshRateSwitchingEnabled)
+	val switchResolution by rememberPreference(preferences, UserPreferences.resolutionSwitchingEnabled)
+	val entry by playbackManager.queue.entry.collectAsState()
+	val stream = entry?.run { mediaStreamFlow.collectAsState(mediaStream) }?.value
+	val video = stream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()
+
+	LaunchedEffect(activity, video, switchRefreshRate, switchResolution) {
+		if (!switchRefreshRate && !switchResolution) {
+			val attributes = activity.window.attributes
+			attributes.preferredDisplayModeId = originalPreference
+			activity.window.attributes = attributes
+		} else if (video != null) {
+			// Retain the previous mode while the next queue entry is resolving its stream.
+			PlaybackDisplayMode.apply(activity, video.width, video.height, video.realFrameRate,
+				switchRefreshRate, switchResolution, originalMode)
+		}
+	}
+	DisposableEffect(activity) {
+		onDispose {
+			val attributes = activity.window.attributes
+			attributes.preferredDisplayModeId = originalPreference
+			activity.window.attributes = attributes
 		}
 	}
 }

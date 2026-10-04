@@ -21,7 +21,7 @@ import org.jellyfin.androidtv.data.model.DataRefreshService;
 import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.UserSettingPreferences;
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior;
-import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior;
+import org.jellyfin.androidtv.util.PlaybackDisplayMode;
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
 import org.jellyfin.androidtv.ui.InteractionTrackerViewModel;
@@ -131,8 +131,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     private int playbackRetries = 0;
     private long lastPlaybackError = 0;
 
-    private Display.Mode[] mDisplayModes;
-    private RefreshRateSwitchingBehavior refreshRateSwitchingBehavior = RefreshRateSwitchingBehavior.DISABLED;
+    private Display.Mode mOriginalDisplayMode;
+    private boolean refreshRateSwitchingEnabled;
+    private boolean resolutionSwitchingEnabled;
 
     public PlaybackController(List<BaseItemDto> items, CustomPlaybackOverlayFragment fragment) {
         this(items, fragment, 0);
@@ -149,9 +150,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
         interactionTracker = lazyInteractionTracker.getValue();
 
-        refreshRateSwitchingBehavior = userPreferences.getValue().get(UserPreferences.Companion.getRefreshRateSwitchingBehavior());
-        if (refreshRateSwitchingBehavior != RefreshRateSwitchingBehavior.DISABLED)
-            getDisplayModes();
+        refreshRateSwitchingEnabled = userPreferences.getValue().get(UserPreferences.Companion.getRefreshRateSwitchingEnabled());
+        resolutionSwitchingEnabled = userPreferences.getValue().get(UserPreferences.Companion.getResolutionSwitchingEnabled());
+        mOriginalDisplayMode = fragment.requireActivity().getWindowManager().getDefaultDisplay().getMode();
 
     }
 
@@ -351,96 +352,10 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         mLiveTvRetryRunnable = null;
     }
 
-    private void getDisplayModes() {
-        if (mFragment == null)
-            return;
-        Display display = mFragment.requireActivity().getWindowManager().getDefaultDisplay();
-        mDisplayModes = display.getSupportedModes();
-        Timber.d("Available display refresh rates:");
-        for (Display.Mode mDisplayMode : mDisplayModes) {
-            Timber.v("display mode %s - %dx%d@%f", mDisplayMode.getModeId(), mDisplayMode.getPhysicalWidth(), mDisplayMode.getPhysicalHeight(), mDisplayMode.getRefreshRate());
-        }
-    }
-
-    private Display.Mode findBestDisplayMode(MediaStream videoStream) {
-        if (mFragment == null || mDisplayModes == null || videoStream.getRealFrameRate() == null)
-            return null;
-
-
-        int curWeight = 0;
-        Display.Mode bestMode = null;
-        int sourceRate = Math.round(videoStream.getRealFrameRate() * 100);
-
-        Display.Mode defaultMode = mFragment.requireActivity().getWindowManager().getDefaultDisplay().getMode();
-
-        Timber.d("trying to find display mode for video: %dx%d@%f", videoStream.getWidth(), videoStream.getHeight(), videoStream.getRealFrameRate());
-        for (Display.Mode mode : mDisplayModes) {
-            Timber.d("considering display mode: %s - %dx%d@%f", mode.getModeId(), mode.getPhysicalWidth(), mode.getPhysicalHeight(), mode.getRefreshRate());
-
-            // Skip unwanted display modes
-            if (mode.getPhysicalWidth() < 1280 || mode.getPhysicalHeight() < 720)  // Skip non-HD
-                continue;
-
-            if (mode.getPhysicalWidth() < videoStream.getWidth() || mode.getPhysicalHeight() < videoStream.getHeight())  // Disallow resolution downgrade
-                continue;
-
-            int rate = Math.round(mode.getRefreshRate() * 100);
-            if (rate != sourceRate && rate != sourceRate * 2 && rate != Math.round(sourceRate * 2.5)) // Skip inappropriate rates
-                continue;
-
-            Timber.d("qualifying display mode: %s - %dx%d@%f", mode.getModeId(), mode.getPhysicalWidth(), mode.getPhysicalHeight(), mode.getRefreshRate());
-
-            // if scaling on-device, keep native resolution modes at diff 0 (best score)
-            // for other resolutions when scaling on device, or if scaling on tv, score based on distance from media resolution
-
-            // use -1 as the default so, with SCALE_ON_DEVICE, a mode at native resolution will rank higher than
-            // a mode with equal refresh rate and the same resolution as the media
-            int resolutionDifference = -1;
-            if ((refreshRateSwitchingBehavior == RefreshRateSwitchingBehavior.SCALE_ON_DEVICE &&
-                    !(mode.getPhysicalWidth() == defaultMode.getPhysicalWidth() && mode.getPhysicalHeight() == defaultMode.getPhysicalHeight())) ||
-
-                    refreshRateSwitchingBehavior == RefreshRateSwitchingBehavior.SCALE_ON_TV) {
-
-                resolutionDifference = Math.abs(mode.getPhysicalWidth() - videoStream.getWidth());
-            }
-            int refreshRateDifference = rate - sourceRate;
-
-            // use 100,000 to account for refresh rates 120Hz+ (at 120Hz rate == 12,000)
-            int weight = 100000 - refreshRateDifference + 100000 - resolutionDifference;
-
-            if (weight > curWeight) {
-                Timber.d("preferring mode: %s - %dx%d@%f", mode.getModeId(), mode.getPhysicalWidth(), mode.getPhysicalHeight(), mode.getRefreshRate());
-                curWeight = weight;
-                bestMode = mode;
-            }
-        }
-
-        return bestMode;
-    }
-
-    private void setRefreshRate(MediaStream videoStream) {
-        if (videoStream == null || mFragment == null) {
-            Timber.w("No video stream available to set refresh rate");
-            return;
-        }
-
-        Display.Mode current = mFragment.requireActivity().getWindowManager().getDefaultDisplay().getMode();
-        Display.Mode best = findBestDisplayMode(videoStream);
-        if (best != null) {
-            Timber.i("Best refresh mode is: %s - %dx%d/%f",
-                    best.getModeId(), best.getPhysicalWidth(), best.getPhysicalHeight(), best.getRefreshRate());
-            if (current.getModeId() != best.getModeId()) {
-                Timber.i("Attempting to change refresh rate from: %s - %dx%d@%f", current.getModeId(), current.getPhysicalWidth(),
-                        current.getPhysicalHeight(), current.getRefreshRate());
-                WindowManager.LayoutParams params = mFragment.requireActivity().getWindow().getAttributes();
-                params.preferredDisplayModeId = best.getModeId();
-                mFragment.requireActivity().getWindow().setAttributes(params);
-            } else {
-                Timber.d("Display is already in best mode");
-            }
-        } else {
-            Timber.i("Unable to find display mode for refresh rate: %f", videoStream.getRealFrameRate());
-        }
+    private void setPlaybackDisplayMode(MediaStream videoStream) {
+        if (videoStream == null || mFragment == null) return;
+        PlaybackDisplayMode.apply(mFragment.requireActivity(), videoStream.getWidth(), videoStream.getHeight(),
+                videoStream.getRealFrameRate(), refreshRateSwitchingEnabled, resolutionSwitchingEnabled, mOriginalDisplayMode);
     }
 
     // central place to update mCurrentPosition
@@ -741,9 +656,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
         Long mbPos = position * 10000;
 
-        // set refresh rate
-        if (refreshRateSwitchingBehavior != RefreshRateSwitchingBehavior.DISABLED) {
-            setRefreshRate(JavaCompat.getVideoStream(response.getMediaSource()));
+        // Apply resolution and refresh preferences independently.
+        if (refreshRateSwitchingEnabled || resolutionSwitchingEnabled) {
+            setPlaybackDisplayMode(JavaCompat.getVideoStream(response.getMediaSource()));
         }
 
         // set playback speed to user selection, or 1 if we're watching live-tv
