@@ -39,6 +39,7 @@ import org.jellyfin.sdk.model.api.MediaSegmentType
 import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun VideoPlayerMediaSegmentOverlay(
@@ -66,18 +67,16 @@ fun VideoPlayerMediaSegmentOverlay(
 
 	LaunchedEffect(position, segments) {
 		val previous = previousPosition
-		val skipSegment = segments.firstOrNull { segment ->
-			val key = segment.key
-			mediaSegmentRepository.getMediaSegmentAction(segment) == MediaSegmentAction.SKIP &&
-				!handledSkipSegmentKeys.contains(key) &&
-				previous != null &&
-				previous < segment.start &&
-				position >= segment.start &&
-				position < segment.end
-		}
+		val skipSegment = findAutoSkipSegment(
+			segments = segments,
+			previousPosition = previous,
+			position = position,
+			handledKeys = handledSkipSegmentKeys,
+			actionFor = mediaSegmentRepository::getMediaSegmentAction,
+		)
 
 		if (skipSegment != null) {
-			handledSkipSegmentKeys = handledSkipSegmentKeys + skipSegment.key
+			handledSkipSegmentKeys = handledSkipSegmentKeys + skipSegment.stableKey
 			playbackManager.state.seek(skipSegment.end)
 		}
 
@@ -85,14 +84,10 @@ fun VideoPlayerMediaSegmentOverlay(
 	}
 
 	val promptSegment = remember(position, segments) {
-		segments.firstOrNull { segment ->
-			mediaSegmentRepository.getMediaSegmentAction(segment) == MediaSegmentAction.ASK_TO_SKIP &&
-				position >= segment.start &&
-				position < segment.end
-		}
+		findPromptSegment(segments, position, mediaSegmentRepository::getMediaSegmentAction)
 	}
 
-	LaunchedEffect(promptSegment?.key) {
+	LaunchedEffect(promptSegment?.stableKey) {
 		onPromptTargetChanged(promptSegment?.end)
 		onEndingSkipPromptChanged(promptSegment?.type == MediaSegmentType.OUTRO)
 	}
@@ -125,5 +120,33 @@ fun VideoPlayerMediaSegmentOverlay(
 	}
 }
 
-private val MediaSegmentDto.key: String
+internal val MediaSegmentDto.stableKey: String
 	get() = "$type:$startTicks:$endTicks"
+
+internal fun findPromptSegment(
+	segments: List<MediaSegmentDto>,
+	position: Duration,
+	actionFor: (MediaSegmentDto) -> MediaSegmentAction,
+): MediaSegmentDto? = segments.firstOrNull { segment ->
+	actionFor(segment) == MediaSegmentAction.ASK_TO_SKIP &&
+		position >= segment.start &&
+		position < segment.end
+}
+
+internal fun findAutoSkipSegment(
+	segments: List<MediaSegmentDto>,
+	previousPosition: Duration?,
+	position: Duration,
+	handledKeys: Set<String>,
+	actionFor: (MediaSegmentDto) -> MediaSegmentAction,
+	maximumNaturalAdvance: Duration = 2.seconds,
+): MediaSegmentDto? {
+	if (previousPosition == null || position < previousPosition || position - previousPosition > maximumNaturalAdvance) return null
+	return segments.firstOrNull { segment ->
+		actionFor(segment) == MediaSegmentAction.SKIP &&
+			segment.stableKey !in handledKeys &&
+			previousPosition < segment.start &&
+			position >= segment.start &&
+			position < segment.end
+	}
+}
