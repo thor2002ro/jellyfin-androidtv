@@ -255,16 +255,13 @@ class PlaySessionService(
 	}
 
 	private suspend fun getSelectedAudioStreamIndex() = withContext(Dispatchers.Main) {
-		manager.trackSelection
-			?.getAvailableTracks(TrackType.AUDIO)
-			?.firstOrNull(PlayerTrack::isSelected)
-			?.streamIndex
-			?: selectedAudioStreamIndex
+		val tracks = manager.trackSelection?.getAvailableTracks(TrackType.AUDIO) ?: return@withContext selectedAudioStreamIndex
+		tracks.selectedJellyfinStreamIndex(selectedAudioStreamIndex)
 	}
 
 	private suspend fun getSelectedSubtitleStreamIndex(): Int? = withContext(Dispatchers.Main) {
 		val tracks = manager.trackSelection?.getAvailableTracks(TrackType.SUBTITLE) ?: return@withContext selectedSubtitleStreamIndex
-		tracks.firstOrNull(PlayerTrack::isSelected)?.streamIndex ?: -1
+		tracks.selectedJellyfinStreamIndex(-1)
 	}
 
 	private suspend fun getQueue(): List<QueueItem> {
@@ -629,4 +626,9 @@ class PlaySessionService(
 		}.onFailure { error -> Timber.w("Failed to send playback stop event", error) }
 
 	}
+}
+
+internal fun List<PlayerTrack>.selectedJellyfinStreamIndex(fallback: Int?): Int? {
+	val selected = firstOrNull(PlayerTrack::isSelected) ?: return fallback
+	return selected.streamIndex
 }

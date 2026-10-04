@@ -59,7 +59,8 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 
 	val videoQueueManager by fragment.inject<VideoQueueManager>()
 	val item = getCurrentlyPlayingItem() ?: return
-	TrackSelectionResolver.storeSelectedSubtitleTrack(item, currentMediaSource, videoQueueManager, index)
+	// Startup reapplication and unavailable-track fallback must not become a series preference.
+	if (!force) TrackSelectionResolver.storeSelectedSubtitleTrack(item, currentMediaSource, videoQueueManager, index)
 
 	// Already using this subtitle index
 	if (mCurrentOptions.subtitleStreamIndex == index && !force) return
@@ -91,7 +92,7 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 		val stream = mediaSource.mediaStreams?.firstOrNull { it.type == MediaStreamType.SUBTITLE && it.index == index }
 		if (stream == null) {
 			Timber.w("Failed to find correct media stream")
-			return setSubtitleIndex(-1)
+			return setSubtitleIndex(-1, force = true)
 		}
 
 		when {
@@ -125,7 +126,7 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 
 					if (localIndex == null) {
 						Timber.w("Failed to find local subtitle index")
-						return setSubtitleIndex(-1)
+						return setSubtitleIndex(-1, force = true)
 					}
 
 					mVideoManager.mExoPlayer.currentTracks.groups
@@ -136,7 +137,7 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 
 				if (group == null) {
 					Timber.w("Failed to find correct subtitle group for method ${stream.deliveryMethod}")
-					return setSubtitleIndex(-1)
+					return setSubtitleIndex(-1, force = true)
 				}
 
 				Timber.i("Enabling subtitle group $index via method ${stream.deliveryMethod}")
@@ -152,7 +153,7 @@ fun PlaybackController.setSubtitleIndex(index: Int, force: Boolean = false) {
 
 			stream.deliveryMethod == SubtitleDeliveryMethod.DROP || stream.deliveryMethod == null -> {
 				Timber.d("Dropping subtitles")
-				setSubtitleIndex(-1)
+				setSubtitleIndex(-1, force = true)
 			}
 		}
 	}

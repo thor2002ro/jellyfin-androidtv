@@ -177,7 +177,7 @@ val appModule = module {
 		)
 	}
 
-	single<UserRepository> { UserRepositoryImpl() }
+	single<UserRepository> { UserRepositoryImpl(get()) }
 	single<UserViewsRepository> { UserViewsRepositoryImpl(get(), androidContext(), get()) }
 	single<NotificationsRepository> { NotificationsRepositoryImpl(get(), get()) }
 	single<ItemMutationRepository> { ItemMutationRepositoryImpl(get(), get()) }
