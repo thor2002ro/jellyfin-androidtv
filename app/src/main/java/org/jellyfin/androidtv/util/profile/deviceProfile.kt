@@ -734,6 +734,7 @@ internal fun createDeviceProfile(
 			unsupported
 		}
 		addUnsupportedVideoRanges(videoCodec, excludedRanges)
+		addServerDoviRemuxMetadataWorkaround(videoCodec, excludedRanges, doviPlaybackPlan)
 	}
 
 	// Audio channel profile
@@ -803,6 +804,39 @@ internal fun createDeviceProfile(
 }.let { profile ->
 	if (enableFfmpegVideo && doviPlaybackPlan == null) profile.withFfmpegVideo(mediaTest, maxResolution, userAVCLevel, userHEVCLevel)
 	else profile
+}
+
+/**
+ * Jellyfin Server 12 only preserves the fMP4 Dolby Vision configuration when the
+ * requested ranges include fallback-free DOVI; otherwise FFmpeg omits dvcC/dvvC.
+ * Supported sources skip exclusion profiles, so an explicit accepted-range profile
+ * is needed to send that range and trigger the server's -strict -2 muxing option.
+ * Remove this workaround when the server preserves DV configuration on video copy
+ * without requiring the extra DOVI capability. This is independent of the player.
+ */
+private fun DeviceProfileBuilder.addServerDoviRemuxMetadataWorkaround(
+	videoCodec: String,
+	excludedRanges: Set<VideoRangeType>,
+	plan: DoviPlaybackPlan?,
+) {
+	// Only native/converted DV routes opt in; never override codec/range exclusions
+	// or advertise DV for source-base playback and server tone-mapping routes.
+	if (plan?.advertiseRemuxDoviMetadata != true ||
+		!plan.codec.name.equals(videoCodec, ignoreCase = true) ||
+		plan.sourceRangeType in excludedRanges || VideoRangeType.DOVI in excludedRanges
+	) return
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = videoCodec
+		conditions {
+			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection
+				(VideoRangeType.entries - excludedRanges).map { it.serialName }
+		}
+		// Scope the extra capability to the source selected by the DV policy.
+		applyConditions {
+			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection listOf(plan.sourceRangeType.serialName)
+		}
+	}
 }
 
 internal fun DeviceProfileBuilder.addUnsupportedVideoRanges(videoCodec: String, unsupported: Set<VideoRangeType>) {

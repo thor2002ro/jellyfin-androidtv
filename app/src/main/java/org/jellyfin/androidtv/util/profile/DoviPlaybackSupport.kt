@@ -65,6 +65,8 @@ internal data class DoviPlaybackPlan(
 	val container: String?,
 	val codec: DoviVideoCodec,
 	val sourceRangeType: VideoRangeType,
+	// Opt-in for addServerDoviRemuxMetadataWorkaround, not general DV capability.
+	val advertiseRemuxDoviMetadata: Boolean = false,
 ) {
 	val advertisedHevcRangeTypes: Set<VideoRangeType>
 		get() = if (
@@ -72,14 +74,19 @@ internal data class DoviPlaybackPlan(
 			sourceRangeType in recognizedDoviVideoRangeTypes &&
 			decision.route != DoviRoute.ServerFallback
 		) {
-			setOf(sourceRangeType)
+			buildSet {
+				add(sourceRangeType)
+				// Server 12 writes the remuxed Dolby Vision configuration only when the
+				// client also advertises the fallback-free DOVI range.
+				if (advertiseRemuxDoviMetadata) add(VideoRangeType.DOVI)
+			}
 		} else {
 			emptySet()
 		}
 }
 
-internal fun decideDoviPlayback(request: DoviPlaybackRequest): DoviPlaybackPlan = DoviPlaybackPlan(
-	decision = DoviCompatibilityPolicy.decide(
+internal fun decideDoviPlayback(request: DoviPlaybackRequest): DoviPlaybackPlan {
+	val decision = DoviCompatibilityPolicy.decide(
 		DoviCompatibilityPolicy.Input(
 			mode = request.mode,
 			backend = request.backend,
@@ -93,12 +100,28 @@ internal fun decideDoviPlayback(request: DoviPlaybackRequest): DoviPlaybackPlan 
 			builtInPlayerSelected = request.builtInPlayerSelected,
 			retrySuppressed = request.retrySuppressed,
 		),
-	),
-	mediaSourceId = "test-source",
-	container = request.container,
-	codec = request.codec,
-	sourceRangeType = request.sourceRangeType,
-)
+	)
+	return DoviPlaybackPlan(
+		decision = decision,
+		mediaSourceId = "test-source",
+		container = request.container,
+		codec = request.codec,
+		sourceRangeType = request.sourceRangeType,
+		advertiseRemuxDoviMetadata = decision.needsServerDoviRemuxMetadataWorkaround(request.sourceRangeType),
+	)
+}
+
+/**
+ * Server 12 requires an extra DOVI range to preserve DV configuration during remux.
+ * Derive the opt-in from the selected presentation, not the backend: native DV and
+ * libdovi DV conversion need that metadata; HDR base playback and server fallback
+ * must not advertise fallback-free DV. This does not change the conversion policy.
+ * Remove with addServerDoviRemuxMetadataWorkaround once the server preserves DV
+ * metadata on video copy without this extra capability.
+ */
+private fun DoviDecision.needsServerDoviRemuxMetadataWorkaround(sourceRangeType: VideoRangeType): Boolean =
+	sourceRangeType in recognizedDoviVideoRangeTypes &&
+		(route == DoviRoute.Native || route is DoviRoute.Transform)
 
 internal fun QueueEntry.bindDoviPlaybackPlan(plan: DoviPlaybackPlan?) {
 	// Clear an earlier source's decision before binding the current request.
