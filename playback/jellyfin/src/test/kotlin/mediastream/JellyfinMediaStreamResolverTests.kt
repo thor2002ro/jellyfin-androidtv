@@ -35,7 +35,7 @@ import org.jellyfin.sdk.model.api.VideoRangeType
 import java.util.UUID
 
 class JellyfinMediaStreamResolverTests : FunSpec({
-	suspend fun resolveVideo(transcodeUrl: String, decision: DoviDecision? = null): MediaConversionMethod? {
+	suspend fun resolveVideo(transcodeUrl: String, decision: DoviDecision? = null): org.jellyfin.playback.core.mediastream.PlayableMediaStream? {
 		val item = BaseItemDto(
 			id = UUID.randomUUID(),
 			type = BaseItemKind.MOVIE,
@@ -54,7 +54,7 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 		val api = mockk<ApiClient>()
 		val mediaInfoApi = mockk<MediaInfoApi>()
 		every { api.getOrCreateApi(MediaInfoApi::class, any()) } returns mediaInfoApi
-		every { api.createUrl(any(), any(), any(), true) } returns "https://example.invalid$transcodeUrl"
+		every { api.createUrl(any(), any(), any(), true) } answers { "https://example.invalid${firstArg<String>()}" }
 		coEvery { mediaInfoApi.getPostedPlaybackInfo(any(), any()) } returns playbackInfoResponse(mediaSource, "session")
 		val resolver = JellyfinMediaStreamResolver(
 			api = api,
@@ -71,7 +71,7 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 			doviDecision = decision
 		}
 
-		return resolver.getStream(entry, null)?.conversionMethod
+		return resolver.getStream(entry, null)
 	}
 
 	test("audio and subtitle options are resolved from the awaited media source") {
@@ -218,7 +218,7 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 	test("HDR playback preserves video when the server converts only audio") {
 		runBlocking {
 			val transcodeUrl = "/Videos/item/master.m3u8?VideoCodec=hevc,h264&TranscodeReasons=AudioCodecNotSupported"
-			resolveVideo(transcodeUrl) shouldBe MediaConversionMethod.Remux
+			resolveVideo(transcodeUrl)?.conversionMethod shouldBe MediaConversionMethod.Remux
 		}
 	}
 
@@ -230,7 +230,7 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 				reason = DoviDecisionReason.SOURCE_BASE,
 			)
 
-			resolveVideo(transcodeUrl, decision) shouldBe MediaConversionMethod.Remux
+			resolveVideo(transcodeUrl, decision)?.conversionMethod shouldBe MediaConversionMethod.Remux
 		}
 	}
 
@@ -242,7 +242,15 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 				reason = DoviDecisionReason.NO_COMPATIBLE_ROUTE,
 			)
 
-			resolveVideo(transcodeUrl, decision) shouldBe MediaConversionMethod.Remux
+			resolveVideo(transcodeUrl, decision)?.conversionMethod shouldBe MediaConversionMethod.Remux
+		}
+	}
+
+	test("resolved server stream requests a safe DTS encoding bitrate while preserving video copy") {
+		runBlocking {
+			val stream = resolveVideo("/Videos/item/master.m3u8?VideoCodec=hevc&AudioCodec=dts&AudioBitrate=640000&TranscodeReasons=AudioCodecNotSupported")
+			stream?.url shouldBe "https://example.invalid/Videos/item/master.m3u8?VideoCodec=hevc&AudioCodec=dts&AudioBitrate=768000&TranscodeReasons=AudioCodecNotSupported"
+			stream?.conversionMethod shouldBe MediaConversionMethod.Remux
 		}
 	}
 })
