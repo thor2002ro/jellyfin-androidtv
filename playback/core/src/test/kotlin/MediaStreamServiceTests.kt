@@ -41,6 +41,52 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class MediaStreamServiceTests : FunSpec({
+	test("stream replacement waits for window preparation and rejects a stop during the wait") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.resolver.response.complete(fixture.reloadedStream)
+		val preparing = CompletableDeferred<Unit>()
+		val ready = CompletableDeferred<Boolean>()
+		fixture.manager.options.beforePlayItem = {
+			preparing.complete(Unit)
+			ready.await()
+		}
+		coroutineScope {
+			val reload = async(start = CoroutineStart.UNDISPATCHED) { fixture.manager.reloadCurrentMediaStream() }
+			preparing.await()
+			verify(exactly = 0) { fixture.backend.replaceItem(any()) }
+			fixture.manager.state.stop()
+			ready.complete(true)
+			reload.await() shouldBe false
+		}
+		verify(exactly = 0) { fixture.backend.replaceItem(any()) }
+	}
+
+	test("stream replacement starts only after window preparation succeeds") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.resolver.response.complete(fixture.reloadedStream)
+		val ready = CompletableDeferred<Boolean>()
+		fixture.manager.options.beforePlayItem = { ready.await() }
+		coroutineScope {
+			val reload = async(start = CoroutineStart.UNDISPATCHED) { fixture.manager.reloadCurrentMediaStream() }
+			verify(exactly = 0) { fixture.backend.replaceItem(any()) }
+			ready.complete(true)
+			reload.await() shouldBe true
+		}
+		verify(exactly = 1) { fixture.backend.replaceItem(fixture.first) }
+	}
+
+	test("failed window preparation preserves the current stream") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.resolver.response.complete(fixture.reloadedStream)
+		fixture.manager.options.beforePlayItem = { false }
+		fixture.manager.reloadCurrentMediaStream() shouldBe false
+		fixture.first.mediaStream shouldBeSameInstanceAs fixture.firstStream
+		verify(exactly = 0) { fixture.backend.replaceItem(any()) }
+	}
+
 	test("a late Jellyfin response cannot overwrite the accepted source and live stream identifiers") {
 		val api = mockk<ApiClient>()
 		every { api.getOrCreateApi(MediaInfoApi::class, any()) } returns MediaInfoApi(api)

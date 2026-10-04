@@ -83,11 +83,26 @@ internal class MediaStreamService(
 
 	private suspend fun playEntry(entry: QueueEntry): Boolean {
 		val backend = requireNotNull(manager.backend)
+		val queue = requireNotNull(manager.getService<QueueService>())
+		val entryRevision = queue.entryRevision
 		val startPosition = entry.startPosition?.coerceAtLeast(Duration.ZERO)
 		entry.startPosition = startPosition
 		val hasMediaStream = entry.ensureMediaStream(startPosition)
 
 		if (hasMediaStream) {
+			val stream = requireNotNull(entry.mediaStream)
+			// Stream resolution can outlive the queue selection or the selected backend.
+			if (queue.entry.value !== entry || queue.entryRevision != entryRevision || manager.backend !== backend) return false
+			// Opening the decoder must follow display preparation. Publishing the stream
+			// alone is insufficient: a UI effect reacting to it can run after playItem().
+			val preparation = manager.options.beforePlayItem
+			if (preparation?.invoke(stream) == false) return false
+			// The wait also gives the user time to stop, switch players, or leave the screen.
+			// Callback identity detects a screen replacement even if the queue stayed the same.
+			if (queue.entry.value !== entry || queue.entryRevision != entryRevision ||
+				manager.backend !== backend || entry.mediaStream !== stream ||
+				manager.options.beforePlayItem !== preparation
+			) return false
 			manager.state.resetSubtitleTiming()
 			backend.playItem(entry)
 			entry.startPosition = null
@@ -124,6 +139,21 @@ internal class MediaStreamService(
 			queue.entry.value !== entry ||
 			entry.mediaStream !== originalStream ||
 			manager.backend !== backend
+		) return false
+
+		// Reloads can change video dimensions too. Prepare for the new stream before
+		// publishing it or asking the backend to replace the currently playing stream.
+		val preparation = manager.options.beforePlayItem
+		if (preparation?.invoke(newStream) == false) return false
+		// Window preparation suspends too: reject a stopped, replaced, or superseded entry.
+		// The revision also catches stopping and selecting the same QueueEntry again.
+		if (
+			latestReloadRequest !== request ||
+			queue.entryRevision != entryRevision ||
+			queue.entry.value !== entry ||
+			entry.mediaStream !== originalStream ||
+			manager.backend !== backend ||
+			manager.options.beforePlayItem !== preparation
 		) return false
 
 		manager.queue.entries.value.forEach { queuedEntry ->
