@@ -100,9 +100,9 @@ class LibMPVAudioPreferencesTests : FunSpec({
 			.audioOutput shouldBe LibMPVAudioOutput.AUDIOTRACK.mpvValue
 	}
 
-	test("AudioTrack passthrough configuration uses PCM16 for decoded fallback") {
+	test("passthrough capability does not degrade unrelated decoded PCM") {
 		preferences().mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3))
-			.audioTrackPcmFloat shouldBe false
+			.audioTrackPcmFloat shouldBe true
 	}
 
 	test("PCM-only configuration preserves MPV's float output default") {
