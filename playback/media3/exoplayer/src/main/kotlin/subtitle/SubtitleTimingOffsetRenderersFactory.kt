@@ -8,10 +8,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.text.TextRenderer
 import androidx.media3.extractor.text.SubtitleParser
 import org.jellyfin.playback.media3.exoplayer.AudioPassthroughPolicyAudioSink
+import org.jellyfin.playback.media3.exoplayer.StereoDownmixAudioProcessor
 
 @UnstableApi
 @OptIn(ExperimentalApi::class)
@@ -20,13 +22,25 @@ class SubtitleTimingOffsetRenderersFactory(
 	private val offsetState: SubtitleTimingOffsetState,
 	private val subtitleParserFactory: SubtitleParser.Factory,
 	private val isAudioPassthroughEnabled: (String) -> Boolean = { true },
+	private val downmixToStereo: () -> Boolean = { false },
 ) : DefaultRenderersFactory(context) {
 	override fun buildAudioSink(
 		context: Context,
 		enableFloatOutput: Boolean,
 		enableAudioOutputPlaybackParams: Boolean,
-	): AudioSink? = super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams)?.let { sink ->
-		AudioPassthroughPolicyAudioSink(sink, isAudioPassthroughEnabled)
+	): AudioSink {
+		val downmixProcessor = StereoDownmixAudioProcessor(downmixToStereo)
+		return AudioPassthroughPolicyAudioSink(
+			DefaultAudioSink.Builder(context)
+				// Float output bypasses the PCM processor chain. Keep mixing on the processed path.
+				.setEnableFloatOutput(false)
+				.setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+				.setAudioProcessors(arrayOf(downmixProcessor))
+				.build(),
+			downmixToStereo = downmixToStereo,
+			downmixProcessor = downmixProcessor,
+			isPassthroughEnabled = isAudioPassthroughEnabled,
+		)
 	}
 
 	override fun buildTextRenderers(
