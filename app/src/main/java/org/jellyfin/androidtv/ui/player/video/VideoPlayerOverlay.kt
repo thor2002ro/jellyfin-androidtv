@@ -703,7 +703,7 @@ fun VideoPlayerOverlay(
 				zoomStatus = zoomStatus,
 				modifier = Modifier
 					.align(Alignment.TopEnd)
-					.padding(top = 68.dp, end = 48.dp)
+					.padding(top = 38.dp, end = 48.dp)
 			)
 		}
 
