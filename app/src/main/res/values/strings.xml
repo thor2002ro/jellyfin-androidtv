@@ -708,6 +708,7 @@
     <string name="library_view_style">View style</string>
     <string name="library_view_style_cards">Cards</string>
     <string name="library_view_style_dense_list">Dense list</string>
+    <string name="library_view_style_kaleidescape_style">Kaleidescape-style list</string>
     <string name="library_card_spacing">Card spacing</string>
     <string name="library_card_spacing_compact">Compact</string>
     <string name="library_card_spacing_normal">Normal</string>

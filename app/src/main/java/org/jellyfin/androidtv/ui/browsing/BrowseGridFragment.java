@@ -63,6 +63,7 @@ import org.jellyfin.androidtv.ui.presentation.BrowseImageRequestSize;
 import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter;
 import org.jellyfin.androidtv.ui.presentation.ComposeVerticalGridPresenter;
 import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter;
+import org.jellyfin.androidtv.ui.presentation.KaleidescapeStylePresenter;
 import org.jellyfin.androidtv.util.CoroutineUtils;
 import org.jellyfin.androidtv.util.ImageHelper;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
@@ -225,6 +226,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mCardSpacing = libraryPreferences.get(LibraryPreferences.Companion.getCardSpacing());
         mViewStyle = libraryPreferences.get(LibraryPreferences.Companion.getViewStyle());
         mShowCardTitles = libraryPreferences.get(LibraryPreferences.Companion.getShowCardTitles());
+        if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) {
+            mImageType = ImageType.POSTER;
+            mShowCardTitles = false;
+        }
 
         setGridPresenter(createGridPresenter(mGridDirection, mViewStyle));
 
@@ -243,6 +248,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     static Presenter createGridPresenter(GridDirection direction, LibraryViewStyle viewStyle) {
         if (viewStyle == LibraryViewStyle.DENSE_LIST) return new ComposeBrowseListPresenter();
+        if (viewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) return new KaleidescapeStylePresenter();
         return direction == GridDirection.VERTICAL
                 ? new ComposeVerticalGridPresenter()
                 : new HorizontalGridPresenter();
@@ -253,6 +259,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     static GridDirection effectiveNavigationControlsDirection(LibraryViewStyle style, GridDirection cardDirection) {
+        if (style == LibraryViewStyle.KALEIDESCAPE_STYLE) return GridDirection.HORIZONTAL;
         return style == LibraryViewStyle.DENSE_LIST ? GridDirection.VERTICAL : cardDirection;
     }
 
@@ -313,7 +320,12 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         binding.alphaPickerHorizontal.setVisibility(vertical ? View.GONE : View.VISIBLE);
         binding.alphaPickerVertical.setVisibility(vertical ? View.VISIBLE : View.GONE);
         mActiveToolBar = vertical ? binding.verticalToolBar : binding.toolBar;
+        KaleidescapeStylePresenter.configureHost(binding, mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE);
         updateNavigationControlsSpacing();
+        DisplayMetrics display = getResources().getDisplayMetrics();
+        mGridHeight = Math.round(display.heightPixels / display.density -
+                (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE ? KaleidescapeStylePresenter.FOOTER_HEIGHT_DP : 130.6f));
+        setAutoCardGridValues();
 
         AlphaPickerView picker = vertical ? binding.alphaPickerVertical : binding.alphaPickerHorizontal;
         picker.setOnAlphaSelected(letter -> {
@@ -341,6 +353,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void updateNavigationControlsSpacing() {
+        if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) return;
         GridDirection controlsDirection = getNavigationControlsDirection();
         int gridHostStartMargin = Utils.convertDpToPixel(requireContext(), getGridHostSideMarginDp(controlsDirection));
         int gridHostEndMargin = Utils.convertDpToPixel(requireContext(), getGridHostEndMarginDp(controlsDirection));
@@ -377,6 +390,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     @Override
     public boolean onKey(View v, int keyCode, KeyEvent event) {
+        if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE && keyCode == KeyEvent.KEYCODE_DPAD_UP) return false;
         if (shouldMoveFocusFromGridToHome(getNavigationControlsDirection(), event.getAction(), keyCode)) {
             return binding != null && binding.clock.getHomeButton().requestFocus();
         }
@@ -432,7 +446,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             int paddingStart = mGridPaddingLeft;
             int paddingEnd = mGridPaddingLeft;
             int verticalPadding = 16;
-            mGridView = mGridViewHolder.view;
+            mGridView = horizontal ? ((HorizontalGridPresenter.ViewHolder) mGridViewHolder).getGridView() : mGridViewHolder.view;
             if (horizontal) {
                 ViewGroup.MarginLayoutParams titleMargin = (ViewGroup.MarginLayoutParams) binding.title.getLayoutParams();
                 ViewGroup.MarginLayoutParams clockMargin = (ViewGroup.MarginLayoutParams) binding.clock.getLayoutParams();
@@ -440,6 +454,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 paddingStart = pixelsToDp(titleMargin.getMarginStart(), density);
                 paddingEnd = pixelsToDp(clockMargin.getMarginEnd(), density);
                 verticalPadding = mGridPaddingTop;
+            }
+            if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) {
+                paddingStart = 8;
+                paddingEnd = 8;
             }
             presenter.configure(
                     mImageType,
@@ -623,6 +641,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         boolean vertical = GridDirection.VERTICAL.equals(getNavigationControlsDirection());
         AlphaPickerView picker = vertical ? binding.alphaPickerVertical : binding.alphaPickerHorizontal;
         picker.setGridFocusTargetId(mGridView.getId());
+        if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) {
+            KaleidescapeStylePresenter.configureFooterFocus(binding, mGridView);
+            return;
+        }
         if (!shouldConfigureNavigationControlsFocus(getNavigationControlsDirection())) return;
 
         View homeButton = binding.clock.getHomeButton();
@@ -658,6 +680,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     public void setItem(BaseRowItem item) {
+        if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) return;
         if (item != null) {
             binding.title.setText(item.getFullName(requireContext()));
             InfoLayoutHelper.addInfoRow(requireContext(), item.getBaseItem(), binding.infoRow, true);
@@ -986,6 +1009,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         LibraryCardSpacing cardSpacing = libraryPreferences.get(LibraryPreferences.Companion.getCardSpacing());
         LibraryViewStyle viewStyle = libraryPreferences.get(LibraryPreferences.Companion.getViewStyle());
         boolean showCardTitles = libraryPreferences.get(LibraryPreferences.Companion.getShowCardTitles());
+        if (viewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) {
+            imageType = ImageType.POSTER;
+            showCardTitles = false;
+        }
 
         if (mImageType != imageType || mPosterSizeSetting != posterSizeSetting || mGridDirection != gridDirection ||
                 mCardSpacing != cardSpacing || mViewStyle != viewStyle || mShowCardTitles != showCardTitles || mDirty) {
@@ -998,13 +1025,15 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mViewStyle = viewStyle;
             mShowCardTitles = showCardTitles;
 
-            if (mViewStyle == LibraryViewStyle.DENSE_LIST && !(mGridPresenter instanceof ComposeBrowseListPresenter)) {
+            if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE && !(mGridPresenter instanceof KaleidescapeStylePresenter)) {
+                setGridPresenter(new KaleidescapeStylePresenter());
+            } else if (mViewStyle == LibraryViewStyle.DENSE_LIST && !(mGridPresenter instanceof ComposeBrowseListPresenter)) {
                 setGridPresenter(new ComposeBrowseListPresenter());
             } else if (mViewStyle == LibraryViewStyle.CARDS && mGridDirection.equals(GridDirection.VERTICAL) &&
                     !(mGridPresenter instanceof ComposeVerticalGridPresenter)) {
                 setGridPresenter(new ComposeVerticalGridPresenter());
             } else if (mViewStyle == LibraryViewStyle.CARDS && mGridDirection.equals(GridDirection.HORIZONTAL) &&
-                    !(mGridPresenter instanceof HorizontalGridPresenter)) {
+                    (!(mGridPresenter instanceof HorizontalGridPresenter) || mGridPresenter instanceof KaleidescapeStylePresenter)) {
                 setGridPresenter(new HorizontalGridPresenter());
             }
             setDefaultGridRowCols(mPosterSizeSetting, mImageType);
@@ -1395,8 +1424,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 mCurrentItem = (BaseRowItem) item;
                 binding.title.setText(mCurrentItem.getName(requireContext()));
                 binding.infoRow.removeAllViews();
-                mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
-                mHandler.postDelayed(mDelayedSetBackground, BACKGROUND_UPDATE_DELAY);
+                if (mViewStyle != LibraryViewStyle.KALEIDESCAPE_STYLE) {
+                    mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
+                    mHandler.postDelayed(mDelayedSetBackground, BACKGROUND_UPDATE_DELAY);
+                }
 
                 int position = mAdapter.indexOf(mCurrentItem);
                 if (!determiningPosterSize)
