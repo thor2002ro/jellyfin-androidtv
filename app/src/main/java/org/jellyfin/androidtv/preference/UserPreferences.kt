@@ -37,6 +37,8 @@ import org.jellyfin.preference.stringPreference
 import org.jellyfin.sdk.model.api.MediaSegmentType
 import kotlin.time.Duration.Companion.minutes
 
+const val SUBTITLES_HDR_TEXT_COLOR_DEFAULT = 0xFF7F7F7F
+
 /**
  * User preferences are configurable by the user and change behavior of the application.
  * When changing preferences migration should be added to the init function.
@@ -252,6 +254,11 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Subtitles foreground color
 		 */
 		var subtitlesTextColor = longPreference("subtitles_text_color", 0xFFFFFFFF)
+
+		/**
+		 * Subtitles foreground color for HDR video.
+		 */
+		var subtitlesHdrTextColor = longPreference("subtitles_hdr_text_color", SUBTITLES_HDR_TEXT_COLOR_DEFAULT)
 
 		/**
 		 * Subtitles stroke color

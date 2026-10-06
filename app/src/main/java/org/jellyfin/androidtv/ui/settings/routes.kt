@@ -20,6 +20,7 @@ import org.jellyfin.androidtv.ui.settings.screen.customization.SettingsCustomiza
 import org.jellyfin.androidtv.ui.settings.screen.customization.SettingsCustomizationWatchedIndicatorScreen
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitleTextStrokeColorScreen
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitlesBackgroundColorScreen
+import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitlesHdrTextColorScreen
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitlesScreen
 import org.jellyfin.androidtv.ui.settings.screen.customization.subtitle.SettingsSubtitlesTextColorScreen
 import org.jellyfin.androidtv.ui.settings.screen.home.SettingsHomeNextUpCutoffScreen
@@ -89,6 +90,7 @@ object Routes {
 	const val CUSTOMIZATION_SCREENSAVER_AGE_RATING = "/customization/screensaver/age-rating"
 	const val CUSTOMIZATION_SUBTITLES = "/customization/subtitles"
 	const val CUSTOMIZATION_SUBTITLES_TEXT_COLOR = "/customization/subtitles/text-color"
+	const val CUSTOMIZATION_SUBTITLES_HDR_TEXT_COLOR = "/customization/subtitles/hdr-text-color"
 	const val CUSTOMIZATION_SUBTITLES_BACKGROUND_COLOR = "/customization/subtitles/background-color"
 	const val CUSTOMIZATION_SUBTITLES_EDGE_COLOR = "/customization/subtitles/edge-color"
 	const val LIBRARIES = "/libraries"
@@ -193,6 +195,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.CUSTOMIZATION_SUBTITLES_TEXT_COLOR to {
 		SettingsSubtitlesTextColorScreen()
+	},
+	Routes.CUSTOMIZATION_SUBTITLES_HDR_TEXT_COLOR to {
+		SettingsSubtitlesHdrTextColorScreen()
 	},
 	Routes.CUSTOMIZATION_SUBTITLES_BACKGROUND_COLOR to {
 		SettingsSubtitlesBackgroundColorScreen()
