@@ -8,7 +8,11 @@ import androidx.core.content.edit
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -35,19 +39,59 @@ class AppUpdater(
 ) {
 	private val appContext = context.applicationContext
 	private val prefs = appContext.getSharedPreferences("app_updater", Context.MODE_PRIVATE)
-	private val checkMutex = Mutex()
+	private val check = AppUpdateCheck(CoroutineScope(SupervisorJob() + Dispatchers.IO), ::fetchUpdate)
+	val checkState = check.state
 	private val downloadMutex = Mutex()
+	private val operation = AppUpdateOperation { update, progress -> download(update, progress) }
+	val operationState = operation.state
 	private var startupCacheCleared = false
 	val deviceAbi = selectDeviceAbi(Build.SUPPORTED_ABIS.asList(), config.supportedAbis)
 	private val selectedArtifactSuffix get() = artifactSuffixForSelection(useUniversalApk, deviceAbi, config.buildType)
 
 	var includePrereleases: Boolean
 		get() = prefs.getBoolean("include_prereleases", false)
-		set(value) = prefs.edit { putBoolean("include_prereleases", value) }
+		set(value) {
+			if (includePrereleases != value && !checkState.value.checking && operation.reset()) {
+				prefs.edit { putBoolean("include_prereleases", value) }
+				check.reset()
+			}
+		}
 
 	var useUniversalApk: Boolean
 		get() = prefs.getBoolean(PREFERENCE_USE_UNIVERSAL_APK, true)
-		set(value) = prefs.edit { putBoolean(PREFERENCE_USE_UNIVERSAL_APK, value || deviceAbi == null) }
+		set(value) {
+			val universal = value || deviceAbi == null
+			if (useUniversalApk != universal && !checkState.value.checking && operation.reset()) {
+				prefs.edit { putBoolean(PREFERENCE_USE_UNIVERSAL_APK, universal) }
+				check.reset()
+			}
+		}
+
+	suspend fun downloadAndInstall(update: AppUpdate, canInstallNow: () -> Boolean) {
+		initializeUseUniversalApk()
+		if (!matchesSelection(update)) return
+		if (operation.download(update)) installReadyUpdate(canInstallNow)
+	}
+
+	fun resumeInstallAfterPermission(canInstallNow: () -> Boolean) {
+		if (operationState.value.awaitingInstallPermission && canInstallPackages()) installReadyUpdate(canInstallNow)
+	}
+
+	private fun installReadyUpdate(canInstallNow: () -> Boolean) {
+		if (operation.install(canInstallNow(), ::startInstall) == InstallStartResult.PermissionRequired) {
+			runCatching { openInstallPermissionSettings() }.onFailure {
+				operation.permissionSettingsFailed(
+					"Unable to open install permission settings. Enable permission in Android settings, then choose Install again."
+				)
+			}
+		}
+	}
+
+	private fun matchesSelection(update: AppUpdate) =
+		updateMatchesSelection(update, config.artifactPrefix, selectedArtifactSuffix, includePrereleases)
+
+	private fun canInstallPackages() =
+		Build.VERSION.SDK_INT < Build.VERSION_CODES.O || appContext.packageManager.canRequestPackageInstalls()
 
 	suspend fun initializeUseUniversalApk(): Boolean = withContext(Dispatchers.IO) {
 		initializeUseUniversalApkBlocking()
@@ -62,23 +106,18 @@ class AppUpdater(
 		}
 	}
 
-	suspend fun checkForUpdate(force: Boolean = false): UpdateCheckResult {
-		return withContext(Dispatchers.IO) {
-			initializeUseUniversalApkBlocking()
-			checkMutex.withLock {
-				runCatching {
-					if (!force && !shouldCheck()) return@runCatching UpdateCheckResult.Skipped
+	suspend fun checkForUpdate(force: Boolean = false): UpdateCheckResult = check.run(force)
 
-					val releases = parseReleases(httpGet("https://api.github.com/repos/${config.owner}/${config.repo}/releases?per_page=20"))
-					prefs.edit { putLong("last_check_ms", System.currentTimeMillis()) }
-					findUpdate(releases)?.let(UpdateCheckResult::Available) ?: UpdateCheckResult.NoUpdate
-				}.getOrElse { error ->
-					if (error is CancellationException) throw error
-					UpdateCheckResult.Failed(
-						"Unable to check for updates${error.message?.let { ": $it" }.orEmpty()}"
-					)
-				}
-			}
+	private fun fetchUpdate(force: Boolean): UpdateCheckResult {
+		initializeUseUniversalApkBlocking()
+		return runCatching {
+			if (!force && !shouldCheck()) return@runCatching UpdateCheckResult.Skipped
+			val releases = parseReleases(httpGet("https://api.github.com/repos/${config.owner}/${config.repo}/releases?per_page=20"))
+			prefs.edit { putLong("last_check_ms", System.currentTimeMillis()) }
+			findUpdate(releases)?.let(UpdateCheckResult::Available) ?: UpdateCheckResult.NoUpdate
+		}.getOrElse { error ->
+			if (error is CancellationException) throw error
+			UpdateCheckResult.Failed("Unable to check for updates${error.message?.let { ": $it" }.orEmpty()}")
 		}
 	}
 
@@ -138,7 +177,7 @@ class AppUpdater(
 
 	@Suppress("DEPRECATION")
 	fun startInstall(file: File): InstallStartResult {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !appContext.packageManager.canRequestPackageInstalls()) {
+		if (!canInstallPackages()) {
 			return InstallStartResult.PermissionRequired
 		}
 
@@ -243,7 +282,7 @@ class AppUpdater(
 		}
 	}
 
-	private fun downloadTo(url: String, file: File, assetSize: Long, onProgress: (Long, Long) -> Unit): String {
+	private suspend fun downloadTo(url: String, file: File, assetSize: Long, onProgress: (Long, Long) -> Unit): String {
 		val connection = openConnection(url)
 		return connection.use {
 			if (responseCode !in 200..299) throw IOException("GitHub update download failed (HTTP $responseCode). Please retry.")
@@ -256,6 +295,7 @@ class AppUpdater(
 				FileOutputStream(file).use { output ->
 					val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
 					while (true) {
+						currentCoroutineContext().ensureActive()
 						val bytes = input.read(buffer)
 						if (bytes < 0) break
 						output.write(buffer, 0, bytes)
@@ -388,3 +428,6 @@ private inline fun <T> HttpURLConnection.use(block: HttpURLConnection.() -> T): 
 private const val PREFERENCE_USE_UNIVERSAL_APK = "use_universal_apk"
 private const val SHA256_PREFIX = "sha256:"
 private val SHA256_REGEX = Regex("[0-9a-fA-F]{64}")
+
+internal fun updateMatchesSelection(update: AppUpdate, prefix: String, suffix: String, includePrereleases: Boolean) =
+	(!update.prerelease || includePrereleases) && update.assetName.startsWith(prefix) && update.assetName.endsWith(suffix)
