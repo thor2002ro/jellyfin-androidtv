@@ -22,7 +22,6 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
-import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -304,7 +303,7 @@ class PlaySessionService(
 		val audioStreamIndex = getSelectedAudioStreamIndex()
 		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
 		val repeatMode = state.repeatMode.value.remoteRepeatMode
-		val canSeek = !entry.isDirectPlayLiveTv
+		val canSeek = state.canSeek
 		val playbackOrder = when (state.playbackOrder.value) {
 			org.jellyfin.playback.core.model.PlaybackOrder.DEFAULT -> PlaybackOrder.DEFAULT
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
@@ -372,7 +371,7 @@ class PlaySessionService(
 		val audioStreamIndex = getSelectedAudioStreamIndex()
 		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
 		val repeatMode = state.repeatMode.value.remoteRepeatMode
-		val canSeek = !entry.isDirectPlayLiveTv
+		val canSeek = state.canSeek
 		val playbackOrder = when (state.playbackOrder.value) {
 			org.jellyfin.playback.core.model.PlaybackOrder.DEFAULT -> PlaybackOrder.DEFAULT
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE

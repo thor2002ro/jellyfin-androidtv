@@ -18,7 +18,8 @@ import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.DEFAULT_SUBTITLE_TIMING_SPEED
 import org.jellyfin.playback.core.model.coerceSubtitleTimingSpeed
 import org.jellyfin.playback.core.queue.QueueService
-import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
+import org.jellyfin.playback.core.queue.canSeek
+import org.jellyfin.playback.core.queue.isLiveTv
 import kotlin.time.Duration
 
 interface PlayerState {
@@ -41,6 +42,7 @@ interface PlayerState {
 	 * second for UI or read when necessary.
 	 */
 	val positionInfo: PositionInfo
+	val canSeek: Boolean
 
 	// Queue management
 	fun play()
@@ -56,6 +58,7 @@ interface PlayerState {
 	fun seek(to: Duration)
 	fun fastForward(amount: Duration? = null)
 	fun rewind(amount: Duration? = null)
+	fun goLive()
 	fun setScrubbing(scrubbing: Boolean)
 
 	// Playback properties
@@ -114,8 +117,8 @@ class MutablePlayerState(
 	override val positionInfo: PositionInfo
 		get() = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
 
-	private val canSeek: Boolean
-		get() = queue?.entry?.value?.isDirectPlayLiveTv != true
+	override val canSeek: Boolean
+		get() = queue?.entry?.value.let { entry -> entry?.isLiveTv != true || entry.canSeek(positionInfo) }
 
 	init {
 		backendService.addListener(object : PlayerBackendEventListener() {
@@ -160,11 +163,13 @@ class MutablePlayerState(
 	}
 
 	override fun pause() {
+		if (!canSeek) return
 		// TODO: enqueue action when backend is not set
 		backendService.backend?.pause()
 	}
 
 	override fun unpause() {
+		if (!canSeek) return
 		backendService.backend?.play()
 	}
 
@@ -202,6 +207,16 @@ class MutablePlayerState(
 
 	override fun rewind(amount: Duration?) {
 		seekRelative(-(amount ?: options.defaultRewindAmount()))
+	}
+
+	override fun goLive() {
+		if (queue?.entry?.value?.isLiveTv != true || !canSeek) return
+		val backend = backendService.backend ?: return
+		setScrubbing(false)
+		if (backend.seekToLiveEdge()) {
+			backend.play()
+			_seekRequests.tryEmit(backend.getPositionInfo().active)
+		}
 	}
 
 	override fun setScrubbing(scrubbing: Boolean) {

@@ -519,6 +519,12 @@ class LibVLCBackend(
 
 	override fun setScrubbing(scrubbing: Boolean) = Unit
 
+	override fun seekToLiveEdge(): Boolean {
+		val stream = currentStream ?: return false
+		replaceItem(stream.queueEntry)
+		return true
+	}
+
 	override fun setSpeed(speed: Float) {
 		playbackSpeed = speed
 		player.rate = speed
@@ -602,7 +608,7 @@ class LibVLCBackend(
 		}
 		val active = initialPositionForReporting ?: nativePosition
 		val duration = player.length.coerceAtLeast(0).milliseconds
-		return PositionInfo(active, active, duration)
+		return PositionInfo(active, active, duration, isSeekable = player.isSeekable)
 	}
 
 	override fun getFrameStats(): PlaybackFrameStats {
