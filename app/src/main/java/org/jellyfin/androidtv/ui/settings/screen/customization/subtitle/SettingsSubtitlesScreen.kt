@@ -43,6 +43,7 @@ fun SettingsSubtitlesScreen() {
 	var subtitlesBackgroundColor by rememberPreference(userPreferences, UserPreferences.subtitlesBackgroundColor)
 	var subtitlesTextWeight by rememberPreference(userPreferences, UserPreferences.subtitlesTextWeight)
 	var subtitlesTextColor by rememberPreference(userPreferences, UserPreferences.subtitlesTextColor)
+	var subtitlesHdrTextColor by rememberPreference(userPreferences, UserPreferences.subtitlesHdrTextColor)
 	var subtitleTextStrokeColor by rememberPreference(userPreferences, UserPreferences.subtitleTextStrokeColor)
 	var subtitlesTextSize by rememberPreference(userPreferences, UserPreferences.subtitlesTextSize)
 	var subtitlesOffsetPosition by rememberPreference(userPreferences, UserPreferences.subtitlesOffsetPosition)
@@ -149,6 +150,15 @@ fun SettingsSubtitlesScreen() {
 				trailingContent = { ColorSwatch(color = Color(subtitlesTextColor.toInt())) },
 				onClick = { router.push(Routes.CUSTOMIZATION_SUBTITLES_TEXT_COLOR) },
 				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SUBTITLES_TEXT_COLOR)
+			)
+		}
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.lbl_subtitle_hdr_text_color)) },
+				trailingContent = { ColorSwatch(color = Color(subtitlesHdrTextColor.toInt())) },
+				onClick = { router.push(Routes.CUSTOMIZATION_SUBTITLES_HDR_TEXT_COLOR) },
+				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SUBTITLES_HDR_TEXT_COLOR)
 			)
 		}
 
