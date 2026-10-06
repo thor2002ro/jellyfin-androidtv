@@ -8,6 +8,7 @@ import kotlin.time.Duration
 data class ExoPlayerOptions(
 	val isAudioPassthroughEnabled: (String) -> Boolean = { true },
 	val downmixToStereo: () -> Boolean = { false },
+	val surroundVolumeBoost: () -> Int = { 6 },
 	val preferFfmpegAudio: () -> Boolean = { false },
 	val preferFfmpegAudioForLiveTv: () -> Boolean = { false },
 	val preferFfmpegVideo: () -> Boolean = { false },

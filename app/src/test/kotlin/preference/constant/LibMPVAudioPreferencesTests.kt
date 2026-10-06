@@ -32,6 +32,16 @@ import org.jellyfin.androidtv.preference.mpvVideoSync
 import org.jellyfin.playback.mpv.LibMPVAudioPreset
 
 class LibMPVAudioPreferencesTests : FunSpec({
+	test("one surround gain preference reaches both native backend options including Off") {
+		UserPreferences.surroundVolumeBoost.defaultValue shouldBe 6
+		for (gain in listOf(0, 3, 6, 9, 12)) {
+			val preferences = preferences()
+			every { preferences[UserPreferences.surroundVolumeBoost] } returns gain
+			preferences.mpvPlaybackOptions(emptySet()).surroundVolumeBoost shouldBe gain
+			preferences.libVLCPlaybackOptions(LibVLCDeblocking.AUTOMATIC, false, false, 0)
+				.surroundVolumeBoost shouldBe gain
+		}
+	}
 	test("local AC3 conversion requires both audio conversion settings") {
 		for ((behavior, enabled, expected) in listOf(
 			Triple(AudioBehavior.DIRECT_STREAM, false, false),
@@ -229,6 +239,7 @@ private fun preferences(
 	audioPreset: LibMPVAudioPresetOption = LibMPVAudioPresetOption.OFF,
 	convertAudioToAc3: Boolean = false,
 ) = mockk<UserPreferences> {
+	every { this@mockk[UserPreferences.surroundVolumeBoost] } returns UserPreferences.surroundVolumeBoost.defaultValue
 	every { this@mockk[UserPreferences.mpvConvertAudioToAc3] } returns convertAudioToAc3
 	every { this@mockk[UserPreferences.audioBehaviour] } returns audioBehavior
 	every { this@mockk[UserPreferences.bitstreamAc3] } returns if (ac3) BitstreamAudioMode.AUTO else BitstreamAudioMode.DISABLE

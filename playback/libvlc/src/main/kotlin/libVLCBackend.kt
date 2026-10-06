@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import org.jellyfin.playback.core.PlaybackBufferOptions
+import org.jellyfin.playback.core.surroundVolumeBoost
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.activate
@@ -64,6 +65,7 @@ enum class LibVLCVideoDecoder(val vlcValue: Int, val label: String) {
 }
 
 data class LibVLCPlaybackOptions(
+	val surroundVolumeBoost: Int = 6,
 	val deblocking: Int = -1,
 	val frameSkip: Boolean = false,
 	val audioTimeStretch: Boolean = false,
@@ -279,6 +281,30 @@ class LibVLCBackend(
 		}
 	}
 
+	private var surroundBoostGain = 0
+	private var surroundBoostRequest: Int? = null
+	private var surroundBoostAllowed = false
+
+	private fun updateSurroundVolumeBoost() {
+		if (!surroundBoostAllowed || playbackOptions.surroundVolumeBoost <= 0) {
+			setSurroundBoostGain(0)
+			return
+		}
+		val track = player.getSelectedTrack(IMedia.Track.Type.Audio) as? IMedia.AudioTrack
+		// Digital output stays disabled in createPlayer, so these outputs receive decoded audio.
+		val gain = surroundVolumeBoost(playbackOptions.surroundVolumeBoost, track?.channels, surroundBoostAllowed)
+		setSurroundBoostGain(gain)
+	}
+
+	private fun setSurroundBoostGain(gain: Int) {
+		if (gain == surroundBoostRequest) return
+		surroundBoostRequest = gain
+		if (gain == surroundBoostGain) return
+		val equalizer = if (gain == 0) null else MediaPlayer.Equalizer.create().apply { setPreAmp(gain.toFloat()) }
+		if (player.setEqualizer(equalizer)) surroundBoostGain = gain
+		else Timber.w("VLC rejected surround volume boost of %s dB", gain)
+	}
+
 	override fun supportsStream(stream: MediaStream): PlaySupportReport = object : PlaySupportReport {
 		override val canPlay = true
 	}
@@ -380,6 +406,9 @@ class LibVLCBackend(
 	}
 
 	private fun setMedia(stream: PlayableMediaStream) {
+		surroundBoostAllowed = false
+		setSurroundBoostGain(0)
+		playbackOptionsProvider?.invoke()?.let(::setPlaybackOptions)
 		videoOutput.apply(VideoOutputTransform.NONE)
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		ensureInstanceOptions()
@@ -434,6 +463,8 @@ class LibVLCBackend(
 	}
 
 	override fun stop() {
+		surroundBoostAllowed = false
+		setSurroundBoostGain(0)
 		handler.removeCallbacks(tick)
 		videoOutput.apply(VideoOutputTransform.NONE)
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
@@ -499,6 +530,8 @@ class LibVLCBackend(
 
 	fun setPlaybackOptions(options: LibVLCPlaybackOptions) {
 		playbackOptions = options
+		surroundBoostRequest = null
+		updateSurroundVolumeBoost()
 	}
 
 	override fun setForcedVideoDecoderOption(option: VideoDecoderOption?) {
@@ -520,6 +553,7 @@ class LibVLCBackend(
 	private fun createPlayer(libVLC: LibVLC, options: LibVLCInstanceOptions) =
 		MediaPlayer(libVLC).apply {
 			options.audioOutput?.let(::setAudioOutput)
+			setAudioDigitalOutputEnabled(false)
 			setEventListener(::onPlayerEvent)
 			rate = playbackSpeed
 		}
@@ -537,6 +571,9 @@ class LibVLCBackend(
 		appliedInstanceOptions = desiredOptions
 		libVLC = createLibVLC(desiredOptions)
 		player = createPlayer(libVLC, desiredOptions)
+		surroundBoostGain = 0
+		surroundBoostRequest = null
+		surroundBoostAllowed = false
 		videoOutput.reapply()
 		updateViews()
 	}
@@ -625,6 +662,8 @@ class LibVLCBackend(
 	private fun onPlayerEvent(event: MediaPlayer.Event) {
 		when (event.type) {
 			MediaPlayer.Event.Opening -> {
+				surroundBoostAllowed = false
+				setSurroundBoostGain(0)
 				bufferingPercent = 0f
 				playbackActive = false
 				listener?.onPlayStateChange(PlayState.BUFFERING)
@@ -638,6 +677,7 @@ class LibVLCBackend(
 				IMedia.Track.Type.Audio -> {
 					notifyTracksChanged()
 					applyInitialTrackSelection(TrackType.AUDIO)
+					updateSurroundVolumeBoost()
 				}
 				IMedia.Track.Type.Text -> {
 					notifyTracksChanged()
@@ -648,15 +688,20 @@ class LibVLCBackend(
 			MediaPlayer.Event.ESDeleted,
 			MediaPlayer.Event.ESSelected,
 			-> when (event.esChangedType) {
-				IMedia.Track.Type.Audio,
-				IMedia.Track.Type.Text,
-				-> notifyTracksChanged()
+				IMedia.Track.Type.Audio -> {
+					notifyTracksChanged()
+					surroundBoostRequest = null
+					updateSurroundVolumeBoost()
+				}
+				IMedia.Track.Type.Text -> notifyTracksChanged()
 				else -> Unit
 			}
 			MediaPlayer.Event.Playing -> {
+				surroundBoostAllowed = true
 				bufferingPercent = 100f
 				playbackActive = true
 				applyInitialTrackSelection()
+				updateSurroundVolumeBoost()
 				applySubtitleTimingOffset()
 				handler.removeCallbacks(tick)
 				lastTickPosition = getPositionInfo().active
@@ -670,11 +715,15 @@ class LibVLCBackend(
 				listener?.onPlayStateChange(PlayState.PAUSED)
 			}
 			MediaPlayer.Event.Stopped -> {
+				surroundBoostAllowed = false
+				setSurroundBoostGain(0)
 				playbackActive = false
 				handler.removeCallbacks(tick)
 				listener?.onPlayStateChange(PlayState.STOPPED)
 			}
 			MediaPlayer.Event.EndReached -> {
+				surroundBoostAllowed = false
+				setSurroundBoostGain(0)
 				playbackActive = false
 				handler.removeCallbacks(tick)
 				listener?.onPlayStateChange(PlayState.STOPPED)
@@ -682,6 +731,8 @@ class LibVLCBackend(
 				endReported = true
 			}
 			MediaPlayer.Event.EncounteredError -> {
+				surroundBoostAllowed = false
+				setSurroundBoostGain(0)
 				playbackActive = false
 				handler.removeCallbacks(tick)
 				listener?.onPlaybackError(PlaybackError("LIBVLC_ERROR", origin = currentStream?.errorOrigin))

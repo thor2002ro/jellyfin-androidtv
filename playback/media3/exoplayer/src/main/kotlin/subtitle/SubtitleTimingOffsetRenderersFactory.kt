@@ -6,6 +6,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.common.Format
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -24,6 +25,7 @@ class SubtitleTimingOffsetRenderersFactory @JvmOverloads constructor(
 	private val isAudioPassthroughEnabled: (String) -> Boolean = { true },
 	private val downmixToStereo: () -> Boolean = { false },
 	private val onAudioSinkBufferAttempt: () -> Unit = {},
+	private val onAudioOutputFormat: (Format?) -> Unit = {},
 ) : DefaultRenderersFactory(context) {
 	override fun buildAudioSink(
 		context: Context,
@@ -41,6 +43,7 @@ class SubtitleTimingOffsetRenderersFactory @JvmOverloads constructor(
 			downmixToStereo = downmixToStereo,
 			downmixProcessor = downmixProcessor,
 			onBufferAttempt = onAudioSinkBufferAttempt,
+			onOutputFormat = onAudioOutputFormat,
 			isPassthroughEnabled = isAudioPassthroughEnabled,
 		)
 	}
