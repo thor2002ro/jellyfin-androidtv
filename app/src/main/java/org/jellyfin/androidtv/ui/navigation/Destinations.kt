@@ -14,6 +14,7 @@ import org.jellyfin.androidtv.ui.browsing.GenericFolderFragment
 import org.jellyfin.androidtv.ui.browsing.LiveTvChannelsFragment
 import org.jellyfin.androidtv.ui.browsing.LiveTvLibraryFragment
 import org.jellyfin.androidtv.ui.browsing.SuggestedMoviesFragment
+import org.jellyfin.androidtv.ui.favorites.FavoritesFragment
 import org.jellyfin.androidtv.ui.home.HomeFragment
 import org.jellyfin.androidtv.ui.itemdetail.FullDetailsFragment
 import org.jellyfin.androidtv.ui.itemdetail.ItemListFragment
@@ -53,6 +54,7 @@ object Destinations {
 
 	// General
 	val home = fragmentDestination<HomeFragment>()
+	val favorites = fragmentDestination<FavoritesFragment>()
 	fun search(query: String? = null) = fragmentDestination<SearchFragment> {
 		putString(SearchFragment.EXTRA_QUERY, query)
 	}
