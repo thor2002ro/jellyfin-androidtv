@@ -12,6 +12,16 @@ import kotlin.time.Duration.Companion.seconds
 import `is`.xyz.mpv.MPVNode
 
 class LibMPVOptionsTest : StringSpec({
+	"track names prefer a nonblank title then MP4 metadata and leave unnamed tracks for the source label" {
+		val metadata = MPVNode.MapNode(mapOf("name" to MPVNode.StringNode("Commentary")))
+		mapOf("title" to MPVNode.StringNode("Main audio"), "metadata" to metadata).mpvTrackTitle() shouldBe "Main audio"
+		mapOf("metadata" to metadata).mpvTrackTitle() shouldBe "Commentary"
+		mapOf("title" to MPVNode.StringNode(" \t"), "metadata" to metadata).mpvTrackTitle() shouldBe "Commentary"
+		mapOf("title" to MPVNode.StringNode(""), "metadata" to MPVNode.MapNode(mapOf("name" to MPVNode.StringNode(" "))))
+			.mpvTrackTitle() shouldBe null
+		emptyMap<String, MPVNode>().mpvTrackTitle() shouldBe null
+	}
+
 	"local audio conversion status reads the output codec and excludes native passthrough" {
 		localAudioConversionCodec("floatp", "spdif-ac3") shouldBe "ac3"
 		localAudioConversionCodec("floatp", "spdif-dts") shouldBe "dts"
