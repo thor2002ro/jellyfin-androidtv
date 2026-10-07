@@ -25,7 +25,6 @@ class TranscodingStatusRepository(
 	private var cachedSessions = emptyList<SessionInfoDto>()
 
 	suspend fun getTranscodingInfo(
-		playSessionId: String?,
 		itemId: UUID?,
 		mediaSourceId: String?,
 	): TranscodingInfo? {
@@ -33,22 +32,15 @@ class TranscodingStatusRepository(
 
 		val sessions = getCachedSessions()
 
-		return sessions.firstTranscodingInfo {
-			!playSessionId.isNullOrBlank() && it.id == playSessionId
-		} ?: sessions.firstTranscodingInfo {
-			!mediaSourceId.isNullOrBlank() && it.playState?.mediaSourceId == mediaSourceId
-		} ?: sessions.firstTranscodingInfo {
-			itemId != null && it.nowPlayingItem?.id == itemId
-		} ?: sessions.firstNotNullOfOrNull { it.transcodingInfo }
+		return selectTranscodingInfo(sessions, itemId, mediaSourceId)
 	}
 
 	@JvmOverloads
 	fun getTranscodingInfoBlocking(
-		playSessionId: String? = null,
 		itemId: UUID? = null,
 		mediaSourceId: String? = null,
 	): TranscodingInfo? = runBlocking {
-		getTranscodingInfo(playSessionId, itemId, mediaSourceId)
+		getTranscodingInfo(itemId, mediaSourceId)
 	}
 
 	private suspend fun getCachedSessions(): List<SessionInfoDto> = cacheMutex.withLock {
@@ -69,14 +61,30 @@ class TranscodingStatusRepository(
 		cachedSessions
 	}
 
-	private inline fun List<SessionInfoDto>.firstTranscodingInfo(
-		predicate: (SessionInfoDto) -> Boolean,
-	): TranscodingInfo? = firstOrNull { predicate(it) && it.transcodingInfo != null }?.transcodingInfo
-
 	private companion object {
 		private const val SESSION_CACHE_MS = 2_500L
 		private const val ACTIVE_WITHIN_SECONDS = 30
 	}
+}
+
+internal fun selectTranscodingInfo(
+	sessions: List<SessionInfoDto>,
+	itemId: UUID?,
+	mediaSourceId: String?,
+): TranscodingInfo? {
+	if (itemId != null && !mediaSourceId.isNullOrBlank()) {
+		return sessions.firstOrNull {
+			it.nowPlayingItem?.id == itemId && it.playState?.mediaSourceId == mediaSourceId
+		}?.transcodingInfo
+	}
+	if (!mediaSourceId.isNullOrBlank()) {
+		sessions.firstOrNull { it.playState?.mediaSourceId == mediaSourceId }?.let { return it.transcodingInfo }
+	}
+	if (itemId != null) {
+		sessions.firstOrNull { it.nowPlayingItem?.id == itemId }?.let { return it.transcodingInfo }
+	}
+
+	return null
 }
 
 object TranscodingStatusFormatter {

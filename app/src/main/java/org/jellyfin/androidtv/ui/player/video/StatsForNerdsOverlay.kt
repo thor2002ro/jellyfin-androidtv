@@ -140,7 +140,6 @@ fun PlaybackInfoOverlay(
 
 		while (true) {
 			transcodingInfo = transcodingStatusRepository.getTranscodingInfo(
-				playSessionId = stream.identifier,
 				itemId = itemId,
 				mediaSourceId = mediaSourceId,
 			)
