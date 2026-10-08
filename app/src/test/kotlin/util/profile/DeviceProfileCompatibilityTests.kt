@@ -59,6 +59,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		)
 		for ((format, codecs) in codecsByFormat) for (mode in BitstreamAudioMode.entries) {
 			val preferences = mockk<UserPreferences>()
+			every { preferences[UserPreferences.audioNightMode] } returns false
 			for (entry in BitstreamAudioFormat.entries) {
 				every { preferences[entry.preference] } returns if (entry == format) mode else BitstreamAudioMode.AUTO
 			}
@@ -73,6 +74,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 
 	test("forced EAC3 respects disabled AC3 and detected codec aliases survive auto mode") {
 		val preferences = mockk<UserPreferences>()
+		every { preferences[UserPreferences.audioNightMode] } returns false
 		for (entry in BitstreamAudioFormat.entries) {
 			every { preferences[entry.preference] } returns BitstreamAudioMode.AUTO
 		}
@@ -89,6 +91,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		try {
 			val context = mockk<Context>()
 			val preferences = mockk<UserPreferences>()
+			every { preferences[UserPreferences.audioNightMode] } returns false
 			mockkConstructor(Size::class)
 			every { anyConstructed<Size>().width } returns 0
 			every { anyConstructed<Size>().height } returns 0

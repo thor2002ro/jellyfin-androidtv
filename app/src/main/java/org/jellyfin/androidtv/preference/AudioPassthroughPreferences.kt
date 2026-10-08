@@ -20,7 +20,7 @@ internal val managedAudioPassthroughMimeTypes = setOf(
 )
 
 @OptIn(UnstableApi::class)
-fun UserPreferences.isAudioPassthroughEnabled(mimeType: String): Boolean = when (mimeType) {
+fun UserPreferences.isAudioPassthroughEnabled(mimeType: String): Boolean = !this[UserPreferences.audioNightMode] && when (mimeType) {
 	MimeTypes.AUDIO_AC3 -> this[UserPreferences.bitstreamAc3] != BitstreamAudioMode.DISABLE
 	MimeTypes.AUDIO_E_AC3,
 	MimeTypes.AUDIO_E_AC3_JOC -> this[UserPreferences.bitstreamAc3] != BitstreamAudioMode.DISABLE &&
