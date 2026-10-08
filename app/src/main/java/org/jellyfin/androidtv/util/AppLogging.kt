@@ -5,9 +5,13 @@ import android.util.Log
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.preference.UserPreferences
 import timber.log.Timber
+import java.time.Instant
 
 object AppLogging {
 	private var logcatTree: Timber.Tree? = null
+	private val memoryLogs = MemoryLogBuffer()
+
+	fun dumpMemoryLogs(): String = memoryLogs.dump()
 
 	fun configure(context: Context) {
 		val userPreferences = UserPreferences(context.applicationContext)
@@ -51,5 +55,18 @@ object AppLogging {
 		private val minPriority: Int,
 	) : Timber.DebugTree() {
 		override fun isLoggable(tag: String?, priority: Int): Boolean = priority >= minPriority
+
+		override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+			val level = when (priority) {
+				Log.VERBOSE -> "V"
+				Log.DEBUG -> "D"
+				Log.INFO -> "I"
+				Log.WARN -> "W"
+				Log.ERROR -> "E"
+				else -> "A"
+			}
+			memoryLogs.append("${Instant.now()} $level ${tag.orEmpty()}: $message\n")
+			super.log(priority, tag, message, t)
+		}
 	}
 }
