@@ -700,6 +700,7 @@ class LibMPVOptionsTest : StringSpec({
 		isLibMPVOptionManagedByJellyfin("audiotrack-pcm-float") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-max-bytes") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-max-back-bytes") shouldBe true
+		isLibMPVOptionManagedByJellyfin("demuxer-hysteresis-bytes") shouldBe true
 	}
 
 	"MPV buffer details suppress stale speed while idle" {
