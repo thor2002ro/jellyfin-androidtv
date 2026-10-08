@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.util
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import java.util.concurrent.CancellationException
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.pow
@@ -97,6 +98,7 @@ object BlurHashDecoder {
 		}
 
 		for (y in 0 until height) {
+			if (Thread.currentThread().isInterrupted) throw CancellationException("BlurHash decode cancelled")
 			for (x in 0 until width) {
 				var r = 0f
 				var g = 0f

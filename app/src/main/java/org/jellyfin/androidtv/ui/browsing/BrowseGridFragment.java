@@ -33,6 +33,7 @@ import androidx.lifecycle.Lifecycle;
 
 import coil3.ImageLoader;
 import coil3.request.ImageRequest;
+import coil3.request.Disposable;
 
 import org.jellyfin.androidtv.R;
 import org.jellyfin.androidtv.constant.ChangeTriggerType;
@@ -82,6 +83,8 @@ import org.jellyfin.sdk.model.api.SortOrder;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -166,7 +169,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private int mPendingSelectedPosition = -1;
     private boolean mRestoringSelectedPosition = false;
     private int mSelectionRestoreGeneration = 0;
-    private final Set<String> mPrefetchedImageUrls = new HashSet<>();
+    private final Map<String, Disposable> mImagePrefetches = new HashMap<>();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -425,6 +428,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     @Override
     public void onDestroyView() {
+        cancelImagePrefetches();
         if (mAdapter != null) mAdapter.cancelRetrieval();
         if (mAlphabetPickerController != null) mAlphabetPickerController.cancel();
         releaseGrid();
@@ -585,6 +589,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         int maxWidth = Utils.convertDpToPixel(requireContext(), imageRequestSize.getWidthDp());
         int start = Math.min(itemsLoaded, position + 1 + Math.max(1, mCardsScreenEst));
         int end = Math.min(itemsLoaded, start + Math.max(1, mCardsScreenStride));
+        Set<String> urls = new LinkedHashSet<>();
         for (int i = start; i < end; i++) {
             if (!(mAdapter.get(i) instanceof BaseRowItem)) continue;
 
@@ -592,10 +597,27 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             if (image == null) continue;
 
             String url = JellyfinImageKt.getUrl(image, api.getValue(), maxWidth, maxHeight, null, null);
-            if (!mPrefetchedImageUrls.add(url)) continue;
-
-            imageLoader.getValue().enqueue(new ImageRequest.Builder(requireContext()).data(url).build());
+            urls.add(url);
         }
+        cancelObsoleteImagePrefetches(mImagePrefetches, urls);
+        for (String url : urls) {
+            if (mImagePrefetches.containsKey(url)) continue;
+            mImagePrefetches.put(url, imageLoader.getValue().enqueue(new ImageRequest.Builder(requireContext()).data(url).build()));
+        }
+    }
+
+    static void cancelObsoleteImagePrefetches(Map<String, Disposable> requests, Set<String> retainedUrls) {
+        requests.entrySet().removeIf(entry -> {
+            if (retainedUrls.contains(entry.getKey())) return false;
+            entry.getValue().dispose();
+            return true;
+        });
+    }
+
+    private void cancelImagePrefetches() {
+        cancelObsoleteImagePrefetches(mImagePrefetches, Collections.emptySet());
+        mLastImagePrefetchPosition = -1;
+        mLastImagePrefetchItemsLoaded = -1;
     }
 
     private void updateAdapter() {
@@ -1079,6 +1101,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void buildAdapter() {
+        cancelImagePrefetches();
         if (mAdapter != null) mAdapter.cancelRetrieval();
         mCardPresenter = new CardPresenter(
                 false,
@@ -1087,10 +1110,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 true,
                 shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles)
         );
-        mLastImagePrefetchPosition = -1;
-        mLastImagePrefetchItemsLoaded = -1;
         mPendingSelectedPosition = -1;
-        mPrefetchedImageUrls.clear();
 
         Timber.d("buildAdapter cardHeight <%s> getCardWidthBy <%s> chunks <%s> type <%s>", mCardHeight, (int) getCardWidthBy(mCardHeight, mImageType, mFolder), mRowDef.getChunkSize(), mRowDef.getQueryType().toString());
 
