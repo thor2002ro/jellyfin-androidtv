@@ -580,6 +580,14 @@ class LibMPVOptionsTest : StringSpec({
 		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = null) shouldBe null
 	}
 
+	"MPV automatic cache has a bounded default without replacing explicit limits" {
+		PlaybackBufferOptions().libMPVMaxCacheBytes() shouldBe 64L * 1024 * 1024
+		PlaybackBufferOptions(maxBufferBytes = 128L * 1024 * 1024).libMPVMaxCacheBytes() shouldBe
+			128L * 1024 * 1024
+		PlaybackBufferOptions(maxBufferBytes = 0).libMPVMaxCacheBytes() shouldBe 0
+		PlaybackBufferOptions(maxBufferBytes = -1).libMPVMaxCacheBytes() shouldBe -1
+	}
+
 	"MPV byte cap also limits cache and wait durations" {
 		val cappedSeconds = 128 * 1024 * 1024 * 8.0 / 25_000_000
 
@@ -639,6 +647,13 @@ class LibMPVOptionsTest : StringSpec({
 		shouldUseNativeSubtitleOverlay("mediacodec_embed", hasSelectedSubtitle = true) shouldBe true
 		shouldUseNativeSubtitleOverlay("mediacodec_embed", hasSelectedSubtitle = false) shouldBe false
 		shouldUseNativeSubtitleOverlay("gpu-next", hasSelectedSubtitle = true) shouldBe false
+	}
+
+	"native subtitle overlay changes only when its active state changes" {
+		libMPVSubtitleOverlayModeChanged(wasActive = false, isActive = true) shouldBe true
+		libMPVSubtitleOverlayModeChanged(wasActive = true, isActive = false) shouldBe true
+		libMPVSubtitleOverlayModeChanged(wasActive = false, isActive = false) shouldBe false
+		libMPVSubtitleOverlayModeChanged(wasActive = true, isActive = true) shouldBe false
 	}
 
 	"unchanged native subtitle overlay omits pixels" {
