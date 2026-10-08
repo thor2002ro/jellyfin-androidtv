@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,12 @@ class SearchFragment : Fragment() {
 		val textInputFocusRequester = remember { FocusRequester() }
 		val resultFocusRequester = remember { FocusRequester() }
 		val speechRecognizerAvailability = rememberSpeechRecognizerAvailability()
+		DisposableEffect(viewModel, searchFragmentDelegate) {
+			onDispose {
+				viewModel.cancelSearch()
+				searchFragmentDelegate.showResults(emptyList())
+			}
+		}
 
 		LaunchedEffect(Unit) {
 			val extraQuery = arguments?.getString(EXTRA_QUERY)
@@ -61,6 +68,7 @@ class SearchFragment : Fragment() {
 				viewModel.searchImmediately(extraQuery)
 				resultFocusRequester.requestFocus()
 			} else {
+				viewModel.searchImmediately(query.text)
 				textInputFocusRequester.requestFocus()
 			}
 

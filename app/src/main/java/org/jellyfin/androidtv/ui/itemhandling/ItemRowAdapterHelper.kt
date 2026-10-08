@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.itemhandling
 
 import android.content.Context
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -183,7 +182,7 @@ private fun ItemRowAdapter.replaceIfChanged(items: List<BaseRowItem>, signature:
 }
 
 fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.libraryApi.getResumeItems(query).content
@@ -211,7 +210,7 @@ fun ItemRowAdapter.retrieveNextUpItems(
 	query: GetNextUpRequest,
 	combinedResumeQuery: GetResumeItemsRequest? = null,
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		var displayedItems = emptyList<BaseItemDto>()
 		runCatching {
 			val (response, resumeItems) = coroutineScope {
@@ -310,7 +309,7 @@ internal fun combinedContinueWatchingAndNextUpRowItems(
 }
 
 fun ItemRowAdapter.retrieveLatestMedia(api: ApiClient, query: GetLatestMediaRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		var response = emptyList<BaseItemDto>()
 		runCatching {
 			response = withContext(Dispatchers.IO) {
@@ -375,7 +374,7 @@ private fun ItemRowAdapter.refreshCurrentStreamBadges(
 	val badgeItems = items.streamBadgeItems(shouldRefresh)
 	if (badgeItems.isEmpty()) return
 
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		val enriched = try {
 			withContext(Dispatchers.IO) {
 				badgeItems.enrich(api)
@@ -950,7 +949,7 @@ private fun <K, V> LinkedHashMap<K, V>.removeEldestKeys(maxSize: Int): List<K> =
 }
 
 fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.libraryApi.getSpecialFeatures(query.itemId).content
@@ -972,7 +971,7 @@ fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsReq
 }
 
 fun ItemRowAdapter.retrieveAdditionalParts(api: ApiClient, query: GetAdditionalPartsRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.videoApi.getAdditionalPart(query.itemId).content
@@ -996,7 +995,7 @@ fun ItemRowAdapter.retrieveUserViews(
 	userViewsRepository: UserViewsRepository,
 	initialViews: Collection<BaseItemDto>? = null,
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val items = initialViews ?: withContext(Dispatchers.IO) {
 				api.userViewApi.getUserViews().content.items
@@ -1018,7 +1017,7 @@ fun ItemRowAdapter.retrieveUserViews(
 }
 
 fun ItemRowAdapter.retrieveSeasons(api: ApiClient, query: GetSeasonsRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		var items = emptyList<BaseItemDto>()
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
@@ -1043,7 +1042,7 @@ fun ItemRowAdapter.retrieveSeasons(api: ApiClient, query: GetSeasonsRequest) {
 }
 
 fun ItemRowAdapter.retrieveUpcomingEpisodes(api: ApiClient, query: GetUpcomingEpisodesRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.showApi.getUpcomingEpisodes(query).content
@@ -1063,7 +1062,7 @@ fun ItemRowAdapter.retrieveUpcomingEpisodes(api: ApiClient, query: GetUpcomingEp
 }
 
 fun ItemRowAdapter.retrieveSimilarItems(api: ApiClient, query: GetSimilarItemsRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.libraryApi.getSimilarItems(query).content
@@ -1083,7 +1082,7 @@ fun ItemRowAdapter.retrieveSimilarItems(api: ApiClient, query: GetSimilarItemsRe
 }
 
 fun ItemRowAdapter.retrieveTrailers(api: ApiClient, query: GetTrailersRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.libraryApi.getLocalTrailers(itemId = query.itemId)
@@ -1115,7 +1114,7 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 	query: GetRecommendedProgramsRequest,
 	selectAction: BaseRowItemSelectAction = BaseRowItemSelectAction.ShowDetails,
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val items = withContext(Dispatchers.IO) {
 				val programs = api.liveTvApi.getRecommendedPrograms(query).content.items
@@ -1178,7 +1177,7 @@ private fun ItemRowAdapter.refreshLiveTvTrackBadge(channelId: UUID) {
 }
 
 fun ItemRowAdapter.retrieveLiveTvRecordings(api: ApiClient, query: GetRecordingsRequest) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.liveTvApi.getRecordings(query).content
@@ -1208,7 +1207,7 @@ fun ItemRowAdapter.retrieveLiveTvSeriesTimers(
 	context: Context,
 	canManageRecordings: Boolean
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.liveTvApi.getSeriesTimers().content
@@ -1271,7 +1270,7 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 	startIndex: Int,
 	batchSize: Int
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.liveTvApi.getLiveTvChannels(
@@ -1334,7 +1333,7 @@ fun ItemRowAdapter.retrieveAlbumArtists(
 	batchSize: Int,
 	queryVersion: Int = currentQueryVersion(),
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.artistApi.getAlbumArtists(
@@ -1366,6 +1365,7 @@ fun ItemRowAdapter.retrieveAlbumArtists(
 				if (applied) notifyRetrieveFinished() else notifyObsoleteRetrieveFinished()
 			},
 			onFailure = { error ->
+				if (error is CancellationException) return@fold
 				if (queryVersion == currentQueryVersion()) notifyRetrieveFinished(error as? Exception)
 				else notifyObsoleteRetrieveFinished()
 			}
@@ -1380,7 +1380,7 @@ fun ItemRowAdapter.retrieveArtists(
 	batchSize: Int,
 	queryVersion: Int = currentQueryVersion(),
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.artistApi.getArtists(
@@ -1412,6 +1412,7 @@ fun ItemRowAdapter.retrieveArtists(
 				if (applied) notifyRetrieveFinished() else notifyObsoleteRetrieveFinished()
 			},
 			onFailure = { error ->
+				if (error is CancellationException) return@fold
 				if (queryVersion == currentQueryVersion()) notifyRetrieveFinished(error as? Exception)
 				else notifyObsoleteRetrieveFinished()
 			}
@@ -1426,7 +1427,7 @@ fun ItemRowAdapter.retrieveItems(
 	batchSize: Int,
 	queryVersion: Int = currentQueryVersion(),
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		var streamBadgeItems = emptyList<BaseItemDto>()
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
@@ -1480,6 +1481,7 @@ fun ItemRowAdapter.retrieveItems(
 				} else notifyObsoleteRetrieveFinished()
 			},
 			onFailure = { error ->
+				if (error is CancellationException) return@fold
 				if (queryVersion == currentQueryVersion()) notifyRetrieveFinished(error as? Exception)
 				else notifyObsoleteRetrieveFinished()
 			}
@@ -1491,7 +1493,7 @@ fun ItemRowAdapter.retrievePremieres(
 	api: ApiClient,
 	query: GetItemsRequest,
 ) {
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
+	retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.libraryApi.getItems(query).content
