@@ -37,6 +37,7 @@ import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
 import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
+import org.jellyfin.androidtv.preference.mpvCheckHardwareProfile
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
@@ -110,6 +111,7 @@ fun SettingsPlaybackLibMPVScreen() {
 	val audioBehavior by rememberPreference(userPreferences, UserPreferences.audioBehaviour)
 	var convertAudioToAc3 by rememberPreference(userPreferences, UserPreferences.mpvConvertAudioToAc3)
 	var decoderThreads by rememberPreference(userPreferences, UserPreferences.mpvDecoderThreads)
+	var checkHardwareProfile by rememberPreference(userPreferences, UserPreferences.mpvCheckHardwareProfile)
 	var optionOverrides by rememberPreference(userPreferences, UserPreferences.mpvOptionOverrides)
 	val overrideCount = remember(optionOverrides) {
 		parseLibMPVOptionOverrides(optionOverrides).values.keys.count { name -> !isLibMPVOptionManagedByJellyfin(name) }
@@ -232,6 +234,18 @@ fun SettingsPlaybackLibMPVScreen() {
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.REPLAY_GAIN, replayGain) }
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_decoder)) }) }
+		item {
+			LibMPVBooleanButton(
+				headingRes = R.string.preference_mpv_check_hardware_profile,
+				captionRes = R.string.preference_mpv_check_hardware_profile_description,
+				checked = checkHardwareProfile,
+				defaultValue = false,
+				onClick = {
+					checkHardwareProfile = !checkHardwareProfile
+					backendSettings.applyPreferences(clearOverrides = setOf("vd-lavc-check-hw-profile"))
+				},
+			)
+		}
 		item {
 			val interactionSource = remember { MutableInteractionSource() }
 			ListControl(
