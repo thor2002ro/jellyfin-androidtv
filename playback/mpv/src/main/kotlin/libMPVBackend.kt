@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.MPVNode
+import `is`.xyz.mpv.ObservedProperties
 import io.github.thor2002ro.libdovi.DoviBridge
 import io.github.thor2002ro.libdovi.DoviException
 import io.github.thor2002ro.libdovi.DoviMpvSession
@@ -68,6 +69,8 @@ import org.jellyfin.playback.dovi.requiresHardwareVideoDecoder
 import org.jellyfin.playback.dovi.toPlaybackDoviTransformStats
 import timber.log.Timber
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -215,6 +218,10 @@ class LibMPVBackend(
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
 		const val SUBTITLE_OVERLAY_INTERVAL_MS = 33L
+		// Serial creation also protects the dependency's shared JNI/config setup.
+		val playerWorker = Executors.newSingleThreadExecutor { task ->
+			Thread(task, "mpv-player-setup").apply { isDaemon = true }
+		}
 	}
 
 	override val reportsBufferedPosition = true
@@ -279,8 +286,21 @@ class LibMPVBackend(
 	private val commandRequests = LibMPVCommandRequests()
 	private val subtitleOverlayScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 	private val playerLock = Any()
-	private var player: MPV
+	private lateinit var player: MPV
+	@Volatile
+	private var playerReady = false
+	@Volatile
+	private var playerSetup = CompletableFuture.completedFuture(Unit)
+	private var pendingInstanceOptions: Map<String, String>? = null
+	private val emptyProperties = ObservedProperties()
+	private val playerLoader = LibMPVPlayerLoader<MPV>(playerWorker, { handler.post(it) }) { target ->
+		synchronized(playerLock) {
+			runCatching { target.close() }
+				.onFailure { error -> Timber.w(error, "Unable to destroy MPV instance cleanly") }
+		}
+	}
 	private var playerObserver: MPV.EventObserver? = null
+	@Volatile
 	private var released = false
 	private val playerLogObserver = object : MPV.LogObserver {
 		override fun logMessage(prefix: String, level: Int, text: String) {
@@ -326,6 +346,7 @@ class LibMPVBackend(
 	private var playbackSpeed = 1f
 	private var lastTickPosition = Duration.ZERO
 	private var lastPositionInfo = PositionInfo.EMPTY
+	private var initialStartPosition = Duration.ZERO
 	private var endReported = false
 	private var externalSubtitlesAdded = false
 	private var loadRequested = false
@@ -335,6 +356,8 @@ class LibMPVBackend(
 	private var doviVideoDecoderFailureObserved = false
 	private var doviHardwareFailureReported = false
 	private var isPaused = true
+	// Native startup notifications describe the new instance, not the requested playback state.
+	private var requestedPaused = true
 	private var pausedForCache = false
 	private var seeking = false
 	private val scrubbing = LibMPVScrubState()
@@ -350,7 +373,7 @@ class LibMPVBackend(
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
 	private val appliedPresetOptions = mutableSetOf<String>()
 	private val appliedCustomOptions = mutableSetOf<String>()
-	private val observedProperties get() = player.cachedProperties
+	private val observedProperties get() = if (playerReady) player.cachedProperties else emptyProperties
 	private val videoOutput = MPVVideoOutput { aspectRatio ->
 		setProperty("video-aspect-override", aspectRatio)
 	}
@@ -366,12 +389,7 @@ class LibMPVBackend(
 	}
 
 	init {
-		synchronized(playerLock) {
-			val options = currentInstanceOptions()
-			player = createPlayer(options)
-			appliedInstanceOptions = LinkedHashMap(options)
-			finishPlayerSetup(player)
-		}
+		ensureInstanceOptions()
 	}
 
 	private fun currentCustomOptions(): Map<String, String> = playbackOptions.customOptions
@@ -443,9 +461,11 @@ class LibMPVBackend(
 		surfaceHolder?.takeIf { holder -> holder.surface.isValid }?.let(::attachSurface)
 	}
 
-	private fun ensureInstanceOptions(forceRecreate: Boolean = false) = synchronized(playerLock) {
+	private fun ensureInstanceOptions(forceRecreate: Boolean = false) {
+		if (released) return
 		val desiredOptions = currentInstanceOptions()
-		if (forceRecreate || desiredOptions != appliedInstanceOptions) {
+		if (pendingInstanceOptions == desiredOptions) return
+		if (forceRecreate || !playerReady || desiredOptions != appliedInstanceOptions) {
 			recreatePlayer(desiredOptions)
 		} else {
 			appliedGpuApi = requestedGpuApi
@@ -453,28 +473,48 @@ class LibMPVBackend(
 	}
 
 	private fun recreatePlayer(desiredOptions: Map<String, String>) {
-		// Create first so a bad expert option does not destroy a working player.
-		val replacement = createPlayer(desiredOptions)
-		val previous = player
-		val previousObserver = playerObserver
-
+		// Retain the old handle until a replacement has initialized successfully.
+		val previousSetup = playerSetup
+		playerSetup = CompletableFuture()
+		previousSetup.complete(Unit)
 		handler.removeCallbacks(tick)
-		detachSurface(previous)
-		// Invalidate native callbacks already queued before observer removal.
+		stopNativeSubtitleOverlay()
 		playerGeneration++
-		previousObserver?.let(previous::removeObserver)
-		previous.removeLogObserver(playerLogObserver)
-		runCatching { previous.close() }
-			.onFailure { error -> Timber.w(error, "Unable to destroy previous MPV instance cleanly") }
-
-		player = replacement
-		surroundBoostFilter = null
-		surroundBoostRequest = null
-		playerObserver = null
-		appliedInstanceOptions = LinkedHashMap(desiredOptions)
-		appliedGpuApi = requestedGpuApi
-		surfaceAttached = false
-		finishPlayerSetup(replacement)
+		if (::player.isInitialized) {
+			playerObserver?.let(player::removeObserver)
+			player.command("stop")
+		}
+		playerReady = false
+		pendingInstanceOptions = LinkedHashMap(desiredOptions)
+		playerLoader.load({ createPlayer(desiredOptions) }, { replacement ->
+			handler.removeCallbacks(tick)
+			stopNativeSubtitleOverlay()
+			playerGeneration++
+			if (::player.isInitialized) {
+				val previous = player
+				detachSurface(previous)
+				playerObserver?.let(previous::removeObserver)
+				previous.removeLogObserver(playerLogObserver)
+				playerLoader.retire(previous)
+			}
+			player = replacement
+			playerReady = true
+			pendingInstanceOptions = null
+			surroundBoostFilter = null
+			surroundBoostRequest = null
+			playerObserver = null
+			appliedInstanceOptions = LinkedHashMap(desiredOptions)
+			appliedGpuApi = requestedGpuApi
+			surfaceAttached = false
+			finishPlayerSetup(replacement)
+			if (loadRequested) currentStream?.let(::queueMediaLoad)
+			playerSetup.complete(Unit)
+		}, { error ->
+			pendingInstanceOptions = null
+			playerSetup.completeExceptionally(error)
+			Timber.e(error, "Unable to initialize MPV")
+			handlePlaybackError("Unable to initialize MPV: ${error.message}")
+		})
 	}
 
 	private inner class PlayerObserver(
@@ -577,36 +617,51 @@ class LibMPVBackend(
 		if (holder === surfaceHolder) detachSurface()
 	}
 
-	private fun attachSurface(holder: SurfaceHolder, target: MPV = player) {
-		if (!holder.surface.isValid || !target.isInitialized) return
+	private fun attachSurface(holder: SurfaceHolder) {
+		if (!playerReady || !holder.surface.isValid) return
+		val target = player
 		if (surfaceAttached) detachSurface(target)
-		runCatching {
-			target.attachSurface(holder.surface)
-			target.setPropertyString("force-window", "yes")
-			target.setPropertyString("vo", effectiveVideoOutput)
-			surfaceAttached = true
-			val frame = holder.surfaceFrame
-			updateSurfaceSize(frame.width(), frame.height(), target)
-		}.onFailure { error ->
-			Timber.e(error, "Unable to attach MPV video surface")
-			surfaceAttached = false
+		val surface = holder.surface
+		val videoOutput = effectiveVideoOutput
+		val frame = holder.surfaceFrame
+		val width = frame.width()
+		val height = frame.height()
+		val generation = playerGeneration
+		surfaceAttached = true
+		playerLoader.execute {
+			runCatching {
+				if (surface.isValid) {
+					target.attachSurface(surface)
+					target.setPropertyString("force-window", "yes")
+					target.setPropertyString("vo", videoOutput)
+					updateSurfaceSize(width, height, target)
+				}
+			}.onFailure { error ->
+				Timber.e(error, "Unable to attach MPV video surface")
+				onPlayerEvent(generation) {
+					surfaceAttached = false
+					handlePlaybackError("Unable to attach MPV video surface")
+				}
+			}
 		}
 	}
 
-	private fun detachSurface(target: MPV = player) {
-		if (!surfaceAttached || !target.isInitialized) return
-		runCatching {
-			target.setPropertyString("vo", "null")
-			target.setPropertyString("force-window", "no")
-			target.detachSurface()
-		}.onFailure { error ->
-			Timber.w(error, "Unable to detach MPV video surface cleanly")
+	private fun detachSurface(target: MPV? = if (::player.isInitialized) player else null) {
+		if (!surfaceAttached || target == null) return
+		playerLoader.execute {
+			runCatching {
+				target.setPropertyString("vo", "null")
+				target.setPropertyString("force-window", "no")
+				target.detachSurface()
+			}.onFailure { error ->
+				Timber.w(error, "Unable to detach MPV video surface cleanly")
+			}
 		}
 		surfaceAttached = false
 	}
 
-	private fun updateSurfaceSize(width: Int, height: Int, target: MPV = player) {
-		if (width <= 0 || height <= 0) return
+	private fun updateSurfaceSize(width: Int, height: Int, target: MPV? = if (playerReady) player else null) {
+		if (width <= 0 || height <= 0 || target == null) return
 		runCatching { target.setPropertyString("android-surface-size", "${width}x${height}") }
 			.onFailure { error -> Timber.w(error, "Unable to update MPV surface size") }
 	}
@@ -680,6 +735,7 @@ class LibMPVBackend(
 	}
 
 	private fun startNativeSubtitleOverlay() {
+		if (!playerReady) return
 		nativeSubtitleJob?.cancel()
 		val target = player
 		val generation = playerGeneration
@@ -754,7 +810,6 @@ class LibMPVBackend(
 		// settings. Refresh before creating or configuring the next native player.
 		videoDecoder = videoDecoderProvider?.invoke() ?: videoDecoder
 		playbackOptions = playbackOptionsProvider?.invoke() ?: playbackOptions
-		ensureInstanceOptions(forceRecreate)
 		scrubbing.reset()
 		endReported = false
 		externalSubtitlesAdded = false
@@ -765,6 +820,7 @@ class LibMPVBackend(
 		doviVideoDecoderFailureObserved = false
 		doviHardwareFailureReported = false
 		isPaused = false
+		requestedPaused = false
 		pausedForCache = false
 		seeking = false
 		terminalState = null
@@ -776,12 +832,28 @@ class LibMPVBackend(
 			if (stream.selectedSubtitleStreamIndex != null) pendingInitialTrackTypes += TrackType.SUBTITLE
 		}
 		val startPosition = stream.queueEntry.startPosition ?: Duration.ZERO
+		// The queue clears its one-shot position before our deferred load runs.
+		initialStartPosition = startPosition
 		observedProperties.clear("time-pos", "duration", "demuxer-cache-time", "demuxer-cache-duration", "seekable")
 		lastPositionInfo = PositionInfo(startPosition, startPosition, Duration.ZERO)
 		lastTickPosition = startPosition
 		listener?.onSubtitleTimingOffsetSupportChange(true)
 		publishPlayState(force = true)
+		ensureInstanceOptions(forceRecreate)
+		if (playerReady && pendingInstanceOptions == null) queueMediaLoad(stream)
+	}
 
+	private fun queueMediaLoad(stream: PlayableMediaStream) {
+		val generation = playerGeneration
+		// Surface barriers must finish before MediaCodec starts decoding this item.
+		playerLoader.execute {
+			onPlayerEvent(generation) {
+				if (loadRequested && currentStream === stream && playerReady) loadMedia(stream)
+			}
+		}
+	}
+
+	private fun loadMedia(stream: PlayableMediaStream) {
 		applyPlaybackOptions()
 		applyVideoDecoder()
 		applyShieldFallbackBeforeLoad(stream)
@@ -801,7 +873,7 @@ class LibMPVBackend(
 			return
 		}
 
-		val startOption = stream.queueEntry.startPosition.mpvStartOption()
+		val startOption = initialStartPosition.mpvStartOption()
 		val loaded = if (startOption == null) {
 			runCommand("loadfile", stream.url, "replace")
 		} else {
@@ -812,7 +884,7 @@ class LibMPVBackend(
 			handlePlaybackError("Unable to issue MPV loadfile command")
 			return
 		}
-		setBooleanProperty("pause", false)
+		setBooleanProperty("pause", requestedPaused)
 	}
 
 	override fun setBufferOptions(options: PlaybackBufferOptions) {
@@ -893,6 +965,7 @@ class LibMPVBackend(
 		fileLoaded = false
 		playbackRestarted = false
 		isPaused = true
+		requestedPaused = true
 		pausedForCache = false
 		seeking = false
 		terminalState = PlayState.STOPPED
@@ -920,23 +993,26 @@ class LibMPVBackend(
 	}
 
 	override fun release() {
-		synchronized(playerLock) {
-			if (released) return
-			// Ignore native events already queued on the main thread before destroying the handle.
-			playerGeneration++
-			doviRequestSession.clear()
-			cancelNvidiaFallbackResync(restorePlayback = false)
-			cleanup()
+		if (released) return
+		// Ignore native events already queued on the main thread before destroying the handle.
+		playerGeneration++
+		if (::player.isInitialized) player.command("stop")
+		doviRequestSession.clear()
+		cancelNvidiaFallbackResync(restorePlayback = false)
+		cleanup()
+		if (::player.isInitialized) {
 			playerObserver?.let(player::removeObserver)
-			playerObserver = null
 			player.removeLogObserver(playerLogObserver)
-			runCatching { if (player.isInitialized) player.close() }
-				.onFailure { error -> Timber.w(error, "Unable to destroy MPV instance cleanly") }
-			currentStream = null
-			subtitleOverlayScope.cancel()
-			terminalState = PlayState.STOPPED
-			released = true
+			playerLoader.retire(player)
 		}
+		playerObserver = null
+		playerReady = false
+		playerLoader.close()
+		playerSetup.completeExceptionally(IllegalStateException("MPV backend was released"))
+		currentStream = null
+		subtitleOverlayScope.cancel()
+		terminalState = PlayState.STOPPED
+		released = true
 	}
 
 	override fun seekTo(position: Duration): Boolean {
@@ -1069,7 +1145,8 @@ class LibMPVBackend(
 	}
 
 	private fun setPaused(paused: Boolean) {
-		if (setBooleanProperty("pause", paused)) {
+		if (!playerReady || setBooleanProperty("pause", paused)) {
+			requestedPaused = paused
 			isPaused = paused
 		}
 	}
@@ -1087,7 +1164,7 @@ class LibMPVBackend(
 	}
 
 	private fun applyConfigurationChange(preservedFallback: LibMPVShieldFallback? = null) {
-		val canRecreateImmediately = currentStream == null ||
+		val canRecreateImmediately = !playerReady || currentStream == null ||
 			terminalState == PlayState.STOPPED ||
 			terminalState == PlayState.ERROR
 		if (canRecreateImmediately) {
@@ -1153,37 +1230,45 @@ class LibMPVBackend(
 	 * Build an option catalog directly from the bundled libMPV. This makes the expert
 	 * settings screen follow the exact native build instead of a hard-coded option list.
 	 */
-	fun getOptionCatalog(): List<LibMPVOptionInfo> = synchronized(playerLock) {
-		runCatching {
-			// Root key-action properties normally expose every option as a map. Accept
-			// array-shaped native nodes as well, and conservatively augment the names
-			// with property-list. Every candidate is still verified through option-info,
-			// so ordinary properties cannot leak into the option catalog.
-			val candidateNames = buildSet {
-				sequenceOf("options", "option-info").forEach { property ->
-					addAll(runCatching { player.getPropertyNode(property).optionNames() }
-						.getOrDefault(emptySet()))
+	fun getOptionCatalog(): List<LibMPVOptionInfo> {
+		while (!playerReady) {
+			check(!released) { "MPV backend was released" }
+			check(Looper.myLooper() != Looper.getMainLooper()) { "MPV option loading must run off the main thread" }
+			playerSetup.join()
+		}
+		return synchronized(playerLock) {
+			check(playerReady && !released) { "MPV player is unavailable" }
+			runCatching {
+				// Root key-action properties normally expose every option as a map. Accept
+				// array-shaped native nodes as well, and conservatively augment the names
+				// with property-list. Every candidate is still verified through option-info,
+				// so ordinary properties cannot leak into the option catalog.
+				val candidateNames = buildSet {
+					sequenceOf("options", "option-info").forEach { property ->
+						addAll(runCatching { player.getPropertyNode(property).optionNames() }
+							.getOrDefault(emptySet()))
+					}
+					addAll(
+						runCatching {
+							player.getPropertyNode("property-list")
+								?.asArray()
+								.orEmpty()
+								.mapNotNull(MPVNode::asString)
+						}.getOrDefault(emptyList())
+					)
 				}
-				addAll(
-					runCatching {
-						player.getPropertyNode("property-list")
-							?.asArray()
-							.orEmpty()
-							.mapNotNull(MPVNode::asString)
-					}.getOrDefault(emptyList())
-				)
-			}
 
-			val catalog = candidateNames
-				.mapNotNull(::readOptionInfo)
-				.distinctBy(LibMPVOptionInfo::name)
-				.sortedBy(LibMPVOptionInfo::name)
+				val catalog = candidateNames
+					.mapNotNull(::readOptionInfo)
+					.distinctBy(LibMPVOptionInfo::name)
+					.sortedBy(LibMPVOptionInfo::name)
 
-			check(catalog.isNotEmpty()) { "libMPV did not report an option catalog" }
-			catalog
-		}.onFailure { error ->
-			Timber.e(error, "Unable to read libMPV option catalog")
-		}.getOrThrow()
+				check(catalog.isNotEmpty()) { "libMPV did not report an option catalog" }
+				catalog
+			}.onFailure { error ->
+				Timber.e(error, "Unable to read libMPV option catalog")
+			}.getOrThrow()
+		}
 	}
 
 	private fun readOptionInfo(candidateName: String): LibMPVOptionInfo? {
@@ -1226,7 +1311,7 @@ class LibMPVBackend(
 		if (forcedVideoDecoder == decoder) return
 		val previousVideoOutput = effectiveVideoOutput
 		forcedVideoDecoder = decoder
-		val canRecreateImmediately = currentStream == null ||
+		val canRecreateImmediately = !playerReady || currentStream == null ||
 			terminalState == PlayState.STOPPED ||
 			terminalState == PlayState.ERROR
 		if (canRecreateImmediately) {
@@ -1845,26 +1930,28 @@ class LibMPVBackend(
 	}
 
 	private fun setOption(name: String, value: String): Boolean =
-		runCatching { player.setPropertyString("options/$name", value) }
+		playerReady && runCatching { player.setPropertyString("options/$name", value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV option %s=%s", name, value) }
 			.isSuccess
 
 	private fun setProperty(name: String, value: String) {
+		if (!playerReady) return
 		runCatching { player.setPropertyString(name, value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV property %s", name) }
 	}
 
 	private fun setBooleanProperty(name: String, value: Boolean): Boolean =
-		runCatching { player.setPropertyBoolean(name, value) }
+		playerReady && runCatching { player.setPropertyBoolean(name, value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV property %s", name) }
 			.isSuccess
 
 	private fun setDoubleProperty(name: String, value: Double) {
+		if (!playerReady) return
 		runCatching { player.setPropertyDouble(name, value) }
 			.onFailure { error -> Timber.w(error, "Unable to set MPV property %s", name) }
 	}
 
-	private fun runCommand(vararg command: String): Boolean = runCatching {
+	private fun runCommand(vararg command: String): Boolean = playerReady && runCatching {
 		// True means accepted; the observer handles failures after execution.
 		val requestId = commandRequests.nextId()
 		check(player.commandAsync(requestId, *command)) { "Unable to queue libMPV command" }
