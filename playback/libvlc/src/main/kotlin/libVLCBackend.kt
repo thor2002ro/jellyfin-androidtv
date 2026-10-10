@@ -52,6 +52,7 @@ import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IVLCVout
 import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCUtil
+import org.videolan.libvlc.util.HWDecoderUtil
 import timber.log.Timber
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -255,6 +256,7 @@ class LibVLCBackend(
 	private var initialPositionForReporting: Duration? = null
 	private var startPlayWhenReady = true
 	private var playbackSpeed = 1f
+	private var audioOutputChannels: Int? = null
 	private var mediaReady = false
 	private var inputStarted = false
 	private var surfacesReady = false
@@ -283,9 +285,21 @@ class LibVLCBackend(
 	private var liveTvBufferDuration: Duration? = null
 	private var maxBufferBytes: Long? = null
 	private var previousStatsSample: LibVLCStatsSample? = null
-	private val decoderLogReader = LibVLCDecoderLogReader(LibVLCDecoderLogParser(), logSink = nativeLogSink)
+	private val decoderLogReader = LibVLCDecoderLogReader(
+		LibVLCDecoderLogParser(),
+		logSink = nativeLogSink,
+		onAudioOutputChanged = { session, output ->
+			handler.post {
+				if (!released && currentStream != null && session == decoderSessionCounter.toString()) {
+					observedAudioOutput = output
+					updateSurroundVolumeBoost()
+				}
+			}
+		},
+	)
 	private var decoderSessionCounter = 0L
 	private var currentStream: PlayableMediaStream? = null
+	private var observedAudioOutput: LibVLCAudioOutput? = null
 	private var surfaceView: PlayerSurfaceView? = null
 	private var videoSurfaceWidthScale = 1.0
 	private var videoSurfaceHeightScale = 1.0
@@ -315,9 +329,9 @@ class LibVLCBackend(
 			setSurroundBoostGain(0)
 			return
 		}
-		val track = mediaTracks().firstOrNull { it.type == IMedia.Track.Type.Audio && it.id == player.audioTrack } as? IMedia.AudioTrack
-		// Digital output stays disabled in createPlayer, so these outputs receive decoded audio.
-		val gain = surroundVolumeBoost(playbackOptions.surroundVolumeBoost, track?.channels, surroundBoostAllowed)
+		// A surround source may have been downmixed to stereo, so source channels cannot decide the boost.
+		val channels = audioOutputChannels ?: observedAudioOutput?.channels
+		val gain = surroundVolumeBoost(playbackOptions.surroundVolumeBoost, channels, surroundBoostAllowed)
 		setSurroundBoostGain(gain)
 	}
 
@@ -516,6 +530,7 @@ class LibVLCBackend(
 		endReported = false
 		playbackActive = false
 		bufferingPercent = 0f
+		observedAudioOutput = null
 		bufferingReceived = false
 		videoOutputCount = 0
 		previousStatsSample = null
@@ -632,6 +647,7 @@ class LibVLCBackend(
 		playbackActive = false
 		previousStatsSample = null
 		decoderLogReader.endSession()
+		observedAudioOutput = null
 		pendingInitialTrackTypes.clear()
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
@@ -749,8 +765,18 @@ class LibVLCBackend(
 		MediaPlayer(libVLC).apply {
 			setVideoTitleDisplay(MediaPlayer.Position.Disable, 0)
 			vlcVout.addCallback(this@LibVLCBackend)
+			audioOutputChannels = null
 			options.audioOutput?.let(::setAudioOutput)
 			setAudioDigitalOutputEnabled(false)
+			val usesAudioTrack = when (options.audioOutput) {
+				null -> HWDecoderUtil.getAudioOutputFromDevice() != HWDecoderUtil.AudioOutput.OPENSLES
+				else -> options.audioOutput in listOf("audiotrack", "android_audiotrack")
+			}
+			if (usesAudioTrack) {
+					// shortcut: keep the working stereo route on devices that reject multichannel DIRECT output; revisit after device validation.
+					if (setAudioOutputDevice("stereo")) audioOutputChannels = 2
+					else Timber.w("VLC rejected the stereo audio output device")
+			}
 			rate = playbackSpeed
 		}
 
@@ -862,6 +888,8 @@ class LibVLCBackend(
 			subtitleExtractor = "libVLC",
 			subtitleRender = "libVLC",
 			backendDetails = buildMap {
+				(audioOutputChannels ?: observedAudioOutput?.channels)?.let { put("Audio output channels", it.toString()) }
+				observedAudioOutput?.let { put("Audio output format", "${it.format} ${it.sampleRate} Hz") }
 				put("Video outputs", videoOutputCount.toString())
 				if (stats != null) putAll(libVLCBackendDetails(stats, rates))
 				putAll(trackDiagnostics.details)

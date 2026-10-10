@@ -25,10 +25,10 @@
     <string name="preference_libvlc_video_output_android_display_description">Use VLC Android\'s native Android display output path.</string>
     <string name="preference_libvlc_audio_output">Audio output</string>
     <string name="preference_libvlc_audio_output_description">Choose the libVLC audio output path. Applies to newly started playback.</string>
-    <string name="preference_libvlc_audio_output_aaudio">AAudio default</string>
-    <string name="preference_libvlc_audio_output_aaudio_description">Use libVLC\'s default AAudio output path on current Android devices.</string>
     <string name="preference_libvlc_audio_output_audiotrack">AudioTrack</string>
-    <string name="preference_libvlc_audio_output_audiotrack_description">Force Android AudioTrack output.</string>
+    <string name="preference_libvlc_audio_output_aaudio">Automatic</string>
+    <string name="preference_libvlc_audio_output_aaudio_description">Use VLC\'s default audio output for this device.</string>
+    <string name="preference_libvlc_audio_output_audiotrack_description">Use Android AudioTrack with stereo output for compatibility.</string>
     <string name="preference_libvlc_audio_output_opensles">OpenSL ES</string>
     <string name="preference_libvlc_audio_output_opensles_description">Force OpenSL ES output for older-device compatibility.</string>
     <string name="preference_libvlc_replay_gain">Replay gain</string>
