@@ -8,17 +8,24 @@ import androidx.media3.exoplayer.audio.AudioOffloadSupport
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.AudioSink.AudioSinkConfig
 import androidx.media3.exoplayer.audio.ForwardingAudioSink
+import java.nio.ByteBuffer
 
 @OptIn(UnstableApi::class)
 internal class AudioPassthroughPolicyAudioSink(
 	sink: AudioSink,
 	private val downmixToStereo: () -> Boolean = { false },
 	private val downmixProcessor: StereoDownmixAudioProcessor? = null,
+	private val onBufferAttempt: () -> Unit = {},
 	private val isPassthroughEnabled: (String) -> Boolean,
 ) : ForwardingAudioSink(sink) {
 	override fun configure(audioSinkConfig: AudioSinkConfig) {
 		downmixProcessor?.setInputFormat(audioSinkConfig.format, audioSinkConfig.outputChannelMapping?.toArray())
 		super.configure(audioSinkConfig)
+	}
+
+	override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
+		onBufferAttempt()
+		return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
 	}
 
 	private fun blocksPassthrough(format: Format): Boolean {
