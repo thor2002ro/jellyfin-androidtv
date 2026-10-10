@@ -3,6 +3,9 @@ package org.jellyfin.playback.libvlc
 import android.os.Process
 import android.util.Log
 import timber.log.Timber
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 internal const val LIBVLC_DECODER_SESSION_PREFIX = "JELLYFIN_VLC_DECODER_BEGIN:"
 private const val LIBVLC_DECODER_LOG_TAG = "JellyfinVLCDecoder"
@@ -108,10 +111,13 @@ internal class LibVLCDecoderLogParser {
 	}
 }
 
-internal fun libVLCDecoderLogcatCommand(processId: Int) = listOf(
+internal fun libVLCDecoderLogcatCommand(
+	processId: Int,
+	startedAt: String = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(Date()),
+) = listOf(
 	"logcat",
 	"-T",
-	"1",
+	startedAt,
 	"--pid=$processId",
 	"-v",
 	"brief",
@@ -119,17 +125,17 @@ internal fun libVLCDecoderLogcatCommand(processId: Int) = listOf(
 
 internal class LibVLCDecoderLogReader(
 	private val parser: LibVLCDecoderLogParser,
-	processId: Int = Process.myPid(),
+	private val processId: Int = Process.myPid(),
 	private val processStarter: (List<String>) -> java.lang.Process = { command ->
 		ProcessBuilder(command)
 			.redirectErrorStream(true)
 			.start()
 	},
 	private val markerWriter: (String) -> Unit = { marker -> Log.i(LIBVLC_DECODER_LOG_TAG, marker) },
+	private val logSink: (String) -> Unit = {},
 ) : AutoCloseable {
 	@Volatile
 	private var closed = false
-	private val command = libVLCDecoderLogcatCommand(processId)
 	private var process: java.lang.Process? = null
 	private var readerThread: Thread? = null
 
@@ -156,6 +162,8 @@ internal class LibVLCDecoderLogReader(
 
 	private fun ensureStarted() {
 		if (process != null) return
+		// Capture from before launching logcat so a busy startup cannot push our marker out of its tail.
+		val command = libVLCDecoderLogcatCommand(processId)
 		val runningProcess = runCatching { processStarter(command) }
 			.onFailure { error -> Timber.w(error, "Unable to start LibVLC decoder log reader") }
 			.getOrNull() ?: return
@@ -164,7 +172,11 @@ internal class LibVLCDecoderLogReader(
 			{
 				runCatching {
 					runningProcess.inputStream.bufferedReader().useLines { lines ->
-						lines.forEach(parser::accept)
+						lines.forEach { line ->
+							parser.accept(line)
+							val tag = line.substringAfter('/').substringBefore('(').trim()
+							if (tag == "VLC" || tag == "VLC-std" || tag.startsWith("VLC/")) logSink(line)
+						}
 					}
 				}.onFailure { error ->
 					if (!closed) Timber.w(error, "LibVLC decoder log reader stopped")
