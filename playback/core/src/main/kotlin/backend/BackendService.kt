@@ -89,6 +89,11 @@ class BackendService {
 		listeners.remove(listener)
 	}
 
+	internal fun reportPlaybackError(error: PlaybackError) {
+		callListeners { onPlaybackError(error) }
+		callListeners { onPlayStateChange(PlayState.ERROR) }
+	}
+
 	fun setVideoOutputTransform(transform: VideoOutputTransform) {
 		if (videoOutputTransform == transform) return
 		videoOutputTransform = transform
