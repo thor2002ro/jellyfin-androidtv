@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceView
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -24,6 +25,7 @@ import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
 import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
@@ -52,6 +54,9 @@ import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCUtil
 import timber.log.Timber
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.FutureTask
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -61,7 +66,7 @@ enum class LibVLCVideoDecoder(val vlcValue: Int, val label: String) {
 	AUTOMATIC(-1, "Auto"),
 	DISABLED(0, "Software"),
 	DECODING(1, "Decoding"),
-	FULL(2, "Full"),
+	FULL(2, "Hardware with direct rendering"),
 }
 
 data class LibVLCPlaybackOptions(
@@ -97,7 +102,9 @@ internal fun libVLCMediaOptions(
 	maxBufferBytes: Long?,
 	bitrate: Long,
 	options: LibVLCPlaybackOptions,
+	subtitlesDisabled: Boolean = false,
 ): List<String> = buildList {
+	if (subtitlesDisabled) add(":sub-language=none")
 	add(if (options.audioTimeStretch) ":audio-time-stretch" else ":no-audio-time-stretch")
 	add(":avcodec-skiploopfilter=${resolveDeblocking(options.deblocking)}")
 	add(":avcodec-skip-frame=${if (options.frameSkip) 2 else 0}")
@@ -180,10 +187,10 @@ internal fun PlayableMediaStream.sourceTrackIndex(type: TrackType, streamIndex: 
 		.takeIf { index -> index >= 0 }
 
 internal fun orderedLibVLCTrackIds(
-	mediaTrackIds: List<String>,
-	descriptionTrackIds: List<String>,
-): List<String> {
-	val selectableIds = descriptionTrackIds.filter(String::isNotEmpty).distinct()
+	mediaTrackIds: List<Int>,
+	descriptionTrackIds: List<Int>,
+): List<Int> {
+	val selectableIds = descriptionTrackIds.filter { it >= 0 }.distinct()
 	val selectableIdSet = selectableIds.toHashSet()
 	val orderedIds = mediaTrackIds.filter { trackId -> trackId in selectableIdSet }.distinct().toMutableList()
 	val orderedIdSet = orderedIds.toHashSet()
@@ -212,7 +219,7 @@ class LibVLCBackend(
 	private val videoDecoderProvider: (() -> LibVLCVideoDecoder)? = null,
 	private val playbackOptionsProvider: (() -> LibVLCPlaybackOptions)? = null,
 	nativeLogSink: (String) -> Unit = {},
-) : BasePlayerBackend(), TrackSelectionBackend, IVLCVout.OnNewVideoLayoutListener {
+) : BasePlayerBackend(), TrackSelectionBackend, IVLCVout.OnNewVideoLayoutListener, IVLCVout.Callback {
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
 	}
@@ -241,15 +248,30 @@ class LibVLCBackend(
 	private var subtitleStyle: PlayerSubtitleStyle? = null
 	private var subtitleTimingOffset = Duration.ZERO
 	private var bufferingPercent = 100f
+	private var bufferingReceived = false
 	private var playbackActive = false
 	private var pendingStartPosition: Duration? = null
+	private var initialSeekFailed = false
 	private var initialPositionForReporting: Duration? = null
 	private var startPlayWhenReady = true
 	private var playbackSpeed = 1f
+	private var mediaReady = false
+	private var inputStarted = false
+	private var surfacesReady = false
+	private var attachedVideoView: SurfaceView? = null
+	private var attachedSubtitleView: SurfaceView? = null
+	private var attachedPlayer: MediaPlayer? = null
+	private val stoppingPlayers = mutableSetOf<MediaPlayer>()
+	private val pendingSubtitleSurfaceRemovals = mutableListOf<Pair<MediaPlayer, SurfaceView>>()
+	private var playRequested = false
+	private var videoOutputCount = 0
+	private val mediaGeneration = AtomicLong()
+	// Loading and stopping can block in VLC; keep them off the UI thread and in the order requested.
+	private val nativeExecutor = Executors.newSingleThreadExecutor { task -> Thread(task, "vlc-media") }
 	private var appliedInstanceOptions = currentInstanceOptions()
 	private var libVLC = createLibVLC(appliedInstanceOptions)
 	private var player = createPlayer(libVLC, appliedInstanceOptions)
-	private val videoOutput = LibVLCVideoOutput { aspectRatio -> player.setAspectRatio(aspectRatio) }
+	private val videoOutput = LibVLCVideoOutput { aspectRatio -> if (mediaReady && !released) player.setAspectRatio(aspectRatio) }
 	private val handler = Handler(Looper.getMainLooper())
 	private val viewAttachScheduler = CoalescingViewAttachScheduler(
 		post = { runnable -> handler.post(runnable) },
@@ -265,6 +287,8 @@ class LibVLCBackend(
 	private var decoderSessionCounter = 0L
 	private var currentStream: PlayableMediaStream? = null
 	private var surfaceView: PlayerSurfaceView? = null
+	private var videoSurfaceWidthScale = 1.0
+	private var videoSurfaceHeightScale = 1.0
 	private var subtitleView: PlayerSubtitleView? = null
 	private var subtitleSurface: SurfaceView? = null
 	private var subtitleLayoutListener: View.OnLayoutChangeListener? = null
@@ -291,7 +315,7 @@ class LibVLCBackend(
 			setSurroundBoostGain(0)
 			return
 		}
-		val track = player.getSelectedTrack(IMedia.Track.Type.Audio) as? IMedia.AudioTrack
+		val track = mediaTracks().firstOrNull { it.type == IMedia.Track.Type.Audio && it.id == player.audioTrack } as? IMedia.AudioTrack
 		// Digital output stays disabled in createPlayer, so these outputs receive decoded audio.
 		val gain = surroundVolumeBoost(playbackOptions.surroundVolumeBoost, track?.channels, surroundBoostAllowed)
 		setSurroundBoostGain(gain)
@@ -311,15 +335,38 @@ class LibVLCBackend(
 	}
 
 	override fun setSurfaceView(surfaceView: PlayerSurfaceView?) {
+		this.surfaceView?.removeOnLayoutChangeListener(videoLayoutListener)
 		this.surfaceView = surfaceView
+		surfaceView?.addOnLayoutChangeListener(videoLayoutListener)
 		updateViews()
+	}
+
+	private val videoLayoutListener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+		if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) updateVideoWindowSize()
+	}
+
+	private fun updateVideoWindowSize() {
+		val view = surfaceView ?: return
+		if (released || view.width <= 0 || view.height <= 0) return
+		player.vlcVout.setWindowSize(view.width, view.height)
+		val video = attachedVideoView ?: return
+		// The shared viewport fits the visible frame; include coded padding in the inner surface.
+		val layoutWidth = kotlin.math.ceil(view.width * videoSurfaceWidthScale).toInt()
+		val layoutHeight = kotlin.math.ceil(view.height * videoSurfaceHeightScale).toInt()
+		if (video.layoutParams.width != layoutWidth || video.layoutParams.height != layoutHeight) {
+			video.layoutParams = FrameLayout.LayoutParams(layoutWidth, layoutHeight, Gravity.CENTER)
+		}
 	}
 
 	override fun setSubtitleView(surfaceView: PlayerSubtitleView?) {
 		subtitleView?.onSubtitleStyleChanged = null
 		subtitleLayoutListener?.let { listener -> subtitleView?.removeOnLayoutChangeListener(listener) }
 		subtitleLayoutListener = null
-		(subtitleSurface?.parent as? ViewGroup)?.removeView(subtitleSurface)
+		subtitleSurface?.let { surface ->
+			val owner = attachedPlayer?.takeIf { attachedSubtitleView === surface && it in stoppingPlayers }
+			if (owner != null) pendingSubtitleSurfaceRemovals += owner to surface
+			else (surface.parent as? ViewGroup)?.removeView(surface)
+		}
 		subtitleView = surfaceView
 		subtitleSurface = surfaceView?.let { view ->
 			val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -366,33 +413,74 @@ class LibVLCBackend(
 	private fun updateViews() {
 		if (surfaceView == null) {
 			viewAttachScheduler.cancel()
-			player.vlcVout.detachViews()
-		} else {
+			if (player !in stoppingPlayers) player.vlcVout.detachViews()
+		} else if (mediaReady) {
 			viewAttachScheduler.schedule()
 		}
 	}
 
 	private fun attachViewsNow() {
-		player.vlcVout.detachViews()
+		if (released) return
 		val video = surfaceView?.surface ?: return
+		if (player.vlcVout.areViewsAttached() && attachedVideoView === video && attachedSubtitleView === subtitleSurface) {
+			updateVideoWindowSize()
+			startPlaybackIfReady()
+			return
+		}
+		surfacesReady = false
+		player.vlcVout.detachViews()
+		attachedVideoView = video
+		attachedSubtitleView = subtitleSurface
+		attachedPlayer = player
 		player.vlcVout.setVideoView(video)
 		subtitleSurface?.let(player.vlcVout::setSubtitlesView)
+		updateVideoWindowSize()
 		player.vlcVout.attachViews(this)
+		startPlaybackIfReady()
+	}
+
+	private fun startPlaybackIfReady() {
+		// Video needs real surfaces, not just attached views. Audio-only items can start without either.
+		val needsVideo = currentStream?.tracks?.any { it is MediaStreamVideoTrack } == true
+		if (released || !mediaReady || !playRequested || (needsVideo && !surfacesReady)) return
+		if (startPlayWhenReady || pendingStartPosition != null) {
+			if (!inputStarted) {
+				player.media?.let { media ->
+					try {
+						// Choose this at the last moment so a seek made during loading is included before any frames appear.
+						if (pendingStartPosition != null) media.addOption(":start-paused")
+					} finally { media.release() }
+				}
+				inputStarted = true
+			}
+			playRequested = false
+			player.play()
+		}
+	}
+
+	override fun onSurfacesCreated(vout: IVLCVout) {
+		if (released || vout !== player.vlcVout) return
+		surfacesReady = true
+		startPlaybackIfReady()
+	}
+
+	override fun onSurfacesDestroyed(vout: IVLCVout) {
+		if (released || vout !== player.vlcVout) return
+		surfacesReady = false
 	}
 
 	override fun prepareItem(item: QueueEntry) = Unit
 
 	override fun playItem(item: QueueEntry) {
+		if (released) return
 		val stream = requireNotNull(item.mediaStream)
-		if (stream == currentStream && player.isPlaying) return
+		if (mediaReady && stream == currentStream && player.isPlaying) return
 
 		setMedia(stream)
-		player.play()
 	}
 
 	override fun replaceItem(item: QueueEntry) {
 		setMedia(requireNotNull(item.mediaStream))
-		player.play()
 	}
 
 	override fun setBufferOptions(options: PlaybackBufferOptions) {
@@ -407,19 +495,32 @@ class LibVLCBackend(
 	}
 
 	private fun setMedia(stream: PlayableMediaStream) {
+		if (released) return
+		val generation = mediaGeneration.incrementAndGet()
+		viewAttachScheduler.cancel()
+		// Changing media must not tear down the surfaces under its running decoder.
+		mediaReady = false
+		inputStarted = false
+		playRequested = true
+		player.setEventListener(null)
+		handler.removeCallbacks(tick)
 		surroundBoostAllowed = false
 		setSurroundBoostGain(0)
 		playbackOptionsProvider?.invoke()?.let(::setPlaybackOptions)
 		videoOutput.apply(VideoOutputTransform.NONE)
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		ensureInstanceOptions()
-		decoderLogReader.beginSession((++decoderSessionCounter).toString())
+		val decoderSession = (++decoderSessionCounter).toString()
 		currentStream = stream
 		stream.errorOrigin?.activate()
 		endReported = false
 		playbackActive = false
+		bufferingPercent = 0f
+		bufferingReceived = false
+		videoOutputCount = 0
 		previousStatsSample = null
 		pendingStartPosition = stream.queueEntry.startPosition?.takeIf { it > Duration.ZERO }
+		initialSeekFailed = false
 		initialPositionForReporting = pendingStartPosition
 		startPlayWhenReady = true
 		pendingInitialTrackTypes.clear()
@@ -429,11 +530,10 @@ class LibVLCBackend(
 		}
 		lastTickPosition = Duration.ZERO
 		listener?.onSubtitleTimingOffsetSupportChange(true)
+		listener?.onPlayStateChange(PlayState.BUFFERING)
 		val media = Media(libVLC, Uri.parse(stream.url))
 		try {
 			media.setVideoDecoder(effectiveVideoDecoder)
-			// VLC 4's start-time trims the timeline. Open paused to retain absolute positions.
-			if (pendingStartPosition != null) media.addOption(":start-paused")
 			libVLCMediaOptions(
 				isLiveTv = stream.queueEntry.isLiveTv,
 				normalBufferDuration = normalBufferDuration,
@@ -441,37 +541,92 @@ class LibVLCBackend(
 				maxBufferBytes = maxBufferBytes,
 				bitrate = stream.totalBitrate(),
 				options = playbackOptions,
+				subtitlesDisabled = stream.selectedSubtitleStreamIndex == -1,
 			).forEach(media::addOption)
-			player.media = media
-		} finally {
+		} catch (error: Exception) {
 			media.release()
+			throw error
 		}
-		stream.externalSubtitles.forEach { subtitle ->
-			val select = shouldSelectExternalSubtitle(subtitle, stream.selectedSubtitleStreamIndex)
-			player.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(subtitle.url), select)
+		val target = player
+		stoppingPlayers += target
+		nativeExecutor.execute {
+			try {
+				if (generation != mediaGeneration.get()) return@execute
+				if (target.hasMedia()) target.stop()
+				detachStoppedViews(target, releasing = false)
+				if (generation != mediaGeneration.get()) return@execute
+				target.media = media
+				if (generation != mediaGeneration.get()) return@execute
+				// Mark only the new input's output; the previous item must not decide its surround gain.
+				decoderLogReader.beginSession(decoderSession)
+				stream.externalSubtitles.forEach { subtitle ->
+					val select = shouldSelectExternalSubtitle(subtitle, stream.selectedSubtitleStreamIndex)
+					target.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(subtitle.url), select)
+				}
+				handler.post {
+					// A channel change or Stop may have happened while VLC was loading this media.
+					if (generation != mediaGeneration.get() || released) return@post
+					mediaReady = true
+					target.rate = playbackSpeed
+					videoOutput.reapply()
+					target.setEventListener { event ->
+						if (!released && generation == mediaGeneration.get() && target === player) onPlayerEvent(event)
+					}
+					viewAttachScheduler.cancel()
+					attachViewsNow()
+					startPlaybackIfReady()
+				}
+			} catch (error: Exception) {
+				Timber.e(error, "VLC media assignment failed")
+				handler.post {
+					if (generation != mediaGeneration.get() || released) return@post
+					listener?.onPlaybackError(PlaybackError("LIBVLC_ERROR", origin = stream.errorOrigin))
+					listener?.onPlayStateChange(PlayState.ERROR)
+				}
+			} finally {
+				media.release()
+			}
 		}
 	}
 
 	override fun play() {
+		initialSeekFailed = false
 		startPlayWhenReady = true
-		if (pendingStartPosition != null) return
-		player.play()
+		if (mediaReady && pendingStartPosition != null && !playRequested) return
+		playRequested = true
+		startPlaybackIfReady()
 	}
 
 	override fun pause() {
 		startPlayWhenReady = false
-		player.pause()
+		if (released) return
+		if (inputStarted) player.pause()
+		else listener?.onPlayStateChange(PlayState.PAUSED)
 	}
 
 	override fun stop() {
+		if (released) return
+		mediaGeneration.incrementAndGet()
+		mediaReady = false
+		inputStarted = false
+		playRequested = false
+		startPlayWhenReady = false
+		player.setEventListener(null)
 		surroundBoostAllowed = false
 		setSurroundBoostGain(0)
 		handler.removeCallbacks(tick)
 		videoOutput.apply(VideoOutputTransform.NONE)
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
-		player.stop()
+		viewAttachScheduler.cancel()
+		val target = player
+		stoppingPlayers += target
+		nativeExecutor.execute {
+			target.stop()
+			detachStoppedViews(target, releasing = false)
+		}
 		currentStream = null
 		pendingStartPosition = null
+		initialSeekFailed = false
 		initialPositionForReporting = null
 		endReported = false
 		playbackActive = false
@@ -481,6 +636,7 @@ class LibVLCBackend(
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
 		listener?.onSubtitleTimingOffsetSupportChange(false)
+		listener?.onPlayStateChange(PlayState.STOPPED)
 	}
 
 	override fun reset() {
@@ -500,13 +656,45 @@ class LibVLCBackend(
 		reset()
 		cleanup()
 		player.setEventListener(null)
-		player.release()
-		libVLC.release()
+		val oldPlayer = player
+		val oldLibVLC = libVLC
+		nativeExecutor.execute {
+			try {
+				detachStoppedViews(oldPlayer, releasing = true)
+				oldPlayer.release()
+			} finally { oldLibVLC.release() }
+		}
+		nativeExecutor.shutdown()
 		decoderLogReader.close()
 		released = true
 	}
 
+	private fun detachStoppedViews(target: MediaPlayer, releasing: Boolean) {
+		// Only the native worker waits; Android view cleanup must finish on main before native release.
+		val cleanup = FutureTask {
+			if (releasing || released || target !== player || currentStream == null) target.vlcVout.detachViews()
+			stoppingPlayers -= target
+			if (attachedPlayer === target && !target.vlcVout.areViewsAttached()) {
+				attachedPlayer = null
+				attachedVideoView = null
+				attachedSubtitleView = null
+			}
+			val removals = pendingSubtitleSurfaceRemovals.filter { it.first === target }
+			removals.forEach { (_, surface) -> (surface.parent as? ViewGroup)?.removeView(surface) }
+			pendingSubtitleSurfaceRemovals.removeAll(removals.toSet())
+		}
+		handler.post(cleanup)
+		cleanup.get()
+	}
+
 	override fun seekTo(position: Duration): Boolean {
+		if (released) return false
+		// Keep the newest seek until startup finishes; the original resume point must not overwrite it.
+		if (!inputStarted || pendingStartPosition != null) {
+			pendingStartPosition = position
+			initialPositionForReporting = position
+			return true
+		}
 		val previous = getPositionInfo()
 		if (player.setTime(position.inWholeMilliseconds) < 0) {
 			Timber.w("libVLC rejected seek to %d ms", position.inWholeMilliseconds)
@@ -528,7 +716,7 @@ class LibVLCBackend(
 
 	override fun setSpeed(speed: Float) {
 		playbackSpeed = speed
-		player.rate = speed
+		if (mediaReady && !released) player.rate = speed
 	}
 
 	fun setVideoDecoder(decoder: LibVLCVideoDecoder) {
@@ -559,9 +747,10 @@ class LibVLCBackend(
 
 	private fun createPlayer(libVLC: LibVLC, options: LibVLCInstanceOptions) =
 		MediaPlayer(libVLC).apply {
+			setVideoTitleDisplay(MediaPlayer.Position.Disable, 0)
+			vlcVout.addCallback(this@LibVLCBackend)
 			options.audioOutput?.let(::setAudioOutput)
 			setAudioDigitalOutputEnabled(false)
-			setEventListener(::onPlayerEvent)
 			rate = playbackSpeed
 		}
 
@@ -570,10 +759,17 @@ class LibVLCBackend(
 		if (desiredOptions == appliedInstanceOptions) return
 
 		handler.removeCallbacks(tick)
-		player.vlcVout.detachViews()
 		player.setEventListener(null)
-		player.release()
-		libVLC.release()
+		val oldPlayer = player
+		val oldLibVLC = libVLC
+		stoppingPlayers += oldPlayer
+		nativeExecutor.execute {
+			try {
+				if (oldPlayer.hasMedia()) oldPlayer.stop()
+				detachStoppedViews(oldPlayer, releasing = true)
+				oldPlayer.release()
+			} finally { oldLibVLC.release() }
+		}
 
 		appliedInstanceOptions = desiredOptions
 		libVLC = createLibVLC(desiredOptions)
@@ -592,6 +788,7 @@ class LibVLCBackend(
 	}
 
 	private fun applySubtitleTimingOffset() {
+		if (released || !mediaReady) return
 		if (!player.setSpuDelay(subtitleTimingOffset.inWholeMicroseconds)) {
 			Timber.w("libVLC rejected subtitle timing offset")
 		}
@@ -602,6 +799,10 @@ class LibVLCBackend(
 	}
 
 	override fun getPositionInfo(): PositionInfo {
+		if (released || !mediaReady) {
+			val position = initialPositionForReporting ?: Duration.ZERO
+			return PositionInfo(position, position, Duration.ZERO, isSeekable = false)
+		}
 		val nativePosition = player.time.coerceAtLeast(0).milliseconds
 		// Playing can arrive before VLC publishes the timestamp of the initial seek.
 		initialPositionForReporting?.let { initial ->
@@ -613,6 +814,7 @@ class LibVLCBackend(
 	}
 
 	override fun getFrameStats(): PlaybackFrameStats {
+		if (released || !mediaReady) return PlaybackFrameStats(droppedFrames = 0, corruptedFrames = 0, playerName = "libVLC")
 		val stats = player.media?.let { media ->
 			try {
 				media.stats
@@ -622,16 +824,16 @@ class LibVLCBackend(
 		}
 		val currentStatsSample = stats?.let {
 			LibVLCStatsSample(
-				decodedVideo = it.decodedVideo,
-				displayedPictures = it.displayedPictures,
+				decodedVideo = it.decodedVideo.toLong(),
+				displayedPictures = it.displayedPictures.toLong(),
 				elapsedRealtimeNanos = System.nanoTime(),
 			)
 		}
 		val rates = currentStatsSample?.let { calculateLibVLCRates(previousStatsSample, it) }
 		previousStatsSample = currentStatsSample
 		val trackDiagnostics = libVLCTrackDiagnostics(
-			video = player.getSelectedTrack(IMedia.Track.Type.Video) as? IMedia.VideoTrack,
-			audio = player.getSelectedTrack(IMedia.Track.Type.Audio) as? IMedia.AudioTrack,
+			video = player.currentVideoTrack,
+			audio = mediaTracks().firstOrNull { it.type == IMedia.Track.Type.Audio && it.id == player.audioTrack } as? IMedia.AudioTrack,
 		)
 		val estimatedBytes = estimateBufferedBytes(
 			stats?.demuxBitrate,
@@ -640,10 +842,10 @@ class LibVLCBackend(
 		val bufferDetails = formatLibVLCBufferDetails(estimatedBytes, bufferingPercent)
 		val decoderDiagnostics = decoderLogReader.snapshot()
 		return PlaybackFrameStats(
-			droppedFrames = stats?.lostPictures?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
-			corruptedFrames = stats?.demuxCorrupted?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
+			droppedFrames = stats?.lostPictures?.coerceAtLeast(0) ?: 0,
+			corruptedFrames = stats?.demuxCorrupted?.coerceAtLeast(0) ?: 0,
 			playerName = "libVLC",
-			videoDecodedFrames = stats?.decodedVideo?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
+			videoDecodedFrames = stats?.decodedVideo?.coerceAtLeast(0) ?: 0,
 			videoDecoderFps = rates?.decodedFps,
 			videoDecoderName = decoderDiagnostics.video?.name,
 			videoDecoderType = decoderDiagnostics.video?.type,
@@ -660,6 +862,7 @@ class LibVLCBackend(
 			subtitleExtractor = "libVLC",
 			subtitleRender = "libVLC",
 			backendDetails = buildMap {
+				put("Video outputs", videoOutputCount.toString())
 				if (stats != null) putAll(libVLCBackendDetails(stats, rates))
 				putAll(trackDiagnostics.details)
 			},
@@ -667,18 +870,29 @@ class LibVLCBackend(
 	}
 
 	private fun onPlayerEvent(event: MediaPlayer.Event) {
+		// A queued startup event must not hide a resume failure before the user retries.
+		if (initialSeekFailed) return
 		when (event.type) {
 			MediaPlayer.Event.Opening -> {
 				surroundBoostAllowed = false
 				setSurroundBoostGain(0)
 				bufferingPercent = 0f
+				bufferingReceived = false
 				playbackActive = false
 				listener?.onPlayStateChange(PlayState.BUFFERING)
 			}
 			MediaPlayer.Event.Buffering -> {
+				bufferingReceived = true
 				bufferingPercent = normalizeBufferingPercent(event.buffering, bufferingPercent)
-				bufferingPlayState(bufferingPercent, playbackActive, player.isPlaying)
-					?.let { listener?.onPlayStateChange(it) }
+				publishPlaybackState()
+			}
+			MediaPlayer.Event.SeekableChanged -> {
+				if (event.seekable && pendingStartPosition != null && !player.isPlaying) applyPendingStartPosition()
+			}
+			MediaPlayer.Event.Vout -> {
+				videoOutputCount = event.voutCount
+				if (videoOutputCount > 0) player.updateVideoSurfaces()
+				publishPlaybackState()
 			}
 			MediaPlayer.Event.ESAdded -> when (event.esChangedType) {
 				IMedia.Track.Type.Audio -> {
@@ -704,8 +918,11 @@ class LibVLCBackend(
 				else -> Unit
 			}
 			MediaPlayer.Event.Playing -> {
+				if (!startPlayWhenReady) {
+					if (player.isPlaying) player.pause()
+					return
+				}
 				surroundBoostAllowed = true
-				bufferingPercent = 100f
 				playbackActive = true
 				applyInitialTrackSelection()
 				updateSurroundVolumeBoost()
@@ -713,7 +930,7 @@ class LibVLCBackend(
 				handler.removeCallbacks(tick)
 				lastTickPosition = getPositionInfo().active
 				handler.post(tick)
-				listener?.onPlayStateChange(PlayState.PLAYING)
+				publishPlaybackState()
 			}
 			MediaPlayer.Event.Paused -> {
 				if (applyPendingStartPosition()) return
@@ -748,11 +965,34 @@ class LibVLCBackend(
 		}
 	}
 
+	private fun publishPlaybackState() {
+		if (!playbackActive || !startPlayWhenReady) return
+		val needsVideo = currentStream?.tracks?.any { it is MediaStreamVideoTrack } == true
+		// Local files may never report buffering; wait for video output without inventing a buffer stall.
+		val state = bufferingPlayState(
+			percent = if (bufferingReceived) bufferingPercent else 100f,
+			playbackActive = playbackActive,
+			waitingForVideo = needsVideo && videoOutputCount == 0,
+		)
+		state?.let { listener?.onPlayStateChange(it) }
+	}
+
 	private fun applyPendingStartPosition(): Boolean {
 		val position = pendingStartPosition ?: return false
 		val result = player.setTime(position.inWholeMilliseconds)
 		Timber.i("VLC initial seek requestedMs=%d seekable=%s result=%d", position.inWholeMilliseconds, player.isSeekable, result)
-		if (result < 0) return false
+		if (result < 0) {
+			initialSeekFailed = true
+			// Do not hide a rejected resume behind a permanent pending seek or silently play from zero.
+			pendingStartPosition = null
+			initialPositionForReporting = null
+			startPlayWhenReady = false
+			playbackActive = false
+			handler.removeCallbacks(tick)
+			listener?.onPlayStateChange(PlayState.ERROR)
+			listener?.onPlaybackError(PlaybackError("LIBVLC_INITIAL_SEEK_FAILED", origin = currentStream?.errorOrigin))
+			return true
+		}
 		pendingStartPosition = null
 		lastTickPosition = position
 		if (!startPlayWhenReady) return false
@@ -781,9 +1021,7 @@ class LibVLCBackend(
 		streamIndex: Int,
 	): Boolean {
 		if (type == TrackType.SUBTITLE && streamIndex < 0) {
-			if (player.getSelectedTrack(IMedia.Track.Type.Text) == null) return true
-			player.unselectTrackType(IMedia.Track.Type.Text)
-			return true
+			return player.spuTrack == -1 || player.setSpuTrack(-1)
 		}
 		val sourceIndex = stream.sourceTrackIndex(type, streamIndex)
 		if (sourceIndex == null) {
@@ -792,8 +1030,8 @@ class LibVLCBackend(
 		}
 		val track = selectableTracks(type).getOrNull(sourceIndex) ?: return false
 		val selected = when (type) {
-			TrackType.AUDIO -> player.getSelectedTrack(IMedia.Track.Type.Audio)?.id == track.id || player.selectTrack(track.id)
-			TrackType.SUBTITLE -> player.getSelectedTrack(IMedia.Track.Type.Text)?.id == track.id || player.selectTrack(track.id)
+			TrackType.AUDIO -> player.audioTrack == track.id || player.setAudioTrack(track.id)
+			TrackType.SUBTITLE -> player.spuTrack == track.id || player.setSpuTrack(track.id)
 		}
 		if (selected) {
 			Timber.i("Applied initial %s stream index %d as libVLC track %s", type.name.lowercase(), streamIndex, track.id)
@@ -801,18 +1039,24 @@ class LibVLCBackend(
 		return selected
 	}
 
-	private fun selectableTracks(type: TrackType, mediaIds: List<String> = mediaTrackIds(type)): List<IMedia.Track> {
-		val vlcType = type.libVLCTrackType()
-		val descriptions = player.getTracks(vlcType).orEmpty()
-		val descriptionsById = descriptions.associateBy(IMedia.Track::id)
-		return orderedLibVLCTrackIds(mediaIds, descriptions.map(IMedia.Track::id))
+	private fun selectableTracks(type: TrackType, mediaIds: List<Int> = mediaTrackIds(type)): List<MediaPlayer.TrackDescription> {
+		val descriptions = when (type) {
+			TrackType.AUDIO -> player.audioTracks
+			TrackType.SUBTITLE -> player.spuTracks
+		}.orEmpty()
+		val descriptionsById = descriptions.associateBy { it.id }
+		return orderedLibVLCTrackIds(mediaIds, descriptions.map { it.id })
 			.mapNotNull(descriptionsById::get)
 	}
 
-	private fun mediaTrackIds(type: TrackType): List<String> {
+	private fun mediaTrackIds(type: TrackType): List<Int> = mediaTracks()
+		.filter { it.type == type.libVLCTrackType() }.map { it.id }
+
+	private fun mediaTracks(): List<IMedia.Track> {
+		if (released || !mediaReady) return emptyList()
 		val media = player.media ?: return emptyList()
 		return try {
-			media.getTracks(type.libVLCTrackType()).orEmpty().map(IMedia.Track::id)
+			(0 until media.trackCount).mapNotNull(media::getTrack)
 		} finally {
 			media.release()
 		}
@@ -827,33 +1071,44 @@ class LibVLCBackend(
 		sarNum: Int,
 		sarDen: Int,
 	) {
-		listener?.onVideoGeometryChange(
-			libVLCVideoGeometry(width, height, visibleWidth, visibleHeight, sarNum, sarDen)
-		)
+		if (released || !mediaReady || vout !== player.vlcVout) return
+		videoSurfaceWidthScale = if (width > 0 && visibleWidth > 0) width.toDouble() / visibleWidth else 1.0
+		videoSurfaceHeightScale = if (height > 0 && visibleHeight > 0) height.toDouble() / visibleHeight else 1.0
+		updateVideoWindowSize()
+		listener?.onVideoGeometryChange(libVLCVideoGeometry(width, height, visibleWidth, visibleHeight, sarNum, sarDen))
 	}
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
+		if (released || !mediaReady) return emptyList()
 		val mediaIds = mediaTrackIds(type)
 		val sourceTracks = currentStream?.libVLCSourceTracks(type, mediaIds.size).orEmpty()
 		val tracks = selectableTracks(type, mediaIds)
+		val metadata = mediaTracks().filter { it.type == type.libVLCTrackType() }.associateBy { it.id }
+		val selectedId = when (type) {
+			TrackType.AUDIO -> player.audioTrack
+			TrackType.SUBTITLE -> player.spuTrack
+		}
 		return tracks.mapIndexed { index, track ->
-			libVLCPlayerTrack(index, type, track, sourceTracks.getOrNull(index))
+			libVLCPlayerTrack(index, type, track.id, track.name, metadata[track.id], selectedId, sourceTracks.getOrNull(index))
 		}
 	}
 
 	override fun selectTrack(type: TrackType, index: Int): Boolean {
+		if (released || !mediaReady) return false
 		pendingInitialTrackTypes -= type
 		val stream = currentStream ?: return false
 		if (type == TrackType.SUBTITLE && index == -1) {
 			if (!stream.allowsLocalSubtitleDisable()) return false
-			player.unselectTrackType(IMedia.Track.Type.Text)
-			return true
+			return player.setSpuTrack(-1)
 		}
 		val mediaIds = mediaTrackIds(type)
 		val track = selectableTracks(type, mediaIds).getOrNull(index) ?: return false
 		val sourceTrack = stream.libVLCSourceTracks(type, mediaIds.size).getOrNull(index)
 		if (!stream.allowsLocalTrackSelection(type, sourceTrack)) return false
-		return player.selectTrack(track.id)
+		return when (type) {
+			TrackType.AUDIO -> player.setAudioTrack(track.id)
+			TrackType.SUBTITLE -> player.setSpuTrack(track.id)
+		}
 	}
 }
 
@@ -862,9 +1117,9 @@ private fun TrackType.libVLCTrackType() = when (this) {
 	TrackType.SUBTITLE -> IMedia.Track.Type.Text
 }
 
-internal fun bufferingPlayState(percent: Float, playbackActive: Boolean, playerIsPlaying: Boolean): PlayState? = when {
+internal fun bufferingPlayState(percent: Float, playbackActive: Boolean, waitingForVideo: Boolean = false): PlayState? = when {
 	!playbackActive -> null
-	percent < 100f && playerIsPlaying -> null
+	waitingForVideo -> PlayState.BUFFERING
 	percent < 100f -> PlayState.BUFFERING
 	else -> PlayState.PLAYING
 }
@@ -872,23 +1127,26 @@ internal fun bufferingPlayState(percent: Float, playbackActive: Boolean, playerI
 internal fun libVLCPlayerTrack(
 	index: Int,
 	type: TrackType,
-	track: IMedia.Track,
+	trackId: Int,
+	trackName: String?,
+	metadata: IMedia.Track?,
+	selectedId: Int,
 	source: MediaStreamTrack?,
 ) = PlayerTrack(
 	index = index,
 	type = type,
-	label = track.name ?: when (source) {
+	label = trackName ?: when (source) {
 		is MediaStreamAudioTrack -> source.title
 		is MediaStreamSubtitleTrack -> source.title
 		else -> null
 	},
-	language = track.language ?: when (source) {
+	language = metadata?.language ?: when (source) {
 		is MediaStreamAudioTrack -> source.language
 		is MediaStreamSubtitleTrack -> source.language
 		else -> null
 	},
-	codec = track.codec ?: source?.codec,
-	isSelected = track.selected,
+	codec = metadata?.codec ?: source?.codec,
+	isSelected = trackId == selectedId,
 	streamIndex = source?.index,
 	trackIndex = index,
 )
@@ -985,7 +1243,7 @@ internal fun libVLCTrackDiagnostics(
 	)
 }
 
-private fun Long.nonNegativeBytes() = coerceAtLeast(0).formatBufferBytes()
+private fun Int.nonNegativeBytes() = coerceAtLeast(0).toLong().formatBufferBytes()
 
 private fun Float.byteRate() = takeIf { it.isFinite() && it > 0f }
 	?.toLong()

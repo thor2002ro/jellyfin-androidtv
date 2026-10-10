@@ -59,7 +59,7 @@ class LibVLCStatsTests : StringSpec({
 	"libVLC statistics hide inactive stream output garbage" {
 		val stats = IMedia.Stats(
 			0, 0f, 0, 0f, 0, 0, 0, 0, 0, 0, 0, 0,
-			0, 12_884_901_888, 0f,
+			0, Int.MAX_VALUE, 0f,
 		)
 
 		libVLCBackendDetails(stats, rates = null).shouldNotContainKey("Stream output")
@@ -67,11 +67,11 @@ class LibVLCStatsTests : StringSpec({
 
 	"libVLC selected tracks expose codec profile level and rates" {
 		val video = IMedia.VideoTrack(
-			"video/0", "Main video", true, "hevc", "hvc1", 0, 2, 153, 12_000_000,
+			"hevc", "hvc1", 0, 0, 2, 153, 12_000_000,
 			"und", null, 1080, 1920, 1, 1, 24_000, 1_001, 0, 0,
 		)
 		val audio = IMedia.AudioTrack(
-			"audio/0", "English", true, "eac3", "ec-3", 0, 0, 0, 640_000,
+			"eac3", "ec-3", 0, 0, 0, 0, 640_000,
 			"eng", null, 6, 48_000,
 		)
 
