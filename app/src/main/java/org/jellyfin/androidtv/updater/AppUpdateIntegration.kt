@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,7 +77,16 @@ fun AppUpdatePrompt(
 ) {
 	val update by notificationsRepository.appUpdatePrompt.collectAsState()
 	val destination by navigationRepository.currentDestination.collectAsState()
-	val availableUpdate = appUpdatePrompt(update, Destinations.isPlayback(destination)) ?: return
+	val hostWindowFocused = LocalWindowInfo.current.isWindowFocused
+	var promptedUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+	val availableUpdate = appUpdatePrompt(
+		update = update,
+		currentPrompt = promptedUpdate,
+		isPlayback = Destinations.isPlayback(destination),
+		hostWindowFocused = hostWindowFocused,
+	)
+	SideEffect { promptedUpdate = availableUpdate }
+	availableUpdate ?: return
 	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
 	var downloading by remember(availableUpdate) { mutableStateOf(false) }
 	var downloadProgress by remember(availableUpdate) { mutableStateOf<Int?>(null) }
@@ -406,5 +417,13 @@ private data class InstallOutcome(
 	val installerStarted: Boolean = false,
 )
 
-internal fun appUpdatePrompt(update: AppUpdate?, isPlayback: Boolean) =
-	update?.takeUnless { isPlayback }
+internal fun appUpdatePrompt(
+	update: AppUpdate?,
+	currentPrompt: AppUpdate?,
+	isPlayback: Boolean,
+	hostWindowFocused: Boolean,
+) = when {
+	update == null || isPlayback -> null
+	currentPrompt != null || hostWindowFocused -> update
+	else -> null
+}
