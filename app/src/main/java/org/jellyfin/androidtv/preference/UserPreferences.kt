@@ -305,6 +305,8 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 */
 		var videoStartDelay = longPreference("video_start_delay", 0)
 
+		var skipPromptTimeout = intPreference("skip_prompt_timeout", 10)
+
 		/**
 		 * The actions to take for each media segment type. Managed by the [MediaSegmentRepository].
 		 */
