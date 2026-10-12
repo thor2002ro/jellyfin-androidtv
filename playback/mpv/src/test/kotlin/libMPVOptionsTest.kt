@@ -85,6 +85,7 @@ class LibMPVOptionsTest : StringSpec({
 			"gpu-api" to "auto",
 			"video-sync" to "audio",
 			"framedrop" to "vo",
+			"deinterlace" to "no",
 			"interpolation" to "no",
 			"scale" to "bilinear",
 			"cscale" to "bilinear",
@@ -229,6 +230,7 @@ class LibMPVOptionsTest : StringSpec({
 		isLibMPVOptionManagedByJellyfin("sub-margin-y") shouldBe true
 		isLibMPVOptionManagedByJellyfin("cache-pause-wait") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-readahead-secs") shouldBe true
+		isLibMPVOptionManagedByJellyfin("deinterlace") shouldBe true
 		isLibMPVOptionManagedByJellyfin("vo") shouldBe true
 		isLibMPVOptionManagedByJellyfin("hwdec") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-ass-override") shouldBe true

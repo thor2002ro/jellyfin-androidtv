@@ -38,6 +38,7 @@ import org.jellyfin.androidtv.preference.mpvAudioSpdif
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
+import org.jellyfin.androidtv.preference.mpvDeinterlace
 import org.jellyfin.androidtv.preference.mpvFrameDrop
 import org.jellyfin.androidtv.preference.mpvGpuApi
 import org.jellyfin.androidtv.preference.mpvGpuContext
@@ -84,6 +85,7 @@ fun SettingsPlaybackLibMPVScreen() {
 	val gpuApi by rememberPreference(userPreferences, UserPreferences.mpvGpuApi)
 	val videoSync by rememberPreference(userPreferences, UserPreferences.mpvVideoSync)
 	val frameDrop by rememberPreference(userPreferences, UserPreferences.mpvFrameDrop)
+	val deinterlace by rememberPreference(userPreferences, UserPreferences.mpvDeinterlace)
 	val scaler by rememberPreference(userPreferences, UserPreferences.mpvScaler)
 	val toneMapping by rememberPreference(userPreferences, UserPreferences.mpvToneMapping)
 	val audioOutput by rememberPreference(userPreferences, UserPreferences.mpvAudioOutput)
@@ -138,6 +140,7 @@ fun SettingsPlaybackLibMPVScreen() {
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_video)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.VIDEO_SYNC, videoSync) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.FRAME_DROP, frameDrop) }
+		item { LibMPVChoiceButton(LibMPVChoiceSetting.DEINTERLACE, deinterlace) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.SCALER, scaler) }
 		item {
 			LibMPVBooleanButton(
