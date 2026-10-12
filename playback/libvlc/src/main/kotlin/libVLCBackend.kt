@@ -433,7 +433,7 @@ class LibVLCBackend(
 	override fun seekTo(position: Duration): Boolean {
 		val previous = getPositionInfo()
 		if (player.setTime(position.inWholeMilliseconds) < 0) {
-			Timber.w("LibVLC rejected seek to %d ms", position.inWholeMilliseconds)
+			Timber.w("libVLC rejected seek to %d ms", position.inWholeMilliseconds)
 			return false
 		}
 		initialPositionForReporting = null
@@ -500,12 +500,12 @@ class LibVLCBackend(
 	override fun setSubtitleTiming(offset: Duration, speed: Float) {
 		subtitleTimingOffset = offset
 		applySubtitleTimingOffset()
-		if (speed != 1f) Timber.w("LibVLC does not support subtitle timing speed")
+		if (speed != 1f) Timber.w("libVLC does not support subtitle timing speed")
 	}
 
 	private fun applySubtitleTimingOffset() {
 		if (!player.setSpuDelay(subtitleTimingOffset.inWholeMicroseconds)) {
-			Timber.w("LibVLC rejected subtitle timing offset")
+			Timber.w("libVLC rejected subtitle timing offset")
 		}
 	}
 
@@ -553,21 +553,21 @@ class LibVLCBackend(
 		return PlaybackFrameStats(
 			droppedFrames = stats?.lostPictures ?: 0,
 			corruptedFrames = stats?.demuxCorrupted ?: 0,
-			playerName = "LibVLC",
+			playerName = "libVLC",
 			videoDecodedFrames = stats?.decodedVideo ?: 0,
 			videoDecoderFps = rates?.decodedFps,
-			videoDecoderName = "LibVLC ${effectiveVideoDecoder.label}",
+			videoDecoderName = "libVLC ${effectiveVideoDecoder.label}",
 			videoCodec = trackDiagnostics.videoCodec,
 			videoSourceFps = trackDiagnostics.videoSourceFps,
 			videoBitrate = trackDiagnostics.videoBitrate,
+			audioDecoderName = "libVLC",
 			audioCodec = trackDiagnostics.audioCodec,
-			audioDecoderName = "LibVLC",
 			audioBitrate = trackDiagnostics.audioBitrate,
 			audioChannels = trackDiagnostics.audioChannels,
 			audioSampleRate = trackDiagnostics.audioSampleRate,
 			bufferedBytes = bufferDetails,
-			subtitleExtractor = "LibVLC",
-			subtitleRender = "LibVLC",
+			subtitleExtractor = "libVLC",
+			subtitleRender = "libVLC",
 			backendDetails = buildMap {
 				if (stats != null) putAll(libVLCBackendDetails(stats, rates))
 				putAll(trackDiagnostics.details)
@@ -668,7 +668,7 @@ class LibVLCBackend(
 			TrackType.SUBTITLE -> player.spuTrack == track.id || player.setSpuTrack(track.id)
 		}
 		if (selected) {
-			Timber.i("Applied initial %s stream index %d as LibVLC track %d", type.name.lowercase(), streamIndex, track.id)
+			Timber.i("Applied initial %s stream index %d as libVLC track %d", type.name.lowercase(), streamIndex, track.id)
 		}
 		return selected
 	}

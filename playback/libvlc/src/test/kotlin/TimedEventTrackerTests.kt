@@ -27,7 +27,7 @@ class TimedEventTrackerTests : StringSpec({
 		estimateBufferedBytes(2_000_000f, 5.seconds) shouldBe 10_000_000L
 	}
 
-	"LibVLC descriptions follow media track IDs with unmatched slaves appended" {
+	"libVLC descriptions follow media track IDs with unmatched slaves appended" {
 		orderedLibVLCTrackIds(
 			mediaTrackIds = listOf(7, 3),
 			descriptionTrackIds = listOf(-1, 3, 7, 9),
@@ -45,7 +45,7 @@ class TimedEventTrackerTests : StringSpec({
 		activations shouldBe 1
 	}
 
-	"LibVLC network cache follows the normal buffer duration and live tv override" {
+	"libVLC network cache follows the normal buffer duration and live tv override" {
 		libVLCMediaOptions(
 			isLiveTv = true,
 			normalBufferDuration = 120.seconds,
@@ -88,7 +88,7 @@ class TimedEventTrackerTests : StringSpec({
 		resolveDeblocking(4, fastDevice) shouldBe 4
 	}
 
-	"subtitle style maps to one LibVLC startup option set" {
+	"subtitle style maps to one libVLC startup option set" {
 		val options = PlayerSubtitleStyle(
 			textColor = 0x80445566.toInt(),
 			backgroundColor = 0x40112233,
@@ -125,7 +125,7 @@ class TimedEventTrackerTests : StringSpec({
 		shouldSelectExternalSubtitle(subtitle, 4) shouldBe true
 	}
 
-	"source track indexes follow LibVLC embedded then external subtitle order" {
+	"source track indexes follow libVLC embedded then external subtitle order" {
 		val stream = PlayableMediaStream(
 			identifier = "test",
 			conversionMethod = MediaConversionMethod.None,
