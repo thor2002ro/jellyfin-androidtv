@@ -16,7 +16,7 @@ class Av1CodecCapabilities(
 		internal const val AV1_PROFILE_MAIN10 = 0x2
 		internal const val AV1_PROFILE_MAIN10_HDR10 = 0x1000
 		internal const val AV1_PROFILE_MAIN10_HDR10_PLUS = 0x2000
-		internal const val AV1_LEVEL5 = 0x1000
+		internal const val AV1_LEVEL2 = 0x1
 		internal const val DV_PROFILE_DVAV1_10 = 0x400
 	}
 

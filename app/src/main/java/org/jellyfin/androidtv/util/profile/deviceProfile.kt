@@ -32,6 +32,9 @@ import org.jellyfin.playback.dovi.DoviRoute
 import org.jellyfin.playback.dovi.DoviVideoCodec
 import kotlin.math.roundToInt
 
+private const val VIDEO_BIT_DEPTH_8 = 8
+private const val VIDEO_BIT_DEPTH_10 = 10
+
 private val downmixSupportedAudioCodecs = arrayOf(
 	Codec.Audio.AAC,
 	Codec.Audio.MP2,
@@ -146,6 +149,7 @@ internal fun createDeviceProfile(
 	)
 }
 
+@OptIn(UnstableApi::class)
 internal fun createDeviceProfile(
 	mediaTest: MediaCodecCapabilitiesTest,
 	maxBitrate: Int,
@@ -202,6 +206,7 @@ internal fun createDeviceProfile(
 	val supportsVC1 = mediaTest.supportsVc1()
 	val supportsMpeg2 = mediaTest.supportsMpeg2()
 	val supportsMpeg4Asp = mediaTest.supportsMpeg4Asp()
+	val supportsMpeg4Simple = mediaTest.supportsMpeg4Simple()
 	val supportsVP8 = mediaTest.supportsVp8()
 	val supportsVP9 = mediaTest.supportsVp9()
 	val supportsVP9Main8 = mediaTest.supportsVp9Main8()
@@ -214,6 +219,7 @@ internal fun createDeviceProfile(
 	val maxHevcHeight = if (attemptSelectedHevcSource) maxResolution.maxHeight else maxResolutionHevc.height
 	val maxResolutionAV1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_AV1).capTo(maxResolution)
 	val maxResolutionVC1 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VC1).capTo(maxResolution)
+	val maxResolutionVP9 = mediaTest.getMaxResolution(MimeTypes.VIDEO_VP9).capTo(maxResolution)
 
 	/// HDR capabilities
 
@@ -477,8 +483,14 @@ internal fun createDeviceProfile(
 		conditions {
 			when {
 				!supportsAV1 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
-				!supportsAV1Main10 -> ProfileConditionValue.VIDEO_PROFILE notEquals "main 10"
-				else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+				else -> ProfileConditionValue.VIDEO_PROFILE equals "main"
+			}
+			if (supportsAV1) {
+				ProfileConditionValue.VIDEO_BIT_DEPTH lowerThanOrEquals if (supportsAV1Main10) {
+					VIDEO_BIT_DEPTH_10
+				} else {
+					VIDEO_BIT_DEPTH_8
+				}
 			}
 		}
 	}
@@ -511,19 +523,49 @@ internal fun createDeviceProfile(
 		}
 	}
 
-	for ((videoCodec, supported) in arrayOf(
-		Codec.Video.MPEG4 to supportsMpeg4Asp,
-		Codec.Video.VP8 to supportsVP8,
-		Codec.Video.VP9 to supportsVP9,
-	)) {
-		codecProfile {
-			type = CodecType.VIDEO
-			codec = videoCodec
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.MPEG4
+		conditions {
+			val profiles = listOfNotNull(
+				if (supportsMpeg4Simple) "Simple Profile" else null,
+				if (supportsMpeg4Asp) "Advanced Simple Profile" else null,
+			)
+			if (profiles.isEmpty()) ProfileConditionValue.VIDEO_PROFILE equals "none"
+			else ProfileConditionValue.VIDEO_PROFILE inCollection profiles
+		}
+	}
 
-			conditions {
-				when {
-					!supported -> ProfileConditionValue.VIDEO_PROFILE equals "none"
-					else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.VP8
+		conditions {
+			when {
+				!supportsVP8 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+				else -> ProfileConditionValue.VIDEO_PROFILE notEquals "none"
+			}
+		}
+	}
+
+	// VP9 profiles 0 and 2 are the 4:2:0 profiles used by Android video decoders.
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.VP9
+
+		conditions {
+			when {
+				!supportsVP9 -> ProfileConditionValue.VIDEO_PROFILE equals "none"
+				supportsVP9Main10 -> ProfileConditionValue.VIDEO_PROFILE inCollection listOfNotNull(
+					if (supportsVP9Main8) "profile 0" else null,
+					"profile 2",
+				)
+				else -> ProfileConditionValue.VIDEO_PROFILE equals "profile 0"
+			}
+			if (supportsVP9) {
+				ProfileConditionValue.VIDEO_BIT_DEPTH lowerThanOrEquals if (supportsVP9Main10) {
+					VIDEO_BIT_DEPTH_10
+				} else {
+					VIDEO_BIT_DEPTH_8
 				}
 			}
 		}
@@ -573,6 +615,17 @@ internal fun createDeviceProfile(
 		conditions {
 			ProfileConditionValue.WIDTH lowerThanOrEquals maxResolutionVC1.width
 			ProfileConditionValue.HEIGHT lowerThanOrEquals maxResolutionVC1.height
+		}
+	}
+
+	// VP9
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = Codec.Video.VP9
+
+		conditions {
+			ProfileConditionValue.WIDTH lowerThanOrEquals maxResolutionVP9.width
+			ProfileConditionValue.HEIGHT lowerThanOrEquals maxResolutionVP9.height
 		}
 	}
 
@@ -626,6 +679,7 @@ internal fun createDeviceProfile(
 		} else {
 			unsupported
 		}
+		addUnsupportedVideoRanges(videoCodec, excludedRanges)
 		addServerDoviRemuxMetadataWorkaround(videoCodec, excludedRanges, doviPlaybackPlan)
 	}
 

@@ -57,10 +57,13 @@ class Av1CodecCapabilitiesTest : FunSpec({
 		Av1CodecCapabilities(query).supportsAv1() shouldBe false
 	}
 
-	test("supportsAv1Main10 returns true when device supports Main10 at Level 5") {
+	test("supportsAv1Main10 returns true when device supports Main10 at the minimum level") {
 		every { AndroidVersion.sdkInt } returns apiQ
 		val query = mockk<MediaCodecQuery> {
-			every { hasDecoder(mimeAv1, any(), any()) } returns true
+			every { hasDecoder(mimeAv1, any(), any()) } answers {
+				secondArg<Int>() == CodecProfileLevel.AV1ProfileMain10 &&
+					thirdArg<Int>() == CodecProfileLevel.AV1Level2
+			}
 		}
 		Av1CodecCapabilities(query).supportsAv1Main10() shouldBe true
 	}
@@ -96,7 +99,7 @@ class Av1CodecCapabilitiesTest : FunSpec({
 			query.hasDecoder(
 				mimeAv1,
 				Av1CodecCapabilities.AV1_PROFILE_MAIN10,
-				Av1CodecCapabilities.AV1_LEVEL5,
+				Av1CodecCapabilities.AV1_LEVEL2,
 			)
 		}
 	}
@@ -169,7 +172,7 @@ class Av1CodecCapabilitiesTest : FunSpec({
 			query.hasDecoder(
 				mimeAv1,
 				Av1CodecCapabilities.AV1_PROFILE_MAIN10_HDR10,
-				Av1CodecCapabilities.AV1_LEVEL5,
+				Av1CodecCapabilities.AV1_LEVEL2,
 			)
 		}
 	}
@@ -204,7 +207,7 @@ class Av1CodecCapabilitiesTest : FunSpec({
 			query.hasDecoder(
 				mimeAv1,
 				Av1CodecCapabilities.AV1_PROFILE_MAIN10_HDR10_PLUS,
-				Av1CodecCapabilities.AV1_LEVEL5,
+				Av1CodecCapabilities.AV1_LEVEL2,
 			)
 		}
 	}

@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.util.profile.codec.Av1CodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.AvcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.HevcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
+import org.jellyfin.androidtv.util.profile.codec.Vp9CodecCapabilities
 
 @OptIn(UnstableApi::class)
 class MediaCodecCapabilitiesTest(
@@ -20,6 +21,7 @@ class MediaCodecCapabilitiesTest(
 	private val avc by lazy { AvcCodecCapabilities(codecQuery) }
 	private val hevc by lazy { HevcCodecCapabilities(codecQuery) }
 	private val av1 by lazy { Av1CodecCapabilities(codecQuery) }
+	private val vp9 by lazy { Vp9CodecCapabilities(codecQuery) }
 
 	fun supportsAV1(): Boolean = av1.supportsAv1()
 
@@ -70,6 +72,9 @@ class MediaCodecCapabilitiesTest(
 	fun supportsMimeType(mime: String): Boolean = codecQuery.hasCodecForMime(mime)
 
 	fun supportsMpeg2(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_MPEG2)
+
+	fun supportsMpeg4Simple(): Boolean =
+		codecQuery.getDecoderLevel(MimeTypes.VIDEO_MP4V, CodecProfileLevel.MPEG4ProfileSimple) > 0
 
 	// DivX and Xvid require Advanced Simple Profile; a Simple Profile decoder is insufficient.
 	fun supportsMpeg4Asp(): Boolean =

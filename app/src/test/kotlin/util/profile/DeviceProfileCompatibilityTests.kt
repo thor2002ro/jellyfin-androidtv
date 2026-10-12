@@ -15,7 +15,9 @@ import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.DlnaProfileType
 import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.ProfileConditionType
+import org.jellyfin.sdk.model.api.ProfileCondition
 import org.jellyfin.sdk.model.api.ProfileConditionValue
+import org.jellyfin.sdk.model.api.VideoRangeType
 
 class DeviceProfileCompatibilityTests : FunSpec({
 	afterTest { unmockkConstructor(Size::class) }
@@ -422,6 +424,9 @@ private fun deviceProfile(
 	supportsVp9Hdr10Plus: Boolean = false,
 	supportsHevcHdr10: Boolean = false,
 	mpeg4AspSupported: Boolean = false,
+	mpeg4SimpleSupported: Boolean = false,
+	maxVideoWidth: Int = 3840,
+	maxVideoHeight: Int = 2160,
 	supportedAudioMimes: Set<String> = emptySet(),
 	supportedVideoMimes: Set<String> = emptySet(),
 	forceEnabledHdr: Set<VideoRangeType> = emptySet(),
@@ -437,11 +442,11 @@ private fun deviceProfile(
 	),
 ): DeviceProfile {
 	mockkConstructor(Size::class)
-	every { anyConstructed<Size>().width } returns 3840
-	every { anyConstructed<Size>().height } returns 2160
+	every { anyConstructed<Size>().width } returns maxVideoWidth
+	every { anyConstructed<Size>().height } returns maxVideoHeight
 	val size = mockk<Size> {
-		every { width } returns 3840
-		every { height } returns 2160
+		every { width } returns maxVideoWidth
+		every { height } returns maxVideoHeight
 	}
 	val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
 		every { getMaxResolution(any()) } returns size
@@ -451,6 +456,7 @@ private fun deviceProfile(
 		every { supportsAV1HDR10Plus() } returns supportsAv1Hdr10Plus
 		every { supportsMpeg2() } returns (MimeTypes.VIDEO_MPEG2 in supportedVideoMimes)
 		every { supportsMpeg4Asp() } returns mpeg4AspSupported
+		every { supportsMpeg4Simple() } returns mpeg4SimpleSupported
 		every { supportsOpus() } returns true
 		every { supportsVp8() } returns (MimeTypes.VIDEO_VP8 in supportedVideoMimes)
 		every { supportsVp9() } returns (MimeTypes.VIDEO_VP9 in supportedVideoMimes || supportsVp9Main10)
@@ -493,6 +499,19 @@ private fun DeviceProfile.videoTranscodeProfile(container: String) = transcoding
 private fun DeviceProfile.announcedAudioCodecs() = directPlayProfiles.flatMap { profile ->
 	profile.audioCodec.declarations()
 }
+
+private fun DeviceProfile.videoCodecConditions(codec: String) = codecProfiles
+	.filter { it.codec == codec }
+	.flatMap { it.conditions }
+
+private fun DeviceProfile.unsupportedRanges(codec: String) = codecProfiles
+	.asSequence()
+	.filter { it.codec == codec }
+	.flatMap { it.applyConditions.asSequence() }
+	.filter { it.property == ProfileConditionValue.VIDEO_RANGE_TYPE }
+	.flatMap { it.value.orEmpty().split('|').asSequence() }
+	.filter(String::isNotEmpty)
+	.toSet()
 
 private fun String?.declarations() = orEmpty().split(',').filter(String::isNotBlank)
 
