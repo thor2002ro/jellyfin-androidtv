@@ -29,7 +29,7 @@ typealias RouteComposable = @Composable ((context: RouteContext) -> Unit)
 @Serializable
 data class RouteContext(
 	val route: String,
-	val parameters: RouteParameters,
+	val parameters: RouteParameters = emptyMap(),
 )
 
 class Router(
@@ -61,6 +61,7 @@ class Router(
 	}
 
 	fun back() {
+		if (backStack.size <= 1) return
 		backStack.removeLastOrNull()?.let(focusedKeys::remove)
 	}
 
