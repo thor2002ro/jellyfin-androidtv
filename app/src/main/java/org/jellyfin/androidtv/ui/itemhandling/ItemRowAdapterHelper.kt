@@ -346,7 +346,7 @@ private fun ItemRowAdapter.refreshLatestStreamBadges(api: ApiClient, items: List
 
 private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto>) {
 	replaceAll(
-		items = items.map { item -> latestMediaRowItem(item) },
+		items = items.map { item -> latestMediaRowItem(item, preferParentThumb, isStaticHeight) },
 		areItemsTheSame = { old, new -> (old as? BaseRowItem)?.itemId == (new as? BaseRowItem)?.itemId },
 	)
 	itemsLoaded = items.size
@@ -354,12 +354,16 @@ private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto
 	addRowToParentIfResultsReceived()
 }
 
-private fun ItemRowAdapter.latestMediaRowItem(item: BaseItemDto) = BaseItemDtoBaseRowItem(
-	item,
-	preferParentThumb,
-	isStaticHeight,
-	BaseRowItemSelectAction.ShowDetails,
-	preferParentThumb,
+internal fun latestMediaRowItem(
+	item: BaseItemDto,
+	preferParentThumb: Boolean,
+	staticHeight: Boolean,
+) = BaseItemDtoBaseRowItem(
+	item = item,
+	preferParentThumb = preferParentThumb,
+	staticHeight = staticHeight,
+	selectAction = BaseRowItemSelectAction.ShowDetails,
+	preferSeriesPoster = preferParentThumb,
 	showParentTitle = true,
 )
 

@@ -1,8 +1,13 @@
 package org.jellyfin.androidtv.ui.itemhandling
 
+import android.content.Context
+import android.content.res.Resources
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.every
+import io.mockk.mockk
+import org.jellyfin.androidtv.R
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaSourceInfo
@@ -12,6 +17,8 @@ import org.jellyfin.androidtv.util.apiclient.JellyfinImageSource
 import org.jellyfin.sdk.model.api.ImageType
 
 class BaseItemDtoBaseRowItemTests : FunSpec({
+	val context = mockk<Context>()
+
 	test("stream badge media is separate from the card item") {
 		val item = BaseItemDto(
 			id = UUID.randomUUID(),
@@ -101,6 +108,79 @@ class BaseItemDtoBaseRowItemTests : FunSpec({
 		updatedStreamBadgeRowItem.streamBadgeMediaSources shouldBe updatedBadgeSources
 	}
 
+	test("recently added season shows series title and season subtitle") {
+		val season = season(
+			name = "Season 1",
+			seriesName = "Example Series",
+		)
+
+		val rowItem = latestMediaRowItem(
+			item = season,
+			preferParentThumb = false,
+			staticHeight = false,
+		)
+
+		rowItem.getCardName(context) shouldBe "Example Series"
+		rowItem.getSubText(context) shouldBe "Season 1"
+	}
+
+	test("recently added season falls back when series title is missing") {
+		val season = season(name = "Season 1")
+
+		val rowItem = BaseItemDtoBaseRowItem(
+			item = season,
+			showParentTitle = true,
+		)
+
+		rowItem.getCardName(context) shouldBe "Season 1"
+		rowItem.getSubText(context) shouldBe ""
+	}
+
+	test("regular season keeps season title and episode count") {
+		val season = season(
+			name = "Season 1",
+			seriesName = "Example Series",
+			childCount = 8,
+		)
+		val resources = mockk<Resources>()
+		every { context.resources } returns resources
+		every { resources.getQuantityString(R.plurals.episodes, 8, 8) } returns "8 episodes"
+
+		val rowItem = BaseItemDtoBaseRowItem(item = season)
+
+		rowItem.getCardName(context) shouldBe "Season 1"
+		rowItem.getSubText(context) shouldBe "8 episodes"
+	}
+
+	test("copying recently added season preserves parent title presentation") {
+		val season = season(
+			name = "Season 1",
+			seriesName = "Example Series",
+		)
+		val rowItem = BaseItemDtoBaseRowItem(
+			item = season,
+			showParentTitle = true,
+		)
+
+		val copied = rowItem.copyWithItem(
+			item = season,
+			streamBadgeMediaSources = emptyList(),
+		)
+
+		copied.getCardName(context) shouldBe "Example Series"
+		copied.getSubText(context) shouldBe "Season 1"
+	}
+
+	test("parent title presentation participates in row content equality") {
+		val season = season(
+			name = "Season 1",
+			seriesName = "Example Series",
+		)
+
+		BaseItemDtoBaseRowItem(item = season, showParentTitle = true) shouldNotBe
+			BaseItemDtoBaseRowItem(item = season, showParentTitle = false)
+	}
+
 	test("wide episode cards prefer the series thumbnail over episode artwork") {
 		val seriesId = UUID.randomUUID()
 		val episode = BaseItemDto(
@@ -178,3 +258,15 @@ class BaseItemDtoBaseRowItemTests : FunSpec({
 	}
 
 })
+
+private fun season(
+	name: String,
+	seriesName: String? = null,
+	childCount: Int? = null,
+) = BaseItemDto(
+	id = UUID.randomUUID(),
+	type = BaseItemKind.SEASON,
+	name = name,
+	seriesName = seriesName,
+	childCount = childCount,
+)

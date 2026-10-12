@@ -24,8 +24,8 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	staticHeight: Boolean = false,
 	selectAction: BaseRowItemSelectAction = BaseRowItemSelectAction.ShowDetails,
 	val preferSeriesPoster: Boolean = false,
-	private val showParentTitle: Boolean = false,
 	val streamBadgeMediaSources: List<MediaSourceInfo>? = null,
+	val showParentTitle: Boolean = false,
 ) : BaseRowItem(
 	baseRowType = when (item.type) {
 		BaseItemKind.TV_CHANNEL,
@@ -73,13 +73,13 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	override val isPlayed get() = baseItem?.userData?.played == true
 
 	override fun getCardName(context: Context) = when {
-		showParentTitle && baseItem?.type == BaseItemKind.SEASON && !baseItem.seriesName.isNullOrBlank() -> baseItem.seriesName
-
+		showParentTitle &&
+			baseItem?.type == BaseItemKind.SEASON &&
+			!baseItem.seriesName.isNullOrBlank() -> baseItem.seriesName
 		baseItem?.type == BaseItemKind.AUDIO && baseItem.artists != null -> baseItem.artists?.joinToString(", ")
 		baseItem?.type == BaseItemKind.AUDIO && baseItem.albumArtists != null -> baseItem.albumArtists?.joinToString(", ")
 		baseItem?.type == BaseItemKind.AUDIO && baseItem.albumArtist != null -> baseItem.albumArtist
 		baseItem?.type == BaseItemKind.AUDIO && baseItem.album != null -> baseItem.album
-
 		else -> baseItem?.getFullName(context)
 	}
 
@@ -119,8 +119,11 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 			"$title $timestamp"
 		}
 
-		BaseItemKind.SEASON if showParentTitle && !baseItem.seriesName.isNullOrBlank() -> baseItem.name
-		BaseItemKind.SEASON -> baseItem.getSubName(context)
+		BaseItemKind.SEASON -> if (showParentTitle && !baseItem.seriesName.isNullOrBlank()) {
+			baseItem.name
+		} else {
+			baseItem.getSubName(context)
+		}
 
 		else -> baseItem?.getSubName(context)
 	}
@@ -135,7 +138,6 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 
 			baseItem?.type == BaseItemKind.SEASON -> baseItem.itemImages[ImageType.PRIMARY]
 				?: baseItem.seriesPrimaryImage
-
 			baseItem?.type == BaseItemKind.PROGRAM -> baseItem.itemImages[ImageType.THUMB]
 			baseItem?.type == BaseItemKind.AUDIO -> baseItem.albumPrimaryImage
 			else -> null
@@ -159,6 +161,7 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 		if (other is BaseItemDtoBaseRowItem) {
 			return other.baseItem == baseItem &&
 				other.streamBadgeMediaSources == streamBadgeMediaSources &&
+				other.showParentTitle == showParentTitle &&
 				other.showRemainingTimeBadge == showRemainingTimeBadge
 		}
 		return super.equals(other)
@@ -167,6 +170,7 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	override fun hashCode(): Int {
 		var result = baseItem?.hashCode() ?: 0
 		result = 31 * result + (streamBadgeMediaSources?.hashCode() ?: 0)
+		result = 31 * result + showParentTitle.hashCode()
 		result = 31 * result + showRemainingTimeBadge.hashCode()
 		return result
 	}
@@ -210,6 +214,7 @@ fun BaseItemDtoBaseRowItem.copyWithItem(
 		selectAction = selectAction,
 		preferSeriesPoster = preferSeriesPoster,
 		streamBadgeMediaSources = streamBadgeMediaSources,
+		showParentTitle = showParentTitle,
 	)
 }
 
