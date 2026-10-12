@@ -3,6 +3,7 @@ package org.jellyfin.playback.core.backend
 import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.support.PlaySupportReport
 import org.jellyfin.playback.core.timedevent.TimedEvent
@@ -21,6 +22,7 @@ interface PlayerBackend {
 	// UI
 	fun setSurfaceView(surfaceView: PlayerSurfaceView?)
 	fun setSubtitleView(surfaceView: PlayerSubtitleView?)
+	fun setVideoOutputTransform(transform: VideoOutputTransform) = Unit
 
 	// Data retrieval
 

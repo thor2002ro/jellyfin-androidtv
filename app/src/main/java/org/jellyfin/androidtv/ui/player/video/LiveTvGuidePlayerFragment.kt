@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
@@ -124,6 +125,8 @@ private fun LiveTvGuidePlayerScreen(
 	val coroutineScope = rememberCoroutineScope()
 	val mediaToastRegistry = remember { MediaToastRegistry(coroutineScope) }
 	var zoomMode by remember { mutableStateOf(userPreferences[UserPreferences.playerZoomMode]) }
+	val initialZoomStatus = stringResource(zoomMode.nameRes)
+	var zoomStatus by remember { mutableStateOf(initialZoomStatus) }
 	var guideItem by remember { mutableStateOf<BaseItemDto?>(null) }
 	var fullScreen by remember { mutableStateOf(false) }
 	var started by remember { mutableStateOf(false) }
@@ -157,12 +160,16 @@ private fun LiveTvGuidePlayerScreen(
 		BoxWithConstraints(
 			modifier = modifier.background(Color.Black),
 		) {
+			val fullscreenVideoReady = fullScreen && surfaceExpansion >= 1f
 			val playerWidth = GuidePlayerPreviewWidth + (maxWidth - GuidePlayerPreviewWidth) * surfaceExpansion
 			val playerHeight = GuidePlayerPreviewHeight + (maxHeight - GuidePlayerPreviewHeight) * surfaceExpansion
 
 			PlayerSurface(
 				playbackManager = playbackManager,
+				zoomMode = if (fullscreenVideoReady) zoomMode else ZoomMode.FIT,
 				modifier = Modifier
+				onZoomStatusChanged = { zoomStatus = it },
+				allowOutputTransform = fullscreenVideoReady,
 					.offset(x = 0.dp, y = 0.dp)
 					.size(playerWidth, playerHeight)
 					.padding(if (fullScreen) 0.dp else 1.dp),
@@ -173,6 +180,7 @@ private fun LiveTvGuidePlayerScreen(
 					playbackManager = playbackManager,
 					mediaToastRegistry = mediaToastRegistry,
 					zoomMode = zoomMode,
+					zoomStatus = zoomStatus,
 					onZoomModeSelected = { zoomMode = it },
 					onClosePlayer = { fullScreen = false },
 					onRemoteKeyEventHandlerChanged = { handler ->

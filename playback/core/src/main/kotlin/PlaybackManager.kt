@@ -7,6 +7,7 @@ import org.jellyfin.playback.core.backend.BackendService
 import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.mediastream.MediaStreamService
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.plugin.PlayerService
 import timber.log.Timber
 import kotlin.reflect.KClass
@@ -43,6 +44,10 @@ class PlaybackManager internal constructor(
 		Timber.i("Adding service $service")
 		service.initialize(this, state, Job(job))
 		services.add(service)
+	}
+
+	fun setVideoOutputTransform(transform: VideoOutputTransform) {
+		backendService.setVideoOutputTransform(transform)
 	}
 
 	fun <T : PlayerService> getService(kclass: KClass<T>): T? {
