@@ -384,7 +384,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Stream type", stream.streamType())
 					row("Display HDR support", displayHdrModes)
 					row("Position", "${positionInfo.active.formatDuration()}/${positionInfo.duration.formatDuration()}")
-					row("Buffer", positionInfo.formatBuffer())
+					row("Buffer", positionInfo.formatBuffer(frameStats.bufferedBytes))
 					if (speed != 1f) row("Speed", "${"%.2f".format(speed)}x")
 				},
 			),
@@ -949,9 +949,12 @@ private fun Duration.formatDuration(): String {
 	else "%d:%02d".format(minutes, seconds)
 }
 
-private fun PositionInfo.formatBuffer(): String {
+private fun PositionInfo.formatBuffer(bufferedBytes: String?): String {
 	val ahead = (buffer - active).coerceAtLeast(Duration.ZERO)
-	return "${buffer.formatDuration()} +${ahead.formatDuration()}"
+	return buildString {
+		append("${buffer.formatDuration()} +${ahead.formatDuration()}")
+		bufferedBytes?.let { append(" ($it)") }
+	}
 }
 
 private fun buildThumbnailCacheRows(
