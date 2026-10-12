@@ -21,6 +21,7 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -64,7 +65,8 @@ class PlaySessionService(
 	override suspend fun onInitialize() {
 		state.playState.onEach { playState ->
 			when (playState) {
-				PlayState.PLAYING -> {
+				PlayState.PLAYING,
+				PlayState.BUFFERING -> {
 					sendStreamStart()
 					startProgressReports(PROGRESS_REPORTING_INTERVAL)
 				}
@@ -208,6 +210,7 @@ class PlaySessionService(
 				delay(interval)
 				when (state.playState.value) {
 					PlayState.PLAYING,
+					PlayState.BUFFERING,
 					PlayState.PAUSED -> sendStreamUpdate()
 
 					PlayState.STOPPED,
@@ -284,6 +287,7 @@ class PlaySessionService(
 		val audioStreamIndex = getSelectedAudioStreamIndex()
 		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
 		val repeatMode = state.repeatMode.value.remoteRepeatMode
+		val canSeek = !entry.isDirectPlayLiveTv
 		val playbackOrder = when (state.playbackOrder.value) {
 			org.jellyfin.playback.core.model.PlaybackOrder.DEFAULT -> PlaybackOrder.DEFAULT
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
@@ -300,10 +304,10 @@ class PlaySessionService(
 					mediaSourceId = entry.mediaSourceId,
 					liveStreamId = entry.liveStreamId,
 					playlistItemId = item.playlistItemId,
-					canSeek = true,
+					canSeek = canSeek,
 					isMuted = state.volume.muted,
 					volumeLevel = (state.volume.volume * 100).roundToInt(),
-					isPaused = state.playState.value != PlayState.PLAYING,
+					isPaused = state.playState.value == PlayState.PAUSED,
 					aspectRatio = state.videoSize.value.aspectRatio.toString(),
 					positionTicks = reporting.positionTicks,
 					playMethod = playMethod,
@@ -329,7 +333,7 @@ class PlaySessionService(
 				playMethod = playMethod,
 				liveStreamId = entry.liveStreamId,
 				playSessionId = stream.identifier,
-				canSeek = true,
+				canSeek = canSeek,
 			)
 		}.onSuccess {
 			reported = true
@@ -368,12 +372,13 @@ class PlaySessionService(
 		val audioStreamIndex = getSelectedAudioStreamIndex()
 		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
 		val repeatMode = state.repeatMode.value.remoteRepeatMode
+		val canSeek = !entry.isDirectPlayLiveTv
 		val playbackOrder = when (state.playbackOrder.value) {
 			org.jellyfin.playback.core.model.PlaybackOrder.DEFAULT -> PlaybackOrder.DEFAULT
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
 			org.jellyfin.playback.core.model.PlaybackOrder.SHUFFLE -> PlaybackOrder.SHUFFLE
 		}
-		val isPaused = state.playState.value != PlayState.PLAYING
+		val isPaused = state.playState.value == PlayState.PAUSED
 
 		runCatching {
 			api.playStateApi.reportPlaybackProgress(
@@ -384,7 +389,7 @@ class PlaySessionService(
 					mediaSourceId = session.mediaSourceId,
 					liveStreamId = session.liveStreamId,
 					playlistItemId = session.playlistItemId,
-					canSeek = true,
+					canSeek = canSeek,
 					isMuted = state.volume.muted,
 					volumeLevel = (state.volume.volume * 100).roundToInt(),
 					isPaused = isPaused,
