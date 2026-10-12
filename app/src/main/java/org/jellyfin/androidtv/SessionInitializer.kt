@@ -11,12 +11,16 @@ import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.di.KoinInitializer
 import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
+import org.jellyfin.androidtv.util.TrackSelectionManager
+import org.jellyfin.androidtv.util.TrackSelectionStore
 
 @Suppress("unused")
 class SessionInitializer : Initializer<Unit> {
 	override fun create(context: Context) {
+		TrackSelectionManager.initialize(TrackSelectionStore(context))
 		LiveTvTrackCache.initialize(context)
 		SeriesStreamBadgeCache.initialize(context)
+
 		val koin = AppInitializer.getInstance(context)
 			.initializeComponent(KoinInitializer::class.java)
 			.koin

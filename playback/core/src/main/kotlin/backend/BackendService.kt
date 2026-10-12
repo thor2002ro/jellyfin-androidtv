@@ -78,6 +78,11 @@ class BackendService {
 		listeners.remove(listener)
 	}
 
+	/**
+	 * Get the track selection backend if the current backend supports it.
+	 */
+	fun getTrackSelectionBackend(): TrackSelectionBackend? = _backend as? TrackSelectionBackend
+
 	inner class BackendEventListener : PlayerBackendEventListener() {
 		private fun <T> callListeners(
 			body: PlayerBackendEventListener.() -> T
@@ -94,5 +99,9 @@ class BackendService {
 		override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
 			callListeners { onMediaStreamEnd(mediaStream) }
 		}
+		override fun onTracksChanged() {
+			callListeners { onTracksChanged() }
+		}
+
 	}
 }

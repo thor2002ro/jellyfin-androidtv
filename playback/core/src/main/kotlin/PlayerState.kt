@@ -23,6 +23,7 @@ interface PlayerState {
 	val playbackOrder: StateFlow<PlaybackOrder>
 	val repeatMode: StateFlow<RepeatMode>
 	val scrubbing: StateFlow<Boolean>
+	val trackRevision: StateFlow<Long>
 
 	/**
 	 * The position information for the currently playing item or [PositionInfo.EMPTY]. This
@@ -81,6 +82,9 @@ class MutablePlayerState(
 	private val _scrubbing = MutableStateFlow(false)
 	override val scrubbing: StateFlow<Boolean> get() = _scrubbing.asStateFlow()
 
+	private val _trackRevision = MutableStateFlow(0L)
+	override val trackRevision: StateFlow<Long> get() = _trackRevision.asStateFlow()
+
 	override val positionInfo: PositionInfo
 		get() = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
 
@@ -104,6 +108,10 @@ class MutablePlayerState(
 					backendService.backend?.play()
 				}
 			}
+			override fun onTracksChanged() {
+				_trackRevision.value++
+			}
+
 		})
 
 		volume = options.playerVolumeState

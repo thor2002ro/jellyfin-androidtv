@@ -46,6 +46,15 @@ class PlayerStateTests : FunSpec({
 
 		verify { backend.seekTo(30.seconds) }
 	}
+
+	test("backend track changes update shared player state") {
+		val backendService = BackendService()
+		val state = playerState(backend(), QueueEntry(), backendService = backendService)
+
+		backendService.BackendEventListener().onTracksChanged()
+
+		state.trackRevision.value shouldBe 1L
+	}
 })
 
 private fun playerState(
