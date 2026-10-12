@@ -39,6 +39,8 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioCapabilitiesReceiver
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
+import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -63,9 +65,12 @@ import io.github.peerless2012.ass.media.kt.withAssMkvSupport
 import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
 import io.github.peerless2012.ass.media.type.AssRenderType
 import io.github.peerless2012.ass.media.widget.AssSubtitleView
+import io.github.thor2002ro.libdovi.DoviException
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
+import org.jellyfin.playback.core.backend.PlaybackErrorOrigin
+import org.jellyfin.playback.core.backend.activate
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
@@ -86,6 +91,7 @@ import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
 import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PlayState
@@ -104,7 +110,18 @@ import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingRendererInv
 import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingAdjustmentSupported
 import org.jellyfin.playback.media3.exoplayer.support.getPlaySupportReport
 import org.jellyfin.playback.media3.exoplayer.support.toFormats
+import org.jellyfin.playback.exoplayer.dovi.DoviExtractorsFactory
+import org.jellyfin.playback.exoplayer.dovi.DoviHlsExtractorFactory
+import org.jellyfin.playback.exoplayer.dovi.DoviMediaSourceFactory
+import org.jellyfin.playback.exoplayer.dovi.DoviSampleTransformationException
+import org.jellyfin.playback.exoplayer.dovi.DoviTransformContext
+import org.jellyfin.playback.dovi.doviDecision
+import org.jellyfin.playback.dovi.DoviSourceLayer
+import org.jellyfin.playback.dovi.DoviSourceProfile
+import org.jellyfin.playback.dovi.toPlaybackDoviTransformStats
 import timber.log.Timber
+import java.util.Collections
+import java.util.WeakHashMap
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -254,6 +271,30 @@ private fun PlayableMediaStream.subtitleTrack(streamIndex: Int) = tracks
 	.filterIsInstance<MediaStreamSubtitleTrack>()
 	.firstOrNull { track -> track.index == streamIndex }
 
+internal fun Throwable.doviTransformationPlaybackErrorCode(): String? {
+	var current: Throwable? = this
+	val visited = mutableSetOf<Throwable>()
+	while (current != null && visited.add(current)) {
+		when (current) {
+			is DoviException -> return "DOVI_TRANSFORMATION_FAILED_${current.status.name}"
+			is DoviSampleTransformationException -> return "DOVI_TRANSFORMATION_FAILED_${current.status.name}"
+		}
+		current = current.cause
+	}
+	return null
+}
+
+internal data class PlaybackMediaItemTag(
+	val queueEntry: QueueEntry,
+	val errorOrigin: PlaybackErrorOrigin?,
+)
+
+internal val MediaItem.queueEntryTag: QueueEntry?
+	get() = (localConfiguration?.tag as? PlaybackMediaItemTag)?.queueEntry
+
+internal val MediaItem.errorOriginTag: PlaybackErrorOrigin?
+	get() = (localConfiguration?.tag as? PlaybackMediaItemTag)?.errorOrigin
+
 private val currentDeviceIsAmlogic by lazy { isAmlogicDevice() }
 
 @OptIn(UnstableApi::class)
@@ -330,6 +371,9 @@ class ExoPlayerBackend(
 	}
 
 	private var currentStream: PlayableMediaStream? = null
+	private val doviTransformStats = Collections.synchronizedMap(
+		WeakHashMap<QueueEntry, PlaybackDoviTransformStats>(),
+	)
 	private var playerSurfaceView: PlayerSurfaceView? = null
 	private var subtitleSurfaceView: PlayerSubtitleView? = null
 	private var subtitleView: SubtitleView? = null
@@ -711,7 +755,7 @@ class ExoPlayerBackend(
 	private fun recreateCurrentLiveTvMediaSource(): Boolean {
 		val player = exoPlayer
 		val index = player.currentMediaItemIndex.takeIf { it in 0 until player.mediaItemCount } ?: return false
-		val entry = player.currentMediaItem?.localConfiguration?.tag as? QueueEntry ?: return false
+		val entry = player.currentMediaItem?.queueEntryTag ?: return false
 		val stream = currentStream?.takeIf { it.hashCode().toString() == player.currentMediaItem?.mediaId } ?: return false
 		if (entry.liveStreamTargetOffset == null) return false
 
@@ -752,7 +796,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun QueueEntry.toMediaItem(stream: PlayableMediaStream): MediaItem = MediaItem.Builder().apply {
-		setTag(this@toMediaItem)
+		setTag(PlaybackMediaItemTag(this@toMediaItem, stream.errorOrigin))
 		setMediaId(stream.hashCode().toString())
 		setUri(stream.url)
 		liveTvBufferDuration()?.let { offset ->
@@ -775,6 +819,25 @@ class ExoPlayerBackend(
 			})
 		}
 	}.build()
+
+	private fun QueueEntry.doviTransformContext(): DoviTransformContext? {
+		val decision = doviDecision ?: return null
+		val request = decision.request ?: return null
+		val evidence = decision.transformEvidence ?: return null
+		return DoviTransformContext(
+			request = request,
+			inputPresentation = evidence.inputPresentation,
+			sourceBasePresentation = evidence.sourceBasePresentation,
+			dvLevel = evidence.dvLevel,
+			pairEnhancementTrack = evidence.sourceProfile == DoviSourceProfile.PROFILE_7 &&
+				evidence.sourceLayer != DoviSourceLayer.MEL,
+			onTransformObserved = { observation ->
+				synchronized(doviTransformStats) {
+					doviTransformStats.putIfAbsent(this, observation.toPlaybackDoviTransformStats())
+				}
+			},
+		)
+	}
 
 	private fun QueueEntry.createMediaSource(stream: PlayableMediaStream): MediaSource {
 		val mediaItem = toMediaItem(stream)
@@ -853,12 +916,34 @@ class ExoPlayerBackend(
 			extractorsFactory: DefaultExtractorsFactory,
 			subtitleParserFactory: SubtitleParser.Factory,
 			assSubtitleParserFactory: AssSubtitleParserFactory? = null,
-		): DefaultMediaSourceFactory {
-			val extractors: ExtractorsFactory = assSubtitleParserFactory
+		): MediaSource.Factory {
+			val baseExtractors: ExtractorsFactory = assSubtitleParserFactory
 				?.let { extractorsFactory.withAssMkvSupport(it, assHandler) }
 				?: extractorsFactory
-			return DefaultMediaSourceFactory(dataSourceFactory, extractors)
-				.configureSubtitles(subtitleParserFactory)
+			return DoviMediaSourceFactory(
+				progressiveFactory = { doviContext ->
+					DefaultMediaSourceFactory(
+						dataSourceFactory,
+						DoviExtractorsFactory(baseExtractors, doviContext),
+					).configureSubtitles(subtitleParserFactory)
+				},
+				hlsFactory = { doviContext ->
+					HlsMediaSource.Factory(dataSourceFactory)
+						.setExtractorFactory(
+							DoviHlsExtractorFactory(DefaultHlsExtractorFactory(), doviContext)
+						)
+						.setSubtitleParserFactory(subtitleParserFactory)
+						.apply {
+							@Suppress("DEPRECATION")
+							experimentalParseSubtitlesDuringExtraction(
+								exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass
+							)
+						}
+				},
+				context = { mediaItem ->
+					mediaItem.queueEntryTag?.doviTransformContext()
+				},
+			)
 		}
 
 		fun MediaSource.Factory.withExternalSubtitlesInRenderer() =
@@ -1239,6 +1324,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlayerError(error: PlaybackException) {
+			val doviErrorCode = error.doviTransformationPlaybackErrorCode()
 			val rendererIndex = (error as? ExoPlaybackException)
 				?.takeIf { playbackError -> playbackError.type == ExoPlaybackException.TYPE_RENDERER }
 				?.rendererIndex
@@ -1256,11 +1342,13 @@ class ExoPlayerBackend(
 				)
 			) return
 
-			val isLiveTv = (exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry)
-				?.liveStreamTargetOffset != null
+			val errorOrigin = exoPlayer.currentMediaItem?.errorOriginTag
+			val errorEntry = errorOrigin?.queueEntry
+			val isLiveTv = errorEntry?.liveStreamTargetOffset != null
 			val playbackError = PlaybackError(
-				codeName = error.errorCodeName,
+				codeName = doviErrorCode ?: error.errorCodeName,
 				recoverWithIncreasedLiveTvOffset = isLiveTv && error.canRecoverLiveTvWithIncreasedOffset(),
+				origin = errorOrigin,
 			)
 			Timber.e(
 				error,
@@ -1318,7 +1406,7 @@ class ExoPlayerBackend(
 
 		override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
 			listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
-			val queueEntry = mediaItem?.localConfiguration?.tag as? QueueEntry
+			val queueEntry = mediaItem?.queueEntryTag
 			audioPipeline.normalizationGain = queueEntry?.normalizationGain
 			schedulePendingInitialTrackSelectionRetry()
 		}
@@ -1420,6 +1508,7 @@ class ExoPlayerBackend(
 	) {
 		val stream = requireNotNull(item.mediaStream)
 		if (currentStream == stream) return
+		stream.errorOrigin?.activate()
 
 		resetForcedVideoDecoderFallback()
 		clearSubtitleCues()
@@ -1543,6 +1632,7 @@ class ExoPlayerBackend(
 		applyRendererPreferences()
 		clearPendingLiveStart()
 		val stream = requireNotNull(item.mediaStream)
+		stream.errorOrigin?.activate()
 		val player = exoPlayer
 		val currentIndex = player.currentMediaItemIndex.takeIf { index ->
 			index in 0 until player.mediaItemCount
@@ -1690,6 +1780,9 @@ class ExoPlayerBackend(
 			isLoading = exoPlayer.isLoading,
 			estimatedBandwidthBytesPerSecond = estimatedBandwidthBytesPerSecond,
 		)
+		val doviTransform = exoPlayer.currentMediaItem?.queueEntryTag?.let { entry ->
+			synchronized(doviTransformStats) { doviTransformStats[entry] }
+		}
 
 		return PlaybackFrameStats(
 			droppedFrames = counters?.droppedBufferCount ?: 0,
@@ -1711,6 +1804,8 @@ class ExoPlayerBackend(
 			subtitleParser = subtitleParserDebug(),
 			subtitlePath = subtitlePathDebug(),
 			extractorFlags = tsExtractorFlags?.let(::formatTsExtractorFlags),
+			backendDetails = videoInputFormat.colorDetails(),
+			doviTransform = doviTransform,
 			libass = if (canMeasureLibassPerformance(exoPlayerOptions.enableLibass, exoPlayerOptions.libassRenderType)) {
 				assHandler.performanceStats.toPlaybackLibassStats()
 			} else null,
@@ -1750,7 +1845,7 @@ class ExoPlayerBackend(
 	)
 
 	private fun currentTsExtractorFlags(): Int? {
-		val entry = exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry ?: return null
+		val entry = exoPlayer.currentMediaItem?.queueEntryTag ?: return null
 		if (entry.liveStreamTargetOffset == null) return null
 		return mediaSourceTsExtractorFlags[exoPlayer.currentMediaItem?.mediaId]
 	}
@@ -2151,7 +2246,7 @@ class ExoPlayerBackend(
 		override fun getSupportedTypes(): IntArray = defaultFactory.supportedTypes
 
 		override fun createMediaSource(mediaItem: MediaItem): MediaSource {
-			val queueEntry = mediaItem.localConfiguration?.tag as? QueueEntry
+			val queueEntry = mediaItem.queueEntryTag
 			val isLiveTv = queueEntry?.liveStreamTargetOffset != null
 			val tsExtractorFlags = if (isLiveTv) queueEntry.liveTvTsExtractorFlags(usesHardwareVideoDecoder()) else 0
 			val factory = when (tsExtractorFlags) {
@@ -2192,23 +2287,6 @@ internal fun Format?.hdrMode(): String? {
 	}
 }
 
-internal fun formatExoBufferDetails(
-	allocatedBytes: Long?,
-	isBuffering: Boolean,
-	isLoading: Boolean,
-	estimatedBandwidthBytesPerSecond: Long?,
-) = buildList {
-	allocatedBytes?.formatBufferBytes()?.let(::add)
-	when {
-		isBuffering -> add("buffering")
-		isLoading -> add("loading")
-		allocatedBytes != null -> add("idle")
-	}
-	if (isBuffering || isLoading) {
-		estimatedBandwidthBytesPerSecond?.formatBufferBytes()?.let { add("~$it/s") }
-	}
-}.joinToString(", ").takeIf(String::isNotEmpty)
-
 @OptIn(UnstableApi::class)
 internal fun Format?.colorDetails(): Map<String, String> {
 	val color = this?.colorInfo ?: return emptyMap()
@@ -2235,6 +2313,23 @@ internal fun Format?.colorDetails(): Map<String, String> {
 		}?.let { put("Color range", it) }
 	}
 }
+
+internal fun formatExoBufferDetails(
+	allocatedBytes: Long?,
+	isBuffering: Boolean,
+	isLoading: Boolean,
+	estimatedBandwidthBytesPerSecond: Long?,
+) = buildList {
+	allocatedBytes?.formatBufferBytes()?.let(::add)
+	when {
+		isBuffering -> add("buffering")
+		isLoading -> add("loading")
+		allocatedBytes != null -> add("idle")
+	}
+	if (isBuffering || isLoading) {
+		estimatedBandwidthBytesPerSecond?.formatBufferBytes()?.let { add("~$it/s") }
+	}
+}.joinToString(", ").takeIf(String::isNotEmpty)
 
 private fun Format.dolbyVisionMode(): String = codecs
 	?.split(',')
