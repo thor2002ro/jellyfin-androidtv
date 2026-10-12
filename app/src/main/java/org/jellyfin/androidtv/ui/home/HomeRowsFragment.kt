@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.home
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import androidx.core.view.doOnLayout
 import androidx.leanback.app.RowsSupportFragment
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.OnItemViewClickedListener
@@ -36,7 +37,6 @@ import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.data.service.BackgroundService
-import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.CompositeClickedListener
@@ -74,7 +74,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val mediaManager by inject<MediaManager>()
 	private val notificationsRepository by inject<NotificationsRepository>()
 	private val userRepository by inject<UserRepository>()
-	private val userPreferences by inject<UserPreferences>()
 	private val userSettingPreferences by inject<UserSettingPreferences>()
 	private val userViewsRepository by inject<UserViewsRepository>()
 	private val dataRefreshService by inject<DataRefreshService>()
@@ -168,6 +167,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			.onEach { message ->
 				when (message) {
 					CustomMessage.RefreshCurrentItem -> refreshCurrentItem()
+					CustomMessage.RefreshHomeNextUp -> homeRowAdapters.toList()
+						.filter { it.nextUpQueryProvider != null }
+						.forEach(ItemRowAdapter::Retrieve)
 					else -> Unit
 				}
 			}.launchIn(lifecycleScope)
@@ -233,6 +235,18 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onResume() {
 		super.onResume()
+
+		// Returning from Android Home can leave the Leanback view at 0x0 inside
+		// an already-sized Compose container. Request a native layout after resume
+		// so the retained rows are measured again without recreating or reloading them.
+		view?.post {
+			view?.let { rowsView ->
+				rowsView.requestLayout()
+				rowsView.doOnLayout {
+					Timber.i("Home rows layout after resume: %dx%d rows=%d", it.width, it.height, adapter.size())
+				}
+			}
+		}
 
 		//React to deletion
 		val deletedItem = currentItem
@@ -309,6 +323,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		super.onDestroy()
 
 		backgroundUpdateJob?.cancel()
+		homeRowsDebounceJob?.cancel()
 		homeRowsRefreshJob?.cancel()
 		mediaManager.removeAudioEventListener(this)
 	}
@@ -320,7 +335,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		if (itemId == currentBackgroundItemId) return
 
 		backgroundUpdateJob = lifecycleScope.launch {
-			delay(250)
+			delay(HOME_BACKGROUND_UPDATE_DELAY_MS)
 
 			if (item?.baseItem == null) {
 				currentBackgroundItemId = null
@@ -382,6 +397,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 private const val HOME_ROWS_REFRESH_DELAY_MS = 3_500L
 private const val HOME_ROWS_REFRESH_DEBOUNCE_MS = 250L
+private const val HOME_BACKGROUND_UPDATE_DELAY_MS = 1_500L
 
 internal fun createHomeCardPresenter(useWideCards: Boolean) = when (useWideCards) {
 	false -> CardPresenter()

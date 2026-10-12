@@ -6,7 +6,6 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.ChangeTriggerType
 import org.jellyfin.androidtv.data.repository.ItemRepository
-import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -135,3 +134,8 @@ internal fun createHomeNextUpRequest(
 	enableRewatching = includeRewatching,
 	fields = ItemRepository.streamBadgeFields,
 )
+
+internal fun GetNextUpRequest.withHomeNextUpCutoff(
+	maxDays: Int,
+	now: LocalDateTime = LocalDateTime.now(),
+) = copy(nextUpDateCutoff = maxDays.takeIf { it > 0 }?.let { now.minusDays(it.toLong()) })

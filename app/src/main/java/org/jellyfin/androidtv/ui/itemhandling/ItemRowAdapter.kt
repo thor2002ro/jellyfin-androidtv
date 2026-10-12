@@ -51,6 +51,7 @@ import java.time.Instant
 class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var query: GetItemsRequest? = null
 	private var nextUpQuery: GetNextUpRequest? = null
+	internal var nextUpQueryProvider: (() -> GetNextUpRequest)? = null
 	internal var combinedResumeQuery: GetResumeItemsRequest? = null
 	private var seasonQuery: GetSeasonsRequest? = null
 	private var upcomingQuery: GetUpcomingEpisodesRequest? = null
@@ -712,7 +713,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 
 			QueryType.NextUp -> retrieveNextUpItems(
 				api = api,
-				query = requireNotNull(nextUpQuery),
+				query = nextUpQueryProvider?.invoke() ?: requireNotNull(nextUpQuery),
 				combinedResumeQuery = combinedResumeQuery,
 			)
 			QueryType.LatestItems -> retrieveLatestMedia(api, requireNotNull(latestQuery))

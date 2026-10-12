@@ -78,6 +78,7 @@ fun SettingsHomeNextUpCutoffScreen() {
 							)
 							homeNextUpMaxDays = result.value
 							if (result.succeeded) {
+								customMessageRepository.pushMessage(CustomMessage.RefreshHomeNextUp)
 								router.back()
 							} else {
 								showPreferenceSaveFailure(context)

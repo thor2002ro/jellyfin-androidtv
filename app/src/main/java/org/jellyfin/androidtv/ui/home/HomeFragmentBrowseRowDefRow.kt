@@ -32,6 +32,9 @@ class HomeFragmentBrowseRowDefRow(
 		val rowAdapter = when (browseRowDef.queryType) {
 			QueryType.NextUp -> ItemRowAdapter(context, browseRowDef.nextUpQuery, preferParentThumb, cardPresenter, rowsAdapter).apply {
 				combinedResumeQuery = browseRowDef.supplementalResumeQuery
+				nextUpQueryProvider = {
+					browseRowDef.nextUpQuery.withHomeNextUpCutoff(userSettingPreferences[UserSettingPreferences.homeNextUpMaxDays])
+				}
 			}
 			QueryType.LatestItems -> ItemRowAdapter(context, browseRowDef.latestItemsQuery, preferParentThumb, cardPresenter, rowsAdapter)
 			QueryType.Views -> ItemRowAdapter(context, GetUserViewsRequest, cardPresenter, rowsAdapter)
