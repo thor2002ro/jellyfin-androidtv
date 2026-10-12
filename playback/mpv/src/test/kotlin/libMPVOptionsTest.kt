@@ -3,6 +3,7 @@ package org.jellyfin.playback.mpv
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import java.io.File
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.model.PositionInfo
 import kotlin.time.Duration
@@ -10,6 +11,10 @@ import kotlin.time.Duration.Companion.seconds
 import `is`.xyz.mpv.MPVNode
 
 class LibMPVOptionsTest : StringSpec({
+	"resume position is passed to loadfile" {
+		728.seconds.mpvStartOption() shouldBe "start=728.0"
+	}
+
 	"last MPV position survives after the native property becomes unavailable" {
 		val last = PositionInfo(120.seconds, 130.seconds, 1_200.seconds)
 		mpvPositionInfo(null, null, null, null, last) shouldBe last
@@ -41,6 +46,20 @@ class LibMPVOptionsTest : StringSpec({
 			softwareForLiveTv = true,
 			isLiveTv = false,
 		) shouldBe LibMPVVideoDecoder.AUTOMATIC
+		effectiveLibMPVVideoDecoder(
+			configured = LibMPVVideoDecoder.AUTOMATIC,
+			forced = null,
+			softwareForLiveTv = false,
+			isLiveTv = false,
+			videoPreset = LibMPVVideoPreset.OPTIMIZED_8K,
+		) shouldBe LibMPVVideoDecoder.MEDIACODEC
+		effectiveLibMPVVideoDecoder(
+			configured = LibMPVVideoDecoder.AUTOMATIC,
+			forced = LibMPVVideoDecoder.SOFTWARE,
+			softwareForLiveTv = false,
+			isLiveTv = false,
+			videoPreset = LibMPVVideoPreset.OPTIMIZED_8K,
+		) shouldBe LibMPVVideoDecoder.SOFTWARE
 	}
 
 	"mpv HDR mode reports dynamic metadata before transfer characteristics" {
@@ -61,10 +80,6 @@ class LibMPVOptionsTest : StringSpec({
 		mpvGpuApi(currentContext = "android") shouldBe "opengl"
 		mpvGpuApi(currentContext = "androidvk") shouldBe "vulkan"
 		mpvGpuApi(currentContext = null) shouldBe null
-	}
-
-	"resume position is passed to loadfile" {
-		728.seconds.mpvStartOption() shouldBe "start=728.0"
 	}
 
 	"MPV GPU API display includes versions on both sides of a fallback" {
@@ -112,6 +127,8 @@ class LibMPVOptionsTest : StringSpec({
 	}
 
 	"Jellyfin MPV defaults produce the complete managed profile" {
+		LibMPVPlaybackOptions.DEFAULT.videoPreset shouldBe LibMPVVideoPreset.OFF
+		LibMPVPlaybackOptions.DEFAULT.audioPreset shouldBe LibMPVAudioPreset.OFF
 		LibMPVPlaybackOptions.DEFAULT.managedOptions() shouldBe linkedMapOf(
 			"vo" to "gpu-next",
 			"gpu-context" to "android",
@@ -134,6 +151,83 @@ class LibMPVOptionsTest : StringSpec({
 			"vd-lavc-skiploopfilter" to "default",
 			"sub-ass-override" to "no",
 			"sub-use-margins" to "yes",
+		)
+	}
+
+	"all built-in presets apply their upstream options" {
+		val shaderDirectory = File("mpv-anime").absoluteFile
+		val shaderPaths = { names: List<String> ->
+			names.joinToString(File.pathSeparator) { name -> shaderDirectory.resolve(name).absolutePath }
+		}
+		val anime = linkedMapOf(
+			"scale" to "spline64",
+			"cscale" to "spline64",
+			"dscale" to "spline64",
+			"deband" to "yes",
+			"deband-iterations" to "2",
+			"deband-threshold" to "48",
+			"deband-range" to "24",
+			"deband-grain" to "2",
+		)
+		val liveAction = linkedMapOf(
+			"scale" to "spline64",
+			"cscale" to "spline64",
+			"dscale" to "spline64",
+			"deband" to "no",
+		)
+		val expectedVideo = mapOf(
+			LibMPVVideoPreset.OFF to emptyMap(),
+			LibMPVVideoPreset.ANIME_FAST to anime + ("glsl-shaders" to shaderPaths(LibMPVVideoPreset.ANIME_FAST.shaders)),
+			LibMPVVideoPreset.ANIME_BALANCED to anime + ("glsl-shaders" to shaderPaths(LibMPVVideoPreset.ANIME_BALANCED.shaders)),
+			LibMPVVideoPreset.ANIME_HQ to anime + ("glsl-shaders" to shaderPaths(LibMPVVideoPreset.ANIME_HQ.shaders)),
+			LibMPVVideoPreset.LIVE_ACTION_FAST to liveAction + ("glsl-shaders" to shaderPaths(LibMPVVideoPreset.LIVE_ACTION_FAST.shaders)),
+			LibMPVVideoPreset.LIVE_ACTION_BALANCED to liveAction + ("glsl-shaders" to shaderPaths(LibMPVVideoPreset.LIVE_ACTION_BALANCED.shaders)),
+			LibMPVVideoPreset.LIVE_ACTION_HQ to liveAction + ("glsl-shaders" to shaderPaths(LibMPVVideoPreset.LIVE_ACTION_HQ.shaders)),
+			LibMPVVideoPreset.BATTERY_SAVER to mapOf(
+				"glsl-shaders" to "",
+				"dither" to "no",
+				"deband" to "no",
+				"scale" to "bilinear",
+				"cscale" to "bilinear",
+				"dscale" to "bilinear",
+				"correct-downscaling" to "no",
+				"interpolation" to "no",
+			),
+			LibMPVVideoPreset.HDR_HIGH_QUALITY to mapOf(
+				"correct-downscaling" to "yes",
+				"gamma" to "0.0",
+				"contrast" to "0.0",
+				"saturation" to "0.0",
+				"brightness" to "0.0",
+				"tone-mapping" to "clip",
+			),
+			LibMPVVideoPreset.OPTIMIZED_8K to mapOf(
+				"gpu-api" to "opengl",
+				"gpu-context" to "android",
+				"hwdec" to "mediacodec",
+				"vd-lavc-dr" to "yes",
+				"vd-queue-enable" to "no",
+				"profile" to "high-quality",
+				"dither" to "no",
+				"deband" to "no",
+				"interpolation" to "no",
+				"glsl-shaders" to "",
+				"vf" to "",
+			),
+		)
+
+		LibMPVVideoPreset.entries.forEach { preset ->
+			LibMPVPlaybackOptions(videoPreset = preset).presetOptions(shaderDirectory) shouldBe expectedVideo.getValue(preset)
+		}
+
+		LibMPVPlaybackOptions(audioPreset = LibMPVAudioPreset.STANDARD).presetOptions(shaderDirectory) shouldBe mapOf(
+			"audio-channels" to "auto-safe",
+			"af" to "",
+		)
+		LibMPVPlaybackOptions(audioPreset = LibMPVAudioPreset.CINEMA_SPATIAL).presetOptions(shaderDirectory) shouldBe mapOf(
+			"audio-channels" to "7.1",
+			"audio-spdif" to "",
+			"af" to "format=channels=7.1,lavfi=[surround],lavfi=[bass=g=3]",
 		)
 	}
 
@@ -251,12 +345,6 @@ class LibMPVOptionsTest : StringSpec({
 		)
 	}
 
-	"missing MPV stats use a retry backoff" {
-		shouldReadLibMPVStatProperty(lastMissNanos = null, nowNanos = 100, retryNanos = 10) shouldBe true
-		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 109, retryNanos = 10) shouldBe false
-		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 110, retryNanos = 10) shouldBe true
-	}
-
 	"MPV byte cache covers the requested duration with bitrate headroom" {
 		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = 512_000_000) shouldBe 375_000_000
 		mpvCacheBytes(cacheSeconds = 240.0, bitrate = 100_000_000, maximum = 256_000_000) shouldBe 256_000_000
@@ -293,6 +381,12 @@ class LibMPVOptionsTest : StringSpec({
 			initialWaitSeconds = cappedSeconds,
 			rebufferWaitSeconds = cappedSeconds,
 		)
+	}
+
+	"missing MPV stats use a retry backoff" {
+		shouldReadLibMPVStatProperty(lastMissNanos = null, nowNanos = 100, retryNanos = 10) shouldBe true
+		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 109, retryNanos = 10) shouldBe false
+		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 110, retryNanos = 10) shouldBe true
 	}
 
 	"typed profile and universal controls cannot be replaced by expert overrides" {

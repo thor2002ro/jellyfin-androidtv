@@ -1,0 +1,12 @@
+Video and audio presets adapted from:
+https://github.com/Chinna95P/mpv-anime-build/tree/android
+Commit: 97e04fe76c4e0f8c1c75b4f98f6d2dcf45335781
+
+Bundled shaders:
+- FSRCNNX_x2_8-0-4-1_LineArt.glsl, copyright 2017-2021 igv
+- FSRCNNX_x2_8-0-4-1.glsl, copyright 2017-2021 igv
+- SSimSuperRes.glsl by Shiandow
+- SSimDownscaler.glsl by Shiandow
+
+These shader files are distributed under the GNU Lesser General Public License
+version 3.0 or, at your option, any later version. See LICENSE.LGPL-3.0.txt.
