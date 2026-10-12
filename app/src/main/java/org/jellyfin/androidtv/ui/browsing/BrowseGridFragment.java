@@ -142,9 +142,14 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final int BACKGROUND_UPDATE_DELAY = 1500;
     private final int SELECTION_RESTORE_WINDOW_MS = 1500;
     private static final int BROWSE_CARD_TITLE_HEIGHT_DP = 26;
+    private static final int OVERLAY_FOCUS_NONE = 0;
+    private static final int OVERLAY_FOCUS_FILTERS = 1;
+    private static final int OVERLAY_FOCUS_SETTINGS = 2;
 
     private boolean mDirty = true; // CardHeight, RowDef or GridSize changed
     private boolean mPreferencesLoaded = false;
+    private boolean mQueryChangePending = false;
+    private int mOverlayFocusTarget = OVERLAY_FOCUS_NONE;
     private boolean mViewInitialized = false;
     private int mLastImagePrefetchPosition = -1;
     private int mLastImagePrefetchItemsLoaded = -1;
@@ -228,8 +233,26 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 : new HorizontalGridPresenter();
     }
 
+    static int nextSelectionAfterQueryChange(int totalItems) {
+        return totalItems > 0 ? 0 : -1;
+    }
+
     static boolean shouldRetrieveGrid(boolean adapterRebuilt, boolean queryChangePending, int itemsLoaded) {
         return adapterRebuilt || queryChangePending || itemsLoaded <= 0;
+    }
+
+    static boolean shouldKeepToolbarFocusable(int itemsLoaded, boolean filtersActive) {
+        return itemsLoaded == 0 && filtersActive;
+    }
+
+    static boolean shouldRemoveFilteredItem(FilterOptions filters, boolean favorite, boolean played) {
+        return (filters.isFavoriteOnly() && !favorite) ||
+                (filters.isUnwatchedOnly() && played) ||
+                (filters.isWatchedOnly() && !played);
+    }
+
+    static boolean shouldApplyLibraryFilters(FilterOptions current, FilterOptions next) {
+        return !Objects.equals(current, next);
     }
 
     @Override
@@ -608,11 +631,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     public void setStatusText(String folderName) {
         String text = getString(R.string.lbl_showing) + " ";
         FilterOptions filters = mAdapter.getFilters();
-        if (filters == null || (!filters.isFavoriteOnly() && !filters.isUnwatchedOnly())) {
+        if (filters == null || filters.isEmpty()) {
             text += getString(R.string.lbl_all_items);
         } else {
-            text += (filters.isUnwatchedOnly() ? getString(R.string.lbl_unwatched) : "") + " " +
-                    (filters.isFavoriteOnly() ? getString(R.string.lbl_favorites) : "");
+            text += getString(R.string.library_filter_active_count, filters.getActiveCount());
         }
 
         if (mAdapter.getStartLetter() != null) {
@@ -947,6 +969,15 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         } else {
             justLoaded = false;
         }
+        restoreOverlayFocus();
+    }
+
+    private void restoreOverlayFocus() {
+        if (binding == null || mOverlayFocusTarget == OVERLAY_FOCUS_NONE) return;
+
+        ImageButton target = mOverlayFocusTarget == OVERLAY_FOCUS_FILTERS ? mFilterButton : mSettingsButton;
+        mOverlayFocusTarget = OVERLAY_FOCUS_NONE;
+        if (target != null) target.post(target::requestFocus);
     }
 
     private void buildAdapter() {
@@ -998,9 +1029,11 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         }
         mDirty = false;
 
-        FilterOptions filters = new FilterOptions();
-        filters.setFavoriteOnly(libraryPreferences.get(LibraryPreferences.Companion.getFilterFavoritesOnly()));
-        filters.setUnwatchedOnly(libraryPreferences.get(LibraryPreferences.Companion.getFilterUnwatchedOnly()));
+        FilterOptions filters = FilterOptions.fromStored(
+                libraryPreferences.get(LibraryPreferences.Companion.getFilters()),
+                libraryPreferences.get(LibraryPreferences.Companion.getFilterFavoritesOnly()),
+                libraryPreferences.get(LibraryPreferences.Companion.getFilterUnwatchedOnly())
+        );
 
         mAdapter.setRetrieveFinishedListener(new EmptyResponse(getLifecycle()) {
             @Override
@@ -1012,6 +1045,19 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                     updateCounter(mAdapter.getTotalItems() > 0 ? 1 : 0);
                 }
                 updateAlphabetPickerVisibility();
+                if (mQueryChangePending) {
+                    int position = nextSelectionAfterQueryChange(mAdapter.getItemsLoaded());
+                    mQueryChangePending = false;
+                    mSelectedPosition = position;
+                    mPendingSelectedPosition = position;
+                    FilterOptions activeFilters = mAdapter.getFilters();
+                    if (shouldKeepToolbarFocusable(
+                            mAdapter.getItemsLoaded(),
+                            activeFilters != null && !activeFilters.isEmpty()
+                    ) && mFilterButton != null) {
+                        mFilterButton.post(mFilterButton::requestFocus);
+                    }
+                }
                 if (mAdapter.getItemsLoaded() == 0) {
                     mGridView.setFocusable(false);
                     mHandler.postDelayed(() -> {
@@ -1046,15 +1092,15 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private ImageButton mSortButton;
+    private ImageButton mFilterButton;
     private ImageButton mSettingsButton;
-    private ImageButton mUnwatchedButton;
-    private ImageButton mFavoriteButton;
     private ViewGroup mActiveToolBar;
 
     private void updateDisplayPrefs() {
         CoroutineUtils.runOnLifecycle(getLifecycle(), (coroutineScope, continuation) -> {
             libraryPreferences.set(LibraryPreferences.Companion.getFilterFavoritesOnly(), mAdapter.getFilters().isFavoriteOnly());
             libraryPreferences.set(LibraryPreferences.Companion.getFilterUnwatchedOnly(), mAdapter.getFilters().isUnwatchedOnly());
+            libraryPreferences.set(LibraryPreferences.Companion.getFilters(), mAdapter.getFilters().encode());
             libraryPreferences.set(LibraryPreferences.Companion.getSortBy(), mAdapter.getSortBy());
             libraryPreferences.set(LibraryPreferences.Companion.getSortOrder(), mAdapter.getSortOrder());
             return libraryPreferences.commit(continuation);
@@ -1107,46 +1153,37 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mActiveToolBar.addView(mSortButton);
 
         if (mRowDef.getQueryType() == QueryType.Items) {
-            mUnwatchedButton = new ImageButton(requireContext(), null, 0, R.style.Button_Icon);
-            mUnwatchedButton.setImageResource(R.drawable.ic_unwatch);
-            mUnwatchedButton.setActivated(mAdapter.getFilters().isUnwatchedOnly());
-            configureToolButton(mUnwatchedButton, size, padding);
-            mUnwatchedButton.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    FilterOptions filters = mAdapter.getFilters();
-                    if (filters == null) filters = new FilterOptions();
-
-                    filters.setUnwatchedOnly(!filters.isUnwatchedOnly());
-                    mUnwatchedButton.setActivated(filters.isUnwatchedOnly());
-                    mAdapter.setFilters(filters);
-                    mAdapter.Retrieve();
-                    updateDisplayPrefs();
-                }
+            MutableStateFlow<Boolean> filtersVisible = BrowseGridFragmentHelperKt.createFiltersVisibility(BrowseGridFragment.this);
+            mFilterButton = new ImageButton(requireContext(), null, 0, R.style.Button_Icon);
+            mFilterButton.setImageResource(R.drawable.ic_filter_list);
+            mFilterButton.setActivated(mAdapter.getFilters() != null && !mAdapter.getFilters().isEmpty());
+            configureToolButton(mFilterButton, size, padding);
+            mFilterButton.setOnClickListener(v -> {
+                mOverlayFocusTarget = OVERLAY_FOCUS_FILTERS;
+                filtersVisible.setValue(true);
             });
-            mUnwatchedButton.setContentDescription(getString(R.string.lbl_unwatched));
-            mActiveToolBar.addView(mUnwatchedButton);
-        }
+            mFilterButton.setContentDescription(getString(R.string.filters));
+            mActiveToolBar.addView(mFilterButton);
 
-        mFavoriteButton = new ImageButton(requireContext(), null, 0, R.style.Button_Icon);
-        mFavoriteButton.setImageResource(R.drawable.ic_heart);
-        mFavoriteButton.setActivated(mAdapter.getFilters().isFavoriteOnly());
-        configureToolButton(mFavoriteButton, size, padding);
-        mFavoriteButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                FilterOptions filters = mAdapter.getFilters();
-                if (filters == null) filters = new FilterOptions();
-
-                filters.setFavoriteOnly(!filters.isFavoriteOnly());
-                mFavoriteButton.setActivated(filters.isFavoriteOnly());
-                mAdapter.setFilters(filters);
-                mAdapter.Retrieve();
-                updateDisplayPrefs();
+            Set<BaseItemKind> includeTypes = new HashSet<>();
+            if (mRowDef.getQuery().getIncludeItemTypes() != null) {
+                includeTypes.addAll(mRowDef.getQuery().getIncludeItemTypes());
             }
-        });
-        mFavoriteButton.setContentDescription(getString(R.string.lbl_favorite));
-        mActiveToolBar.addView(mFavoriteButton);
+            BrowseGridFragmentHelperKt.addFilters(
+                    BrowseGridFragment.this,
+                    binding.filters,
+                    filtersVisible,
+                    () -> mAdapter.getFilters() != null ? mAdapter.getFilters() : new FilterOptions(),
+                    mParentId,
+                    includeTypes,
+                    filters -> {
+                        applyFilters(filters);
+                        return Unit.INSTANCE;
+                    }
+            );
+        } else {
+            mFilterButton = null;
+        }
 
         if (mFolder.getDisplayPreferencesId() != null) {
             MutableStateFlow<Boolean> settingsVisible = BrowseGridFragmentHelperKt.createSettingsVisibility(BrowseGridFragment.this);
@@ -1156,6 +1193,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mSettingsButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
+                    mOverlayFocusTarget = OVERLAY_FOCUS_SETTINGS;
                     settingsVisible.setValue(true);
                 }
             });
@@ -1165,6 +1203,23 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         }
 
         configureNavigationControlsFocus();
+    }
+
+    private void prepareForQueryChange() {
+        cancelSelectionRestore();
+        mSelectedPosition = -1;
+        mPendingSelectedPosition = -1;
+        mCurrentItem = null;
+        mQueryChangePending = true;
+    }
+
+    private void applyFilters(FilterOptions filters) {
+        if (!shouldApplyLibraryFilters(mAdapter.getFilters(), filters)) return;
+        prepareForQueryChange();
+        mAdapter.setFilters(filters);
+        if (mFilterButton != null) mFilterButton.setActivated(!filters.isEmpty());
+        mAdapter.Retrieve();
+        updateDisplayPrefs();
     }
 
     private void configureToolButton(ImageButton button, int size, int padding) {
@@ -1194,17 +1249,23 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private void refreshCurrentItem() {
         if (mCurrentItem == null) return;
         Timber.d("Refresh item \"%s\"", mCurrentItem.getFullName(requireContext()));
-        ItemRowAdapterHelperKt.refreshItem(mAdapter, api.getValue(), this, mCurrentItem, () -> {
+        ItemRowAdapterHelperKt.refreshItem(mAdapter, api.getValue(), this, mCurrentItem, refreshedItem -> {
             //Now - if filtered make sure we still pass
-            if (mAdapter.getFilters() == null) return null;
-            if ((mAdapter.getFilters().isFavoriteOnly() && !mCurrentItem.isFavorite()) || (mAdapter.getFilters().isUnwatchedOnly() && mCurrentItem.isPlayed())) {
+            FilterOptions filters = mAdapter.getFilters();
+            if (filters == null || refreshedItem == null) return Unit.INSTANCE;
+            mCurrentItem = refreshedItem;
+            if (shouldRemoveFilteredItem(filters, refreshedItem.isFavorite(), refreshedItem.isPlayed())) {
                 // if we are about to remove the current item, throw focus to toolbar so framework doesn't crash
                 mActiveToolBar.requestFocus();
-                mAdapter.remove(mCurrentItem);
-                mAdapter.setTotalItems(mAdapter.getTotalItems() - 1);
-                updateCounter(mAdapter.indexOf(mCurrentItem));
+                int removedPosition = mAdapter.indexOf(refreshedItem);
+                if (removedPosition >= 0) {
+                    mAdapter.remove(refreshedItem);
+                    mAdapter.setTotalItems(Math.max(0, mAdapter.getTotalItems() - 1));
+                    updateCounter(Math.min(removedPosition + 1, mAdapter.getTotalItems()));
+                }
+                mCurrentItem = null;
             }
-            return null;
+            return Unit.INSTANCE;
         });
     }
 
