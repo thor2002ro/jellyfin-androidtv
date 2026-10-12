@@ -12,9 +12,9 @@
     <string name="preference_libvlc_decoder_disabled">Software</string>
     <string name="preference_libvlc_decoder_disabled_description">Disable hardware video decoding. Highest CPU use, useful as a compatibility fallback.</string>
     <string name="preference_libvlc_decoder_decoding">Hardware decoding</string>
-    <string name="preference_libvlc_decoder_decoding_description">Use hardware decoding but disable direct rendering, matching VLC Android\'s decoding mode.</string>
-    <string name="preference_libvlc_decoder_full">Full hardware acceleration</string>
-    <string name="preference_libvlc_decoder_full_description">Use hardware decoding and direct rendering. Fastest path when the device decoder is reliable.</string>
+    <string name="preference_libvlc_decoder_decoding_description">Prefer MediaCodec hardware decoding without direct rendering. Fall back to software if unavailable.</string>
+    <string name="preference_libvlc_decoder_full">Hardware decoding with direct rendering</string>
+    <string name="preference_libvlc_decoder_full_description">Prefer MediaCodec hardware decoding with direct rendering. Fall back to software if unavailable.</string>
     <string name="preference_libvlc_video_output">Video output</string>
     <string name="preference_libvlc_video_output_description">Choose the libVLC video output path. Applies to newly started playback.</string>
     <string name="preference_libvlc_video_output_automatic">Automatic</string>
@@ -25,10 +25,10 @@
     <string name="preference_libvlc_video_output_android_display_description">Use VLC Android\'s native Android display output path.</string>
     <string name="preference_libvlc_audio_output">Audio output</string>
     <string name="preference_libvlc_audio_output_description">Choose the libVLC audio output path. Applies to newly started playback.</string>
-    <string name="preference_libvlc_audio_output_aaudio">AAudio default</string>
-    <string name="preference_libvlc_audio_output_aaudio_description">Use libVLC\'s default AAudio output path on current Android devices.</string>
     <string name="preference_libvlc_audio_output_audiotrack">AudioTrack</string>
-    <string name="preference_libvlc_audio_output_audiotrack_description">Force Android AudioTrack output.</string>
+    <string name="preference_libvlc_audio_output_aaudio">Automatic</string>
+    <string name="preference_libvlc_audio_output_aaudio_description">Use VLC\'s default audio output for this device.</string>
+    <string name="preference_libvlc_audio_output_audiotrack_description">Use Android AudioTrack with stereo output for compatibility.</string>
     <string name="preference_libvlc_audio_output_opensles">OpenSL ES</string>
     <string name="preference_libvlc_audio_output_opensles_description">Force OpenSL ES output for older-device compatibility.</string>
     <string name="preference_libvlc_replay_gain">Replay gain</string>

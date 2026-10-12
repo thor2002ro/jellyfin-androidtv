@@ -5,6 +5,25 @@ import io.kotest.matchers.shouldBe
 import java.io.IOException
 
 class LibVLCDecoderDiagnosticsTests : StringSpec({
+	"audio output evidence uses negotiated PCM rather than the source format" {
+		val parser = activeParser()
+		parser.accept("libvlc audio output: input 'f32l' 48000 Hz 3F2R/LFE frame=1 samples/24 bytes")
+		parser.snapshot().output shouldBe null
+		parser.accept("libvlc audio output: output 's16l' 48000 Hz 3F2R/LFE frame=1 samples/12 bytes")
+		parser.snapshot().output shouldBe LibVLCAudioOutput("s16l", 48_000, 6)
+		parser.accept("libvlc audio output: output 'f32l' 48000 Hz Stereo frame=1 samples/8 bytes")
+		parser.snapshot().output shouldBe LibVLCAudioOutput("f32l", 48_000, 2)
+		parser.accept("libvlc audio output: output 'spdi' 48000 Hz Stereo frame=1536 samples/6144 bytes")
+		parser.snapshot().output?.channels shouldBe null
+		parser.accept("libvlc audio output: output 's16l' 48000 Hz 3F2R/LFE frame=1 samples/11 bytes")
+		parser.snapshot().output?.channels shouldBe null
+		parser.endSession()
+		parser.snapshot().output shouldBe null
+		parser.beginSession("item-1")
+		parser.accept("I/JellyfinVLCDecoder: ${libVLCDecoderSessionMarker("item-10")}")
+		parser.accept("libvlc audio output: output 's16l' 48000 Hz 3F2R/LFE frame=1 samples/12 bytes")
+		parser.snapshot().output shouldBe null
+	}
 	"decoder evidence is ignored until the current playback marker arrives" {
 		val parser = LibVLCDecoderLogParser()
 		parser.beginSession("item-1")
