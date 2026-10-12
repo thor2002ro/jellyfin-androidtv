@@ -77,11 +77,15 @@ class MediaCodecCapabilitiesTest(
 
 	fun supportsVp8(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VP8)
 
-	fun supportsVp9(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VP9)
+	fun supportsVp9(): Boolean = vp9.supportsVp9()
 
-	fun supportsVp9Main10(): Boolean =
-		codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile2, CodecProfileLevel.VP9Level1) ||
-			codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile3, CodecProfileLevel.VP9Level1)
+	fun supportsVp9Main8(): Boolean = vp9.supportsVp9Main8()
+
+	fun supportsVp9Main10(): Boolean = vp9.supportsVp9Main10()
+
+	fun supportsVp9HDR(): Boolean = vp9.supportsVp9Hdr()
+
+	fun supportsVp9HDR10Plus(): Boolean = vp9.supportsVp9Hdr10Plus()
 
 	fun getMaxResolution(mime: String): Size = codecQuery.getMaxResolution(mime)
 }
