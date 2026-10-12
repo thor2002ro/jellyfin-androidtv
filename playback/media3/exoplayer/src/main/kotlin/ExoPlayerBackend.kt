@@ -260,6 +260,8 @@ class ExoPlayerBackend(
 	private val context: Context,
 	private val exoPlayerOptions: ExoPlayerOptions,
 ) : BasePlayerBackend(), TrackSelectionBackend {
+	override val supportsInteractiveScrubbing = true
+
 	companion object {
 		const val TS_SEARCH_BYTES = 3 * TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES
 		const val MEDIA_ITEM_COUNT_MAX = 10
@@ -1595,6 +1597,7 @@ class ExoPlayerBackend(
 
 	override fun stop() {
 		clearPendingLiveStart()
+		exoPlayer.isScrubbingModeEnabled = false
 		exoPlayer.stop()
 		if (exoPlayerOptions.enableLibass) assHandler.reset()
 		clearSubtitleCues()
@@ -1650,13 +1653,14 @@ class ExoPlayerBackend(
 		if (hadFallback) rendererPreferencesDirty = true
 	}
 
-	override fun seekTo(position: Duration) {
+	override fun seekTo(position: Duration): Boolean {
 		if (!exoPlayer.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) || !exoPlayer.isCurrentMediaItemSeekable) {
 			Timber.w("Trying to seek but ExoPlayer doesn't support it for the current item")
 			return false
 		}
 
 		exoPlayer.seekTo(position.inWholeMilliseconds)
+		return true
 	}
 
 	override fun setScrubbing(scrubbing: Boolean) {
