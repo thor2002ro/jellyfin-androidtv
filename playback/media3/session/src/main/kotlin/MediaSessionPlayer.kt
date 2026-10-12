@@ -125,19 +125,18 @@ internal class MediaSessionPlayer(
 				}
 			setPlaylist(playlist)
 
-				setPlaybackState(when (state.playState.value) {
-					PlayState.STOPPED -> STATE_IDLE
-					PlayState.PLAYING -> STATE_READY
-					PlayState.BUFFERING -> STATE_BUFFERING
-					PlayState.PAUSED -> STATE_READY
-					PlayState.ERROR -> STATE_ENDED
-				})
+			setPlaybackState(when (state.playState.value) {
+				PlayState.STOPPED -> STATE_IDLE
+				PlayState.PLAYING -> STATE_READY
+				PlayState.BUFFERING -> STATE_BUFFERING
+				PlayState.PAUSED -> STATE_READY
+				PlayState.ERROR -> STATE_ENDED
+			})
 
-				setCurrentMediaItemIndex(if (previous == null || playlist.size <= 1) 0 else 1)
-			} else {
-				setPlaybackState(STATE_IDLE)
-				setCurrentMediaItemIndex(C.INDEX_UNSET)
-			}
+			setCurrentMediaItemIndex(if (previous == null || playlist.size <= 1) 0 else 1)
+		} else {
+			setPlaybackState(STATE_IDLE)
+			setCurrentMediaItemIndex(C.INDEX_UNSET)
 		}
 
 		setContentPositionMs { state.positionInfo.active.inWholeMilliseconds }
