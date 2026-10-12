@@ -44,6 +44,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ImageType
+import org.jellyfin.androidtv.constant.LibraryCardSpacing
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.AsyncImage
@@ -309,6 +310,10 @@ internal fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: B
 	)
 }
 
+internal fun resolveBrowseGridSpacing(base: Int, option: LibraryCardSpacing): Int = option.apply(base)
+
+internal fun shouldShowBrowseCardInfo(showCardTitles: Boolean): Boolean = showCardTitles
+
 @Composable
 @Stable
 private fun CardViewHolderContent(
@@ -318,6 +323,7 @@ private fun CardViewHolderContent(
 	imageType: ImageType,
 	staticHeight: Int,
 	uniformAspect: Boolean,
+	showBrowserTitle: Boolean = false,
 ) {
 	val context = LocalContext.current
 	val localDensity = LocalDensity.current
@@ -338,7 +344,7 @@ private fun CardViewHolderContent(
 		else -> DpSize(150.dp * aspectRatio, 150.dp)
 	}
 
-	val usePreview = if (liveTvText != null) false else displayConfig.overrideShowInfo ?: showInfo
+	val usePreview = liveTvText == null && (showBrowserTitle || (displayConfig.overrideShowInfo ?: showInfo))
 
 	val card = @Composable {
 		ItemCard(
@@ -439,7 +445,7 @@ private fun CardViewHolderContent(
 					)
 				}
 			},
-			subtitle = subtitle?.let { text ->
+			subtitle = subtitle?.takeUnless { showBrowserTitle }?.let { text ->
 				{
 					Text(
 						text = text,
