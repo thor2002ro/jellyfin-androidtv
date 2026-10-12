@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.settings.screen
 
 import android.content.Context
 import android.media.MediaCodecList
-import android.os.Build
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyListScope
@@ -13,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.core.content.ContextCompat
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
