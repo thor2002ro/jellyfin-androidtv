@@ -29,9 +29,13 @@ import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.AndroidVersion
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
 import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegAudioMimeTypes
+import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegVideoMimeTypes
 import org.koin.compose.koinInject
 
@@ -144,7 +148,7 @@ private fun buildCapabilityGroups(
 	softwareCodecsEnabled: Boolean,
 ): List<CapabilityGroup> {
 	val mediaTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled)
-	val displayHdrTypes = getSupportedHdrTypes(context)
+	val displayHdrTypes = getSupportedDisplayHdrTypes(context)
 
 	return listOf(
 		buildHdrCapabilities(context, mediaTest, displayHdrTypes),
@@ -324,18 +328,6 @@ private val FfmpegCodecCapability.detail
 		),
 		mimeType,
 	).joinToString(" / ")
-
-private fun getSupportedHdrTypes(context: Context): Set<Int> {
-	if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return emptySet()
-
-	val display = ContextCompat.getDisplayOrDefault(context)
-	@Suppress("DEPRECATION")
-	return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-		display.mode.supportedHdrTypes.toSet()
-	} else {
-		display.hdrCapabilities?.supportedHdrTypes?.toSet().orEmpty()
-	}
-}
 
 private fun maxResolutionDetail(
 	context: Context,
