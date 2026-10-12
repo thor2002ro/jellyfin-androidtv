@@ -51,6 +51,16 @@ class BrowseGridFragmentTests : FunSpec({
 		BrowseGridFragment.getSafeSelectedPosition(-1, -1, -1, 0) shouldBe -1
 	}
 
+	test("returning to a populated library reuses its loaded items") {
+		BrowseGridFragment.shouldRetrieveGrid(false, false, 80) shouldBe false
+	}
+
+	test("initial empty rebuilt and query-changed libraries retrieve items") {
+		BrowseGridFragment.shouldRetrieveGrid(false, false, 0) shouldBe true
+		BrowseGridFragment.shouldRetrieveGrid(true, false, 80) shouldBe true
+		BrowseGridFragment.shouldRetrieveGrid(false, true, 80) shouldBe true
+	}
+
 	test("browse grid loads lightweight fields before stream badges") {
 		val library = BaseItemDto(
 			id = UUID.randomUUID(),
@@ -123,6 +133,11 @@ class BrowseGridFragmentTests : FunSpec({
 
 	test("horizontal browse converts XML pixel insets before passing them to Compose") {
 		BrowseGridFragment.pixelsToDp(100, 2f) shouldBe 50
+	}
+
+	test("horizontal card titles fit inside every grid row") {
+		BrowseGridFragment.getHorizontalBrowseCardHeight(124, false) shouldBe 124
+		BrowseGridFragment.getHorizontalBrowseCardHeight(124, true) shouldBe 98
 	}
 
 	test("browse grid keeps the appropriate bottom control band clear of cards") {
