@@ -165,6 +165,10 @@ internal fun createDeviceProfile(
 
 	val supportsHevc = mediaTest.supportsHevc()
 	val supportsHevcMain10 = mediaTest.supportsHevcMain10()
+	val attemptSelectedHevcSource =
+		doviPlaybackPlan?.codec == DoviVideoCodec.HEVC &&
+			doviPlaybackPlan.decision.route != DoviRoute.ServerFallback
+	val advertiseHevcMain10 = supportsHevcMain10 || attemptSelectedHevcSource
 	val hevcMainLevel = userHEVCLevel ?: mediaTest.getHevcMainLevel()
 	val hevcMain10Level = userHEVCLevel ?: mediaTest.getHevcMain10Level()
 	val supportsAVC = mediaTest.supportsAVC()
@@ -515,7 +519,7 @@ internal fun createDeviceProfile(
 		is DoviRoute.SourceBase,
 		is DoviRoute.Transform,
 		-> baselineUnsupportedRangeTypesHevc -
-			doviPlaybackPlan.advertisedHevcRangeTypes + forceDisabledHdr
+			doviPlaybackPlan.advertisedHevcRangeTypes
 		DoviRoute.ServerFallback -> error("Handled above")
 		}
 	}

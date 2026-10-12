@@ -46,8 +46,8 @@ import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.softwareCodecsEnabledForProfile
 import org.jellyfin.playback.core.playbackManager
-import org.jellyfin.playback.dovi.doviConversionSuppressed
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.dovi.doviTransformationSuppressed
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
 import org.jellyfin.playback.jellyfin.JellyfinDeviceProfileRequest
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -181,7 +181,12 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	)
 	install(media3SessionPlugin(get(), mediaSessionOptions))
 
-	val doviMediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled])
+	val profileSoftwareCodecsEnabled = softwareCodecsEnabledForProfile(
+		backend = playbackBackend,
+		mpvDecoder = mpvDecoder,
+		softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled],
+	)
+	val doviMediaTest = MediaCodecCapabilitiesTest(profileSoftwareCodecsEnabled)
 	val doviNegotiations = get<DoviPlaybackNegotiationStore>()
 	val deviceProfileBuilder = { queueEntry: QueueEntry ->
 		val doviPlan = queueEntry.baseItem?.let { item ->
@@ -190,12 +195,28 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				mediaSourceId = queueEntry.mediaSourceId,
 				userPreferences = userPreferences,
 				mediaTest = doviMediaTest,
-				retrySuppressed = queueEntry.doviConversionSuppressed == true,
+				retrySuppressed = queueEntry.doviTransformationSuppressed == true,
 				displayHdrTypes = getSupportedDisplayHdrTypes(androidContext()),
 			)
 		}
+		if (doviPlan != null) {
+			Timber.i(
+				"Dolby Vision negotiation source=%s range=%s route=%s reason=%s",
+				doviPlan.mediaSourceId,
+				doviPlan.sourceRangeType,
+				doviPlan.decision.route,
+				doviPlan.decision.reason,
+			)
+		}
 		val (profile, token) = doviNegotiations.prepare(queueEntry, doviPlan) {
-			createDeviceProfile(androidContext(), userPreferences, get(), doviPlan)
+			createDeviceProfile(
+				context = androidContext(),
+				userPreferences = userPreferences,
+				serverVersion = get(),
+				doviPlaybackPlan = doviPlan,
+				softwareCodecsEnabled = profileSoftwareCodecsEnabled,
+				mediaTest = doviMediaTest,
+			)
 		}
 		JellyfinDeviceProfileRequest(profile, token)
 	}

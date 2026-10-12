@@ -6,6 +6,8 @@ import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.unmockkConstructor
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -43,11 +45,13 @@ import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class DoviPlaybackSupportTests : FunSpec({
 	val nativeCapabilities = DoviCapability.entries.toSet()
 	val bridge = DoviBridgeEvidence(true, nativeCapabilities)
+	afterTest { unmockkConstructor(Size::class) }
 
 	fun request(
 		mode: DoviCompatibilityMode = DoviCompatibilityMode.AUTO,
@@ -257,6 +261,9 @@ class DoviPlaybackSupportTests : FunSpec({
 	}
 
 	test("device profile removes only the exact selected HEVC range and leaves AV1 reporting unchanged") {
+		mockkConstructor(Size::class)
+		every { anyConstructed<Size>().width } returns 3840
+		every { anyConstructed<Size>().height } returns 2160
 		val size = mockk<Size> {
 			every { width } returns 3840
 			every { height } returns 2160
@@ -320,7 +327,7 @@ class DoviPlaybackSupportTests : FunSpec({
 		profile(fallback, capabilities = supportedMediaTest)
 			.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe true
 		profile(plan, setOf(VideoRangeType.DOVI_WITH_EL))
-			.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe true
+			.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe false
 	}
 
 	test("binding a new request clears a stale queue-entry decision") {
@@ -345,11 +352,11 @@ class DoviPlaybackSupportTests : FunSpec({
 	test("ambiguous media sources require an explicit source id") {
 		val first = doviMediaSource("a", "mkv")
 		val second = doviMediaSource("b", "mp4")
-		val item = BaseItemDto(id = UUID.randomUUID(), mediaSources = listOf(first, second))
+		val item = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE, mediaSources = listOf(first, second))
 
 		item.findDoviVideo(null) shouldBe null
 		item.findDoviVideo("b")?.first shouldBe second
-		BaseItemDto(id = UUID.randomUUID(), mediaSources = listOf(first))
+		BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE, mediaSources = listOf(first))
 			.findDoviVideo(null)?.first shouldBe first
 	}
 
@@ -368,6 +375,16 @@ class DoviPlaybackSupportTests : FunSpec({
 			source = profile7,
 			device = DoviDeviceCapabilities(supportsProfile7 = true),
 		)).decision.route shouldBe DoviRoute.Native
+	}
+
+	test("Profile 7 production metadata without a compatibility id converts to Profile 8.1") {
+		val source = doviMediaSource("p7", "mkv", VideoRangeType.DOVI_WITH_EL, dvProfile = 7)
+			.mediaStreams.orEmpty().single().toDoviSource()
+
+		decideDoviPlayback(request(
+			source = source,
+			device = DoviDeviceCapabilities(supportsProfile8 = true),
+		)).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 	}
 
 	test("Profile 5 production metadata converts only with explicit compatibility id base evidence") {
@@ -412,7 +429,14 @@ class DoviPlaybackSupportTests : FunSpec({
 			createDoviPlaybackPlan(
 				item = BaseItemDto(
 					id = UUID.randomUUID(),
-					mediaSources = listOf(doviMediaSource("p5", "mp4", range, 5, compatibilityId)),
+					type = BaseItemKind.MOVIE,
+					mediaSources = listOf(doviMediaSource(
+						id = "p5",
+						container = "mp4",
+						range = range,
+						dvProfile = 5,
+						compatibilityId = compatibilityId,
+					)),
 				),
 				mediaSourceId = "p5",
 				userPreferences = preferences,
