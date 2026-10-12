@@ -46,6 +46,7 @@ import org.jellyfin.androidtv.preference.mpvGpuApi
 import org.jellyfin.androidtv.preference.mpvGpuContext
 import org.jellyfin.androidtv.preference.mpvInterpolation
 import org.jellyfin.androidtv.preference.mpvLoopFilter
+import org.jellyfin.androidtv.preference.mpvNvidiaShieldWorkarounds
 import org.jellyfin.androidtv.preference.mpvOptionOverrides
 import org.jellyfin.androidtv.preference.mpvReplayGain
 import org.jellyfin.androidtv.preference.mpvScaler
@@ -105,6 +106,7 @@ fun SettingsPlaybackLibMPVScreen() {
 	var audioPitchCorrection by rememberPreference(userPreferences, UserPreferences.mpvAudioPitchCorrection)
 	var subtitleUseMargins by rememberPreference(userPreferences, UserPreferences.mpvSubtitleUseMargins)
 	var softwareDecodingForLiveTv by rememberPreference(userPreferences, UserPreferences.mpvSoftwareDecodingForLiveTv)
+	var nvidiaShieldWorkarounds by rememberPreference(userPreferences, UserPreferences.mpvNvidiaShieldWorkarounds)
 	val videoPreset by rememberPreference(userPreferences, UserPreferences.mpvVideoPreset)
 	val audioPreset by rememberPreference(userPreferences, UserPreferences.mpvAudioPreset)
 	var decoderThreads by rememberPreference(userPreferences, UserPreferences.mpvDecoderThreads)
@@ -129,6 +131,18 @@ fun SettingsPlaybackLibMPVScreen() {
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_general)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.DECODER, decoder) }
+		item {
+			LibMPVBooleanButton(
+				headingRes = R.string.preference_mpv_nvidia_shield_workarounds,
+				captionRes = R.string.preference_mpv_nvidia_shield_workarounds_description,
+				checked = nvidiaShieldWorkarounds,
+				defaultValue = true,
+				onClick = {
+					nvidiaShieldWorkarounds = !nvidiaShieldWorkarounds
+					backendSettings.applyPreferences()
+				},
+			)
+		}
 		item {
 			LibMPVBooleanButton(
 				headingRes = R.string.preference_mpv_software_decoding_livetv,
