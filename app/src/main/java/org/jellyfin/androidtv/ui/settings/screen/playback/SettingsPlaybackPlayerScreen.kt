@@ -91,7 +91,33 @@ fun SettingsPlaybackPlayerScreen() {
 				},
 				captionContent = { Text(stringResource(R.string.enable_playback_module_description)) },
 				onClick = {
-					playbackRewriteVideoEnabled = true
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
+					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.EXOPLAYER
+					externalAppRepository.setExternalPlayerapp(null)
+					router.back()
+				}
+			)
+		}
+
+		item {
+			ListButton(
+				leadingContent = {
+					Image(
+						painter = rememberAsyncImagePainter(R.drawable.ic_flask),
+						contentDescription = null,
+						modifier = Modifier
+							.size(32.dp)
+							.clip(LocalShapes.current.small)
+					)
+				},
+				headingContent = { Text(stringResource(R.string.playback_backend_libvlc_name)) },
+				trailingContent = {
+					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.LIBVLC)
+				},
+				captionContent = { Text(stringResource(R.string.playback_backend_libvlc_description)) },
+				onClick = {
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = true
+					userPreferences[UserPreferences.playbackBackend] = PlaybackBackend.LIBVLC
 					externalAppRepository.setExternalPlayerapp(null)
 					router.back()
 				},

@@ -53,6 +53,8 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 	private val videoQueueManager by inject<VideoQueueManager>()
 	private val playbackManager by inject<PlaybackManager>()
+	private val exoPlayerBackend by inject<ExoPlayerBackend>()
+	private val libVLCBackend by inject<LibVLCBackend>()
 	private val navigationRepository by inject<NavigationRepository>()
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
@@ -66,6 +68,11 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
+
+		playbackManager.switchBackend(when (userPreferences[UserPreferences.playbackBackend]) {
+			PlaybackBackend.EXOPLAYER -> exoPlayerBackend
+			PlaybackBackend.LIBVLC -> libVLCBackend
+		})
 
 		if (
 			arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&

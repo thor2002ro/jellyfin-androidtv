@@ -354,4 +354,4 @@ val routes = mapOf<String, RouteComposable>(
 			artifactId = context.parameters["artifactId"]!!
 		)
 	},
-) + libVLCSettingsRoutes
+) + libassSettingsRoutes + libVLCSettingsRoutes + mpvSettingsRoutes + exoPlayerSettingsRoutes

@@ -75,6 +75,42 @@ val playbackModule = module {
 	single { createExoPlayerBackend() }
 	single { createLibVLCBackend() }
 	single { createPlaybackManager() }
+	single { ExoPlayerBackendSettings(get(), get()) }
+	single { LibVLCBackendSettings(get(), get()) }
+}
+
+private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
+	val userPreferences = get<UserPreferences>()
+	val exoPlayerOptions = ExoPlayerOptions(
+		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
+		preferFfmpegAudioForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] },
+		preferFfmpegVideo = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] },
+		preferFfmpegVideoForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv] },
+		enableLibass = userPreferences[UserPreferences.assDirectPlay],
+		libassRenderType = userPreferences[UserPreferences.libassRenderType].assRenderType,
+		libassGlyphSize = userPreferences[UserPreferences.libassGlyphSize].glyphs,
+		libassCacheSize = userPreferences[UserPreferences.libassCacheSize].megabytes,
+		libassMaxRenderPixels = userPreferences[UserPreferences.libassMaxRenderPixels].pixels,
+		parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction],
+		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
+		baseDataSourceFactory = get<HttpDataSource.Factory>(),
+	)
+	return ExoPlayerBackend(androidContext(), exoPlayerOptions)
+}
+
+private fun Scope.createLibVLCBackend(): LibVLCBackend {
+	val userPreferences = get<UserPreferences>()
+	return LibVLCBackend(
+		context = androidContext(),
+		instanceOptionsProvider = {
+			LibVLCInstanceOptions(
+				arguments = userPreferences.libVLCStartupOptions(),
+				audioOutput = userPreferences[UserPreferences.libVLCAudioOutput].vlcValue,
+			)
+		},
+		videoDecoderProvider = { userPreferences[UserPreferences.libVLCDecoder].decoder },
+		playbackOptionsProvider = { userPreferences.libVLCPlaybackOptions() },
+	)
 }
 
 		gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
@@ -94,27 +130,11 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	}
 
 	val userPreferences = get<UserPreferences>()
-	val bufferLength = userPreferences[UserPreferences.bufferLength]
-	val exoPlayerOptions = ExoPlayerOptions(
-		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
-		preferFfmpegAudioForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] },
-		preferFfmpegVideo = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] },
-		preferFfmpegVideoForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv] },
-		enableLibass = userPreferences[UserPreferences.assDirectPlay],
-		libassRenderType = userPreferences[UserPreferences.libassRenderType].assRenderType,
-		libassGlyphSize = userPreferences[UserPreferences.libassGlyphSize].glyphs,
-		libassCacheSize = userPreferences[UserPreferences.libassCacheSize].megabytes,
-		libassMaxRenderPixels = userPreferences[UserPreferences.libassMaxRenderPixels].pixels,
-		parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction],
-		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
-		baseDataSourceFactory = get<HttpDataSource.Factory>(),
-		minBufferDuration = bufferLength.minBufferDuration,
-		maxBufferDuration = bufferLength.maxBufferDuration,
-		bufferForPlaybackDuration = bufferLength.bufferForPlaybackDuration,
-		bufferForPlaybackAfterRebufferDuration = bufferLength.bufferForPlaybackAfterRebufferDuration,
-		liveTvBufferDuration = bufferLength.liveTvBufferDuration,
-	)
-	install(exoPlayerPlugin(get(), exoPlayerOptions))
+	val backend = when (userPreferences[UserPreferences.playbackBackend]) {
+		PlaybackBackend.EXOPLAYER -> get<ExoPlayerBackend>()
+		PlaybackBackend.LIBVLC -> get<LibVLCBackend>()
+	}
+	install(playbackPlugin { provide(backend) })
 
 	val mediaSessionOptions = MediaSessionOptions(
 		channelId = notificationChannelId,
