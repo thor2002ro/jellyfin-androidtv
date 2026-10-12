@@ -251,6 +251,8 @@ class LibVLCBackend(
 	private var liveTvBufferDuration: Duration? = null
 	private var maxBufferBytes: Long? = null
 	private var previousStatsSample: LibVLCStatsSample? = null
+	private val decoderLogReader = LibVLCDecoderLogReader(LibVLCDecoderLogParser())
+	private var decoderSessionCounter = 0L
 	private var currentStream: PlayableMediaStream? = null
 	private var surfaceView: PlayerSurfaceView? = null
 	private var subtitleView: PlayerSubtitleView? = null
@@ -374,6 +376,7 @@ class LibVLCBackend(
 		videoOutput.apply(VideoOutputTransform.NONE)
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		ensureInstanceOptions()
+		decoderLogReader.beginSession((++decoderSessionCounter).toString())
 		currentStream = stream
 		stream.errorOrigin?.activate()
 		endReported = false
@@ -434,6 +437,7 @@ class LibVLCBackend(
 		endReported = false
 		playbackActive = false
 		previousStatsSample = null
+		decoderLogReader.endSession()
 		pendingInitialTrackTypes.clear()
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
@@ -459,6 +463,7 @@ class LibVLCBackend(
 		player.setEventListener(null)
 		player.release()
 		libVLC.release()
+		decoderLogReader.close()
 		released = true
 	}
 
@@ -582,17 +587,20 @@ class LibVLCBackend(
 			if (currentStream?.queueEntry?.isLiveTv == true) liveTvBufferDuration else normalBufferDuration,
 		)
 		val bufferDetails = formatLibVLCBufferDetails(estimatedBytes, bufferingPercent)
+		val decoderDiagnostics = decoderLogReader.snapshot()
 		return PlaybackFrameStats(
 			droppedFrames = stats?.lostPictures?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
 			corruptedFrames = stats?.demuxCorrupted?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
 			playerName = "libVLC",
 			videoDecodedFrames = stats?.decodedVideo?.coerceIn(0, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
 			videoDecoderFps = rates?.decodedFps,
-			videoDecoderName = "libVLC ${effectiveVideoDecoder.label}",
+			videoDecoderName = decoderDiagnostics.video?.name,
+			videoDecoderType = decoderDiagnostics.video?.type,
 			videoCodec = trackDiagnostics.videoCodec,
 			videoSourceFps = trackDiagnostics.videoSourceFps,
 			videoBitrate = trackDiagnostics.videoBitrate,
-			audioDecoderName = "libVLC",
+			audioDecoderName = decoderDiagnostics.audio?.name ?: "libVLC",
+			audioDecoderType = decoderDiagnostics.audio?.type,
 			audioCodec = trackDiagnostics.audioCodec,
 			audioBitrate = trackDiagnostics.audioBitrate,
 			audioChannels = trackDiagnostics.audioChannels,
