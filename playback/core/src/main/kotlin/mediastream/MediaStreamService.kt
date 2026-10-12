@@ -13,6 +13,7 @@ import org.jellyfin.playback.core.backend.activate
 import org.jellyfin.playback.core.backend.createPlaybackErrorOrigin
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.core.timedevent.TimedEvent

@@ -23,11 +23,11 @@ class BackendService {
 		private set
 
 	fun switchBackend(backend: PlayerBackend) {
-		_backend?.stop()
-		_backend?.setListener(null)
+		if (_backend === backend) return
+
 		_backend?.setVideoOutputTransform(VideoOutputTransform.NONE)
-		_backend?.setSurfaceView(null)
-		_backend?.setSubtitleView(null)
+		_backend?.reset()
+		_backend?.cleanup()
 		videoOutputTransform = VideoOutputTransform.NONE
 		callListeners { onVideoGeometryChange(VideoGeometry.EMPTY) }
 
@@ -106,8 +106,23 @@ class BackendService {
 		callListeners { onVideoGeometryChange(VideoGeometry.EMPTY) }
 	}
 
+	fun reset() {
 		clearVideoOutput()
+		_backend?.reset()
+	}
+
+	fun cleanup() {
+		_backend?.cleanup()
+	}
+
+	fun release() {
 		clearVideoOutput()
+		_backend?.release()
+		_backend = null
+		_surfaceView = null
+		_subtitleView = null
+	}
+
 	/**
 	 * Get the track selection backend if the current backend supports it.
 	 */
