@@ -516,7 +516,7 @@ class PlaybackBackendSuite(
 		val stream = requireNotNull(
 			JellyfinMediaStreamResolver(
 				environment.session.testApi,
-				{ JellyfinDeviceProfileRequest(configured.profile, 0) },
+				{ JellyfinDeviceProfileRequest(configured.profile, 0, protectsHlsVideoCopy = backendName.startsWith("ExoPlayer")) },
 				mediaStreamOptionsProvider = { _, _ ->
 					JellyfinMediaStreamOptions(
 						audioStreamIndex = audioIndex,

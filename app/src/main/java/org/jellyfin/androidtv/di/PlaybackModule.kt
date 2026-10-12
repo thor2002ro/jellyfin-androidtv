@@ -237,7 +237,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 					),
 			)
 		}
-		JellyfinDeviceProfileRequest(profile, token)
+		JellyfinDeviceProfileRequest(profile, token, protectsHlsVideoCopy = backend is ExoPlayerBackend)
 	}
 	val videoQueueManager = get<VideoQueueManager>()
 	install(jellyfinPlugin(
