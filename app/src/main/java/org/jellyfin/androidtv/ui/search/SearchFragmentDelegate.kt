@@ -14,6 +14,7 @@ import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.CustomListRowPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import org.jellyfin.sdk.model.api.BaseItemDto
 
 class SearchFragmentDelegate(
 	private val context: Context,
@@ -21,23 +22,42 @@ class SearchFragmentDelegate(
 	private val itemLauncher: ItemLauncher,
 ) {
 	val rowsAdapter = MutableObjectAdapter<Row>(CustomListRowPresenter())
+	private val rowsByLabel = mutableMapOf<Int, ListRow>()
+	private val itemsByLabel = mutableMapOf<Int, Collection<BaseItemDto>>()
 
 	fun showResults(searchResultGroups: Collection<SearchResultGroup>) {
-		rowsAdapter.clear()
-		val adapters = mutableListOf<ItemRowAdapter>()
+		val rows = mutableListOf<Row>()
+		val labels = searchResultGroups.mapTo(mutableSetOf()) { it.labelRes }
+		rowsByLabel.keys.filter { it !in labels }.forEach { label ->
+			(rowsByLabel.remove(label)?.adapter as? ItemRowAdapter)?.cancelRetrieval()
+			itemsByLabel.remove(label)
+		}
 		for ((labelRes, baseItems) in searchResultGroups) {
+			if (itemsByLabel[labelRes] == baseItems) {
+				rowsByLabel[labelRes]?.let(rows::add)
+				continue
+			}
+			(rowsByLabel.remove(labelRes)?.adapter as? ItemRowAdapter)?.cancelRetrieval()
+			itemsByLabel[labelRes] = baseItems
+			if (baseItems.isEmpty()) continue
 			val adapter = ItemRowAdapter(
 				context,
 				baseItems.toList(),
 				CardPresenter(),
-				rowsAdapter,
+				null,
 				QueryType.Search
-			).apply {
-				setRow(ListRow(HeaderItem(context.getString(labelRes)), this))
-			}
-			adapters.add(adapter)
+			)
+			val row = ListRow(HeaderItem(labelRes.toLong(), context.getString(labelRes)), adapter)
+			adapter.setRow(row)
+			adapter.Retrieve()
+			rowsByLabel[labelRes] = row
+			rows.add(row)
 		}
-		for (adapter in adapters) adapter.Retrieve()
+		rowsAdapter.replaceAll(
+			rows,
+			areItemsTheSame = { old, new -> old.headerItem.id == new.headerItem.id },
+			areContentsTheSame = { old, new -> old === new },
+		)
 	}
 
 	val onItemViewClickedListener = OnItemViewClickedListener { _, item, _, row ->

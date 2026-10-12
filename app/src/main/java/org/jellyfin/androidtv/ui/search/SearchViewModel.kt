@@ -3,12 +3,12 @@ package org.jellyfin.androidtv.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.jellyfin.androidtv.R
 import org.jellyfin.sdk.model.api.BaseItemKind
 import kotlin.time.Duration
@@ -47,6 +47,11 @@ class SearchViewModel(
 
 	fun searchImmediately(query: String) = searchDebounced(query, 0.milliseconds)
 
+	fun cancelSearch() {
+		searchJob?.cancel()
+		previousQuery = null
+	}
+
 	fun searchDebounced(query: String, debounce: Duration = debounceDuration): Boolean {
 		val trimmed = query.trim()
 		if (trimmed == previousQuery) return false
@@ -61,15 +66,16 @@ class SearchViewModel(
 
 		searchJob = viewModelScope.launch {
 			delay(debounce)
-
-			_searchResultsFlow.value = groups.map { (stringRes, itemKinds) ->
-				async {
-					val result = searchRepository.search(trimmed, itemKinds)
-					val items = result.getOrNull().orEmpty()
-
-					SearchResultGroup(stringRes, items)
+			val results = groups.map { (label, _) -> SearchResultGroup(label, emptyList()) }.toMutableList()
+			_searchResultsFlow.value = results.toList()
+			val requests = Semaphore(3)
+			groups.entries.forEachIndexed { index, (stringRes, itemKinds) ->
+				launch {
+					val items = requests.withPermit { searchRepository.search(trimmed, itemKinds).getOrNull().orEmpty() }
+					results[index] = SearchResultGroup(stringRes, items)
+					_searchResultsFlow.value = results.toList()
 				}
-			}.awaitAll()
+			}
 		}
 
 		return true

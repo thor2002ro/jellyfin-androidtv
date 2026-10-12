@@ -22,7 +22,8 @@ import coil3.transform.CircleCropTransformation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runInterruptible
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.util.BlurHashDecoder
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage
@@ -128,8 +129,10 @@ class AsyncImageView @JvmOverloads constructor(
 				// Only show blurhash if an image is going to be loaded from the network.
 				// Start the real image request first so BlurHash decoding never delays it.
 				val blurHashRequest = createBlurHashRequest(url, blurHash, isLowRamDevice, aspectRatio, blurHashResolution)
-				if (blurHashRequest != null) {
-					val blurHashDrawable = withContext(Dispatchers.Default) {
+				val placeholderJob = if (blurHashRequest != null) launch placeholder@{
+					delay(100)
+					if (imageRequest?.job?.isCompleted != false) return@placeholder
+					val blurHashDrawable = runInterruptible(Dispatchers.Default) {
 						BlurHashDecoder.decode(
 							blurHashRequest.blurHash,
 							blurHashRequest.width,
@@ -139,8 +142,12 @@ class AsyncImageView @JvmOverloads constructor(
 					if (requestId == loadRequestId && imageRequest?.job?.isCompleted == false && blurHashDrawable != null) {
 						setImageDrawable(blurHashDrawable)
 					}
+				} else null
+				try {
+					imageRequest?.job?.await()
+				} finally {
+					placeholderJob?.cancel()
 				}
-				imageRequest?.job?.await()
 			}
 		}
 	}

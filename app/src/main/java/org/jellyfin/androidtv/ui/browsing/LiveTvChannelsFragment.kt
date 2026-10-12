@@ -124,6 +124,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 	}
 
 	override fun onDestroyView() {
+		adapter?.cancelRetrieval()
 		handler.removeCallbacksAndMessages(null)
 		val presenter = gridPresenter
 		val holder = gridViewHolder
@@ -186,6 +187,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 
 	private fun buildAdapter(metrics: GridMetrics) {
 		val viewBinding = binding ?: return
+		adapter?.cancelRetrieval()
 		val presenter = CardPresenter(false, ImageType.THUMB, pxToDp(metrics.cardHeightPx), liveTvActions::onLongClick)
 
 		val rowAdapter = ItemRowAdapter(

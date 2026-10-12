@@ -7,6 +7,9 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.PresenterSelector
 import androidx.leanback.widget.Row
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancelChildren
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.ChangeTriggerType
@@ -118,6 +121,8 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private val currentlyRetrievingSemaphore = Any()
 	private var currentlyRetrieving = false
 	private var pendingFullRetrieve = false
+	private var interruptedRetrieve = false
+	internal val retrievalScope by lazy { MainScope() }
 	private var queryVersion = 0
 	private lateinit var context: Context
 
@@ -677,6 +682,10 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 
 	@Suppress("FunctionName")
 	fun ReRetrieveIfNeeded(): Boolean {
+		if (interruptedRetrieve) {
+			Retrieve()
+			return true
+		}
 		val triggers = reRetrieveTriggers ?: return false
 		val lastRetrieve = lastFullRetrieve ?: return false
 
@@ -702,6 +711,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	@Suppress("FunctionName")
 	fun Retrieve() {
 		if (!notifyRetrieveStarted(queueIfBusy = true)) return
+		interruptedRetrieve = false
 		lastFullRetrieve = Instant.now()
 		itemsLoaded = 0
 		itemsRetrieved = 0
@@ -809,6 +819,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 
 	@JvmOverloads
 	fun notifyRetrieveFinished(exception: Exception? = null) {
+		if (exception is CancellationException) return
 		if (exception != null) Timber.w(exception, "Failed to retrieve items")
 
 		val retrieveAgain = finishRetrieveAndConsumePendingFullRetrieve()
@@ -818,6 +829,15 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		}
 		if (exception == null) retrieveFinishedRunnable?.run()
 		if (retrieveAgain) Retrieve()
+	}
+
+	fun cancelRetrieval() {
+		synchronized(currentlyRetrievingSemaphore) {
+			interruptedRetrieve = interruptedRetrieve || currentlyRetrieving
+			currentlyRetrieving = false
+			pendingFullRetrieve = false
+		}
+		retrievalScope.coroutineContext.cancelChildren()
 	}
 
 	internal fun notifyObsoleteRetrieveFinished() {

@@ -131,6 +131,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
 
     private RowsSupportFragment mRowsFragment;
     private MutableObjectAdapter<Row> mRowsAdapter;
+    private final java.util.Set<ItemRowAdapter> itemRowAdapters = new java.util.HashSet<>();
 
     private MyDetailsOverviewRowPresenter mDorPresenter;
     private MyDetailsOverviewRow mDetailsOverviewRow;
@@ -196,6 +197,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                     return null;
                 });
 
+                cancelRowRetrievals();
                 mRowsAdapter.clear();
                 mRowsAdapter.add(mDetailsOverviewRow);
                 //re-retrieve the schedule after giving it a second to rebuild
@@ -286,6 +288,17 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     public void onPause() {
         super.onPause();
         stopClock();
+    }
+
+    @Override
+    public void onDestroyView() {
+        cancelRowRetrievals();
+        super.onDestroyView();
+    }
+
+    private void cancelRowRetrievals() {
+        for (ItemRowAdapter row : itemRowAdapters) row.cancelRetrieval();
+        itemRowAdapters.clear();
     }
 
     @Override
@@ -462,6 +475,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         ps.addClassPresenter(MyDetailsOverviewRow.class, mDorPresenter);
         mListRowPresenter = new CustomListRowPresenter(Utils.convertDpToPixel(requireContext(), 10));
         ps.addClassPresenter(ListRow.class, mListRowPresenter);
+        cancelRowRetrievals();
         mRowsAdapter = new MutableObjectAdapter<Row>(ps);
         mRowsFragment.setAdapter(mRowsAdapter);
         mRowsAdapter.add(mDetailsOverviewRow);
@@ -491,6 +505,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     }
 
     protected void addItemRow(MutableObjectAdapter<Row> parent, ItemRowAdapter row, int index, String headerText) {
+        itemRowAdapters.add(row);
         HeaderItem header = new HeaderItem(index, headerText);
         ListRow listRow = new ListRow(header, row);
         parent.add(listRow);
@@ -499,6 +514,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     }
 
     protected void addDeferredItemRow(ItemRowAdapter row, int index, String headerText) {
+        itemRowAdapters.add(row);
         HeaderItem header = new HeaderItem(index, headerText);
         ListRow listRow = new ListRow(header, row);
         row.setRow(listRow, index);

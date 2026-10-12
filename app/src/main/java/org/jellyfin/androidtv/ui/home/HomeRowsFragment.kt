@@ -328,6 +328,15 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		mediaManager.removeAudioEventListener(this)
 	}
 
+	override fun onDestroyView() {
+		trackHomeRows()
+		homeRowAdapters.forEach(ItemRowAdapter::cancelRetrieval)
+		backgroundUpdateJob?.cancel()
+		homeRowsDebounceJob?.cancel()
+		homeRowsRefreshJob?.cancel()
+		super.onDestroyView()
+	}
+
 	private fun updateBackground(item: BaseRowItem?) {
 		backgroundUpdateJob?.cancel()
 
