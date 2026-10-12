@@ -707,6 +707,7 @@ class ExoPlayerBackend(
 			active = activePositionMs.milliseconds,
 			buffer = safeBufferedPositionMs.milliseconds,
 			duration = duration,
+			isSeekable = mediaItemMatchesCurrentStream && exoPlayer.isCurrentMediaItemSeekable,
 		)
 	}
 
@@ -2148,6 +2149,12 @@ class ExoPlayerBackend(
 
 		cancelAudioDecoderStallCheck()
 		exoPlayer.seekTo(position.inWholeMilliseconds)
+		return true
+	}
+
+	override fun seekToLiveEdge(): Boolean {
+		if (!exoPlayer.isCommandAvailable(Player.COMMAND_SEEK_TO_DEFAULT_POSITION)) return false
+		exoPlayer.seekToDefaultPosition()
 		return true
 	}
 
