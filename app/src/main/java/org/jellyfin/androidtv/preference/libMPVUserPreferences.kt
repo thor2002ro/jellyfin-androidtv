@@ -43,6 +43,7 @@ private val mpvNvidiaShieldWorkaroundsPreference = booleanPreference("mpv_nvidia
 private val mpvVideoPresetPreference = enumPreference("mpv_anime_preset_level", LibMPVVideoPresetOption.OFF)
 private val mpvAudioPresetPreference = enumPreference("mpv_audio_preset", LibMPVAudioPresetOption.OFF)
 private val mpvDecoderThreadsPreference = intPreference("mpv_decoder_threads", 0)
+private val mpvCheckHardwareProfilePreference = booleanPreference("mpv_check_hardware_profile", false)
 private val mpvOptionOverridesPreference = stringPreference("mpv_option_overrides", "")
 
 val UserPreferences.Companion.mpvDecoder get() = mpvDecoderPreference
@@ -68,4 +69,5 @@ val UserPreferences.Companion.mpvNvidiaShieldWorkarounds get() = mpvNvidiaShield
 val UserPreferences.Companion.mpvVideoPreset get() = mpvVideoPresetPreference
 val UserPreferences.Companion.mpvAudioPreset get() = mpvAudioPresetPreference
 val UserPreferences.Companion.mpvDecoderThreads get() = mpvDecoderThreadsPreference
+val UserPreferences.Companion.mpvCheckHardwareProfile get() = mpvCheckHardwareProfilePreference
 val UserPreferences.Companion.mpvOptionOverrides get() = mpvOptionOverridesPreference

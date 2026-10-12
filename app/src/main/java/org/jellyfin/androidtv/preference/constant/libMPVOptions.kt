@@ -11,6 +11,7 @@ import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
 import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
+import org.jellyfin.androidtv.preference.mpvCheckHardwareProfile
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
@@ -425,6 +426,7 @@ fun UserPreferences.mpvPlaybackOptions(
 		replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
 		surroundVolumeBoost = this[UserPreferences.surroundVolumeBoost],
 		decoderThreads = this[UserPreferences.mpvDecoderThreads].coerceIn(0, 32),
+		checkHardwareProfile = this[UserPreferences.mpvCheckHardwareProfile],
 		skipLoopFilter = this[UserPreferences.mpvLoopFilter].mpvValue,
 		subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,
 		subtitleUseMargins = this[UserPreferences.mpvSubtitleUseMargins],
@@ -461,5 +463,6 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvVideoPreset] = LibMPVVideoPresetOption.OFF
 	this[UserPreferences.mpvAudioPreset] = LibMPVAudioPresetOption.OFF
 	this[UserPreferences.mpvDecoderThreads] = 0
+	this[UserPreferences.mpvCheckHardwareProfile] = false
 	this[UserPreferences.mpvOptionOverrides] = ""
 }
