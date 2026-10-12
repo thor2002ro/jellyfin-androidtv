@@ -2,7 +2,6 @@ package org.jellyfin.playback.media3.exoplayer
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.media.MediaCodecList
 import android.os.Build
 import android.os.Handler
@@ -11,7 +10,6 @@ import android.os.SystemClock
 import android.util.TypedValue
 import android.view.ViewGroup
 import androidx.annotation.OptIn
-import androidx.core.graphics.TypefaceCompat
 import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -66,6 +64,7 @@ import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.font.SubtitleFontProvider
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
@@ -74,6 +73,8 @@ import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
+import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
+import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
@@ -204,6 +205,20 @@ private fun String?.tokens() = this
 private fun isH264Codec(codec: String) = codec.lowercase().let { value ->
 	value.contains("h264") || value.contains("avc")
 }
+
+internal fun PlayableMediaStream.initialLocalSubtitleStreamIndex(): Int? =
+	selectedSubtitleStreamIndex?.takeIf { streamIndex ->
+		if (streamIndex < 0) {
+			allowsLocalSubtitleDisable()
+		} else {
+			subtitleTrack(streamIndex)
+				?.let { track -> allowsLocalTrackSelection(TrackType.SUBTITLE, track) } == true
+		}
+	}
+
+private fun PlayableMediaStream.subtitleTrack(streamIndex: Int) = tracks
+	.filterIsInstance<MediaStreamSubtitleTrack>()
+	.firstOrNull { track -> track.index == streamIndex }
 
 private val currentDeviceIsAmlogic by lazy { isAmlogicDevice() }
 
@@ -1179,7 +1194,7 @@ class ExoPlayerBackend(
 				Color.TRANSPARENT,
 				edgeType,
 				subtitleStyle.edgeColor,
-				TypefaceCompat.create(context, Typeface.DEFAULT, subtitleStyle.textWeight, false),
+				SubtitleFontProvider.typeface(context, subtitleStyle.textWeight),
 			)
 		)
 	}
@@ -1524,11 +1539,17 @@ class ExoPlayerBackend(
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
 		return getSourceTracks(type).mapIndexed { index, track ->
-			val supportedTrack = if (currentStream?.conversionMethod == MediaConversionMethod.None) {
+			val usesLocalSelection = currentStream?.allowsLocalTrackSelection(type, track) == true
+			val supportedTrack = if (usesLocalSelection) {
 				findSupportedTrack(type, index, track)
 			} else null
-			val isSelected = supportedTrack?.groupInfo?.isTrackSelected(supportedTrack.trackIndex)
-				?: isSelectedSourceTrack(type, track.index)
+			// Client-owned tracks must reflect Media3's current selection; the source index
+			// does not change when the user switches an external subtitle locally.
+			val isSelected = if (usesLocalSelection) {
+				supportedTrack?.groupInfo?.isTrackSelected(supportedTrack.trackIndex) == true
+			} else {
+				isSelectedSourceTrack(type, track.index)
+			}
 
 			PlayerTrack(
 				index = index,
@@ -1549,7 +1570,7 @@ class ExoPlayerBackend(
 
 		// Handle subtitle disable
 		if (type == TrackType.SUBTITLE && index == -1) {
-			if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
+			if (currentStream?.allowsLocalSubtitleDisable() != true) return false
 
 			val params = exoPlayer.trackSelectionParameters.buildUpon()
 				.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -1558,9 +1579,8 @@ class ExoPlayerBackend(
 			return true
 		}
 
-		if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
-
 		val sourceTrack = getSourceTracks(type).getOrNull(index)
+		if (sourceTrack == null || currentStream?.allowsLocalTrackSelection(type, sourceTrack) != true) return false
 		val match = findSupportedTrack(type, index, sourceTrack)
 		if (match == null) {
 			Timber.w("Could not find track with index $index")
@@ -1678,13 +1698,18 @@ class ExoPlayerBackend(
 	}
 
 	private fun PlayableMediaStream.initialTrackSelection(): PendingInitialTrackSelection? {
-		if (conversionMethod != MediaConversionMethod.None) return null
-		if (selectedAudioStreamIndex == null && selectedSubtitleStreamIndex == null) return null
+		// Remuxed or transcoded audio is selected by the server. External subtitles remain
+		// selectable in Media3 and are handled independently above.
+		val audioStreamIndex = selectedAudioStreamIndex.takeIf {
+			conversionMethod == MediaConversionMethod.None
+		}
+		val subtitleStreamIndex = initialLocalSubtitleStreamIndex()
+		if (audioStreamIndex == null && subtitleStreamIndex == null) return null
 
 		return PendingInitialTrackSelection(
 			stream = this,
-			audioStreamIndex = selectedAudioStreamIndex,
-			subtitleStreamIndex = selectedSubtitleStreamIndex,
+			audioStreamIndex = audioStreamIndex,
+			subtitleStreamIndex = subtitleStreamIndex,
 		)
 	}
 

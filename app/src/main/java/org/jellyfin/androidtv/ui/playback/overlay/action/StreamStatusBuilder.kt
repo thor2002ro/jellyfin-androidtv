@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.ui.playback.getSubtitleMediaStreamCodec
 import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
+import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
