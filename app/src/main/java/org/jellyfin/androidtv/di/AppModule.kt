@@ -141,7 +141,7 @@ val appModule = module {
 			diskCache {
 				DiskCache.Builder()
 					.directory(androidContext().cacheDir.resolve("image_cache").absolutePath.toPath())
-					.maximumMaxSizeBytes(512L * 1024L * 1024L)
+					.maximumMaxSizeBytes(1024L * 1024L * 1024L)
 					.build()
 			}
 
