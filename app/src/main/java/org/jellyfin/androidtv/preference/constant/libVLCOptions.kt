@@ -105,6 +105,7 @@ enum class LibVLCReplayGainMode(
 }
 
 fun UserPreferences.libVLCStartupOptions() = buildList {
+	add("--verbose=2")
 	this@libVLCStartupOptions[UserPreferences.libVLCVideoOutput].libVLCOption?.let(::add)
 	if (this@libVLCStartupOptions[UserPreferences.libVLCReplayGain]) {
 		add("--audio-replay-gain-mode=${this@libVLCStartupOptions[UserPreferences.libVLCReplayGainMode].vlcValue}")
