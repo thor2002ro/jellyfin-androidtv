@@ -8,13 +8,13 @@ import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import org.jellyfin.androidtv.R
-import org.jellyfin.sdk.model.api.BaseItemDto
-import org.jellyfin.sdk.model.api.BaseItemKind
-import org.jellyfin.sdk.model.api.MediaSourceInfo
-import java.util.UUID
 import org.jellyfin.androidtv.constant.ImageType as BaseRowImageType
 import org.jellyfin.androidtv.util.apiclient.JellyfinImageSource
+import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.MediaSourceInfo
+import java.util.UUID
 
 class BaseItemDtoBaseRowItemTests : FunSpec({
 	val context = mockk<Context>()
@@ -256,7 +256,6 @@ class BaseItemDtoBaseRowItemTests : FunSpec({
 		image?.type shouldBe ImageType.THUMB
 		image?.tag shouldBe "parent-series-thumb"
 	}
-
 })
 
 private fun season(

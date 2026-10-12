@@ -67,6 +67,34 @@ class ItemRowAdapterHelperTests : FunSpec({
 		).resumeSignature()
 	}
 
+	test("resume signature changes when server artwork changes") {
+		val itemId = UUID.randomUUID()
+
+		BaseItemDtoBaseRowItem(
+			BaseItemDto(
+				id = itemId,
+				type = BaseItemKind.EPISODE,
+				seriesThumbImageTag = "old-thumb",
+			)
+		).resumeSignature() shouldNotBe BaseItemDtoBaseRowItem(
+			BaseItemDto(
+				id = itemId,
+				type = BaseItemKind.EPISODE,
+				seriesThumbImageTag = "new-thumb",
+			)
+		).resumeSignature()
+	}
+
+	test("next up signature changes when server artwork changes") {
+		val itemId = UUID.randomUUID()
+
+		BaseItemDtoBaseRowItem(
+			BaseItemDto(id = itemId, type = BaseItemKind.EPISODE, seriesPrimaryImageTag = "old-poster")
+		).itemSignature() shouldNotBe BaseItemDtoBaseRowItem(
+			BaseItemDto(id = itemId, type = BaseItemKind.EPISODE, seriesPrimaryImageTag = "new-poster")
+		).itemSignature()
+	}
+
 	test("changing library sorting invalidates pages from the previous ordering") {
 		val adapter = itemAdapter()
 		adapter.totalItems = 160
@@ -193,34 +221,6 @@ class ItemRowAdapterHelperTests : FunSpec({
 
 		adapter.itemsRetrieved shouldBe 0
 	}
-	test("resume signature changes when server artwork changes") {
-		val itemId = UUID.randomUUID()
-
-		BaseItemDtoBaseRowItem(
-			BaseItemDto(
-				id = itemId,
-				type = BaseItemKind.EPISODE,
-				seriesThumbImageTag = "old-thumb",
-			)
-		).resumeSignature() shouldNotBe BaseItemDtoBaseRowItem(
-			BaseItemDto(
-				id = itemId,
-				type = BaseItemKind.EPISODE,
-				seriesThumbImageTag = "new-thumb",
-			)
-		).resumeSignature()
-	}
-
-	test("next up signature changes when server artwork changes") {
-		val itemId = UUID.randomUUID()
-
-		BaseItemDtoBaseRowItem(
-			BaseItemDto(id = itemId, type = BaseItemKind.EPISODE, seriesPrimaryImageTag = "old-poster")
-		).itemSignature() shouldNotBe BaseItemDtoBaseRowItem(
-			BaseItemDto(id = itemId, type = BaseItemKind.EPISODE, seriesPrimaryImageTag = "new-poster")
-		).itemSignature()
-	}
-
 
 	test("combined home items keep resume order, remove next up duplicates, and respect the limit") {
 		val resumedMovie = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE)
@@ -255,7 +255,6 @@ class ItemRowAdapterHelperTests : FunSpec({
 		rowItems.map(BaseRowItem::showRemainingTimeBadge) shouldBe listOf(true, false)
 		rowItems.map(BaseRowItem::preferParentThumb) shouldBe listOf(true, true)
 	}
-
 })
 
 private class NoIdRowItem : BaseRowItem(BaseRowType.BaseItem)
