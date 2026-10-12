@@ -97,7 +97,14 @@ val playbackModule = module {
 	single { createPlaybackManager() }
 	single { ExoPlayerBackendSettings(get(), get()) }
 	single { LibVLCBackendSettings(get(), get()) }
-	single { LibMPVBackendSettings(userPreferences = get<UserPreferences>(), backend = get<LibMPVBackend>()) }
+	single {
+		val userPreferences = get<UserPreferences>()
+		LibMPVBackendSettings(
+			userPreferences = userPreferences,
+			backend = get<LibMPVBackend>(),
+			playbackOptionsProvider = { userPreferences.detectedMPVPlaybackOptions(androidContext()) },
+		)
+	}
 }
 
 private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
@@ -145,9 +152,13 @@ private fun Scope.createLibMPVBackend(): LibMPVBackend {
 	return LibMPVBackend(
 		context = androidContext(),
 		videoDecoderProvider = { userPreferences[UserPreferences.mpvDecoder].decoder },
-		playbackOptionsProvider = { userPreferences.mpvPlaybackOptions() },
+		playbackOptionsProvider = { userPreferences.detectedMPVPlaybackOptions(androidContext()) },
 		gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
 	)
+}
+
+private fun UserPreferences.detectedMPVPlaybackOptions(context: Context) = mpvPlaybackOptions {
+	getSupportedMPVPassthroughAudioMimes(context, managedAudioPassthroughMimeTypes)
 }
 
 fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
@@ -219,6 +230,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				softwareCodecsEnabled = profileSoftwareCodecsEnabled,
 				mediaTest = doviMediaTest,
 				enableFfmpegAudio = get<PlaybackManager>().backend is ExoPlayerBackend,
+				enableMpvAudio = get<PlaybackManager>().backend is LibMPVBackend,
 				enableFfmpegVideo = get<PlaybackManager>().backend is ExoPlayerBackend && (
 					userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] ||
 						(queueEntry.baseItem?.isLiveTv() == true && userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv])

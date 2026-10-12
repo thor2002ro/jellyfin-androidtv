@@ -233,7 +233,11 @@ class PlaybackBackendSuite(
 				LibMPVBackend(
 					context = context,
 					videoDecoderProvider = { preferences[UserPreferences.mpvDecoder].decoder },
-					playbackOptionsProvider = { preferences.mpvPlaybackOptions() },
+					playbackOptionsProvider = {
+						preferences.mpvPlaybackOptions(
+							getSupportedPassthroughAudioMimes(context, managedAudioPassthroughMimeTypes)
+						)
+					},
 					gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
 				)
 			},

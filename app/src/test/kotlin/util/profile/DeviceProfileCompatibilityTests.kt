@@ -15,6 +15,8 @@ import io.mockk.unmockkConstructor
 import io.mockk.unmockkStatic
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
+import org.jellyfin.androidtv.preference.constant.LibMPVAudioPresetOption
+import org.jellyfin.androidtv.preference.constant.LibMPVAudioOutput
 import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.CodecType
 import org.jellyfin.sdk.model.api.DlnaProfileType
@@ -32,6 +34,77 @@ class DeviceProfileCompatibilityTests : FunSpec({
 	afterTest {
 		unmockkConstructor(Size::class)
 		unmockkStatic(FfmpegLibrary::class)
+	}
+
+	test("MPV profile uses carrier-probed passthrough support") {
+		mockkStatic(::getSupportedPassthroughAudioMimes)
+		mockkStatic(::getSupportedMPVPassthroughAudioMimes)
+		try {
+			val context = mockk<Context>()
+			val preferences = mockk<UserPreferences>()
+			mockkConstructor(Size::class)
+			every { anyConstructed<Size>().width } returns 0
+			every { anyConstructed<Size>().height } returns 0
+			val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
+				every { getMaxResolution(any()) } returns Size(0, 0)
+			}
+			every { getSupportedPassthroughAudioMimes(context, any()) } returns
+				setOf(MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3)
+			every { getSupportedMPVPassthroughAudioMimes(context, any()) } returns setOf(MimeTypes.AUDIO_AC3)
+			every { preferences[UserPreferences.playbackBackend] } returns PlaybackBackend.MPV
+			every { preferences[UserPreferences.softwareCodecsEnabled] } returns false
+			every { preferences[UserPreferences.audioBehaviour] } returns AudioBehavior.TRANSCODE_TO_PASSTHROUGH
+			every { preferences[UserPreferences.mpvAudioPreset] } returns LibMPVAudioPresetOption.OFF
+			every { preferences[UserPreferences.mpvAudioOutput] } returns LibMPVAudioOutput.AUDIOTRACK
+			every { preferences[UserPreferences.maxBitrate] } returns "100"
+			every { preferences[UserPreferences.maxResolution] } returns PlaybackResolution.NATIVE
+			every { preferences[UserPreferences.assDirectPlay] } returns true
+			every { preferences[UserPreferences.pgsDirectPlay] } returns true
+			every { preferences[UserPreferences.userAVCLevel] } returns UserPreferences.userAVCLevel.defaultValue
+			every { preferences[UserPreferences.userHEVCLevel] } returns UserPreferences.userHEVCLevel.defaultValue
+			for (format in BitstreamAudioFormat.entries) {
+				every { preferences[format.preference] } returns BitstreamAudioMode.AUTO
+			}
+			for (format in HdrFormat.entries) {
+				every { preferences[format.preference] } returns HdrOverrideMode.AUTO
+			}
+
+			val profile = createDeviceProfile(
+				context = context,
+				userPreferences = preferences,
+				serverVersion = ServerVersion(12, 0, 0),
+				mediaTest = mediaTest,
+			)
+
+			profile.codecProfiles.any { codecProfile ->
+				codecProfile.type == CodecType.VIDEO_AUDIO &&
+					Codec.Audio.EAC3 in codecProfile.codec.declarations() &&
+					codecProfile.conditions.any { condition ->
+						condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
+					}
+			} shouldBe true
+			for (disabledBy in listOf("preset", "downmix", "codec switches")) {
+				every { preferences[UserPreferences.mpvAudioPreset] } returns
+					if (disabledBy == "preset") LibMPVAudioPresetOption.CINEMA_SPATIAL else LibMPVAudioPresetOption.OFF
+				every { preferences[UserPreferences.audioBehaviour] } returns
+					if (disabledBy == "downmix") AudioBehavior.DOWNMIX_TO_STEREO else AudioBehavior.TRANSCODE_TO_PASSTHROUGH
+				for (format in BitstreamAudioFormat.entries) {
+					every { preferences[format.preference] } returns
+						if (disabledBy == "codec switches") BitstreamAudioMode.DISABLE else BitstreamAudioMode.ENABLE
+				}
+				val disabledProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+				disabledProfile.transcodingProfiles.count { it.type == DlnaProfileType.VIDEO } shouldBe 2
+				disabledProfile.codecProfiles.any {
+					it.type == CodecType.VIDEO_AUDIO && !it.codec.isNullOrBlank() &&
+						it.conditions.any { condition -> condition.property == ProfileConditionValue.AUDIO_CHANNELS }
+				} shouldBe false
+			}
+			verify(exactly = 1) { getSupportedMPVPassthroughAudioMimes(context, any()) }
+			verify(exactly = 0) { getSupportedPassthroughAudioMimes(context, any()) }
+		} finally {
+			unmockkStatic(::getSupportedMPVPassthroughAudioMimes)
+			unmockkStatic(::getSupportedPassthroughAudioMimes)
+		}
 	}
 
 	test("preferred FFmpeg video permits missing platform codecs with bounded SDR claims") {
