@@ -34,9 +34,7 @@ import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
-import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegAudioMimeTypes
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
-import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegVideoMimeTypes
 import org.koin.compose.koinInject
 
 // Values from Display.HdrCapabilities. Kept local to avoid minSdk inlined API warnings.
