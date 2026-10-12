@@ -350,6 +350,31 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
+			var boost by rememberPreference(userPreferences, UserPreferences.surroundVolumeBoost)
+			val interactionSource = remember { MutableInteractionSource() }
+			ListControl(
+				headingContent = { Text(stringResource(R.string.pref_surround_volume_boost)) },
+				captionContent = { Text(stringResource(R.string.pref_surround_volume_boost_summary)) },
+				interactionSource = interactionSource,
+				modifier = Modifier.focusKey("surround_volume_boost"),
+			) {
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					RangeControl(
+						modifier = Modifier.height(4.dp).weight(1f),
+						interactionSource = interactionSource,
+						min = 0f,
+						max = 12f,
+						stepForward = 3f,
+						value = boost.coerceIn(0, 12).toFloat(),
+						onValueChange = { boost = it.roundToInt() },
+					)
+					Spacer(Modifier.width(Tokens.Space.spaceSm))
+					Text(if (boost == 0) stringResource(R.string.pref_surround_volume_boost_off) else "+$boost dB")
+				}
+			}
+		}
+
+		item {
 			var audioNightMode by rememberPreference(userPreferences, UserPreferences.audioNightMode)
 
 			ListButton(
