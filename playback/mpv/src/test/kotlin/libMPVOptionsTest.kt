@@ -12,6 +12,19 @@ import kotlin.time.Duration.Companion.seconds
 import `is`.xyz.mpv.MPVNode
 
 class LibMPVOptionsTest : StringSpec({
+	"local audio conversion status reads the output codec and excludes native passthrough" {
+		localAudioConversionCodec("floatp", "spdif-ac3") shouldBe "ac3"
+		localAudioConversionCodec("floatp", "spdif-dts") shouldBe "dts"
+		localAudioConversionCodec("floatp", "spdif-eac3") shouldBe "eac3"
+		localAudioConversionCodec("spdif-dts", "spdif-dts") shouldBe null
+		localAudioConversionCodec("floatp", "spdif-") shouldBe null
+		localAudioConversionCodec("floatp", "ac3") shouldBe null
+		localAudioConversionCodec("spdif-ac3", "spdif-ac3") shouldBe null
+		localAudioConversionCodec("floatp", "float") shouldBe null
+		localAudioConversionCodec(null, "spdif-ac3") shouldBe null
+		localAudioConversionCodec("floatp", null) shouldBe null
+	}
+
 	"NVIDIA detection uses manufacturer only" {
 		isLibMPVNvidiaDevice("NVIDIA") shouldBe true
 		isLibMPVNvidiaDevice("NVIDIA Corporation") shouldBe true
@@ -404,6 +417,26 @@ class LibMPVOptionsTest : StringSpec({
 		)
 		LibMPVPlaybackOptions(audioTrackPcmFloat = false)
 			.managedOptions()["audiotrack-pcm-float"] shouldBe "no"
+	}
+
+	"AC3 conversion appends to expert filters and disabling restores them" {
+		val options = LibMPVPlaybackOptions(
+			convertAudioToAc3 = true,
+			customOptions = mapOf("af" to "lavfi=[volume=0.5]", "vo" to "null"),
+		)
+		options.runtimeOptions(File("mpv-anime"))["vo"] shouldBe options.videoOutput
+		options.runtimeOptions(File("mpv-anime"))["af"] shouldBe
+			"lavfi=[volume=0.5],@jellyfin-ac3:lavcac3enc=tospdif=yes:bitrate=640:minch=3"
+		options.copy(convertAudioToAc3 = false).runtimeOptions(File("mpv-anime"))["af"] shouldBe "lavfi=[volume=0.5]"
+	}
+
+	"AC3 conversion survives the standard preset and clears when disabled" {
+		val options = LibMPVPlaybackOptions(convertAudioToAc3 = true, audioPreset = LibMPVAudioPreset.STANDARD)
+		options.runtimeOptions(File("mpv-anime"))["af"] shouldBe
+			"@jellyfin-ac3:lavcac3enc=tospdif=yes:bitrate=640:minch=3"
+		options.copy(convertAudioToAc3 = false).runtimeOptions(File("mpv-anime"))["af"] shouldBe ""
+		options.copy(convertAudioToAc3 = false, audioPreset = LibMPVAudioPreset.OFF)
+			.runtimeOptions(File("mpv-anime"))["af"] shouldBe ""
 	}
 
 	"all built-in presets apply their upstream options" {

@@ -98,6 +98,25 @@ internal fun LibMPVPlaybackOptions.presetOptions(shaderDirectory: File): Map<Str
 	putAll(audioPreset.options)
 }
 
+internal fun LibMPVPlaybackOptions.runtimeOptions(
+	shaderDirectory: File,
+	vulkanSupported: Boolean = true,
+	effectiveVideoOutput: String = videoOutput,
+	videoDecoder: String? = null,
+) = linkedMapOf<String, String>().apply {
+	putAll(managedOptions(vulkanSupported))
+	put("vo", effectiveVideoOutput)
+	videoDecoder?.let { put("hwdec", it) }
+	putAll(presetOptions(shaderDirectory))
+	putAll(customOptions.filterKeys { !isLibMPVOptionManagedByJellyfin(it) })
+	// Always write af so turning conversion off restores the configured filters.
+	val filters = get("af").orEmpty()
+	put("af", if (convertAudioToAc3) {
+		listOf(filters, "@jellyfin-ac3:lavcac3enc=tospdif=yes:bitrate=640:minch=3")
+			.filter(String::isNotEmpty).joinToString(",")
+	} else filters)
+}
+
 internal val BUNDLED_PRESET_SHADERS: List<String>
 	get() = LibMPVVideoPreset.entries
 		.flatMap(LibMPVVideoPreset::shaders)

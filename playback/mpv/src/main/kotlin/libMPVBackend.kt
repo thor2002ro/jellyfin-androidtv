@@ -398,11 +398,7 @@ class LibMPVBackend(
 		"input-vo-keyboard" to "no",
 		"terminal" to "no",
 	).apply {
-		putAll(playbackOptions.managedOptions(vulkanSupported))
-		put("vo", effectiveVideoOutput)
-		put("hwdec", effectiveVideoDecoderValue)
-		putAll(currentPresetOptions())
-		putAll(currentCustomOptions())
+		putAll(playbackOptions.runtimeOptions(presetDirectory, vulkanSupported, effectiveVideoOutput, effectiveVideoDecoderValue))
 	}
 
 	private fun createPlayer(options: Map<String, String>): MPV {
@@ -1072,10 +1068,7 @@ class LibMPVBackend(
 		removedPresetOptions.forEach(::restoreOptionDefault)
 		removedOptions.forEach(::restoreCustomOption)
 		val runtimeOptions = linkedMapOf<String, String>().apply {
-			putAll(playbackOptions.managedOptions(vulkanSupported))
-			put("vo", effectiveVideoOutput)
-			putAll(presetOptions)
-			putAll(customOptions)
+			putAll(playbackOptions.runtimeOptions(presetDirectory, vulkanSupported, effectiveVideoOutput))
 			putAll(fallbackOptions)
 		}
 		runtimeOptions.forEach { (name, value) ->
@@ -1258,7 +1251,8 @@ class LibMPVBackend(
 			},
 			actualVersion = gpuApiVersion,
 		)
-		val audioFormat = string("audio-params/format")
+		// Filters can encode decoded PCM, so inspect the format sent to the output.
+		val audioFormat = string("audio-out-params/format") ?: string("audio-params/format")
 		val hasHdr10Plus = double("video-params/scene-max-r") != null ||
 			double("video-params/scene-max-g") != null ||
 			double("video-params/scene-max-b") != null
@@ -1303,7 +1297,7 @@ class LibMPVBackend(
 			number("video-params/max-luma", " nits")?.let { put("Mastering peak", it) }
 			number("video-params/max-cll", " nits")?.let { put("MaxCLL", it) }
 			number("video-params/max-fall", " nits")?.let { put("MaxFALL", it) }
-			string("audio-params/format")?.let { put("Audio format", it) }
+			audioFormat?.let { put("Audio format", it) }
 		}
 		val stats = PlaybackFrameStats(
 			droppedFrames = (decoderDropped.toLong() + outputDropped.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
@@ -1322,6 +1316,7 @@ class LibMPVBackend(
 				?: string("current-tracks/audio/decoder"),
 			audioDecoderType = "Software",
 			audioCodec = string("current-tracks/audio/codec"),
+			localAudioConversionCodec = localAudioConversionCodec(string("audio-params/format"), audioFormat),
 			audioBitrate = double("audio-bitrate")?.toInt(),
 			audioChannels = string("audio-params/channels"),
 			audioSampleRate = integer("audio-params/samplerate"),
@@ -1986,6 +1981,12 @@ internal fun mpvSubtitleFontSize(textSizeDp: Float, density: Float, fontHeightEm
 
 internal fun Duration?.mpvStartOption() =
 	this?.takeIf { it > Duration.ZERO }?.let { "start=${it.inWholeMilliseconds / 1_000.0}" }
+
+internal fun localAudioConversionCodec(inputFormat: String?, outputFormat: String?): String? =
+	outputFormat
+		?.takeIf { inputFormat != null && !inputFormat.startsWith("spdif") && it.startsWith("spdif-") }
+		?.removePrefix("spdif-")
+		?.takeIf(String::isNotEmpty)
 
 internal fun formatLibMPVBufferDetails(
 	bufferedBytes: Long?,
