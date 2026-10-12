@@ -268,7 +268,9 @@ class JellyfinMediaStreamResolver(
 
 		return MediaInfo(
 			playSessionId = response.playSessionId.orEmpty(),
-			mediaSource = mediaSource
+			mediaSource = mediaSource.copy(
+				transcodingUrl = mediaSource.transcodingUrl?.withDtsEncodingBitrateFloor(),
+			)
 		)
 	}
 
