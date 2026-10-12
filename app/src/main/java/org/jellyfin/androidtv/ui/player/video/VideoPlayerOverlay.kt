@@ -57,7 +57,7 @@ import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.QueueEntry
-import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
+import org.jellyfin.playback.core.queue.canSeek
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -133,9 +133,11 @@ fun VideoPlayerOverlay(
 		.takeIf { entryIndex >= 0 && entryIndex < videoQueue.lastIndex }
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
 	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
-	val playPauseEnabled = entry?.isLiveTv != true
-	val seekEnabled = entry?.isDirectPlayLiveTv != true
+	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = entry, updateWhilePaused = entry?.isLiveTv == true)
+	val seekEnabled = entry.canSeek(positionInfo)
+	val playPauseEnabled = seekEnabled
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
+	val playbackTimeline = liveTvProgramTimeline.takeUnless { entry?.isLiveTv == true && seekEnabled }
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
 	val currentOnRemoteKeyEventHandlerChanged by rememberUpdatedState(onRemoteKeyEventHandlerChanged)
@@ -599,6 +601,10 @@ fun VideoPlayerOverlay(
 				VideoPlayerControls(
 					playbackManager = playbackManager,
 					onPlayPauseClick = ::togglePlayback,
+					onGoLiveClick = {
+						cancelPendingSeek()
+						playbackManager.state.goLive()
+					},
 					initialFocusRequester = initialControlsFocusRequester,
 					item = item,
 					mediaSourceId = entry?.mediaSourceId,
@@ -611,7 +617,7 @@ fun VideoPlayerOverlay(
 					onPlaybackInfoClick = { showPlaybackInfo = !showPlaybackInfo },
 					onStopClick = onClosePlayer,
 					onLiveTvGuideClick = ::openLiveTvGuide,
-					liveTvProgramTimeline = liveTvProgramTimeline,
+					liveTvProgramTimeline = playbackTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
 				)
 			},
@@ -680,14 +686,14 @@ fun VideoPlayerOverlay(
 				VideoPlayerSeekControls(
 					playbackManager = playbackManager,
 					position = previewPosition,
-					liveTvProgramTimeline = liveTvProgramTimeline,
+					liveTvProgramTimeline = playbackTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
 					enabled = seekEnabled,
 				)
 				VideoPlayerTrickplayThumbnail(
 					item = item,
 					mediaSourceId = entry?.mediaSourceId,
-					position = previewPosition.takeIf { liveTvProgramTimeline == null },
+					position = previewPosition.takeIf { playbackTimeline == null },
 					enabled = trickPlayEnabled,
 					modifier = Modifier
 						.align(Alignment.BottomStart)
