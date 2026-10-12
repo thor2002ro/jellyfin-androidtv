@@ -430,7 +430,6 @@
     <string name="pref_crash_report_logs">로그 포함</string>
     <string name="server_setup_incomplete">서버 설정이 완료되지 않았습니다. 웹 브라우저에서 Jellyfin을 열어 설정을 완료하십시오.</string>
     <string name="not_set">미설정</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="indicator_subtitles">CC</string>
     <string name="dts_hd">DTS:HD</string>
     <string name="dca">DTS</string>

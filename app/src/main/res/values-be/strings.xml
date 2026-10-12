@@ -544,7 +544,6 @@
     <string name="unreleased">Яшчэ не выпушчана</string>
     <string name="enable_reactive_homepage">Уключыць рэактыўную галоўную старонку</string>
     <string name="person_birthday_and_age">Нарадзіўся %1$s (%2$d)</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="dolby_atmos">Dolby Atmos</string>
     <string name="dts_hd">DTS:HD</string>
     <string name="dca">DTS</string>
@@ -645,7 +644,6 @@
     <string name="codec_level_4_1">Узровень 4.1</string>
     <string name="codec_level_4_0">Узровень 4.0</string>
     <string name="hdr10_plus">HDR10+</string>
-    <string name="dolby_vision_with_el">Dolby Vision з EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
