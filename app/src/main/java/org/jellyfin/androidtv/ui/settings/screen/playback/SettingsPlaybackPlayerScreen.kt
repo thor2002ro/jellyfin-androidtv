@@ -85,8 +85,10 @@ fun SettingsPlaybackPlayerScreen() {
 							.clip(LocalShapes.current.small)
 					)
 				},
-				headingContent = { Text("New video player") },
-				trailingContent = { RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled) },
+				headingContent = { Text(stringResource(R.string.playback_backend_exoplayer_name)) },
+				trailingContent = {
+					RadioButton(checked = currentExternalPlayer == null && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.EXOPLAYER)
+				},
 				captionContent = { Text(stringResource(R.string.enable_playback_module_description)) },
 				onClick = {
 					playbackRewriteVideoEnabled = true

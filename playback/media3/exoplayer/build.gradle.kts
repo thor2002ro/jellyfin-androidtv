@@ -38,6 +38,7 @@ dependencies {
 	implementation(files(rootProject.extra["customMedia3FfmpegDecoderAarFile"] as File))
 	implementation(libs.androidx.media3.ui)
 	implementation(libs.libass.media3)
+	implementation(libs.libass.provider)
 
 	// Logging
 	implementation(libs.timber)

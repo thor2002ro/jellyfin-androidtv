@@ -56,8 +56,6 @@ import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
-import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
-import org.jellyfin.playback.media3.exoplayer.VideoDecoder
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
@@ -718,7 +716,8 @@ fun PlaybackInfoButton(
 
 @Composable
 private fun VideoDecoderButton(playbackManager: PlaybackManager) {
-	val backend = playbackManager.backend as? ExoPlayerBackend ?: return
+	val backend = playbackManager.backend
+	if (backend.videoDecoderOptions.isEmpty()) return
 	val coroutineScope = rememberCoroutineScope()
 	var expanded by remember { mutableStateOf(false) }
 	var switching by remember { mutableStateOf(false) }

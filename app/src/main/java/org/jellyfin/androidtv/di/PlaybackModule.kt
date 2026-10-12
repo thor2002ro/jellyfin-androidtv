@@ -13,9 +13,14 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.ExoPlayerBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.preference.constant.BufferLength
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpeg
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegAudioForLiveTv
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
+import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideoForLiveTv
 import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
@@ -28,8 +33,8 @@ import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.playback.core.playbackManager
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
 import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamOptions
+import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerOptions
-import org.jellyfin.playback.media3.exoplayer.exoPlayerPlugin
 import org.jellyfin.playback.media3.session.MediaSessionOptions
 import org.jellyfin.playback.media3.session.media3SessionPlugin
 import org.jellyfin.sdk.model.api.BaseItemDto
