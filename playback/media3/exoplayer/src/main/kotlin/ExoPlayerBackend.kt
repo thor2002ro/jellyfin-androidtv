@@ -90,6 +90,7 @@ import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.core.support.PlaySupportReport
@@ -1275,9 +1276,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onVideoSizeChanged(size: VideoSize) {
-			if (size != VideoSize.UNKNOWN) {
-				listener?.onVideoSizeChange(size.width, size.height)
-			}
+			listener?.onVideoGeometryChange(size.toVideoGeometry())
 		}
 
 		override fun onCues(cueGroup: CueGroup) {
@@ -1318,6 +1317,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+			listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 			val queueEntry = mediaItem?.localConfiguration?.tag as? QueueEntry
 			audioPipeline.normalizationGain = queueEntry?.normalizationGain
 			schedulePendingInitialTrackSelectionRetry()
@@ -1597,6 +1597,7 @@ class ExoPlayerBackend(
 
 	override fun stop() {
 		clearPendingLiveStart()
+		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		exoPlayer.isScrubbingModeEnabled = false
 		exoPlayer.stop()
 		if (exoPlayerOptions.enableLibass) assHandler.reset()
