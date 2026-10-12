@@ -61,6 +61,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -205,7 +206,8 @@ fun PlaybackInfoOverlay(
 		)
 	}
 	val playerMetricSections = sections.filter { it.title == "${frameStats.playerName} Metrics" }
-	val playbackInfoSections = sections - playerMetricSections
+	val libassMetricSections = sections.filter { it.title == "libass Metrics" }
+	val playbackInfoSections = sections - playerMetricSections - libassMetricSections
 
 	Row(
 		modifier = modifier,
@@ -217,10 +219,10 @@ fun PlaybackInfoOverlay(
 				stream = stream,
 				frameStats = frameStats,
 			)
-			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
-			if (playerMetricSections.isNotEmpty()) {
-				PlayerMetricsPanel(sections = playerMetricSections)
+			if (playerMetricSections.isNotEmpty() || libassMetricSections.isNotEmpty()) {
+				PlayerMetricsPanel(sections = playerMetricSections + libassMetricSections)
 			}
+			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
 		}
 
 		PlaybackInfoTextPanel(sections = playbackInfoSections)
@@ -370,7 +372,7 @@ private object NewPlayerStreamStatusBuilder {
 					externalSubtitle.index == selectedSubtitle?.index
 			}
 		val selectedSubtitleCodec = subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle)
-		val showAssStats = selectedSubtitle != null && selectedSubtitleCodec.isAssSubtitleCodec()
+		val showLibassStats = selectedSubtitle != null && frameStats.libass != null
 
 		return listOf(
 			PlaybackInfoSection(
@@ -426,14 +428,15 @@ private object NewPlayerStreamStatusBuilder {
 					row("Codec", selectedSubtitleCodec.formatCodec())
 					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
-					if (showAssStats) {
-						row("ASS extractor", frameStats.subtitleExtractor)
-						row("ASS render", frameStats.subtitleRender)
-						row("ASS parser", frameStats.subtitleParser)
-						row("ASS path", frameStats.subtitlePath)
-					}
+					subtitleDiagnosticValues(frameStats).forEach { (label, value) -> row(label, value) }
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
 					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
+				},
+			),
+			PlaybackInfoSection(
+				title = "libass Metrics",
+				rows = rows {
+					if (showLibassStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
 				},
 			),
 			PlaybackInfoSection(
@@ -473,6 +476,46 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun MutableList<PlaybackInfoRowModel>.row(label: String, value: String?) {
 		if (!value.isNullOrBlank()) add(PlaybackInfoRowModel(label, value))
+	}
+
+	private fun MutableList<PlaybackInfoRowModel>.addLibassStats(stats: PlaybackLibassStats) {
+		row("OpenGL", stats.openGlMode)
+		row("Samples", stats.renderCount.toString())
+		row("ASS eval/s", stats.fps.formatLibassRate())
+		row(
+			"Render ms",
+			"${stats.averageRenderMs.formatLibassMs()} avg, " +
+				"${stats.minRenderMs.formatLibassMs()} min, " +
+				"${stats.maxRenderMs.formatLibassMs()} max, " +
+				"${stats.lastRenderMs.formatLibassMs()} last",
+		)
+		row("Changed", "${stats.changedRenderCount}/${stats.renderCount} (${(stats.changedRatio * 100.0).formatLibassRate()}%)")
+		row("Empty", stats.emptyRenderCount.toString())
+		row("Slow", stats.slowRenderCount.toString())
+		row("Images", "${stats.imageCount} total, ${stats.maxImageCount} max")
+		row("Bitmap px", "${stats.totalBitmapPixels.formatPixelCount()} total, ${stats.maxBitmapPixels.formatPixelCount()} max")
+		row("Atlas pages", "${stats.atlasUploadPageCount} total, ${stats.maxAtlasUploadPageCount} max")
+		row(
+			"Atlas px",
+			"${stats.totalAtlasUploadPagePixels.formatPixelCount()} total, " +
+				"${stats.maxAtlasUploadPagePixels.formatPixelCount()} max",
+		)
+		row(
+			"Atlas updates",
+			"${stats.metadataReuseCount} metadata, " +
+				"${stats.incrementalAtlasUpdateCount} partial, " +
+				"${stats.completeAtlasReplacementCount} full",
+		)
+		row("Mask copy", "${stats.nativeCopiedMaskBytes.formatPixelCount()} B native")
+		row("GL upload", "${stats.glUploadedMaskBytes.formatPixelCount()} B, ${stats.glUploadSubmissionMs.formatLibassMs()} ms")
+		row(
+			"ASS surface",
+			"${stats.activeSurfacePixels.formatPixelCount()} active / " +
+				"${stats.allocatedSurfacePixels.formatPixelCount()} allocated px",
+		)
+		if (stats.executorTimeoutCount > 0L || stats.supersededRequestCount > 0L) {
+			row("Executor", "${stats.executorTimeoutCount} timeouts, ${stats.supersededRequestCount} superseded")
+		}
 	}
 
 	private fun streamingVideoCodec(
@@ -680,6 +723,15 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun Float.formatFrameRate() = "%.3f fps".format(this)
 
+	private fun Double.formatLibassRate() = "%.1f".format(this)
+
+	private fun Double.formatLibassMs() = "%.2f".format(this)
+
+	private fun Long.formatPixelCount() = when {
+		this >= 1_000_000L -> "%.1f MP".format(this / 1_000_000.0)
+		else -> "$this px"
+	}
+
 	private fun Boolean?.formatPassthroughSupport() = when (this) {
 		true -> "Yes"
 		false -> "No"
@@ -868,6 +920,13 @@ private fun PlaybackInfoStaticRow(
 			style = style,
 		)
 	}
+}
+
+internal fun subtitleDiagnosticValues(stats: PlaybackFrameStats): List<Pair<String, String>> = buildList {
+	stats.subtitleExtractor?.takeIf(String::isNotBlank)?.let { add("Provider" to it) }
+	stats.subtitleRender?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
+	stats.subtitleParser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
+	stats.subtitlePath?.takeIf(String::isNotBlank)?.let { add("Path" to it) }
 }
 
 private data class PlaybackInfoSection(
