@@ -2,8 +2,13 @@ package org.jellyfin.androidtv.ui.presentation
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import org.jellyfin.androidtv.constant.LibraryCardSpacing
 
 class HorizontalGridPresenterTests : FunSpec({
+	test("compact card spacing only changes the gap between cards") {
+		resolveBrowseGridSpacing(8, LibraryCardSpacing.COMPACT) shouldBe 6
+	}
+
 	test("selection notification changes when the item at the same position is replaced") {
 		val tracker = GridSelectionNotificationTracker()
 		val first = Any()

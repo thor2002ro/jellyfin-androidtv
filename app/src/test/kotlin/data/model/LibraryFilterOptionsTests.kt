@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.data.model
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import org.jellyfin.androidtv.constant.LibraryCardSpacing
 import org.jellyfin.sdk.model.api.ItemFilter
 import org.jellyfin.sdk.model.api.VideoType
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
@@ -106,6 +107,13 @@ class LibraryFilterOptionsTests : FunSpec({
 
 	test("decade shortcut expands only available years") {
 		expandDecade(1990, setOf(1989, 1990, 1994, 1999, 2000)) shouldBe setOf(1990, 1994, 1999)
+	}
+
+	test("spacing changes only the supplied inter-item gap") {
+		LibraryCardSpacing.COMPACT.apply(8) shouldBe 6
+		LibraryCardSpacing.NORMAL.apply(8) shouldBe 8
+		LibraryCardSpacing.RELAXED.apply(8) shouldBe 10
+		LibraryCardSpacing.COMPACT.apply(1) shouldBe 2
 	}
 
 })
