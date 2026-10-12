@@ -14,6 +14,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -551,6 +552,25 @@ class ExoPlayerBackend(
 	private var subtitleSurfaceView: PlayerSubtitleView? = null
 	private var subtitleView: SubtitleView? = null
 	private val audioPipeline = ExoPlayerAudioPipeline()
+	private var audioOutputFormat: Format? = null
+	private var audioOutputGeneration = 0L
+
+	private fun updateSurroundVolumeBoost() {
+		audioPipeline.surroundGain = org.jellyfin.playback.core.surroundVolumeBoost(
+			exoPlayerOptions.surroundVolumeBoost(),
+			audioInputFormat?.channelCount?.takeIf { it > 0 } ?: audioOutputFormat?.channelCount,
+			currentStream != null && audioOutputFormat?.sampleMimeType == MimeTypes.AUDIO_RAW &&
+				exoPlayer.playbackState != Player.STATE_IDLE && exoPlayer.playbackState != Player.STATE_ENDED,
+		)
+	}
+
+	private fun onAudioOutputFormat(format: Format?, generation: Long) {
+		audioOutputHandler.post {
+			if (released || generation != audioOutputGeneration) return@post
+			audioOutputFormat = format
+			updateSurroundVolumeBoost()
+		}
+	}
 	private val audioAttributeState = AudioAttributeState()
 	private val timedEventState = TimedEventState()
 	private var lastKnownDuration: Duration? = null
@@ -565,6 +585,7 @@ class ExoPlayerBackend(
 		)
 	}
 	private val startHandler = Handler(Looper.getMainLooper())
+	private val audioOutputHandler = Handler(Looper.getMainLooper())
 	private val initialTrackSelectionHandler = Handler(Looper.getMainLooper())
 	private val videoFirstFrameHandler = Handler(Looper.getMainLooper())
 	private val videoBufferingHandler = Handler(Looper.getMainLooper())
@@ -762,6 +783,8 @@ class ExoPlayerBackend(
 	}
 
 	private fun resetPlaybackStats() {
+		audioOutputFormat = null
+		audioPipeline.surroundGain = 0
 		resetVideoDecoderFallback()
 		resetAudioDecoderFallback()
 		videoDecoderName = null
@@ -1193,6 +1216,10 @@ class ExoPlayerBackend(
 	private val exoPlayer get() = exoPlayerDelegate.value
 
 	private fun createExoPlayer(): ExoPlayer {
+		val audioGeneration = ++audioOutputGeneration
+		val onAudioOutputFormatChanged: (Format?) -> Unit = { format ->
+			onAudioOutputFormat(format, audioGeneration)
+		}
 		val rendererPreferences = rendererPreferences()
 		val dataSourceFactory = DefaultDataSource.Factory(
 			context,
@@ -1343,6 +1370,7 @@ class ExoPlayerBackend(
 				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
 				downmixToStereo = exoPlayerOptions.downmixToStereo,
 				onAudioSinkBufferAttempt = onAudioSinkBufferAttempt,
+				onAudioOutputFormat = onAudioOutputFormatChanged,
 			).apply {
 				setEnableDecoderFallback(true)
 				setMediaCodecSelector(mediaCodecSelector)
@@ -1359,6 +1387,7 @@ class ExoPlayerBackend(
 				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
 				downmixToStereo = exoPlayerOptions.downmixToStereo,
 				onAudioSinkBufferAttempt = onAudioSinkBufferAttempt,
+				onAudioOutputFormat = onAudioOutputFormatChanged,
 			).apply {
 				setEnableDecoderFallback(true)
 				setMediaCodecSelector(mediaCodecSelector)
@@ -1591,6 +1620,7 @@ class ExoPlayerBackend(
 			decoderReuseEvaluation: DecoderReuseEvaluation?,
 		) {
 			audioInputFormat = format
+			updateSurroundVolumeBoost()
 			audioDecoderName?.let { audioDecoderType = decoderType(it, format) }
 			audioPassthroughSupported = null
 			audioPassthroughSupportDirty = true
@@ -1611,6 +1641,8 @@ class ExoPlayerBackend(
 				audioDecoderType = null
 				audioDecoderCounters = null
 				audioInputFormat = null
+				audioOutputFormat = null
+				audioPipeline.surroundGain = 0
 				audioPassthroughSupported = null
 				audioPassthroughSupportDirty = true
 				audioCapabilitiesReceiverFailed = false
@@ -1709,6 +1741,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
+			updateSurroundVolumeBoost()
 			if (shouldWatchVideoDecoderStall(exoPlayer.playWhenReady, playbackState)) scheduleVideoDecoderStallFallback()
 			else videoBufferingHandler.removeCallbacksAndMessages(null)
 			if (playbackState == Player.STATE_BUFFERING) scheduleAudioDecoderStallFallback()
@@ -2043,6 +2076,9 @@ class ExoPlayerBackend(
 	}
 
 	override fun stop() {
+		audioOutputFormat = null
+		audioPipeline.surroundGain = 0
+		audioPipeline.normalizationGain = null
 		clearPendingLiveStart()
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		exoPlayer.isScrubbingModeEnabled = false
@@ -2066,6 +2102,7 @@ class ExoPlayerBackend(
 	override fun cleanup() {
 		if (released) return
 		startHandler.removeCallbacksAndMessages(null)
+		audioOutputHandler.removeCallbacksAndMessages(null)
 		initialTrackSelectionHandler.removeCallbacksAndMessages(null)
 		videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		videoBufferingHandler.removeCallbacksAndMessages(null)
@@ -2081,6 +2118,7 @@ class ExoPlayerBackend(
 		if (released) return
 		reset()
 		cleanup()
+		audioPipeline.release()
 		if (exoPlayerDelegate.isInitialized()) {
 			subtitleTimingRendererInvalidator.cancel()
 			exoPlayer.release()

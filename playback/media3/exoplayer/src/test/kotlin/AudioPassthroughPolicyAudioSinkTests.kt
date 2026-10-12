@@ -16,6 +16,29 @@ import io.mockk.every
 import io.mockk.mockk
 
 class AudioPassthroughPolicyAudioSinkTests : FunSpec({
+	test("configured PCM before downmix and encoded fallback changes reach gain handling and reset") {
+		val delegate = mockk<AudioSink> {
+			every { configure(any<AudioSinkConfig>()) } returns Unit
+			every { reset() } returns Unit
+		}
+		var output: Format? = null
+		val sink = AudioPassthroughPolicyAudioSink(
+			delegate,
+			downmixToStereo = { true },
+			onOutputFormat = { output = it },
+			isPassthroughEnabled = { true },
+		)
+		val pcm = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setChannelCount(6).build()
+		val encoded = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AC3).setChannelCount(6).build()
+		sink.configure(AudioSinkConfig.Builder(pcm).build())
+		output shouldBe pcm
+		sink.configure(AudioSinkConfig.Builder(encoded).build())
+		output shouldBe encoded
+		sink.configure(AudioSinkConfig.Builder(pcm).build())
+		output shouldBe pcm
+		sink.reset()
+		output shouldBe null
+	}
 	test("sink configuration passes the speaker mask to the PCM mixer") {
 		val processor = StereoDownmixAudioProcessor { true }
 		val delegate = mockk<AudioSink> {
