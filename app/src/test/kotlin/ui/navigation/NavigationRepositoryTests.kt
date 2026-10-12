@@ -7,6 +7,23 @@ import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 
 class NavigationRepositoryTests : FunSpec({
+	test("current destination follows navigation and restoration") {
+		val root = destination<RootFragment>()
+		val first = destination<FirstFragment>()
+		val second = destination<SecondFragment>()
+		val repository = NavigationRepositoryImpl(root)
+
+		repository.navigate(first)
+		repository.navigate(second)
+		repository.currentDestination.value shouldBe second
+
+		repository.goBack() shouldBe true
+		repository.currentDestination.value shouldBe first
+
+		repository.synchronizeCurrentDestination(second)
+		repository.currentDestination.value shouldBe second
+	}
+
 	test("replacing current destination preserves navigation history") {
 		val root = destination<RootFragment>()
 		val first = destination<FirstFragment>()

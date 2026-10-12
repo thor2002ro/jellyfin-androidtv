@@ -74,6 +74,7 @@ include(":playback:media3:session")
 include(":playback:libvlc")
 include(":playback:mpv")
 include(":preference")
+include(":updater")
 
 dependencyResolutionManagement {
 	defaultLibrariesExtensionName = "baseLibs"
