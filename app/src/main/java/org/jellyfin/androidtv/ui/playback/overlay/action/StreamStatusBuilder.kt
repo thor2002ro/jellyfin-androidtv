@@ -1,11 +1,18 @@
 package org.jellyfin.androidtv.ui.playback.overlay.action
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
+import org.jellyfin.androidtv.ui.playback.appendInline
+import org.jellyfin.androidtv.ui.playback.formatBitrate
+import org.jellyfin.androidtv.ui.playback.getSubtitleMediaStreamCodec
+import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.PlayMethod
+import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod
 import org.jellyfin.sdk.model.api.TranscodingInfo
 
 object StreamStatusBuilder {
@@ -19,7 +26,11 @@ object StreamStatusBuilder {
 		val mediaSource = playbackController.currentMediaSource ?: streamInfo?.mediaSource
 		val videoStream = mediaSource?.stream(MediaStreamType.VIDEO)
 		val audioStream = mediaSource?.stream(MediaStreamType.AUDIO, playbackController.audioStreamIndex)
-		val subtitleStream = mediaSource?.stream(MediaStreamType.SUBTITLE, playbackController.subtitleStreamIndex)
+		val selectedSubtitleStreamIndex = playbackController.subtitleStreamIndex
+		val subtitleStream = selectedSubtitleStreamIndex
+			.takeIf { it >= 0 }
+			?.let { mediaSource?.stream(MediaStreamType.SUBTITLE, it) }
+		val showAssStats = subtitleStream?.codec.isAssSubtitleCodec() && !playbackController.isBurningSubtitlesForStatus()
 
 		row("Play", streamInfo?.playMethod?.displayName() ?: "Unknown")
 		row("Container", streamInfo?.container ?: mediaSource?.container)
@@ -30,6 +41,17 @@ object StreamStatusBuilder {
 		row("Audio", audioSummary(audioStream))
 		row("A bitrate", audioStream?.bitRate?.formatBitrate())
 		row("Sub", subtitleSummary(subtitleStream, playbackController.isBurningSubtitlesForStatus()))
+		row("Sub IDs", subtitleIds(subtitleStream))
+		row("Sub title", subtitleTitle(subtitleStream))
+		row("Sub source", subtitleSource(subtitleStream, playbackController.isBurningSubtitlesForStatus()))
+		row("Sub flags", subtitleFlags(subtitleStream))
+		row("Sub offset", subtitleOffset(subtitleStream, playbackController.isBurningSubtitlesForStatus(), playbackController.subtitleTimingOffsetUs))
+		if (showAssStats) {
+			row("ASS extractor", playbackController.subtitleExtractorDebug)
+			row("ASS render", playbackController.subtitleRenderDebug)
+			row("ASS parser", playbackController.subtitleParserDebug)
+			row("ASS path", playbackController.subtitlePathDebug)
+		}
 		row("Progress", TranscodingStatusFormatter.progress(transcodingInfo))
 		row("T speed", TranscodingStatusFormatter.speed(transcodingInfo))
 		row("T bitrate", TranscodingStatusFormatter.bitrate(transcodingInfo))
@@ -104,6 +126,48 @@ object StreamStatusBuilder {
 		}
 	}
 
+	private fun subtitleIds(stream: MediaStream?): String? = buildString {
+		stream?.index?.let { appendInline("stream $it") }
+	}.takeIf { it.isNotBlank() }
+
+	private fun subtitleTitle(stream: MediaStream?): String? =
+		stream?.displayTitle ?: stream?.title
+
+	private fun subtitleSource(
+		stream: MediaStream?,
+		burningSubtitles: Boolean,
+	): String? = when {
+		burningSubtitles -> "Burned in"
+		stream == null -> null
+		stream.isExternal -> "External renderer"
+		stream.deliveryMethod == SubtitleDeliveryMethod.ENCODE -> "Burned in"
+		else -> stream.deliveryMethod?.let { "$it renderer" } ?: "Embedded renderer"
+	}
+
+	private fun subtitleFlags(stream: MediaStream?): String? = buildString {
+		if (stream?.isExternal == true) appendInline("External")
+		if (stream?.isDefault == true) appendInline("Default")
+		if (stream?.isForced == true) appendInline("Forced")
+	}.takeIf { it.isNotBlank() }
+
+	private fun subtitleOffset(
+		stream: MediaStream?,
+		burningSubtitles: Boolean,
+		offsetUs: Long,
+	): String? = when {
+		stream == null || burningSubtitles -> null
+		else -> "${offsetUs.formatSignedSeconds()} ${if (stream.supportsSubtitleOffset()) "supported" else "unsupported"}"
+	}
+
+	@OptIn(UnstableApi::class)
+	private fun MediaStream.supportsSubtitleOffset(): Boolean {
+		val deliveryMethod = deliveryMethod
+		if (deliveryMethod == SubtitleDeliveryMethod.ENCODE || deliveryMethod == SubtitleDeliveryMethod.DROP) return false
+		if (codec.isNullOrBlank()) return false
+
+		return isSubtitleTimingOffsetSupported(getSubtitleMediaStreamCodec(this))
+	}
+
 	private fun PlayMethod.displayName() = when (this) {
 		PlayMethod.DIRECT_PLAY -> "Direct play"
 		PlayMethod.DIRECT_STREAM -> "Direct stream"
@@ -115,19 +179,6 @@ object StreamStatusBuilder {
 		else -> null
 	}
 
-	private fun Int.formatBitrate(): String {
-		return when {
-			this >= 1_000_000 -> "%.1f Mbps".format(this / 1_000_000.0)
-			else -> "%.0f Kbps".format(coerceAtLeast(0) / 1_000.0)
-		}
-	}
-
-	private fun StringBuilder.appendInline(value: String?) {
-		if (value.isNullOrBlank()) return
-		if (isNotEmpty()) append(' ')
-		append(value)
-	}
-
 	private fun Long.formatDuration(): String {
 		if (this < 0) return "Unknown"
 		val totalSeconds = this / 1000
@@ -137,4 +188,6 @@ object StreamStatusBuilder {
 		return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
 		else "%d:%02d".format(minutes, seconds)
 	}
+
+	private fun Long.formatSignedSeconds(): String = "%+.3fs".format(this / 1_000_000.0)
 }

@@ -27,6 +27,7 @@ import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
@@ -89,7 +90,12 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 				playbackManager.queue.entry
 					.onEach { entry ->
 						if (entry == null) {
-							closePlayerIfVideoQueueEnded()
+							if (
+								hasSeenVideoQueueEntry &&
+								playbackManager.state.playState.value == PlayState.STOPPED &&
+								!showingPostPlaybackPrompt &&
+								!handingOffPlayer
+							) closePlayer() else closePlayerIfVideoQueueEnded()
 						} else {
 							hasSeenVideoQueueEntry = entry.isLiveTv != true
 							closeWhenVideoQueueEnds = false
