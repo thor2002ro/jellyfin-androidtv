@@ -54,7 +54,10 @@ import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
+import org.jellyfin.androidtv.util.sdk.formatVideoRange
 import org.jellyfin.androidtv.util.sdk.isLiveTv
+import org.jellyfin.androidtv.util.sdk.primaryVideoRangeLabel
+import org.jellyfin.androidtv.util.sdk.toVideoRangeTypeOrNull
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -441,7 +444,14 @@ private object NewPlayerStreamStatusBuilder {
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod) ?: frameStats.videoCodec)
-					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
+					row(
+						"HDR mode",
+						streamingHdrMode(
+							playerHdrMode = frameStats.videoHdrMode,
+							streamHdrMode = videoTrack?.videoRange.toVideoRangeTypeOrNull()?.primaryVideoRangeLabel(),
+							isVideoDirect = transcodingInfo?.isVideoDirect,
+						),
+					)
 					row("Dolby Vision", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
 					row("Audio decoder", frameStats.audioDecoderLabel())
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec, frameStats.localAudioConversionCodec))
@@ -504,23 +514,28 @@ private object NewPlayerStreamStatusBuilder {
 					frameStats.backendDetails.forEach { (label, value) -> row(label, value) }
 				},
 			),
-			PlaybackInfoSection(
-				title = "Original Media Info",
-				rows = rows {
-					row("Container", stream.container.format)
-					row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
-					row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
-					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
-					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate() ?: frameStats.videoSourceFps?.formatFrameRate())
-					row("Video range", videoTrack?.videoRange ?: frameStats.videoRange)
-					if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
-					row("Audio codec", audioTrack?.codec.formatCodec() ?: frameStats.audioCodec.formatCodec())
-					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
-					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
-					row("Audio sample rate", (audioTrack?.sampleRate?.takeIf { it > 0 } ?: frameStats.audioSampleRate)?.let { "$it Hz" })
-				},
-			),
 		).filter { it.rows.isNotEmpty() }
+	}
+
+	fun originalMediaInfo(stream: MediaStream, selectedAudio: PlayerTrack?, frameStats: PlaybackFrameStats): PlaybackInfoSection {
+		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
+		val audioTrack = stream.tracks.filterIsInstance<MediaStreamAudioTrack>().selectedTrack(selectedAudio)
+		return PlaybackInfoSection(
+			title = "Original Media Info",
+			rows = rows {
+				row("Container", stream.container.format)
+				row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
+				row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
+				row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
+				row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate() ?: frameStats.videoSourceFps?.formatFrameRate())
+				row("Video range", videoTrack?.videoRange.formatVideoRange() ?: frameStats.videoRange)
+				if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
+				row("Audio codec", audioTrack?.codec.formatCodec() ?: frameStats.audioCodec.formatCodec())
+				row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
+				row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
+				row("Audio sample rate", (audioTrack?.sampleRate?.takeIf { it > 0 } ?: frameStats.audioSampleRate)?.let { "$it Hz" })
+			},
+		)
 	}
 
 	private inline fun rows(build: MutableList<PlaybackInfoRowModel>.() -> Unit) = buildList(build)
@@ -593,16 +608,6 @@ private object NewPlayerStreamStatusBuilder {
 			else -> source
 		}
 	}
-
-	private fun streamingHdrMode(
-		hdrMode: String?,
-		track: MediaStreamVideoTrack?,
-		transcodingInfo: TranscodingInfo?,
-	): String? = hdrMode ?: track
-			?.videoRange
-			?.toVideoRangeType()
-			?.takeIf { transcodingInfo?.isVideoDirect != false }
-			?.workaroundLabel()
 
 	private fun streamingAudioCodec(
 		track: MediaStreamAudioTrack?,
@@ -831,6 +836,18 @@ internal fun streamingCodecLabel(
 	}
 }
 
+internal fun streamingHdrMode(
+	playerHdrMode: String?,
+	streamHdrMode: String?,
+	isVideoDirect: Boolean?,
+): String? {
+	val directStreamHdrMode = streamHdrMode?.takeIf { isVideoDirect != false }
+	return when {
+		directStreamHdrMode == "HDR10+" -> directStreamHdrMode
+		else -> playerHdrMode ?: directStreamHdrMode
+	}
+}
+
 internal fun decoderModeDiagnostic(
 	selected: VideoDecoderOption?,
 	forced: VideoDecoderOption?,
@@ -943,43 +960,20 @@ private fun hevcVideoRangeWorkaroundInfo(
 	val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull() ?: return null
 	if (!videoTrack.isHevc()) return null
 
-	val rangeType = videoTrack.videoRange.toVideoRangeType() ?: return null
+	val rangeType = videoTrack.videoRange.toVideoRangeTypeOrNull() ?: return null
 	val reason = getUnsupportedHevcVideoRangeWorkarounds(
 		mediaTest = mediaTest,
 		forceEnabledHdr = forceEnabledHdr,
 		forceDisabledHdr = forceDisabledHdr,
 	)[rangeType] ?: return null
 
-	return "${rangeType.workaroundLabel()}: $reason"
+	return "${rangeType.primaryVideoRangeLabel()}: $reason"
 }
 
 private fun MediaStreamVideoTrack.isHevc(): Boolean =
 	codec.equals("hevc", ignoreCase = true) ||
 		codec.equals("h265", ignoreCase = true) ||
 		codec.equals("h.265", ignoreCase = true)
-
-private fun String?.toVideoRangeType(): VideoRangeType? {
-	if (isNullOrBlank()) return null
-
-	return enumValues<VideoRangeType>().firstOrNull { range ->
-		equals(range.name, ignoreCase = true) ||
-			equals(range.serialName, ignoreCase = true)
-	}
-}
-
-private fun VideoRangeType.workaroundLabel() = when (this) {
-	VideoRangeType.DOVI -> "DV P5"
-	VideoRangeType.DOVI_WITH_EL,
-	VideoRangeType.DOVI_WITH_ELHDR10_PLUS -> "DV P7"
-	VideoRangeType.DOVI_WITH_HDR10,
-	VideoRangeType.DOVI_WITH_HDR10_PLUS,
-	VideoRangeType.DOVI_WITH_HLG,
-	VideoRangeType.DOVI_WITH_SDR -> "DV P8"
-	VideoRangeType.HDR10_PLUS -> "HDR10+"
-	VideoRangeType.HDR10 -> "HDR10"
-	VideoRangeType.DOVI_INVALID -> "DV invalid"
-	else -> serialName
-}
 
 private fun Int.formatWorkaroundBitrate() = when {
 	this >= 1_000_000 -> "%.2f Mbps".format(this / 1_000_000.0)
