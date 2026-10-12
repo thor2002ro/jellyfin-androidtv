@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.player.video
 
 import android.content.Context
 import android.net.Uri
+import android.view.Display
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +94,7 @@ fun PlaybackInfoOverlay(
 	modifier: Modifier = Modifier,
 ) {
 	val context = LocalContext.current
+	val view = LocalView.current
 	val transcodingStatusRepository = koinInject<TranscodingStatusRepository>()
 	val userPreferences = koinInject<UserPreferences>()
 	val api = koinInject<ApiClient>()
@@ -188,6 +191,7 @@ fun PlaybackInfoOverlay(
 		positionInfo,
 		frameStats,
 		refreshTick,
+		view,
 		displayHdrModes,
 		zoomStatus,
 	) {
@@ -208,6 +212,7 @@ fun PlaybackInfoOverlay(
 			isQualityForcedTranscode = isQualityForcedTranscode,
 			clientWorkaroundInfo = clientWorkaroundInfo,
 			displayHdrModes = displayHdrModes,
+			displayMode = view.display?.mode,
 			zoomStatus = zoomStatus,
 		)
 	}
@@ -376,6 +381,7 @@ private object NewPlayerStreamStatusBuilder {
 		isQualityForcedTranscode: Boolean,
 		clientWorkaroundInfo: String?,
 		displayHdrModes: String,
+		displayMode: Display.Mode?,
 		zoomStatus: String,
 	): List<PlaybackInfoSection> {
 		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
@@ -412,6 +418,7 @@ private object NewPlayerStreamStatusBuilder {
 					if (liveTvDirectPlayDisabled) row("Live TV Direct Play", "Disabled")
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
+					row("Display", displayMode?.let { "${it.physicalWidth}x${it.physicalHeight} @ ${"%.3f Hz".format(Locale.ROOT, it.refreshRate)}" })
 					row("Display HDR support", displayHdrModes)
 					row("Position", "${positionInfo.active.formatDuration()}/${positionInfo.duration.formatDuration()}")
 					row("Buffer", positionInfo.formatBuffer(frameStats.bufferedBytes))
