@@ -1,11 +1,23 @@
 package org.jellyfin.playback.mpv
 
 import android.content.Context
+import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceHolder
+import android.view.View
+import android.view.ViewGroup
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.MPVNode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
@@ -14,6 +26,7 @@ import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
 import org.jellyfin.playback.core.backend.VideoDecoderOption
+import org.jellyfin.playback.core.font.SubtitleFontProvider
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
@@ -22,6 +35,8 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
+import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.mediastream.totalBitrate
@@ -86,6 +101,7 @@ class LibMPVBackend(
 ) : BasePlayerBackend(), TrackSelectionBackend, SurfaceHolder.Callback {
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
+		const val SUBTITLE_OVERLAY_INTERVAL_MS = 33L
 		val FRAME_STAT_PROPERTY_RETRY_NANOS = 10.seconds.inWholeNanoseconds
 	}
 
@@ -116,6 +132,11 @@ class LibMPVBackend(
 			decoder = effectiveVideoDecoder,
 			videoRange = currentStream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()?.videoRange,
 		)
+	private val usesNativeSubtitleOverlay: Boolean
+		get() = shouldUseNativeSubtitleOverlay(
+			videoRange = currentStream?.tracks?.filterIsInstance<MediaStreamVideoTrack>()?.firstOrNull()?.videoRange,
+			videoOutput = effectiveVideoOutput,
+		)
 
 	override val videoDecoderOptions = LibMPVVideoDecoder.entries.map { decoder ->
 		VideoDecoderOption(id = decoder.name, label = decoder.label)
@@ -129,6 +150,7 @@ class LibMPVBackend(
 	private val isNvidiaDevice = isLibMPVNvidiaDevice()
 	private val presetDirectory = appContext.filesDir.resolve("mpv-presets")
 	private val handler = Handler(Looper.getMainLooper())
+	private val subtitleOverlayScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 	private val playerLock = Any()
 	private var player: MPV
 	private var playerObserver: MPV.EventObserver? = null
@@ -158,9 +180,16 @@ class LibMPVBackend(
 	private var surfaceHolder: SurfaceHolder? = null
 	private var surfaceAttached = false
 	private var subtitleView: PlayerSubtitleView? = null
+	private var nativeSubtitleView: LibMPVSubtitleOverlayView? = null
+	private var nativeSubtitleJob: Job? = null
 	private var subtitleStyle: PlayerSubtitleStyle? = null
+	private val subtitleLayoutListener = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+		if (bottom - top != oldBottom - oldTop) applySubtitleStyle(subtitleStyle)
+	}
 	private var subtitleTimingOffset = Duration.ZERO
 	private var subtitleTimingSpeed = 1f
+	@Volatile
+	private var nativeSubtitleModeActive = false
 	private var playbackSpeed = 1f
 	private var lastTickPosition = Duration.ZERO
 	private var lastPositionInfo = PositionInfo.EMPTY
@@ -413,28 +442,115 @@ class LibMPVBackend(
 
 	override fun setSubtitleView(surfaceView: PlayerSubtitleView?) {
 		subtitleView?.onSubtitleStyleChanged = null
+		subtitleView?.removeOnLayoutChangeListener(subtitleLayoutListener)
+		(nativeSubtitleView?.parent as? ViewGroup)?.removeView(nativeSubtitleView)
 		subtitleView = surfaceView
 		subtitleStyle = surfaceView?.subtitleStyle
-		surfaceView?.onSubtitleStyleChanged = ::applySubtitleStyle
+		nativeSubtitleView = surfaceView?.let { host ->
+			LibMPVSubtitleOverlayView(host.context).also { overlay ->
+				host.addView(
+					overlay,
+					ViewGroup.LayoutParams(
+						ViewGroup.LayoutParams.MATCH_PARENT,
+						ViewGroup.LayoutParams.MATCH_PARENT,
+					),
+				)
+			}
+		}
+		surfaceView?.onSubtitleStyleChanged = { style -> applySubtitleStyle(style) }
+		surfaceView?.addOnLayoutChangeListener(subtitleLayoutListener)
 		applySubtitleStyle(subtitleStyle)
+		updateNativeSubtitleOverlayMode()
 	}
 
 	private fun applySubtitleStyle(style: PlayerSubtitleStyle?) {
 		if (style == null) return
 		subtitleStyle = style
+		val context = subtitleView?.context ?: appContext
+		val density = context.resources.displayMetrics.density
+		val fontMetrics = Paint().apply {
+			typeface = SubtitleFontProvider.typeface(context, style.textWeight)
+			textSize = 1f
+		}.fontMetrics
 		setProperty("sub-ass-override", playbackOptions.subtitleAssOverride)
-		setProperty("sub-font-size", mpvSubtitleFontSize(style.textSizeDp).toString())
+		// Android sizes the em; libass sizes the ascender/descender span. Use
+		// physical pixels so window resolution does not change the selected dp size.
+		setProperty("sub-scale-by-window", "no")
+		setProperty("sub-scale-with-window", "yes")
+		setProperty("sub-font-size", mpvSubtitleFontSize(style.textSizeDp, density, fontMetrics.descent - fontMetrics.ascent).toString())
 		setProperty("sub-bold", if (style.textWeight >= 600) "yes" else "no")
 		setProperty("sub-color", style.textColor.mpvColor())
 		setProperty("sub-back-color", style.backgroundColor.mpvColor())
 		setProperty("sub-outline-color", style.edgeColor.mpvColor())
-		setProperty("sub-outline-size", "2.5")
+		setProperty("sub-outline-size", mpvSubtitleOutlineSize(density).toString())
 		setProperty("sub-shadow-offset", "0")
 		setProperty(
 			"sub-border-style",
 			if (style.backgroundColor.alpha() > 0) "background-box" else "outline-and-shadow",
 		)
-		setProperty("sub-margin-y", mpvSubtitleMarginY(style.bottomPaddingFraction).toString())
+		val canvasHeight = subtitleView?.height?.takeIf { it > 0 } ?: context.resources.displayMetrics.heightPixels
+		setProperty("sub-margin-y", mpvSubtitleMarginY(style.bottomPaddingFraction, canvasHeight).toString())
+	}
+
+	private fun updateNativeSubtitleOverlayMode() {
+		val active = usesNativeSubtitleOverlay && fileLoaded && nativeSubtitleView != null
+		nativeSubtitleModeActive = active
+		if (active) {
+			setProperty("sub-visibility", "yes")
+			if (nativeSubtitleJob?.isActive != true) startNativeSubtitleOverlay()
+		} else {
+			stopNativeSubtitleOverlay()
+		}
+	}
+
+	private fun startNativeSubtitleOverlay() {
+		nativeSubtitleJob?.cancel()
+		val target = player
+		val generation = playerGeneration
+		nativeSubtitleJob = subtitleOverlayScope.launch {
+			var previousChangeId = 0L
+			while (isActive && generation == playerGeneration && nativeSubtitleModeActive) {
+				val overlay = nativeSubtitleView ?: break
+				if (overlay.width <= 0 || overlay.height <= 0) {
+					delay(SUBTITLE_OVERLAY_INTERVAL_MS)
+					continue
+				}
+				val node = runCatching {
+					readLibMPVSubtitleOverlay(playerLock, { isActive && generation == playerGeneration && nativeSubtitleModeActive }) {
+						target.commandNode(
+							"subtitle-overlay-raw",
+							previousChangeId.toString(),
+							overlay.width.toString(),
+							overlay.height.toString(),
+						)
+					}
+				}.onFailure { error ->
+					Timber.e(error, "Unable to read MPV subtitle overlay")
+				}.getOrNull()
+				if (!isActive || generation != playerGeneration || !nativeSubtitleModeActive) break
+				val update = parseLibMPVSubtitleOverlay(node, previousChangeId)
+				if (update == null) {
+					Timber.e("MPV subtitle overlay command returned invalid data")
+					withContext(Dispatchers.Main.immediate) { nativeSubtitleView?.clear() }
+					break
+				}
+				when (update) {
+					LibMPVSubtitleOverlayUpdate.Unchanged -> Unit
+					is LibMPVSubtitleOverlayUpdate.Clear -> previousChangeId = update.changeId
+					is LibMPVSubtitleOverlayUpdate.Frame -> previousChangeId = update.changeId
+				}
+				if (update !== LibMPVSubtitleOverlayUpdate.Unchanged) {
+					withContext(Dispatchers.Main.immediate) { nativeSubtitleView?.applyUpdate(update) }
+				}
+				delay(SUBTITLE_OVERLAY_INTERVAL_MS)
+			}
+		}
+	}
+
+	private fun stopNativeSubtitleOverlay() {
+		nativeSubtitleJob?.cancel()
+		nativeSubtitleJob = null
+		nativeSubtitleView?.clear()
 	}
 
 	override fun prepareItem(item: QueueEntry) = Unit
@@ -451,6 +567,7 @@ class LibMPVBackend(
 
 	private fun setMedia(stream: PlayableMediaStream) {
 		cancelNvidiaFallbackResync(restorePlayback = false)
+		stopNativeSubtitleOverlay()
 		val forceRecreate = currentStream?.queueEntry !== stream.queueEntry
 		currentStream = stream
 		ensureInstanceOptions(forceRecreate)
@@ -487,6 +604,7 @@ class LibMPVBackend(
 		applySubtitleStyle(subtitleStyle)
 		applySubtitleTiming()
 		applyPlaybackSpeed()
+		updateNativeSubtitleOverlayMode()
 
 		val startOption = stream.queueEntry.startPosition.mpvStartOption()
 		val loaded = if (startOption == null) {
@@ -569,7 +687,9 @@ class LibMPVBackend(
 		endReported = true
 		lastPositionInfo = getPositionInfo()
 		runCommand("stop")
+		stopNativeSubtitleOverlay()
 		currentStream = null
+		updateNativeSubtitleOverlayMode()
 		activePlaylistEntryId = null
 		fileLoaded = false
 		playbackRestarted = false
@@ -611,6 +731,7 @@ class LibMPVBackend(
 			runCatching { if (player.isInitialized) player.close() }
 				.onFailure { error -> Timber.w(error, "Unable to destroy MPV instance cleanly") }
 			currentStream = null
+			subtitleOverlayScope.cancel()
 			terminalState = PlayState.STOPPED
 			released = true
 		}
@@ -680,6 +801,7 @@ class LibMPVBackend(
 		) {
 			applyShieldFallbackIfNeeded()
 		}
+		updateNativeSubtitleOverlayMode()
 	}
 
 	fun setVideoDecoder(decoder: LibMPVVideoDecoder) {
@@ -738,7 +860,9 @@ class LibMPVBackend(
 	}
 
 	private fun setPaused(paused: Boolean) {
-		if (setBooleanProperty("pause", paused)) isPaused = paused
+		if (setBooleanProperty("pause", paused)) {
+			isPaused = paused
+		}
 	}
 
 	private fun restoreNvidiaFallbackOptions() {
@@ -892,6 +1016,7 @@ class LibMPVBackend(
 			terminalState == PlayState.STOPPED ||
 			terminalState == PlayState.ERROR
 		if (canRecreateImmediately) ensureInstanceOptions() else applyVideoDecoder()
+		updateNativeSubtitleOverlayMode()
 	}
 
 	override fun reloadVideoDecoder(): Boolean =
@@ -1006,7 +1131,7 @@ class LibMPVBackend(
 			number("video-params/max-fall", " nits")?.let { put("MaxFALL", it) }
 			string("audio-params/format")?.let { put("Audio format", it) }
 		}
-		return PlaybackFrameStats(
+		val stats = PlaybackFrameStats(
 			droppedFrames = (decoderDropped.toLong() + outputDropped.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
 			corruptedFrames = 0,
 			playerName = "libMPV",
@@ -1034,6 +1159,7 @@ class LibMPVBackend(
 			subtitlePath = string("current-tracks/sub/external-filename"),
 			backendDetails = backendDetails,
 		)
+		return stats
 	}
 
 	private fun handleEventProperty(generation: Long, property: String, value: Long) = onPlayerEvent(generation) {
@@ -1051,7 +1177,9 @@ class LibMPVBackend(
 
 	private fun handleEventProperty(generation: Long, property: String, value: Boolean) = onPlayerEvent(generation) {
 		when (property) {
-			"pause" -> isPaused = value
+			"pause" -> {
+				isPaused = value
+			}
 			"paused-for-cache" -> pausedForCache = value
 			"seeking" -> seeking = value
 			else -> return@onPlayerEvent
@@ -1090,12 +1218,14 @@ class LibMPVBackend(
 				applySubtitleStyle(subtitleStyle)
 				applySubtitleTiming()
 				applyPlaybackSpeed()
+				updateNativeSubtitleOverlayMode()
 				refreshVideoSize()
 				publishPlayState(force = true)
 			}
 			MPV.mpvEvent.MPV_EVENT_VIDEO_RECONFIG -> {
 				applyShieldFallbackIfNeeded()
 				refreshVideoSize()
+				updateNativeSubtitleOverlayMode()
 			}
 			MPV.mpvEvent.MPV_EVENT_SEEK -> {
 				playbackRestarted = false
@@ -1164,6 +1294,8 @@ class LibMPVBackend(
 		pausedForCache = false
 		seeking = false
 		handler.removeCallbacks(tick)
+		nativeSubtitleModeActive = false
+		stopNativeSubtitleOverlay()
 		when (reason) {
 			"eof" -> {
 				terminalState = PlayState.STOPPED
@@ -1192,6 +1324,8 @@ class LibMPVBackend(
 		handler.removeCallbacks(tick)
 		scrubbing.reset()
 		cancelNvidiaFallbackResync(restorePlayback = false)
+		nativeSubtitleModeActive = false
+		stopNativeSubtitleOverlay()
 		playbackRestarted = false
 		shieldFallback = null
 		terminalState = PlayState.ERROR
@@ -1206,7 +1340,8 @@ class LibMPVBackend(
 	}
 
 	private fun publishVideoSize() {
-		if (videoWidth > 0 && videoHeight > 0) listener?.onVideoSizeChange(videoWidth, videoHeight)
+		if (videoWidth <= 0 || videoHeight <= 0) return
+		listener?.onVideoSizeChange(videoWidth, videoHeight)
 	}
 
 	private fun resolvePlayState(): PlayState {
@@ -1234,13 +1369,18 @@ class LibMPVBackend(
 		if (externalSubtitlesAdded) return
 		externalSubtitlesAdded = true
 		val stream = currentStream ?: return
+		if (stream.externalSubtitles.any { shouldSelectExternalSubtitle(it, stream.selectedSubtitleStreamIndex) }) {
+			pendingInitialTrackTypes += TrackType.SUBTITLE
+		}
 		stream.externalSubtitles.forEach { subtitle ->
 			val flags = buildString {
-				append(if (shouldSelectExternalSubtitle(subtitle, stream.selectedSubtitleStreamIndex)) "select" else "auto")
+				// Select through track-list updates, so late loads cannot override a newer user choice.
+				append("auto")
 				if (subtitle.isForced) append("+forced")
 				if (subtitle.isDefault) append("+default")
 			}
 			runCommand(
+				"async",
 				"sub-add",
 				subtitle.url,
 				flags,
@@ -1290,6 +1430,7 @@ class LibMPVBackend(
 			val streamIndex = when (type) {
 				TrackType.AUDIO -> stream.selectedAudioStreamIndex
 				TrackType.SUBTITLE -> stream.selectedSubtitleStreamIndex
+					?: stream.externalSubtitles.lastOrNull { it.isDefault }?.index
 			} ?: return@forEach
 			if (applyInitialTrackSelection(stream, type, streamIndex)) pendingInitialTrackTypes -= type
 		}
@@ -1307,6 +1448,8 @@ class LibMPVBackend(
 
 		val track = findTrack(stream, type, streamIndex)
 		if (track == null) {
+			// External subtitles may finish out of order; wait for the requested URL, not any subtitle.
+			if (type == TrackType.SUBTITLE && stream.externalSubtitles.any { it.index == streamIndex }) return false
 			if (tracks.none { it.type == type }) return false
 			Timber.w("Could not find initial %s stream index %d", type.name.lowercase(), streamIndex)
 			return true
@@ -1319,16 +1462,16 @@ class LibMPVBackend(
 
 	private fun findTrack(stream: PlayableMediaStream, type: TrackType, streamIndex: Int): LibMPVTrack? {
 		val selectable = tracks.filter { track -> track.type == type }
-		selectable.firstOrNull { track -> track.ffIndex == streamIndex }?.let { return it }
 
 		if (type == TrackType.SUBTITLE) {
 			val external = stream.externalSubtitles.firstOrNull { subtitle -> subtitle.index == streamIndex }
 			if (external != null) {
-				selectable.firstOrNull { track ->
+				return selectable.firstOrNull { track ->
 					track.isExternal && track.externalFilename.matchesExternalUrl(external.url)
-				}?.let { return it }
+				}
 			}
 		}
+		selectable.firstOrNull { track -> track.ffIndex == streamIndex }?.let { return it }
 
 		val sourceIndex = stream.mpvSourceTracks(type).indexOfFirst { source -> source.index == streamIndex }
 		return selectable.getOrNull(sourceIndex)
@@ -1356,14 +1499,19 @@ class LibMPVBackend(
 
 	override fun selectTrack(type: TrackType, index: Int): Boolean {
 		pendingInitialTrackTypes -= type
-		if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
+		val stream = currentStream ?: return false
 		if (type == TrackType.SUBTITLE && index == -1) {
+			if (!stream.allowsLocalSubtitleDisable()) return false
 			setProperty("sid", "no")
 			refreshTracks()
+			nativeSubtitleView?.clear()
 			return true
 		}
 		refreshTracks()
 		val track = tracks.filter { candidate -> candidate.type == type }.getOrNull(index) ?: return false
+		val sourceTracks = stream.mpvSourceTracks(type)
+		val sourceTrack = stream.sourceTrackFor(track, index, sourceTracks)
+		if (!stream.allowsLocalTrackSelection(type, sourceTrack)) return false
 		setProperty(type.selectionProperty, track.id.toString())
 		refreshTracks()
 		return true
@@ -1374,7 +1522,6 @@ class LibMPVBackend(
 		ordinal: Int,
 		sourceTracks: List<MediaStreamTrack>,
 	): MediaStreamTrack? {
-		track.ffIndex?.let { index -> sourceTracks.firstOrNull { source -> source.index == index }?.let { return it } }
 		if (track.type == TrackType.SUBTITLE && track.isExternal) {
 			val external = externalSubtitles.firstOrNull { subtitle ->
 				track.externalFilename.matchesExternalUrl(subtitle.url)
@@ -1383,6 +1530,7 @@ class LibMPVBackend(
 				sourceTracks.firstOrNull { source -> source.index == subtitle.index }?.let { return it }
 			}
 		}
+		track.ffIndex?.let { index -> sourceTracks.firstOrNull { source -> source.index == index }?.let { return it } }
 		return sourceTracks.getOrNull(ordinal)
 	}
 
@@ -1576,11 +1724,18 @@ internal fun mpvGpuApiDisplay(
 	}
 }
 
-internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float) =
-	(bottomPaddingFraction * 720f).roundToInt().coerceIn(0, 600)
+internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float, canvasHeight: Int) =
+	(bottomPaddingFraction * canvasHeight).roundToInt().coerceIn(0, canvasHeight.coerceAtLeast(0))
 
-internal fun mpvSubtitleFontSize(textSizeDp: Float) =
-	(textSizeDp * 38f / 24f).coerceIn(8f, 96f)
+// Android paints a centered stroke and covers its inner half with the glyph fill.
+internal fun mpvSubtitleOutlineSize(density: Float) = (2f * density).roundToInt() / 2f
+
+internal fun mpvSubtitleFontSize(textSizeDp: Float, density: Float, fontHeightEm: Float): Float {
+	val size = textSizeDp.takeIf { it.isFinite() && it > 0f } ?: 24f
+	val pixelDensity = density.takeIf { it.isFinite() && it > 0f } ?: 1f
+	val fontHeight = fontHeightEm.takeIf { it.isFinite() && it > 0f } ?: 1f
+	return (size * pixelDensity * fontHeight).coerceIn(1f, 9000f)
+}
 
 internal fun Duration?.mpvStartOption() =
 	this?.takeIf { it > Duration.ZERO }?.let { "start=${it.inWholeMilliseconds / 1_000.0}" }

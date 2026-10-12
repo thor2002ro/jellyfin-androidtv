@@ -32,14 +32,18 @@ internal fun effectiveLibMPVVideoOutput(
 	decoder: LibMPVVideoDecoder,
 	videoRange: String?,
 ): String {
-	val isHdr = !videoRange.isNullOrBlank() &&
-		!videoRange.equals("SDR", ignoreCase = true) &&
-		!videoRange.equals("UNKNOWN", ignoreCase = true)
 	val triesNativeMediaCodec = decoder == LibMPVVideoDecoder.AUTOMATIC ||
 		decoder == LibMPVVideoDecoder.AUTO_SAFE ||
 		decoder == LibMPVVideoDecoder.MEDIACODEC
-	return if (isHdr && triesNativeMediaCodec) "mediacodec_embed" else configured
+	return if (isLibMPVHdrRange(videoRange) && triesNativeMediaCodec) "mediacodec_embed" else configured
 }
+
+internal fun isLibMPVHdrRange(videoRange: String?) = !videoRange.isNullOrBlank() &&
+	!videoRange.equals("SDR", ignoreCase = true) &&
+	!videoRange.equals("UNKNOWN", ignoreCase = true)
+
+internal fun shouldUseNativeSubtitleOverlay(videoRange: String?, videoOutput: String) =
+	isLibMPVHdrRange(videoRange) && videoOutput == "mediacodec_embed"
 
 /**
  * The Android-TV-friendly MPV profile. Every field has an explicit Jellyfin default.
@@ -324,6 +328,8 @@ internal val MPV_INTERNAL_OPTIONS = setOf(
 	"android-surface-size",
 	// Universal Jellyfin subtitle appearance.
 	"sub-font-size",
+	"sub-scale-by-window",
+	"sub-scale-with-window",
 	"sub-bold",
 	"sub-color",
 	"sub-back-color",
