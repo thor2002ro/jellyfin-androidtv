@@ -118,13 +118,17 @@ class LiveTvPlaybackRecoveryService(
 			try {
 				while (state.playState.value != PlayState.PLAYING && state.playState.value != PlayState.BUFFERING) {
 					val entry = manager.queue.entry.value ?: return@launch
-					if (!liveTvPlaybackPolicy.isLiveTv(entry)) return@launch
+					if (entry.doviRecoveryOwnership != null || !liveTvPlaybackPolicy.isLiveTv(entry)) return@launch
 
 					delay(PLAYBACK_ERROR_RETRY_INTERVAL)
 
 					if (state.playState.value == PlayState.PLAYING || state.playState.value == PlayState.BUFFERING) return@launch
 					val delayedEntry = manager.queue.entry.value ?: return@launch
-					if (delayedEntry !== entry || !liveTvPlaybackPolicy.isLiveTv(delayedEntry)) return@launch
+					if (
+						delayedEntry !== entry ||
+						delayedEntry.doviRecoveryOwnership != null ||
+						!liveTvPlaybackPolicy.isLiveTv(delayedEntry)
+					) return@launch
 
 					recoverPlaybackError(delayedEntry, lastPlaybackError)
 				}
@@ -137,6 +141,7 @@ class LiveTvPlaybackRecoveryService(
 	}
 
 	private suspend fun recoverPlaybackError(entry: QueueEntry, playbackError: PlaybackError?) {
+		if (entry.doviRecoveryOwnership != null) return
 		if (playbackError?.recoverWithIncreasedLiveTvOffset == true) {
 			val liveStreamTargetOffset = liveTvPlaybackPolicy.increaseLiveStreamTargetOffset(entry)
 			reloadCurrentLiveTvStream(
@@ -176,6 +181,7 @@ class LiveTvPlaybackRecoveryService(
 		if (lastPlaybackError != null) return
 
 		val entry = manager.queue.entry.value ?: return
+		if (entry.doviRecoveryOwnership != null || doviTransformationErrorEntry === entry) return
 		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
 
 		val entryIndex = manager.queue.entryIndex.value
@@ -186,6 +192,7 @@ class LiveTvPlaybackRecoveryService(
 				while (true) {
 					delay(PLAYBACK_ERROR_RETRY_INTERVAL)
 
+					if (entry.doviRecoveryOwnership != null) return@launch
 					if (manager.queue.entries.value.getOrNull(entryIndex) !== entry) return@launch
 
 					val currentEntry = manager.queue.entry.value
@@ -225,6 +232,7 @@ class LiveTvPlaybackRecoveryService(
 		}
 
 		val entry = manager.queue.entry.value ?: return
+		if (entry.doviRecoveryOwnership != null) return
 		if (entry.mediaStream?.identifier == null) return
 		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
 
@@ -237,6 +245,7 @@ class LiveTvPlaybackRecoveryService(
 
 				while (state.playState.value == PlayState.BUFFERING) {
 					val currentEntry = manager.queue.entry.value
+					if (currentEntry?.doviRecoveryOwnership != null) return@launch
 					val currentStreamIdentifier = currentEntry?.mediaStream?.identifier
 					if (currentEntry?.let(liveTvPlaybackPolicy::isLiveTv) != true || currentStreamIdentifier == null) {
 						return@launch
@@ -258,6 +267,7 @@ class LiveTvPlaybackRecoveryService(
 					delay(recoveryInterval)
 
 					val delayedEntry = manager.queue.entry.value
+					if (delayedEntry?.doviRecoveryOwnership != null) return@launch
 					val delayedStreamIdentifier = delayedEntry?.mediaStream?.identifier
 					if (state.playState.value != PlayState.BUFFERING) return@launch
 					if (delayedEntry?.let(liveTvPlaybackPolicy::isLiveTv) != true || delayedStreamIdentifier == null) return@launch
@@ -335,6 +345,7 @@ class LiveTvPlaybackRecoveryService(
 		failureMessage: String,
 	): Boolean {
 		val entry = manager.queue.entry.value ?: return false
+		if (entry.doviRecoveryOwnership != null) return false
 		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return false
 		if (!waitForNetworkAvailable(entry, startMessage)) return false
 
@@ -352,7 +363,12 @@ class LiveTvPlaybackRecoveryService(
 		var logged = false
 		while (!isNetworkAvailable()) {
 			val currentEntry = manager.queue.entry.value
-			if (currentEntry !== entry || !liveTvPlaybackPolicy.isLiveTv(currentEntry) || state.playState.value == PlayState.STOPPED) {
+			if (
+				currentEntry !== entry ||
+				entry.doviRecoveryOwnership != null ||
+				!liveTvPlaybackPolicy.isLiveTv(currentEntry) ||
+				state.playState.value == PlayState.STOPPED
+			) {
 				return false
 			}
 
@@ -382,6 +398,18 @@ class LiveTvPlaybackRecoveryService(
 		playbackErrorRecoveryJob = null
 	}
 
+	private suspend fun cancelAndJoinGenericRecovery(entry: QueueEntry) {
+		if (manager.queue.entry.value !== entry) return
+		val currentJob = currentCoroutineContext()[Job]
+		val playback = playbackErrorRecoveryJob
+		val stalled = stalledBufferRecoveryJob
+		val ended = streamEndRecoveryJob
+		cancelAndJoinLiveTvRecoveryJobs(listOfNotNull(playback, stalled, ended), currentJob)
+		if (playbackErrorRecoveryJob === playback) playbackErrorRecoveryJob = null
+		if (stalledBufferRecoveryJob === stalled) stalledBufferRecoveryJob = null
+		if (streamEndRecoveryJob === ended) streamEndRecoveryJob = null
+	}
+
 	private companion object {
 		private const val MAX_FORCE_TRANSCODING_RECOVERY_ATTEMPTS = 1
 		private const val BUFFERED_STALL_RECOVERY_ATTEMPTS_BEFORE_RELOAD = 3
@@ -396,6 +424,16 @@ internal fun shouldReloadBufferedLiveTvStall(
 	bufferedRecoveryAttempts: Int,
 	attemptsBeforeReload: Int,
 ) = bufferedRecoveryAttempts >= attemptsBeforeReload
+
+internal fun shouldSuppressLiveTvGenericRecovery(error: PlaybackError, currentEntry: QueueEntry?): Boolean =
+	doviTransformationFailureStatus(error.codeName) != null &&
+		error.origin?.matches(currentEntry) == true
+
+internal suspend fun cancelAndJoinLiveTvRecoveryJobs(jobs: Collection<Job>, currentJob: Job?) {
+	jobs.distinct().forEach { job ->
+		if (job !== currentJob) job.cancelAndJoin()
+	}
+}
 
 internal fun resetLiveTvRecoveryAttempts(
 	entry: QueueEntry,
