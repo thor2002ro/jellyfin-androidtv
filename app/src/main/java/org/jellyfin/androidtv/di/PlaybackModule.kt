@@ -15,17 +15,20 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.ExoPlayerBackendSettings
 import org.jellyfin.androidtv.preference.LibVLCBackendSettings
+import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.preference.constant.BufferLength
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCDecoder
+import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpeg
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegAudioForLiveTv
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideoForLiveTv
 import org.jellyfin.androidtv.preference.constant.libVLCPlaybackOptions
 import org.jellyfin.androidtv.preference.constant.libVLCStartupOptions
+import org.jellyfin.androidtv.preference.constant.mpvPlaybackOptions
 import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
@@ -40,6 +43,7 @@ import org.jellyfin.playback.jellyfin.jellyfinPlugin
 import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamOptions
 import org.jellyfin.playback.libvlc.LibVLCBackend
 import org.jellyfin.playback.libvlc.LibVLCInstanceOptions
+import org.jellyfin.playback.mpv.LibMPVBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerOptions
 import org.jellyfin.playback.media3.session.MediaSessionOptions
@@ -74,9 +78,11 @@ val playbackModule = module {
 
 	single { createExoPlayerBackend() }
 	single { createLibVLCBackend() }
+	single { createLibMPVBackend() }
 	single { createPlaybackManager() }
 	single { ExoPlayerBackendSettings(get(), get()) }
 	single { LibVLCBackendSettings(get(), get()) }
+	single { LibMPVBackendSettings(userPreferences = get<UserPreferences>(), backend = get<LibMPVBackend>()) }
 }
 
 private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
@@ -113,7 +119,16 @@ private fun Scope.createLibVLCBackend(): LibVLCBackend {
 	)
 }
 
+private fun Scope.createLibMPVBackend(): LibMPVBackend {
+	val userPreferences = get<UserPreferences>()
+	return LibMPVBackend(
+		context = androidContext(),
+		videoDecoderProvider = { userPreferences[UserPreferences.mpvDecoder].decoder },
+		playbackOptionsProvider = { userPreferences.mpvPlaybackOptions() },
 		gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
+	)
+}
+
 fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val activityIntent = Intent(get(), MainActivity::class.java)
 	val pendingIntent = PendingIntent.getActivity(get(), 0, activityIntent, PendingIntent.FLAG_IMMUTABLE)
@@ -133,6 +148,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val backend = when (userPreferences[UserPreferences.playbackBackend]) {
 		PlaybackBackend.EXOPLAYER -> get<ExoPlayerBackend>()
 		PlaybackBackend.LIBVLC -> get<LibVLCBackend>()
+		PlaybackBackend.MPV -> get<LibMPVBackend>()
 	}
 	install(playbackPlugin { provide(backend) })
 

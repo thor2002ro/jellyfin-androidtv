@@ -4,6 +4,9 @@ pluginManagement {
 		mavenCentral()
 		google()
 	}
+	plugins {
+		id("com.vanniktech.maven.publish") version "0.32.0"
+	}
 }
 
 plugins {
@@ -36,10 +39,19 @@ include(":playback:jellyfin")
 include(":playback:media3:exoplayer")
 include(":playback:media3:session")
 include(":playback:libvlc")
+include(":playback:mpv")
 include(":preference")
 
 dependencyResolutionManagement {
 	repositories {
+		exclusiveContent {
+			forRepository {
+				maven(rootDir.resolve("dependencies/mpv-android-lib/OUTPUT/maven"))
+			}
+			filter {
+				includeModule("io.github.abdallahmehiz", "mpv-android-lib")
+			}
+		}
 		mavenCentral()
 		google()
 		maven("https://androidx.dev/snapshots/builds/15645525/artifacts/repository") {

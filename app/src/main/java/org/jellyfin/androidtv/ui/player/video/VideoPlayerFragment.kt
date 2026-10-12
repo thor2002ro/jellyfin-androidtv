@@ -36,6 +36,7 @@ import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.libvlc.LibVLCBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
+import org.jellyfin.playback.mpv.LibMPVBackend
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -55,6 +56,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val playbackManager by inject<PlaybackManager>()
 	private val exoPlayerBackend by inject<ExoPlayerBackend>()
 	private val libVLCBackend by inject<LibVLCBackend>()
+	private val mpvBackend by inject<LibMPVBackend>()
 	private val navigationRepository by inject<NavigationRepository>()
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
@@ -72,6 +74,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		playbackManager.switchBackend(when (userPreferences[UserPreferences.playbackBackend]) {
 			PlaybackBackend.EXOPLAYER -> exoPlayerBackend
 			PlaybackBackend.LIBVLC -> libVLCBackend
+			PlaybackBackend.MPV -> mpvBackend
 		})
 
 		if (
