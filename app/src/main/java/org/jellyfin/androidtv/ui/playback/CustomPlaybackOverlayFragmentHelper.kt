@@ -6,10 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
-import org.jellyfin.androidtv.ui.GuideChannelHeader
 import org.jellyfin.androidtv.ui.asTimerInfoDto
 import org.jellyfin.androidtv.ui.livetv.TvManager
-import org.jellyfin.androidtv.ui.toggleGuideChannelFavorite
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
@@ -18,11 +16,6 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.UUID
 import kotlin.time.Duration
-
-fun CustomPlaybackOverlayFragment.toggleFavorite() {
-	val header = mSelectedProgramView as? GuideChannelHeader
-	if (header != null) toggleGuideChannelFavorite(header)
-}
 
 fun CustomPlaybackOverlayFragment.refreshSelectedProgram() {
 	val api by inject<ApiClient>()

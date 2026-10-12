@@ -30,11 +30,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
+import org.jellyfin.androidtv.ui.ScreensaverLock
 import org.jellyfin.androidtv.ui.base.BaseScreen
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
-import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.queue.isLiveTv
@@ -45,33 +45,34 @@ import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.compose.koinInject
 import org.koin.android.ext.android.inject
-
-private val GuidePlayerPreviewWidth = 332.dp
-private val GuidePlayerPreviewHeight = 186.dp
+import timber.log.Timber
 
 class LiveTvGuidePlayerFragment : Fragment(), View.OnKeyListener {
 	private val playbackManager by inject<PlaybackManager>()
 	private val navigationRepository by inject<NavigationRepository>()
 	private val videoQueueManager by inject<VideoQueueManager>()
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
-	private var playbackStopped = false
 
 	override fun onCreateView(
 		inflater: LayoutInflater,
 		container: ViewGroup?,
 		savedInstanceState: android.os.Bundle?,
-	) = content {
-		BaseScreen {
-			LiveTvGuidePlayerScreen(
-				playbackManager = playbackManager,
-				modifier = Modifier.fillMaxSize(),
-				onRemoteKeyEventHandlerChanged = { handler -> remoteKeyEventHandler = handler },
-				onClosePlayer = ::closePlayer,
-			)
+	): View {
+		LiveTvGuidePlayback.markStarted()
+		return content {
+			BaseScreen {
+				LiveTvGuidePlayerScreen(
+					playbackManager = playbackManager,
+					modifier = Modifier.fillMaxSize(),
+					onRemoteKeyEventHandlerChanged = { handler -> remoteKeyEventHandler = handler },
+					onClosePlayer = ::closePlayer,
+				)
+			}
 		}
 	}
 
 	override fun onDestroyView() {
+		stopPlayback()
 		remoteKeyEventHandler = null
 		super.onDestroyView()
 	}
@@ -81,9 +82,9 @@ class LiveTvGuidePlayerFragment : Fragment(), View.OnKeyListener {
 		playbackManager.state.unpause()
 	}
 
-	override fun onDestroy() {
-		stopPlayback()
-		super.onDestroy()
+	override fun onStop() {
+		LiveTvGuidePlayback.stopSessionIfStarted(playbackManager)
+		super.onStop()
 	}
 
 	override fun onKey(
@@ -101,12 +102,47 @@ class LiveTvGuidePlayerFragment : Fragment(), View.OnKeyListener {
 	}
 
 	private fun stopPlayback() {
-		if (playbackStopped) return
-		playbackStopped = true
-		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
-		playbackManager.state.stop()
+		LiveTvGuidePlayback.stopIfStarted(
+			playbackManager = playbackManager,
+			videoQueueManager = videoQueueManager,
+		)
+	}
+}
+
+object LiveTvGuidePlayback {
+	private var started = false
+
+	fun markStarted() {
+		started = true
+	}
+
+	fun stopIfStarted(
+		playbackManager: PlaybackManager,
+		videoQueueManager: VideoQueueManager,
+	) {
+		if (!started) return
+		stop(playbackManager, videoQueueManager)
+	}
+
+	fun stopSessionIfStarted(playbackManager: PlaybackManager) {
+		if (!started) return
+		stopSession(playbackManager)
+	}
+
+	private fun stop(
+		playbackManager: PlaybackManager,
+		videoQueueManager: VideoQueueManager,
+	) {
+		started = false
+		stopSession(playbackManager)
 		playbackManager.queue.clear()
 		videoQueueManager.clearVideoQueue()
+	}
+
+	private fun stopSession(playbackManager: PlaybackManager) {
+		Timber.i("Stopping Live TV Guide playback")
+		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
+		playbackManager.state.stop()
 	}
 }
 
@@ -136,8 +172,9 @@ private fun LiveTvGuidePlayerScreen(
 		animationSpec = tween(durationMillis = 260),
 		label = "live-tv-guide-player-expansion",
 	)
+	ScreensaverLock(enabled = true)
 
-	LaunchedEffect(liveTvChannelNavigator, hasLiveTvPlayback) {
+	LaunchedEffect(liveTvChannelNavigator) {
 		if (hasLiveTvPlayback) {
 			started = true
 			failed = false
@@ -147,8 +184,15 @@ private fun LiveTvGuidePlayerScreen(
 		}
 	}
 
+	LaunchedEffect(hasLiveTvPlayback) {
+		if (hasLiveTvPlayback) {
+			started = true
+			failed = false
+		}
+	}
+
 	LaunchedEffect(started, playbackItem?.id) {
-		if (started && guideItem == null && playbackItem != null) guideItem = playbackItem
+		if (started && playbackItem != null) guideItem = playbackItem
 	}
 
 	val currentItem = guideItem
@@ -161,18 +205,19 @@ private fun LiveTvGuidePlayerScreen(
 			modifier = modifier.background(Color.Black),
 		) {
 			val fullscreenVideoReady = fullScreen && surfaceExpansion >= 1f
-			val playerWidth = GuidePlayerPreviewWidth + (maxWidth - GuidePlayerPreviewWidth) * surfaceExpansion
-			val playerHeight = GuidePlayerPreviewHeight + (maxHeight - GuidePlayerPreviewHeight) * surfaceExpansion
+			val playerWidth = GuidePreviewWidth + (maxWidth - GuidePreviewWidth) * surfaceExpansion
+			val playerHeight = GuidePreviewHeight + (maxHeight - GuidePreviewHeight) * surfaceExpansion
+			val playerModifier = Modifier
+				.offset(x = 0.dp, y = 0.dp)
+				.size(playerWidth, playerHeight)
+				.padding(if (fullScreen) 0.dp else 1.dp)
 
-			PlayerSurface(
+			PlayerVideoOutput(
 				playbackManager = playbackManager,
 				zoomMode = if (fullscreenVideoReady) zoomMode else ZoomMode.FIT,
-				modifier = Modifier
 				onZoomStatusChanged = { zoomStatus = it },
 				allowOutputTransform = fullscreenVideoReady,
-					.offset(x = 0.dp, y = 0.dp)
-					.size(playerWidth, playerHeight)
-					.padding(if (fullScreen) 0.dp else 1.dp),
+				modifier = playerModifier,
 			)
 
 			if (fullScreen) {
@@ -184,20 +229,24 @@ private fun LiveTvGuidePlayerScreen(
 					onZoomModeSelected = { zoomMode = it },
 					onClosePlayer = { fullScreen = false },
 					onRemoteKeyEventHandlerChanged = { handler ->
-						onRemoteKeyEventHandlerChanged { keyCode, event ->
-							if (
-								event?.action == KeyEvent.ACTION_DOWN &&
-								event.repeatCount == 0 &&
-								(event.keyCode == KeyEvent.KEYCODE_BACK ||
-									event.keyCode == KeyEvent.KEYCODE_ESCAPE ||
-									event.keyCode == KeyEvent.KEYCODE_BUTTON_B)
-							) {
-								fullScreen = false
-								true
-							} else {
-								handler?.invoke(keyCode, event) == true
+						onRemoteKeyEventHandlerChanged(
+							handler?.let { playerHandler ->
+								{ keyCode, event ->
+									if (
+										event?.action == KeyEvent.ACTION_DOWN &&
+										event.repeatCount == 0 &&
+										(event.keyCode == KeyEvent.KEYCODE_BACK ||
+											event.keyCode == KeyEvent.KEYCODE_ESCAPE ||
+											event.keyCode == KeyEvent.KEYCODE_BUTTON_B)
+									) {
+										fullScreen = false
+										true
+									} else {
+										playerHandler(keyCode, event)
+									}
+								}
 							}
-						}
+						)
 					},
 					modifier = Modifier
 						.fillMaxSize()

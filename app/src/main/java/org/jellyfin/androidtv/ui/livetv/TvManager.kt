@@ -13,7 +13,6 @@ import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.Row
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.SystemPreferences
-import org.jellyfin.androidtv.ui.ProgramGridCell
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.TextItemPresenter
@@ -237,33 +236,6 @@ object TvManager {
 				)
 				.append(")")
 		})
-	}
-
-	@JvmStatic
-	fun setFocusParams(currentRow: LinearLayout, otherRow: LinearLayout, up: Boolean) {
-		for (currentRowNdx in 0 until currentRow.childCount) {
-			val cell = currentRow.getChildAt(currentRowNdx) as ProgramGridCell
-			val otherCell = getOtherCell(otherRow, cell)
-			if (otherCell != null) {
-				if (up) {
-					cell.nextFocusUpId = otherCell.id
-				} else {
-					cell.nextFocusDownId = otherCell.id
-				}
-			}
-		}
-	}
-
-	private fun getOtherCell(otherRow: LinearLayout, cell: ProgramGridCell): ProgramGridCell? {
-		for (otherRowNdx in 0 until otherRow.childCount) {
-			val otherCell = otherRow.getChildAt(otherRowNdx) as ProgramGridCell
-			val otherEnd = otherCell.getProgram().endDate
-			val cellStart = cell.getProgram().startDate
-			if (otherEnd != null && cellStart != null && otherEnd.isAfter(cellStart)) {
-				return otherCell
-			}
-		}
-		return null
 	}
 
 	@JvmStatic

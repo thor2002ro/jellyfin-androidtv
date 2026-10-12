@@ -330,7 +330,6 @@
     <string name="bitrate_mbit">%1$,.0f ميجابت/ث</string>
     <string name="grid_direction_vertical">عمودي</string>
     <string name="grid_direction">اتجاه الشبكة</string>
-    <string name="lbl_premiere">العرض الأول</string>
     <string name="lbl_live">مباشر</string>
     <string name="lbl_sports">الرياضة</string>
     <string name="lbl_albums">الألبومات</string>
