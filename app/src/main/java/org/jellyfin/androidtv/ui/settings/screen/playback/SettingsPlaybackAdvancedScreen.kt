@@ -36,7 +36,6 @@ import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButt
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.createDeviceProfileReport
 import org.jellyfin.design.Tokens
-import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.clientLogApi
 import org.jellyfin.sdk.model.ServerVersion
@@ -51,7 +50,6 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
-	val playbackManager = koinInject<PlaybackManager>()
 
 	SettingsColumn {
 		item {
@@ -251,15 +249,6 @@ fun SettingsPlaybackAdvancedScreen() {
 				trailingContent = { Checkbox(checked = pgsDirectPlay) },
 				onClick = { pgsDirectPlay = !pgsDirectPlay },
 				modifier = Modifier.focusKey("pgs_direct_play")
-			)
-		}
-
-		item {
-			ListButton(
-				headingContent = { Text(stringResource(R.string.preference_libass_options)) },
-				captionContent = { Text(stringResource(R.string.preference_libass_options_description)) },
-				onClick = { router.push(Routes.PLAYBACK_LIBASS) },
-				modifier = Modifier.focusKey(Routes.PLAYBACK_LIBASS)
 			)
 		}
 
