@@ -1,70 +1,144 @@
 package org.jellyfin.androidtv.ui.composable.item
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.WatchedIndicatorBehavior
 import org.jellyfin.androidtv.ui.base.Badge
 import org.jellyfin.androidtv.ui.base.Icon
+import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Seekbar
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
+import org.jellyfin.androidtv.util.TimeUtils
+import org.jellyfin.androidtv.util.languageCodesMatch
+import org.jellyfin.androidtv.util.sdk.STREAM_BADGE_DISPLAY_LIMIT
+import org.jellyfin.androidtv.util.sdk.hasLanguageBadgeStreams
+import org.jellyfin.androidtv.util.sdk.streamBadgeItemTypes
+import org.jellyfin.androidtv.util.sdk.videoBadgeCodecText
+import org.jellyfin.androidtv.util.sdk.videoBadgeResolutionText
+import org.jellyfin.androidtv.util.toStreamLanguageBadgeOrNull
 import org.jellyfin.design.Tokens
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaType
+import org.jellyfin.sdk.model.api.MediaSourceInfo
+import org.jellyfin.sdk.model.api.MediaStream
+import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
+import kotlin.math.roundToLong
+import kotlin.time.Duration
 
 @Composable
 @Stable
 fun ItemCardBaseItemOverlay(
 	item: BaseItemDto,
+	streamBadgeItem: BaseItemDto = item,
+	showRemainingTimeBadge: Boolean = false,
 	footer: (@Composable () -> Unit)? = null,
 ) = Box(
 	modifier = Modifier
 		.fillMaxSize()
 		.padding(Tokens.Space.spaceXs)
 ) {
+	val progress = rememberItemCardProgressInfo(item)
+
 	StateIndicator(
 		item = item,
 		modifier = Modifier.align(Alignment.TopStart),
 	)
 
-	WatchIndicator(
+	TopEndIndicator(
 		item = item,
-		modifier = Modifier.align(Alignment.TopEnd)
+		progress = progress?.progress,
+		duration = progress?.duration,
+		showRemainingTimeBadge = showRemainingTimeBadge,
+		modifier = Modifier.align(Alignment.TopEnd),
 	)
 
 	Column(
-		modifier = Modifier.align(Alignment.BottomCenter),
+		modifier = Modifier
+			.align(Alignment.BottomCenter)
+			.fillMaxWidth(),
 		verticalArrangement = Arrangement.spacedBy(Tokens.Space.spaceXs)
 	) {
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+			verticalAlignment = Alignment.Bottom,
+		) {
+			Box(
+				modifier = Modifier.weight(1f),
+				contentAlignment = Alignment.BottomStart,
+			) {
+				VideoStreamBadges(item = streamBadgeItem)
+			}
+
+			Box(
+				modifier = Modifier.weight(1f),
+				contentAlignment = Alignment.BottomEnd,
+			) {
+				MediaStreamBadges(item = streamBadgeItem)
+			}
+		}
+
 		ProgressIndicator(
-			item = item,
+			progress = progress?.progress,
 		)
 
 		if (footer != null) footer()
+	}
+}
+
+@Composable
+@Stable
+private fun TopEndIndicator(
+	item: BaseItemDto,
+	progress: Float?,
+	duration: Duration?,
+	showRemainingTimeBadge: Boolean,
+	modifier: Modifier = Modifier,
+) {
+	val remainingTimeText = if (showRemainingTimeBadge) item.remainingPlaybackTimeText(progress, duration) else null
+	if (remainingTimeText != null) {
+		MediaStreamBadge(
+			icon = R.drawable.ic_time,
+			text = remainingTimeText,
+			modifier = modifier,
+		)
+	} else {
+		WatchIndicator(
+			item = item,
+			modifier = modifier,
+		)
 	}
 }
 
@@ -148,6 +222,135 @@ private fun WatchIndicator(
 private val progressMediaTypes = setOf(MediaType.VIDEO, MediaType.BOOK)
 
 @Composable
+@Stable
+private fun MediaStreamBadges(
+	item: BaseItemDto,
+	modifier: Modifier = Modifier,
+) {
+	val userRepository = koinInject<UserRepository>()
+	val user by userRepository.currentUser.collectAsState()
+	val configuration = user?.configuration
+	val badges = item.streamBadges(
+		audioLanguagePreference = configuration?.takeUnless { it.playDefaultAudioTrack }?.audioLanguagePreference,
+		subtitleLanguagePreference = configuration?.subtitleLanguagePreference,
+	) ?: return
+
+	Column(
+		modifier = modifier,
+		horizontalAlignment = Alignment.End,
+		verticalArrangement = Arrangement.spacedBy(1.dp),
+	) {
+		badges.audio?.let { text ->
+			MediaStreamBadge(
+				icon = R.drawable.ic_badge_speaker,
+				text = text,
+			)
+		}
+
+		badges.subtitle?.let { text ->
+			MediaStreamBadge(
+				icon = R.drawable.ic_badge_subtitles,
+				text = text,
+			)
+		}
+	}
+}
+
+@Composable
+private fun MediaStreamBadge(
+	icon: Int,
+	text: String,
+) {
+	Row(
+		modifier = Modifier
+			.background(Tokens.Color.colorBluegrey900.copy(alpha = 0.72f), JellyfinTheme.shapes.extraSmall)
+			.padding(horizontal = 2.dp, vertical = 1.dp)
+			.widthIn(min = 18.dp),
+		horizontalArrangement = Arrangement.spacedBy(1.dp),
+		verticalAlignment = Alignment.CenterVertically,
+	) {
+		Icon(
+			imageVector = ImageVector.vectorResource(icon),
+			contentDescription = null,
+			tint = Tokens.Color.colorWhite,
+			modifier = Modifier.size(7.dp),
+		)
+		Text(
+			text = text,
+			color = Tokens.Color.colorWhite,
+			fontSize = 7.sp,
+			maxLines = 1,
+		)
+	}
+}
+
+internal data class StreamBadges(
+	val audio: String?,
+	val subtitle: String?,
+)
+
+internal fun BaseItemDto.streamBadges(
+	audioLanguagePreference: String?,
+	subtitleLanguagePreference: String?,
+): StreamBadges? {
+	when (type) {
+		BaseItemKind.MOVIE, BaseItemKind.EPISODE, BaseItemKind.VIDEO, BaseItemKind.SERIES, BaseItemKind.SEASON -> Unit
+		else -> return null
+	}
+
+	val mediaSource = mediaSources?.firstOrNull { source -> source.mediaStreams?.isNotEmpty() == true } ?: return null
+	val streams = mediaSource.mediaStreams.orEmpty()
+	val audio = streams.badgeText(
+		type = MediaStreamType.AUDIO,
+		languagePreference = audioLanguagePreference,
+		defaultIndex = mediaSource.defaultAudioStreamIndex,
+	)
+	val subtitle = streams.badgeText(
+		type = MediaStreamType.SUBTITLE,
+		languagePreference = subtitleLanguagePreference,
+		defaultIndex = mediaSource.defaultSubtitleStreamIndex,
+	)
+
+	return StreamBadges(audio, subtitle).takeIf { badges -> badges.audio != null || badges.subtitle != null }
+}
+
+private fun List<MediaStream>.badgeText(
+	type: MediaStreamType,
+	languagePreference: String?,
+	defaultIndex: Int?,
+): String? {
+	val streams = filter { stream -> stream.type == type }
+	if (streams.isEmpty()) return null
+
+	val badges = buildList {
+		fun add(stream: MediaStream) {
+			val badge = stream.badgeText() ?: return
+			if (none { it == badge }) add(badge)
+		}
+
+		languagePreference?.takeIf { it.isNotBlank() }?.let { preferredLanguage ->
+			streams.filter { stream -> languageCodesMatch(stream.language, preferredLanguage) }.forEach(::add)
+		}
+		if (defaultIndex != -1) {
+			defaultIndex?.let { index -> streams.filter { stream -> stream.index == index }.forEach(::add) }
+			streams.filter { stream -> stream.isDefault }.forEach(::add)
+		}
+		streams.forEach(::add)
+	}
+
+	val visibleBadges = badges.take(MAX_STREAM_BADGE_LANGUAGES)
+	val hiddenCount = badges.size - visibleBadges.size
+	return (visibleBadges + listOfNotNull(hiddenCount.takeIf { it > 0 }?.let { "+$it" }))
+		.joinToString(" ")
+		.takeIf { it.isNotBlank() }
+}
+
+private fun MediaStream.badgeText(): String? =
+	language.toIso2LanguageBadgeOrNull()
+
+private const val MAX_STREAM_BADGE_LANGUAGES = 3
+
+@Composable
 private fun ProgressIndicator(
 	item: BaseItemDto,
 	modifier: Modifier = Modifier,
@@ -157,8 +360,8 @@ private fun ProgressIndicator(
 	val currentQueueEntry by rememberQueueEntry(playbackManager)
 
 	val playedPercentage = when {
-		playState == PlayState.PLAYING && currentQueueEntry?.baseItem?.id == item.id -> rememberPlayerProgress(playbackManager).value
-		item.mediaType in progressMediaTypes -> item.userData?.playedPercentage?.toFloat()?.div(100f)?.coerceIn(0f, 1f)
+		playState.isActivePlayback && currentQueueEntry?.baseItem?.id == item.id -> rememberPlayerProgress(playbackManager).value
+		item.mediaType in progressMediaTypes -> item.userData?.playedPercentage?.toFloat()?.div(100f)?.coerceIn(0f, 1f)?.takeIf { it > 0f && it < 1f }
 
 		else -> null
 	}
