@@ -1,18 +1,9 @@
 package org.jellyfin.androidtv.ui.player.video
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,31 +13,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.R
-import org.jellyfin.androidtv.ui.base.Icon
-import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.LocalTextStyle
-import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
-import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButton
-import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.model.api.BaseItemDto
 import java.util.Locale
 import kotlin.math.abs
 
-private val PlaybackSpeedPopoverVerticalOffset = 5.dp
 private val PlaybackSpeedButtonContentHeight = 20.dp
 private val PlaybackSpeedButtonContentMinWidth = 28.dp
 private val PlaybackSpeedButtonTextVerticalOffset = 2.dp
@@ -117,70 +99,17 @@ private fun PlaybackSpeedPopover(
 	currentSpeed: Float,
 	onSpeedSelected: (Float) -> Unit,
 ) {
-	Popover(
+	PlayerSelectionPopover(
 		expanded = expanded,
 		onDismissRequest = onDismissRequest,
-		alignment = Alignment.TopCenter,
-		offset = DpOffset(0.dp, -PlaybackSpeedPopoverVerticalOffset),
+		title = stringResource(R.string.lbl_playback_speed),
 	) {
-		Column(
-			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 6.dp)
-				.widthIn(min = 120.dp, max = 180.dp)
-				.heightIn(max = 300.dp)
-				.verticalScroll(rememberScrollState())
-		) {
-			Text(
-				text = stringResource(R.string.lbl_playback_speed),
-				style = JellyfinTheme.typography.listHeader.copy(
-					color = JellyfinTheme.colorScheme.listHeader
-				),
-				fontSize = 13.sp,
-				modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+		PlaybackSpeedOption.entries.forEach { option ->
+			PlayerSelectionItem(
+				label = option.label,
+				isSelected = option.matches(currentSpeed),
+				onClick = { onSpeedSelected(option.speed) },
 			)
-
-			PlaybackSpeedOption.entries.forEach { option ->
-				PlaybackSpeedItem(
-					label = option.label,
-					isSelected = option.matches(currentSpeed),
-					onClick = { onSpeedSelected(option.speed) },
-				)
-			}
-		}
-	}
-}
-
-@Composable
-private fun PlaybackSpeedItem(
-	label: String,
-	isSelected: Boolean,
-	onClick: () -> Unit,
-) {
-	Button(
-		onClick = onClick,
-		contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-	) {
-		Row(
-			horizontalArrangement = Arrangement.spacedBy(8.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-		) {
-			Box(modifier = Modifier.size(18.dp)) {
-				if (isSelected) {
-					Icon(
-						imageVector = ImageVector.vectorResource(R.drawable.ic_check),
-						contentDescription = null,
-						modifier = Modifier.size(18.dp),
-					)
-				}
-			}
-			ProvideTextStyle(JellyfinTheme.typography.listHeadline.copy(fontSize = 13.sp)) {
-				Text(
-					text = label,
-					maxLines = 1,
-					overflow = TextOverflow.Ellipsis,
-				)
-			}
 		}
 	}
 }
