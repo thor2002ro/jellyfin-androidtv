@@ -25,6 +25,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.mediastream.totalBitrate
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
@@ -215,6 +216,9 @@ class LibVLCBackend(
 	private var subtitleStyle: PlayerSubtitleStyle? = null
 	private var subtitleTimingOffset = Duration.ZERO
 	private var bufferingPercent = 100f
+	private var pendingStartPosition: Duration? = null
+	private var initialPositionForReporting: Duration? = null
+	private var startPlayWhenReady = true
 	private var playbackSpeed = 1f
 	private var appliedInstanceOptions = currentInstanceOptions()
 	private var libVLC = createLibVLC(appliedInstanceOptions)
@@ -344,6 +348,9 @@ class LibVLCBackend(
 		stream.errorOrigin?.activate()
 		endReported = false
 		previousStatsSample = null
+		pendingStartPosition = stream.queueEntry.startPosition?.takeIf { it > Duration.ZERO }
+		initialPositionForReporting = pendingStartPosition
+		startPlayWhenReady = true
 		pendingInitialTrackTypes.clear()
 		if (stream.conversionMethod == MediaConversionMethod.None) {
 			if (stream.selectedAudioStreamIndex != null) pendingInitialTrackTypes += TrackType.AUDIO
@@ -354,6 +361,8 @@ class LibVLCBackend(
 		val media = Media(libVLC, Uri.parse(stream.url))
 		try {
 			media.setVideoDecoder(effectiveVideoDecoder)
+			// VLC 4's start-time trims the timeline. Open paused to retain absolute positions.
+			if (pendingStartPosition != null) media.addOption(":start-paused")
 			libVLCMediaOptions(
 				isLiveTv = stream.queueEntry.isLiveTv,
 				normalBufferDuration = normalBufferDuration,
@@ -373,10 +382,13 @@ class LibVLCBackend(
 	}
 
 	override fun play() {
+		startPlayWhenReady = true
+		if (pendingStartPosition != null) return
 		player.play()
 	}
 
 	override fun pause() {
+		startPlayWhenReady = false
 		player.pause()
 	}
 
@@ -386,6 +398,8 @@ class LibVLCBackend(
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		player.stop()
 		currentStream = null
+		pendingStartPosition = null
+		initialPositionForReporting = null
 		endReported = false
 		previousStatsSample = null
 		pendingInitialTrackTypes.clear()
@@ -422,6 +436,7 @@ class LibVLCBackend(
 			Timber.w("LibVLC rejected seek to %d ms", position.inWholeMilliseconds)
 			return false
 		}
+		initialPositionForReporting = null
 		timedEvents.advance(previous.active, position, previous.duration, natural = false)
 		lastTickPosition = position
 		return true
@@ -499,7 +514,12 @@ class LibVLCBackend(
 	}
 
 	override fun getPositionInfo(): PositionInfo {
-		val active = player.time.coerceAtLeast(0).milliseconds
+		val nativePosition = player.time.coerceAtLeast(0).milliseconds
+		// Playing can arrive before VLC publishes the timestamp of the initial seek.
+		initialPositionForReporting?.let { initial ->
+			if (nativePosition >= initial) initialPositionForReporting = null
+		}
+		val active = initialPositionForReporting ?: nativePosition
 		val duration = player.length.coerceAtLeast(0).milliseconds
 		return PositionInfo(active, active, duration)
 	}
@@ -580,6 +600,7 @@ class LibVLCBackend(
 				listener?.onPlayStateChange(PlayState.PLAYING)
 			}
 			MediaPlayer.Event.Paused -> {
+				if (applyPendingStartPosition()) return
 				handler.removeCallbacks(tick)
 				listener?.onPlayStateChange(PlayState.PAUSED)
 			}
@@ -599,6 +620,18 @@ class LibVLCBackend(
 				listener?.onPlayStateChange(PlayState.ERROR)
 			}
 		}
+	}
+
+	private fun applyPendingStartPosition(): Boolean {
+		val position = pendingStartPosition ?: return false
+		val result = player.setTime(position.inWholeMilliseconds)
+		Timber.i("VLC initial seek requestedMs=%d seekable=%s result=%d", position.inWholeMilliseconds, player.isSeekable, result)
+		if (result < 0) return false
+		pendingStartPosition = null
+		lastTickPosition = position
+		if (!startPlayWhenReady) return false
+		player.play()
+		return true
 	}
 
 	private fun applyInitialTrackSelection(type: TrackType? = null) {
