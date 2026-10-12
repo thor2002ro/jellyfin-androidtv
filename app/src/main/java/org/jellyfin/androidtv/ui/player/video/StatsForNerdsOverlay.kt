@@ -54,6 +54,7 @@ import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.backend.VideoDecoderOption
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
@@ -420,6 +421,13 @@ private object NewPlayerStreamStatusBuilder {
 				rows = rows {
 					videoDiagnosticValues(playerVideoSize, zoomStatus)
 						.forEach { (label, value) -> row(label, value) }
+					row(
+						"Decoder mode",
+						decoderModeDiagnostic(
+							selected = playbackManager.backend.selectedVideoDecoderOption,
+							forced = playbackManager.backend.forcedVideoDecoderOption,
+						),
+					)
 					row("Video decoder", frameStats.videoDecoderLabel())
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
@@ -792,6 +800,13 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
 
+}
+
+internal fun decoderModeDiagnostic(
+	selected: VideoDecoderOption?,
+	forced: VideoDecoderOption?,
+): String? = selected?.label?.let { label ->
+	if (forced != null) "$label (override)" else label
 }
 
 internal fun List<MediaStreamAudioTrack>.selectedTrack(selectedTrack: PlayerTrack?): MediaStreamAudioTrack? =
