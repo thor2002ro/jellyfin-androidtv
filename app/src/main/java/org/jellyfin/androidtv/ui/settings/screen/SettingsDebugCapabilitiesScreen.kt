@@ -38,6 +38,7 @@ import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.AndroidVersion
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
@@ -50,12 +51,6 @@ import org.jellyfin.androidtv.util.profile.prettyFormat
 import org.koin.compose.koinInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-// Values from Display.HdrCapabilities. Kept local to avoid minSdk inlined API warnings.
-private const val HDR_TYPE_DOLBY_VISION = 1
-private const val HDR_TYPE_HDR10 = 2
-private const val HDR_TYPE_HLG = 3
-private const val HDR_TYPE_HDR10_PLUS = 4
 
 @Composable
 fun SettingsDebugCapabilitiesScreen() {
@@ -415,10 +410,10 @@ private fun buildHdrCapabilities(
 	title = context.getString(R.string.pref_debug_capabilities_hdr_section),
 	caption = context.getString(R.string.pref_debug_capabilities_hdr_section_summary),
 	items = listOf(
-		CapabilityItem("Display: Dolby Vision", displayHdrTypes.contains(HDR_TYPE_DOLBY_VISION)),
-		CapabilityItem("Display: HDR10", displayHdrTypes.contains(HDR_TYPE_HDR10)),
-		CapabilityItem("Display: HDR10+", displayHdrTypes.contains(HDR_TYPE_HDR10_PLUS)),
-		CapabilityItem("Display: HLG", displayHdrTypes.contains(HDR_TYPE_HLG)),
+		CapabilityItem("Display: Dolby Vision", displayHdrTypes.contains(DISPLAY_HDR_TYPE_DOLBY_VISION)),
+		CapabilityItem("Display: HDR10", displayHdrTypes.contains(DISPLAY_HDR_TYPE_HDR10)),
+		CapabilityItem("Display: HDR10+", displayHdrTypes.contains(DISPLAY_HDR_TYPE_HDR10_PLUS)),
+		CapabilityItem("Display: HLG", displayHdrTypes.contains(DISPLAY_HDR_TYPE_HLG)),
 		CapabilityItem("HEVC: Dolby Vision", mediaTest.supportsHevcDolbyVision()),
 		CapabilityItem("HEVC: Dolby Vision Profile 5", mediaTest.supportsHevcDolbyVisionProfile5(), "dvhe.05"),
 		CapabilityItem("HEVC: Dolby Vision Profile 7", mediaTest.supportsHevcDolbyVisionProfile7(), "dvhe.07"),

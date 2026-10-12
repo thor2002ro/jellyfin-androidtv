@@ -189,12 +189,6 @@ internal fun createDeviceProfile(
 	val supportsAV1HDR10 = mediaTest.supportsAV1HDR10()
 	val supportsAV1HDR10Plus = mediaTest.supportsAV1HDR10Plus()
 
-	// HEVC
-	val supportsHevcDolbyVision = mediaTest.supportsHevcDolbyVision()
-	val supportsHevcDolbyVisionEL = mediaTest.supportsHevcDolbyVisionEL()
-	val supportsHevcHDR10 = mediaTest.supportsHevcHDR10()
-	val supportsHevcHDR10Plus = mediaTest.supportsHevcHDR10Plus()
-
 	name = "AndroidTV-Default"
 
 	/// Bitrate
@@ -507,40 +501,11 @@ internal fun createDeviceProfile(
 		}
 	} - forceEnabledHdr + forceDisabledHdr
 
-	val unsupportedRangeTypesHevc = buildSet {
-		add(VideoRangeType.DOVI_INVALID)
-
-		if (!supportsHevcDolbyVisionEL) {
-			if (
-				!KnownDefects.unreportedDoviProfile7Support ||
-				!supportsHevcDolbyVision ||
-				!supportsHevcMain10 ||
-				!supportsHevcHDR10
-			) {
-				add(VideoRangeType.DOVI_WITH_EL)
-
-				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) {
-					add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
-				}
-			}
-
-			if (!supportsHevcDolbyVision) {
-				add(VideoRangeType.DOVI)
-				if (!supportsHevcHDR10) add(VideoRangeType.DOVI_WITH_HDR10)
-				if (!supportsHevcHDR10Plus && !KnownDefects.hevcDoviHdr10PlusBug) add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
-			}
-		}
-
-		if (!supportsHevcHDR10Plus) {
-			add(VideoRangeType.HDR10_PLUS)
-			if (!supportsHevcHDR10) add(VideoRangeType.HDR10)
-		}
-
-		if (KnownDefects.hevcDoviHdr10PlusBug) {
-			add(VideoRangeType.DOVI_WITH_HDR10_PLUS)
-			add(VideoRangeType.DOVI_WITH_ELHDR10_PLUS)
-		}
-	} - forceEnabledHdr + forceDisabledHdr
+	val unsupportedRangeTypesHevc = getUnsupportedHevcVideoRangeWorkarounds(
+		mediaTest = mediaTest,
+		forceEnabledHdr = forceEnabledHdr,
+		forceDisabledHdr = forceDisabledHdr,
+	).keys
 
 	// Note: The codec profiles use a workaround to create correct behavior
 	// The notEquals condition will always fail the ConditionProcessor test in the server so we use applyConditions to only have the codec
@@ -574,6 +539,7 @@ internal fun createDeviceProfile(
 		applyConditions {
 			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection unsupportedRangeTypesHevc.map { it.serialName }
 		}
+		addServerDoviRemuxMetadataWorkaround(videoCodec, excludedRanges, doviPlaybackPlan)
 	}
 
 	// Audio channel profile
@@ -605,6 +571,39 @@ internal fun createDeviceProfile(
 	// ASS/SSA is supported via libass extension
 	subtitleProfile(Codec.Subtitle.ASS, encode = true, embedded = assDirectPlay, external = assDirectPlay)
 	subtitleProfile(Codec.Subtitle.SSA, encode = true, embedded = assDirectPlay, external = assDirectPlay)
+}
+
+/**
+ * Jellyfin Server 12 only preserves the fMP4 Dolby Vision configuration when the
+ * requested ranges include fallback-free DOVI; otherwise FFmpeg omits dvcC/dvvC.
+ * Supported sources skip exclusion profiles, so an explicit accepted-range profile
+ * is needed to send that range and trigger the server's -strict -2 muxing option.
+ * Remove this workaround when the server preserves DV configuration on video copy
+ * without requiring the extra DOVI capability. This is independent of the player.
+ */
+private fun DeviceProfileBuilder.addServerDoviRemuxMetadataWorkaround(
+	videoCodec: String,
+	excludedRanges: Set<VideoRangeType>,
+	plan: DoviPlaybackPlan?,
+) {
+	// Only native/converted DV routes opt in; never override codec/range exclusions
+	// or advertise DV for source-base playback and server tone-mapping routes.
+	if (plan?.advertiseRemuxDoviMetadata != true ||
+		!plan.codec.name.equals(videoCodec, ignoreCase = true) ||
+		plan.sourceRangeType in excludedRanges || VideoRangeType.DOVI in excludedRanges
+	) return
+	codecProfile {
+		type = CodecType.VIDEO
+		codec = videoCodec
+		conditions {
+			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection
+				(VideoRangeType.entries - excludedRanges).map { it.serialName }
+		}
+		// Scope the extra capability to the source selected by the DV policy.
+		applyConditions {
+			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection listOf(plan.sourceRangeType.serialName)
+		}
+	}
 }
 
 // Little helper function to more easily define subtitle profiles

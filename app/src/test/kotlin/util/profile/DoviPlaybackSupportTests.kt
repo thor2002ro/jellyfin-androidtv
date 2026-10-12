@@ -63,7 +63,6 @@ class DoviPlaybackSupportTests : FunSpec({
 		bridgeEvidence: DoviBridgeEvidence = bridge,
 		workarounds: DoviWorkarounds = DoviWorkarounds(),
 		builtIn: Boolean = true,
-		external: Boolean = false,
 	) = DoviPlaybackRequest(
 		mode = mode,
 		backend = backend,
@@ -75,7 +74,6 @@ class DoviPlaybackSupportTests : FunSpec({
 		bridge = bridgeEvidence,
 		workarounds = workarounds,
 		builtInPlayerSelected = builtIn,
-		externalPlayerSelected = external,
 	)
 
 	test("Auto advertises supported Profile 5 and Profile 7 unchanged") {
@@ -170,7 +168,6 @@ class DoviPlaybackSupportTests : FunSpec({
 			request(mode = DoviCompatibilityMode.ALWAYS, container = "avi"),
 			request(mode = DoviCompatibilityMode.ALWAYS, backend = DoviPlaybackBackend.OTHER),
 			request(mode = DoviCompatibilityMode.ALWAYS, builtIn = false),
-			request(mode = DoviCompatibilityMode.ALWAYS, external = true),
 			request(mode = DoviCompatibilityMode.ALWAYS, bridgeEvidence = DoviBridgeEvidence(false, emptySet())),
 		).forEach { unsupported ->
 			val plan = decideDoviPlayback(unsupported)
@@ -398,11 +395,13 @@ class DoviPlaybackSupportTests : FunSpec({
 
 	test("create plan uses Profile 5 compatibility metadata and rejects absent base") {
 		val preferences = mockk<UserPreferences>()
+		val videoPlayer = UserPreferences.playbackPlayerPreferences(hdr = false)
 		val hdrPlayer = UserPreferences.playbackPlayerPreferences(hdr = true)
+		every { preferences[hdrPlayer.playbackBackend] } returns PlaybackBackend.SAME_VIDEO_PLAYER
 		every { preferences[UserPreferences.doviCompatibilityMode] } returns AppDoviCompatibilityMode.AUTO
-		every { preferences[hdrPlayer.useExternalPlayer] } returns false
-		every { preferences[hdrPlayer.playbackRewriteVideoEnabled] } returns true
-		every { preferences[hdrPlayer.playbackBackend] } returns PlaybackBackend.EXOPLAYER
+		every { preferences[videoPlayer.useExternalPlayer] } returns false
+		every { preferences[videoPlayer.playbackRewriteVideoEnabled] } returns true
+		every { preferences[videoPlayer.playbackBackend] } returns PlaybackBackend.EXOPLAYER
 		HdrFormat.entries.forEach { format ->
 			every { preferences[format.preference] } returns HdrOverrideMode.AUTO
 		}
@@ -420,7 +419,6 @@ class DoviPlaybackSupportTests : FunSpec({
 				mediaTest = mediaTest,
 				retrySuppressed = false,
 				bridge = bridge,
-				workarounds = DoviWorkarounds(),
 				displayHdrTypes = setOf(DISPLAY_HDR_TYPE_HDR10, DISPLAY_HDR_TYPE_HDR10_PLUS),
 			)
 
@@ -461,7 +459,6 @@ class DoviPlaybackSupportTests : FunSpec({
 			mediaTest = mockk(relaxed = true),
 			retrySuppressed = false,
 			bridge = bridge,
-			workarounds = DoviWorkarounds(),
 			displayHdrTypes = setOf(DISPLAY_HDR_TYPE_HDR10),
 		)
 
@@ -479,22 +476,6 @@ class DoviPlaybackSupportTests : FunSpec({
 		).decision
 		entry.retainDoviPlaybackPlanFor(plan, doviMediaSource("source-a", "mkv"), otherDecision)
 		entry.doviDecision shouldBe null
-	}
-
-	test("workaround provider defaults unknown devices to none and accepts explicit exact overrides") {
-		DoviWorkaroundProvider("unknown", "device").resolve() shouldBe DoviWorkarounds()
-		val workaround = DoviWorkarounds(repairActiveArea = true)
-		DoviWorkaroundProvider(
-			manufacturer = "Example",
-			model = "Model A",
-			features = setOf(DoviWorkaroundProvider.Feature.ACTIVE_AREA_LIMITED),
-			ruleSource = DoviWorkaroundRuleSource { listOf(DoviWorkaroundProvider.Rule(
-				manufacturer = "example",
-				model = "model a",
-				requiredFeatures = setOf(DoviWorkaroundProvider.Feature.ACTIVE_AREA_LIMITED),
-				workarounds = workaround,
-			)) },
-		).resolve() shouldBe workaround
 	}
 
 	test("source-base fallback requires effective HDR output support") {
@@ -849,6 +830,7 @@ private fun doviMediaSource(
 		type = MediaStreamType.VIDEO,
 		index = 0,
 		isExternal = false,
+		isOriginal = true,
 		isTextSubtitleStream = false,
 		supportsExternalStream = false,
 		videoRangeType = range,

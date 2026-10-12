@@ -41,8 +41,6 @@ import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
-import org.jellyfin.androidtv.util.profile.DoviWorkaroundProvider
-import org.jellyfin.androidtv.util.profile.DoviWorkaroundRuleSource
 import org.jellyfin.androidtv.util.profile.DoviPlaybackNegotiationStore
 import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
@@ -73,8 +71,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import org.jellyfin.androidtv.ui.playback.PlaybackManager as LegacyPlaybackManager
 
 val playbackModule = module {
-	single<DoviWorkaroundRuleSource> { DoviWorkaroundRuleSource.Empty }
-	single { DoviWorkaroundProvider(ruleSource = get()) }
 	single { DoviPlaybackNegotiationStore() }
 	single { LegacyPlaybackManager(get()) }
 	single { VideoQueueManager(get()) }
@@ -182,7 +178,6 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	install(media3SessionPlugin(get(), mediaSessionOptions))
 
 	val doviMediaTest = MediaCodecCapabilitiesTest(userPreferences[UserPreferences.softwareCodecsEnabled])
-	val doviWorkaroundProvider = get<DoviWorkaroundProvider>()
 	val doviNegotiations = get<DoviPlaybackNegotiationStore>()
 	val deviceProfileBuilder = { queueEntry: QueueEntry ->
 		val doviPlan = queueEntry.baseItem?.let { item ->
@@ -192,7 +187,6 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				userPreferences = userPreferences,
 				mediaTest = doviMediaTest,
 				retrySuppressed = queueEntry.doviConversionSuppressed == true,
-				workarounds = doviWorkaroundProvider.resolve(),
 				displayHdrTypes = getSupportedDisplayHdrTypes(androidContext()),
 			)
 		}

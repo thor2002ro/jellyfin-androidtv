@@ -56,7 +56,6 @@ internal data class DoviPlaybackRequest(
 	val bridge: DoviBridgeEvidence,
 	val workarounds: DoviWorkarounds = DoviWorkarounds(),
 	val builtInPlayerSelected: Boolean = true,
-	val externalPlayerSelected: Boolean = false,
 	val retrySuppressed: Boolean = false,
 )
 
@@ -92,7 +91,6 @@ internal fun decideDoviPlayback(request: DoviPlaybackRequest): DoviPlaybackPlan 
 			nativeCapabilities = request.bridge.capabilities,
 			workarounds = request.workarounds,
 			builtInPlayerSelected = request.builtInPlayerSelected,
-			externalPlayerSelected = request.externalPlayerSelected,
 			retrySuppressed = request.retrySuppressed,
 		),
 	),
@@ -117,7 +115,7 @@ internal fun QueueEntry.retainDoviPlaybackPlanFor(
 		mediaSource.id == plan.mediaSourceId &&
 		mediaSource.container.equals(plan.container, ignoreCase = true) &&
 		video?.toDoviVideoCodec() == plan.codec &&
-		video?.videoRangeType == plan.sourceRangeType
+		video.videoRangeType == plan.sourceRangeType
 	doviDecision = plan?.decision.takeIf { matches && it == expectedDecision }
 }
 
@@ -128,7 +126,6 @@ internal fun createDoviPlaybackPlan(
 	mediaTest: MediaCodecCapabilitiesTest,
 	retrySuppressed: Boolean,
 	bridge: DoviBridgeEvidence = currentDoviBridgeEvidence(),
-	workarounds: DoviWorkarounds,
 	displayHdrTypes: Set<Int>,
 ): DoviPlaybackPlan? {
 	val (mediaSource, videoStream) = item.findDoviVideo(mediaSourceId) ?: return null
@@ -150,13 +147,14 @@ internal fun createDoviPlaybackPlan(
 	if (videoStream.videoRangeType in userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)) {
 		return DoviPlaybackPlan(
 			decision = DoviDecision(DoviRoute.ServerFallback, DoviDecisionReason.DISABLED_BY_USER),
+	val useHdrPlayer = userPreferences[UserPreferences.playbackPlayerPreferences(hdr = true).playbackBackend] != PlaybackBackend.SAME_VIDEO_PLAYER
 			mediaSourceId = requireNotNull(mediaSource.id),
 			container = mediaSource.container,
 			codec = codec,
 			sourceRangeType = videoStream.videoRangeType,
+	val playerPreferences = UserPreferences.playbackPlayerPreferences(useHdrPlayer)
 		)
 	}
-	val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr = true)
 	val externalPlayerSelected = userPreferences[playerPreferences.useExternalPlayer]
 	val builtInPlayerSelected = !externalPlayerSelected &&
 		userPreferences[playerPreferences.playbackRewriteVideoEnabled]
@@ -176,9 +174,7 @@ internal fun createDoviPlaybackPlan(
 				displayHdrTypes = displayHdrTypes,
 			),
 			bridge = bridge,
-			workarounds = workarounds,
 			builtInPlayerSelected = builtInPlayerSelected,
-			externalPlayerSelected = externalPlayerSelected,
 			retrySuppressed = retrySuppressed,
 		),
 	).copy(mediaSourceId = requireNotNull(mediaSource.id))
@@ -306,6 +302,7 @@ internal fun MediaStream.toDoviSource(): DoviSource {
 }
 
 private fun PlaybackBackend.toDoviBackend(): DoviPlaybackBackend = when (this) {
+	PlaybackBackend.SAME_VIDEO_PLAYER,
 	PlaybackBackend.EXOPLAYER -> DoviPlaybackBackend.MEDIA3
 	PlaybackBackend.MPV -> DoviPlaybackBackend.MPV
 	PlaybackBackend.LIBVLC -> DoviPlaybackBackend.OTHER
