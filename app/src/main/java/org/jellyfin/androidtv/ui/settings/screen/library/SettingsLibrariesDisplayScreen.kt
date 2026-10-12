@@ -103,31 +103,33 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 			)
 		}
 
-		item {
-			var showCardTitles by rememberPreference(libraryPreferences, LibraryPreferences.showCardTitles)
+		if (cardDisplayOptionsVisible(viewStyle)) {
+			item {
+				var showCardTitles by rememberPreference(libraryPreferences, LibraryPreferences.showCardTitles)
 
-			ListButton(
-				headingContent = { Text(stringResource(R.string.library_show_card_titles)) },
-				trailingContent = { Checkbox(checked = showCardTitles) },
-				onClick = { showCardTitles = !showCardTitles },
-				modifier = Modifier.focusKey("library_show_card_titles"),
-			)
-		}
+				ListButton(
+					headingContent = { Text(stringResource(R.string.library_show_card_titles)) },
+					trailingContent = { Checkbox(checked = showCardTitles) },
+					onClick = { showCardTitles = !showCardTitles },
+					modifier = Modifier.focusKey("library_show_card_titles"),
+				)
+			}
 
-		item {
-			var gridDirection by rememberPreference(libraryPreferences, LibraryPreferences.gridDirection)
+			item {
+				var gridDirection by rememberPreference(libraryPreferences, LibraryPreferences.gridDirection)
 
-			ListButton(
-				headingContent = { Text(stringResource(R.string.grid_direction)) },
-				captionContent = { Text(stringResource(gridDirection.nameRes)) },
-				onClick = {
-					router.push(
-						Routes.LIBRARIES_DISPLAY_GRID,
-						mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId)
-					)
-				},
-				modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_GRID)
-			)
+				ListButton(
+					headingContent = { Text(stringResource(R.string.grid_direction)) },
+					captionContent = { Text(stringResource(gridDirection.nameRes)) },
+					onClick = {
+						router.push(
+							Routes.LIBRARIES_DISPLAY_GRID,
+							mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId)
+						)
+					},
+					modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_GRID)
+				)
+			}
 		}
 
 		if (allowViewSelection) item {
