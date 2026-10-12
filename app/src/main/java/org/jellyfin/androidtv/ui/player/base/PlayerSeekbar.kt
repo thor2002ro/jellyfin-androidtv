@@ -10,7 +10,7 @@ import org.jellyfin.androidtv.ui.base.SeekbarColors
 import org.jellyfin.androidtv.ui.base.SeekbarDefaults
 import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.times
@@ -20,11 +20,13 @@ fun PlayerSeekbar(
 	modifier: Modifier = Modifier,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
 	playbackManager: PlaybackManager = koinInject<PlaybackManager>(),
+	progress: Duration? = null,
+	markers: List<Duration> = emptyList(),
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
 	val positionInfo = playbackManager.state.positionInfo
-	val progress by rememberPlayerProgress(
-		playing = playState == PlayState.PLAYING,
+	val animatedProgress by rememberPlayerProgress(
+		playing = playState.isActivePlayback,
 		active = positionInfo.active,
 		duration = positionInfo.duration,
 	)
@@ -32,7 +34,7 @@ fun PlayerSeekbar(
 	val seekRewindAmount = remember { playbackManager.options.defaultRewindAmount() }
 
 	Seekbar(
-		progress = progress.toDouble() * positionInfo.duration,
+		progress = progress ?: animatedProgress.toDouble() * positionInfo.duration,
 		buffer = positionInfo.buffer,
 		duration = positionInfo.duration,
 		seekForwardAmount = seekForwardAmount,
@@ -42,5 +44,6 @@ fun PlayerSeekbar(
 		modifier = modifier,
 		colors = colors,
 		enabled = positionInfo.duration > Duration.ZERO,
+		markers = markers,
 	)
 }

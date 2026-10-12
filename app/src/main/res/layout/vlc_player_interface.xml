@@ -108,6 +108,23 @@
             app:layout_constraintTop_toBottomOf="@id/item_title"
             tools:text="Subtitle" />
 
+        <TextView
+            android:id="@+id/playback_debug_info"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:textColor="@color/white"
+            android:textSize="11sp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@id/textClock"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/item_subtitle"
+            tools:text="Direct play • 1920x1080 H264 • AAC 5.1 eng • Sub: ASS eng" />
+
         <org.jellyfin.androidtv.ui.ClockUserView
             android:id="@+id/textClock"
             android:layout_width="wrap_content"
@@ -119,5 +136,6 @@
     <org.jellyfin.androidtv.ui.playback.overlay.SkipOverlayView
         android:id="@+id/skip_overlay"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:elevation="16dp" />
 </FrameLayout>

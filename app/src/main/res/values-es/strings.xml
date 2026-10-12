@@ -136,7 +136,6 @@
     <string name="lbl_song_title">Título de la canción</string>
     <string name="lbl_album_name">Nombre del álbum</string>
     <string name="lbl_next_episode">Próximo episodio</string>
-    <string name="lbl_previous_episode">Episodio anterior</string>
     <string name="lbl_more_like_this">Más como este</string>
     <string name="lbl_resume_from">Reanudar desde %1$s</string>
     <string name="lbl_guide_option_number">Número de canal</string>
@@ -645,19 +644,6 @@
     <string name="pref_burn_subtitles_when_transcoding_description">Incrustar siempre los subtítulos en el vídeo durante la transcodificación. Esto puede arreglar los problemas de sincronización de subtítulos pero desactiva su personalización.</string>
     <string name="pref_burn_subtitles_when_transcoding">Incrustar subtítulos durante la transcodificación</string>
     <string name="playback_info">Información de reproducción</string>
-    <string name="playback_info_play_method">Método de reproducción: %1$s</string>
-    <string name="playback_info_direct_play">Reproducción en directo</string>
-    <string name="playback_info_direct_stream">Transmisión en directo</string>
-    <string name="playback_info_transcoding">Transcodificación</string>
-    <string name="playback_info_container">Contenedor: %1$s</string>
-    <string name="playback_info_video_title">Video</string>
-    <string name="playback_info_audio_title">Audio</string>
-    <string name="playback_info_codec">Códec: %1$s</string>
-    <string name="playback_info_resolution">Resolución: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">Bitrate: %1$s</string>
-    <string name="playback_info_channels">Canales: %1$d</string>
-    <string name="playback_info_video_range">Rango de video: %1$s</string>
-    <string name="playback_info_transcoding_note">El servidor está transcodificando este archivo</string>
     <string name="playback_buffer_length">Tamaño de búfer de reproducción</string>
     <string name="playback_buffer_auto">Automático</string>
     <string name="playback_buffer_large">Grande</string>
@@ -668,7 +654,6 @@
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
     <string name="preference_enable_pgs_description">Se requiere transcodificación cuando está desactivado</string>
-    <string name="preference_enable_ass_description">Función experimental, puede dejar de funcionar</string>
     <string name="pref_software_codecs_enabled">Usar códec de software</string>
     <string name="pref_software_codecs_enabled_description">Algunas implementaciones basadas en software podrían reducir el rendimiento. Desactivar esta opción hace la transcodificación más probable.</string>
     <string name="preference_enable_ass">Reproducir directamente subtítulos ASS</string>

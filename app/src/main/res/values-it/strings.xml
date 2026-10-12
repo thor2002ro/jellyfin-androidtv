@@ -194,7 +194,6 @@
     <string name="lbl_song_title">Titolo brano</string>
     <string name="lbl_album_name">Nome Album</string>
     <string name="lbl_next_episode">Prossimo episodio</string>
-    <string name="lbl_previous_episode">Episodio precedente</string>
     <string name="lbl_more_like_this">Simili a questo</string>
     <string name="lbl_resume_from">Riprendi da %1$s</string>
     <string name="lbl_resume_preroll">Riprendi il pre-roll</string>
@@ -626,20 +625,7 @@
     <string name="filters">Filtri</string>
     <string name="backdrop_behavior_with_blur">Sfondo con opacità</string>
     <string name="backdrop_behavior_without_blur">Sfondo senza opacità</string>
-    <string name="playback_info_play_method">Metodo di riproduzione:%1$s</string>
-    <string name="playback_info_direct_play">Riproduzione diretta</string>
-    <string name="playback_info_codec">Codec: %1$s</string>
-    <string name="playback_info_resolution">Risoluzione: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">Bitrate: %1$s</string>
-    <string name="playback_info_channels">Canali: %1$d</string>
     <string name="playback_info">Informazioni riproduzione</string>
-    <string name="playback_info_direct_stream">Streaming diretto</string>
-    <string name="playback_info_transcoding">Transcodifica</string>
-    <string name="playback_info_container">Contenitore: %1$s</string>
-    <string name="playback_info_video_title">Video</string>
-    <string name="playback_info_audio_title">Audio</string>
-    <string name="playback_info_video_range">Intervallo video: %1$s</string>
-    <string name="playback_info_transcoding_note">Il server sta transcodificando questo file</string>
     <string name="lbl_date_show_added">Data aggiunta della serie</string>
     <string name="lbl_date_episode_added">Data aggiunta dell\'episodio</string>
     <string name="playback_buffer_length">Dimensione del buffer di riproduzione</string>
@@ -665,7 +651,6 @@
     <string name="codec_level_4_0">Livello 4.0</string>
     <string name="preference_enable_ass">Riproduci direttamente i sottotitoli ASS</string>
     <string name="preference_enable_pgs_description">Richiede la transcodifica quando disabilitato</string>
-    <string name="preference_enable_ass_description">Funzione sperimentale, potrebbe non funzionare in modo affidabile</string>
     <string name="auto">Automatico</string>
     <string name="hdr10_plus">HDR10+</string>
     <string name="dolby_vision_with_el">Dolby Vision con EL</string>

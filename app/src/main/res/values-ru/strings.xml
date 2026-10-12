@@ -170,7 +170,6 @@
     <string name="lbl_song_title">Название композиции</string>
     <string name="lbl_album_name">Название альбома</string>
     <string name="lbl_next_episode">Следующий эпизод</string>
-    <string name="lbl_previous_episode">Предыдущий эпизод</string>
     <string name="lbl_resume_from">Возобновить с %1$s</string>
     <string name="lbl_guide_option_number">Номер канала</string>
     <string name="lbl_show_indicators">Показывать индикаторы для</string>
@@ -658,19 +657,6 @@
     <string name="user_hevc_level">Уровень H.265 (HEVC)</string>
     <string name="user_avc_level">Уровень H.264 (AVC)</string>
     <string name="playback_info">Информация о воспроизведении</string>
-    <string name="playback_info_play_method">Метод воспроизведения: %1$s</string>
-    <string name="playback_info_direct_play">Прямое воспроизведение</string>
-    <string name="playback_info_direct_stream">Прямая трансляция</string>
-    <string name="playback_info_transcoding">Перекодирование</string>
-    <string name="playback_info_container">Контейнер: %1$s</string>
-    <string name="playback_info_video_title">Видео</string>
-    <string name="playback_info_audio_title">Аудио</string>
-    <string name="playback_info_codec">Кодек: %1$s</string>
-    <string name="playback_info_resolution">Разрешение: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">Битрейт: %1$s</string>
-    <string name="playback_info_channels">Каналы: %1$d</string>
-    <string name="playback_info_video_range">Диапазон видео: %1$s</string>
-    <string name="playback_info_transcoding_note">Сервер перекодирует файл</string>
     <string name="playback_buffer_length">Размер буфера воспроизведения</string>
     <string name="playback_buffer_auto">Авто</string>
     <string name="playback_buffer_large">Большой</string>
@@ -681,7 +667,6 @@
     <string name="lbl_date_episode_added">Дата добавления эпизода</string>
     <string name="preference_enable_ass">Прямое воспроизведение ASS-субтитров</string>
     <string name="preference_enable_pgs_description">Требует перекодирования когда выключено</string>
-    <string name="preference_enable_ass_description">Экспериментальная функция, может работать нестабильно</string>
     <string name="pref_software_codecs_enabled">Использовать программные кодеки</string>
     <string name="pref_software_codecs_enabled_description">Некоторые программные кодеки могут ухудшить производительность. Отключение этой опции повышает вероятность перекодирования.</string>
     <string name="truehd">TrueHD</string>

@@ -15,9 +15,11 @@ import org.jellyfin.androidtv.ui.playback.AudioEventListener
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.RepeatMode
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.core.queue.supplier.QueueSupplier
@@ -26,6 +28,7 @@ import org.jellyfin.playback.jellyfin.queue.createBaseItemQueueEntry
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.MediaType
+import kotlin.time.Duration
 
 @Suppress("TooManyFunctions")
 class RewriteMediaManager(
@@ -89,6 +92,7 @@ class RewriteMediaManager(
 					when (playState) {
 						PlayState.STOPPED -> PlaybackController.PlaybackState.IDLE
 						PlayState.PLAYING -> PlaybackController.PlaybackState.PLAYING
+						PlayState.BUFFERING -> PlaybackController.PlaybackState.PLAYING
 						PlayState.PAUSED -> PlaybackController.PlaybackState.PAUSED
 						PlayState.ERROR -> PlaybackController.PlaybackState.ERROR
 					}, currentAudioItem
@@ -145,7 +149,7 @@ class RewriteMediaManager(
 		playbackManager.queue.addSupplier(BaseItemQueueSupplier(api, items, true))
 		playbackManager.state.setPlaybackOrder(if (isShuffleMode) PlaybackOrder.SHUFFLE else PlaybackOrder.DEFAULT)
 
-		if (playbackManager.state.playState.value != PlayState.PLAYING) playbackManager.state.play()
+		if (!playbackManager.state.playState.value.isActivePlayback) playbackManager.state.play()
 	}
 
 	override fun removeFromAudioQueue(entry: QueueEntry) {
@@ -153,7 +157,7 @@ class RewriteMediaManager(
 	}
 
 	override val isPlayingAudio: Boolean
-		get() = playbackManager.state.playState.value == PlayState.PLAYING
+		get() = playbackManager.state.playState.value.isActivePlayback
 
 	override fun playNow(context: Context, items: List<BaseItemDto>, position: Int, shuffle: Boolean) {
 		val filteredItems = items.drop(position)
@@ -212,7 +216,7 @@ class RewriteMediaManager(
 	override fun togglePlayPause() {
 		val playState = playbackManager.state.playState.value
 		if (playState == PlayState.PAUSED || playState == PlayState.STOPPED) playbackManager.state.unpause()
-		else if (playState == PlayState.PLAYING) playbackManager.state.pause()
+		else if (playState.isActivePlayback) playbackManager.state.pause()
 	}
 
 	override fun fastForward() {
@@ -227,6 +231,8 @@ class RewriteMediaManager(
 		private val api: ApiClient,
 		val items: List<BaseItemDto>,
 		val visibleInScreensaver: Boolean,
+		private val initialStartPosition: Duration? = null,
+		private val initialStartIndex: Int = 0,
 	) : QueueSupplier {
 		override val size: Int
 			get() = items.size
@@ -235,6 +241,9 @@ class RewriteMediaManager(
 			val item = items.getOrNull(index) ?: return null
 			return createBaseItemQueueEntry(api, item).also {
 				it.visibleInScreensaver = visibleInScreensaver
+				if (index == initialStartIndex && initialStartPosition != null) {
+					it.startPosition = initialStartPosition
+				}
 			}
 		}
 	}

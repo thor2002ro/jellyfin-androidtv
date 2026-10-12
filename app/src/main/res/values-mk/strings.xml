@@ -441,7 +441,6 @@
     <string name="lbl_series_settings">Поставки за серија</string>
     <string name="desc_premieres">Покажи ред на нови пилот епизоди за било која серија која се гледа</string>
     <string name="lbl_on_schedule">На време</string>
-    <string name="lbl_previous_episode">Претходна епизода</string>
     <string name="lbl_sort_by">Сортирај по</string>
     <string name="lbl_resume_from">Продолжи од %1$s</string>
     <string name="lbl_premieres">Премиери</string>

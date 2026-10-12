@@ -188,6 +188,16 @@ fun InfoRowMediaDetails(mediaSource: MediaSourceInfo) {
 		}
 	}
 
+	val videoCodec = videoStream?.codec?.uppercase()
+	if (!videoCodec.isNullOrBlank()) {
+		InfoRowItem(
+			contentDescription = null,
+			colors = InfoRowColors.Default,
+		) {
+			Text(videoCodec)
+		}
+	}
+
 	// Video range
 	val videoRangeNames: Set<String> = when (videoStream?.videoRangeType) {
 		VideoRangeType.SDR -> setOf(stringResource(R.string.sdr))

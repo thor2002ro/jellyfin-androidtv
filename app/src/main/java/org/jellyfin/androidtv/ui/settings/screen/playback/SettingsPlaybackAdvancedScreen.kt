@@ -36,6 +36,7 @@ import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButt
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.profile.createDeviceProfileReport
 import org.jellyfin.design.Tokens
+import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.clientLogApi
@@ -51,6 +52,7 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val playbackManager = koinInject<PlaybackManager>()
 
 	SettingsColumn {
 		item {
@@ -229,14 +231,11 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
-			var assDirectPlay by rememberPreference(userPreferences, UserPreferences.assDirectPlay)
-
 			ListButton(
-				headingContent = { Text(stringResource(R.string.preference_enable_ass)) },
-				captionContent = { Text(stringResource(R.string.preference_enable_ass_description)) },
-				trailingContent = { Checkbox(checked = assDirectPlay) },
-				onClick = { assDirectPlay = !assDirectPlay },
-				modifier = Modifier.focusKey("ass_direct_play")
+				headingContent = { Text(stringResource(R.string.preference_libass_options)) },
+				captionContent = { Text(stringResource(R.string.preference_libass_options_description)) },
+				onClick = { router.push(Routes.PLAYBACK_LIBASS) },
+				modifier = Modifier.focusKey(Routes.PLAYBACK_LIBASS)
 			)
 		}
 
@@ -320,6 +319,14 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.pref_troubleshooting)) }) }
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_debug_capabilities_title)) },
+				captionContent = { Text(stringResource(R.string.pref_debug_capabilities_summary)) },
+				onClick = { router.push(Routes.PLAYBACK_DEBUG_CAPABILITIES) },
+			)
+		}
 
 		item {
 			val api = koinInject<ApiClient>()

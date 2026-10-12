@@ -274,7 +274,6 @@
     <string name="lbl_on_schedule">शेड्यूल पर</string>
     <string name="lbl_schedule">शेड्यूल</string>
     <string name="lbl_sort_by">क्रम में लगाएं</string>
-    <string name="lbl_previous_episode">पिछला एपिसोड</string>
     <string name="lbl_song_title">गाने का शीर्षक</string>
     <string name="lbl_news">न्यूज़</string>
     <string name="lbl_subtitle_delay">सबटाइटल देरी</string>
@@ -582,19 +581,6 @@
     <string name="pref_screensaver_ageratingmax_zero">सभी उम्र</string>
     <string name="pref_subtitles_position">नीचे से अंतर</string>
     <string name="playback_info">प्लेबैक की जानकारी</string>
-    <string name="playback_info_play_method">चलाने का तरीका: %1$s</string>
-    <string name="playback_info_direct_play">डायरेक्ट प्ले</string>
-    <string name="playback_info_direct_stream">डायरेक्ट स्ट्रीम</string>
-    <string name="playback_info_transcoding">ट्रांसकोडिंग</string>
-    <string name="playback_info_container">कंटेनर: %1$s</string>
-    <string name="playback_info_video_title">वीडियो</string>
-    <string name="playback_info_audio_title">ऑडियो</string>
-    <string name="playback_info_codec">कोडेक: %1$s</string>
-    <string name="playback_info_resolution">रिज़ॉल्यूशन: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">बिटरेट: %1$s</string>
-    <string name="playback_info_channels">चैनल: %1$d</string>
-    <string name="playback_info_video_range">वीडियो रेंज: %1$s</string>
-    <string name="playback_info_transcoding_note">सर्वर इस फ़ाइल को ट्रांसकोड कर रहा है</string>
     <string name="playback_buffer_length">प्लेबैक बफ़र की लंबाई</string>
     <string name="playback_buffer_auto">ऑटो</string>
     <string name="playback_buffer_large">बड़ा</string>
@@ -659,7 +645,6 @@
     <string name="codec_level_4_0">Level 4.0</string>
     <string name="preference_enable_ass">डायरेक्ट प्ले ए.एस.एस. (ASS) उपशीर्षक</string>
     <string name="preference_enable_pgs_description">अक्षम होने पर ट्रांसकोडिंग की आवश्यकता होती है</string>
-    <string name="preference_enable_ass_description">प्रायोगिक सुविधा, शायद ठीक से काम ना करे</string>
     <string name="pref_software_codecs_enabled">सॉफ्टवेयर कोडेक्स का उपयोग करें</string>
     <string name="pref_software_codecs_enabled_description">कुछ सॉफ्टवेयर-आधारित कार्यान्वयन प्रदर्शन को कम कर सकते हैं। इस विकल्प को अक्षम करने से ट्रांसकोडिंग की संभावना बढ़ जाती है।</string>
     <string name="truehd">TrueHD</string>

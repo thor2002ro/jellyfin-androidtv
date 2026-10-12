@@ -98,37 +98,30 @@ class CardPresenter(
 	private inner class CardViewHolder(composeView: ComposeView) : ViewHolder(composeView) {
 		private val _item = MutableStateFlow<BaseRowItem?>(null)
 		private val _focused = MutableStateFlow(false)
-		private val _focused = MutableStateFlow(false)
 
 		init {
 			composeView.setOnFocusChangeListener { _, hasFocus -> _focused.value = hasFocus }
 			composeView.setContent {
 				val item by _item.collectAsState()
 				val focused by _focused.collectAsState()
-				val focused by _focused.collectAsState()
 
 				CardViewHolderContent(
 					item = item,
-					focused = focused,
+					focused = false,
 					showInfo = showInfo,
 					imageType = imageType,
 					staticHeight = staticHeight,
 					uniformAspect = uniformAspect,
 				)
 			}
-
-			_focused.value = view.isFocused
-			composeView.onFocusChangeListener = { _, focused -> _focused.value = focused }
 		}
 
 		fun bind(item: BaseRowItem) {
 			_item.value = item
-			_focused.value = view.isFocused
 		}
 
 		fun unbind() {
 			_item.value = null
-			_focused.value = false
 		}
 	}
 }

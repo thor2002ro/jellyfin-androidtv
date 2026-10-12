@@ -1,11 +1,14 @@
 package org.jellyfin.androidtv.ui.player.base
 
+import android.view.KeyEvent as AndroidKeyEvent
+import android.view.ViewConfiguration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,8 +25,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -33,6 +40,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -48,28 +57,101 @@ fun PlayerOverlayLayout(
 	visibilityState: PlayerOverlayVisibilityState = rememberPlayerOverlayVisibility(),
 	header: (@Composable () -> Unit)? = null,
 	controls: (@Composable () -> Unit)? = null,
-) = Box(
-	modifier = modifier
-		.fillMaxSize()
-		.focusable()
-		.onPreviewKeyEvent {
-			// Reset hide timer on key presses
-			if (visibilityState.visible) visibilityState.show()
+	onCenterClick: (() -> Boolean)? = null,
+	onCenterLongClick: (() -> Boolean)? = null,
+) {
+	val focusRequester = remember { FocusRequester() }
+	val controlsFocusRequester = remember { FocusRequester() }
+	val scope = rememberCoroutineScope()
+	val windowInfo = LocalWindowInfo.current
+	val lifecycleOwner = LocalLifecycleOwner.current
+	var controlsHaveFocus by remember { mutableStateOf(false) }
+	var centerShortcutArmed by remember { mutableStateOf(false) }
+	var centerLongPressHandled by remember { mutableStateOf(false) }
+	var centerLongPressJob by remember { mutableStateOf<Job?>(null) }
 
-			// Otherwise, only act on key down
-			if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+	fun clearCenterShortcut() {
+		centerLongPressJob?.cancel()
+		centerLongPressJob = null
+		centerShortcutArmed = false
+		centerLongPressHandled = false
+	}
 
-			if (it.key == Key.Back && visibilityState.visible) {
-				visibilityState.hide()
-				true
-			} else if (!it.nativeKeyEvent.isSystem && !visibilityState.visible) {
-				visibilityState.show()
-				true
-			} else {
-				false
+	Box(
+		modifier = modifier
+			.fillMaxSize()
+			.focusRequester(focusRequester)
+			.focusable()
+			.onPreviewKeyEvent {
+				val nativeEvent = it.nativeKeyEvent
+				if (nativeEvent.isCenterKey()) {
+					when (nativeEvent.action) {
+						AndroidKeyEvent.ACTION_DOWN -> {
+							if (centerShortcutArmed) return@onPreviewKeyEvent true
+							if (visibilityState.visible) return@onPreviewKeyEvent false
+
+							centerShortcutArmed = true
+							centerLongPressHandled = false
+							centerLongPressJob?.cancel()
+							centerLongPressJob = scope.launch {
+								delay(ViewConfiguration.getLongPressTimeout().toLong())
+								if (centerShortcutArmed) {
+									centerLongPressHandled = true
+									onCenterLongClick?.invoke()
+								}
+							}
+							return@onPreviewKeyEvent true
+						}
+
+						AndroidKeyEvent.ACTION_UP -> {
+							if (!centerShortcutArmed) return@onPreviewKeyEvent false
+
+							centerLongPressJob?.cancel()
+							centerLongPressJob = null
+							val handled = if (centerLongPressHandled || nativeEvent.flags and AndroidKeyEvent.FLAG_CANCELED_LONG_PRESS != 0) {
+								true
+							} else {
+								onCenterClick?.invoke() == true
+							}
+							val shouldShowOverlay = handled && !centerLongPressHandled
+							clearCenterShortcut()
+							if (shouldShowOverlay) visibilityState.show()
+							return@onPreviewKeyEvent true
+						}
+					}
+				}
+
+				// Reset hide timer on key presses
+				if (visibilityState.visible) visibilityState.show()
+
+				// Otherwise, only act on key down
+				if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+				if (it.key == Key.Back && visibilityState.visible) {
+					visibilityState.hide()
+					true
+				} else if (nativeEvent.shouldShowHiddenOverlay(visibilityState.visible)) {
+					visibilityState.show()
+					true
+				} else {
+					false
+				}
+			}
+	) {
+		LaunchedEffect(visibilityState.visible, windowInfo.isWindowFocused, controls != null, controlsHaveFocus) {
+			if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+				return@LaunchedEffect
+			}
+
+			when {
+				visibilityState.visible && windowInfo.isWindowFocused && controls != null && !controlsHaveFocus ->
+					controlsFocusRequester.requestFocus()
+
+				!visibilityState.visible ->
+					focusRequester.requestFocus()
 			}
 		}
-) {
+
 	if (header != null) {
 		AnimatedVisibility(
 			visible = visibilityState.visible,
@@ -118,6 +200,10 @@ fun PlayerOverlayLayout(
 				modifier = Modifier
 					.fillMaxWidth()
 					.fillMaxHeight(1f / 3)
+					.focusRequester(controlsFocusRequester)
+					.focusRestorer()
+					.focusGroup()
+					.onFocusChanged { controlsHaveFocus = it.hasFocus }
 					.background(
 						brush = Brush.verticalGradient(
 							colors = listOf(
@@ -149,6 +235,7 @@ fun PlayerOverlayLayout(
 		}
 	}
 }
+}
 
 data class PlayerOverlayVisibilityState(
 	val visible: Boolean,
@@ -161,6 +248,7 @@ data class PlayerOverlayVisibilityState(
 @Composable
 fun rememberPlayerOverlayVisibility(
 	timeout: Duration = 5.seconds,
+	keepVisible: Boolean = false,
 ): PlayerOverlayVisibilityState {
 	val scope = rememberCoroutineScope()
 	var timerVisible by remember { mutableStateOf(false) }
@@ -169,27 +257,41 @@ fun rememberPlayerOverlayVisibility(
 	fun show() {
 		timerJob?.cancel()
 		timerVisible = true
-		timerJob = scope.launch {
-			delay(timeout)
-			timerVisible = false
+		timerJob = null
+
+		if (!keepVisible) {
+			timerJob = scope.launch {
+				delay(timeout)
+				timerVisible = false
+			}
 		}
 	}
 
 	fun hide() {
+		timerVisible = false
 		timerJob?.cancel()
 		timerJob = null
-		timerVisible = false
 	}
 
 	fun toggle() {
-		if (timerVisible) hide()
+		if (timerVisible || keepVisible) hide()
 		else show()
+	}
+
+	LaunchedEffect(keepVisible) {
+		if (keepVisible) {
+			timerVisible = true
+			timerJob?.cancel()
+			timerJob = null
+		} else if (timerVisible) {
+			show()
+		}
 	}
 
 	// Force visibility when not the active window, reset timer when it changes
 	// to make sure popups keep the overlay visible
 	val windowInfo = LocalWindowInfo.current
-	val visible = timerVisible || !windowInfo.isWindowFocused
+	val visible = timerVisible || keepVisible || !windowInfo.isWindowFocused
 
 	var previousIsWindowFocused by remember { mutableStateOf(windowInfo.isWindowFocused) }
 	LaunchedEffect(windowInfo.isWindowFocused) {
@@ -203,4 +305,23 @@ fun rememberPlayerOverlayVisibility(
 		show = ::show,
 		hide = ::hide,
 	)
+}
+
+private fun AndroidKeyEvent.isCenterKey() = when (keyCode) {
+	AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+	AndroidKeyEvent.KEYCODE_ENTER,
+	AndroidKeyEvent.KEYCODE_NUMPAD_ENTER,
+	AndroidKeyEvent.KEYCODE_BUTTON_A -> true
+
+	else -> false
+}
+
+private fun AndroidKeyEvent.shouldShowHiddenOverlay(visible: Boolean) =
+	action == AndroidKeyEvent.ACTION_DOWN && !isSystem && !isSeekKey() && !visible
+
+private fun AndroidKeyEvent.isSeekKey() = when (keyCode) {
+	AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+	AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> true
+
+	else -> false
 }

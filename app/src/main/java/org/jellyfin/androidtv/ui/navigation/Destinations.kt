@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.navigation
 
 import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.constant.Extras
+import org.jellyfin.androidtv.constant.LiveTvOption
 import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseRecordingsFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseScheduleFragment
@@ -10,6 +11,7 @@ import org.jellyfin.androidtv.ui.browsing.ByGenreFragment
 import org.jellyfin.androidtv.ui.browsing.ByLetterFragment
 import org.jellyfin.androidtv.ui.browsing.CollectionFragment
 import org.jellyfin.androidtv.ui.browsing.GenericFolderFragment
+import org.jellyfin.androidtv.ui.browsing.LiveTvChannelsFragment
 import org.jellyfin.androidtv.ui.browsing.SuggestedMoviesFragment
 import org.jellyfin.androidtv.ui.home.HomeFragment
 import org.jellyfin.androidtv.ui.itemdetail.FullDetailsFragment
@@ -24,7 +26,9 @@ import org.jellyfin.androidtv.ui.player.photo.PhotoPlayerFragment
 import org.jellyfin.androidtv.ui.player.video.VideoPlayerFragment
 import org.jellyfin.androidtv.ui.search.SearchFragment
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.SeriesTimerInfoDto
 import org.jellyfin.sdk.model.api.SortOrder
 import java.util.UUID
@@ -109,6 +113,12 @@ object Destinations {
 	}
 
 	// Live TV
+	fun liveTvLibrary(name: String) = fragmentDestination<LiveTvLibraryFragment> {
+		putString(Extras.Folder, Json.encodeToString(createLiveTvView(name)))
+	}
+	fun liveTvChannels(name: String) = fragmentDestination<LiveTvChannelsFragment> {
+		putString(Extras.Folder, Json.encodeToString(createLiveTvView(name)))
+	}
 	val liveTvGuide = fragmentDestination<LiveTvGuideFragment>()
 	val liveTvSchedule = fragmentDestination<BrowseScheduleFragment>()
 	val liveTvRecordings = fragmentDestination<BrowseRecordingsFragment>()
@@ -144,6 +154,15 @@ object Destinations {
 	}
 
 	fun stillWatching(item: UUID) = fragmentDestination<StillWatchingFragment> {
-		putString(NextUpFragment.ARGUMENT_ITEM_ID, item.toString())
+		putString(StillWatchingFragment.ARGUMENT_ITEM_ID, item.toString())
 	}
+
+	private fun createLiveTvView(name: String) = BaseItemDto(
+		id = LiveTvOption.LIVE_TV_VIEW_ID,
+		type = BaseItemKind.COLLECTION_FOLDER,
+		mediaType = MediaType.UNKNOWN,
+		collectionType = CollectionType.LIVETV,
+		name = name,
+		displayPreferencesId = LiveTvOption.LIVE_TV_DISPLAY_PREFERENCES_ID,
+	)
 }

@@ -47,7 +47,6 @@
     <string name="lbl_song_title">Назва пісні</string>
     <string name="lbl_album_name">Назва альбому</string>
     <string name="lbl_next_episode">Наступний епізод</string>
-    <string name="lbl_previous_episode">Попередній епізод</string>
     <string name="lbl_more_like_this">Подібні до цього</string>
     <string name="lbl_resume_from">Продовжити з %1$s</string>
     <string name="lbl_guide_option_number">Номер каналу</string>
@@ -641,19 +640,6 @@
     <string name="codec_level_warning">Зміна з автоматичного може спричинити проблеми з відтворенням, якщо ваш пристрій насправді не підтримує вибраний рівень.</string>
     <string name="preference_codecs">Медіа кодеки</string>
     <string name="playback_info">Інформація про відтворення</string>
-    <string name="playback_info_play_method">Спосіб відтворення: %1$s</string>
-    <string name="playback_info_direct_play">Пряме відтворення</string>
-    <string name="playback_info_direct_stream">Прямий потік</string>
-    <string name="playback_info_transcoding">Перекодування</string>
-    <string name="playback_info_container">Контейнер: %1$s</string>
-    <string name="playback_info_video_title">Відео</string>
-    <string name="playback_info_audio_title">Аудіо</string>
-    <string name="playback_info_codec">Кодек: %1$s</string>
-    <string name="playback_info_resolution">Роздільна здатність: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">Бітрейт: %1$s</string>
-    <string name="playback_info_channels">Канали: %1$d</string>
-    <string name="playback_info_video_range">Діапазон відео: %1$s</string>
-    <string name="playback_info_transcoding_note">Сервер перекодує цей файл</string>
     <string name="playback_buffer_length">Розмір буфера відтворення</string>
     <string name="playback_buffer_auto">Авто</string>
     <string name="playback_buffer_large">Великий</string>
@@ -679,7 +665,6 @@
     <string name="hlg">HLG</string>
     <string name="preference_enable_ass">Пряме відтворення субтитрів ASS</string>
     <string name="preference_enable_pgs_description">Потребує транскодування, якщо вимкнено</string>
-    <string name="preference_enable_ass_description">Експериментальна функція, може працювати нестабільно</string>
     <string name="pref_software_codecs_enabled">Використовувати програмні кодеки</string>
     <string name="pref_software_codecs_enabled_description">Деякі програмні реалізації можуть знизити продуктивність. Вимкнення цієї опції підвищує ймовірність транскодування.</string>
     <string name="lbl_date_show_added">Дата додавання шоу</string>

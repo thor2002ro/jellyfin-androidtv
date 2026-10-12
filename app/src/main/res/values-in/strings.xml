@@ -36,7 +36,6 @@
     <string name="lbl_song_title">Judul lagu</string>
     <string name="lbl_album_name">Nama album</string>
     <string name="lbl_next_episode">Episode berikutnya</string>
-    <string name="lbl_previous_episode">Episode sebelumnya</string>
     <string name="lbl_resume_from">Lanjutkan dari %1$s</string>
     <string name="lbl_guest_stars">Bintang tamu</string>
     <string name="lbl_on_schedule">Sesuai jadwal</string>
@@ -537,6 +536,4 @@
     <string name="lbl_still_watching_very_long">8 episode atau 240 menit</string>
     <string name="pref_subtitles_bold">Teks tebal</string>
     <string name="dts_hd">DTS:HD</string>
-    <string name="playback_info_resolution">Resolusi</string>
-    <string name="playback_info_video_range">Jangkauan video:%1$s</string>
 </resources>

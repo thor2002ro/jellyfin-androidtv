@@ -142,7 +142,6 @@
     <string name="lbl_song_title">Zeneszám címe</string>
     <string name="lbl_album_name">Albumcím</string>
     <string name="lbl_next_episode">Következő epizód</string>
-    <string name="lbl_previous_episode">Előző epizód</string>
     <string name="lbl_resume_from">Lejátszás %1$s -tól</string>
     <string name="lbl_guide_option_number">Csatorna száma</string>
     <string name="lbl_guide_option_played">Legutóbb játszott</string>
@@ -585,19 +584,6 @@
     <string name="pref_subtitles_position">Alsó eltolás</string>
     <string name="settings">Beállítások</string>
     <string name="playback_info">Lejátszási adatok</string>
-    <string name="playback_info_play_method">Lejátszási módszer: %1$s</string>
-    <string name="playback_info_direct_play">Közvetlen lejátszás</string>
-    <string name="playback_info_direct_stream">Közvetlen streamelés</string>
-    <string name="playback_info_transcoding">Átkódolás</string>
-    <string name="playback_info_container">Tároló: %1$s</string>
-    <string name="playback_info_video_title">Videó</string>
-    <string name="playback_info_audio_title">Hang</string>
-    <string name="playback_info_codec">Kodek: %1$s</string>
-    <string name="playback_info_resolution">Felbontás: %1$d%2$d</string>
-    <string name="playback_info_bitrate">Bitráta: %1$s</string>
-    <string name="playback_info_channels">Csatornák: %1$d</string>
-    <string name="playback_info_video_range">Dinamikatartomány: %1$s</string>
-    <string name="playback_info_transcoding_note">A szerver transzkódolja ezt a fájlt</string>
     <string name="playback_buffer_length">Lejátszás puffer méret</string>
     <string name="playback_buffer_auto">Automatikus</string>
     <string name="playback_buffer_large">Nagy</string>
@@ -659,7 +645,6 @@
     <string name="codec_level_4_0">4.0 szint</string>
     <string name="preference_enable_ass">Közvetlen ASS felirat lejátszás</string>
     <string name="preference_enable_pgs_description">Letiltás esetén átkódolást igényel</string>
-    <string name="preference_enable_ass_description">Kísérleti funkció, előfordulhat, hogy nem működik megbízhatóan</string>
     <string name="pref_software_codecs_enabled">Használjon szoftveres kodekeket</string>
     <string name="pref_software_codecs_enabled_description">Néhány szoftveralapú megvalósítás ronthatja a teljesítményt. A beállítás letiltása nagyobb valószínűséggel okoz átkódolást.</string>
     <string name="lbl_date_show_added">A műsor hozzáadásának dátuma</string>

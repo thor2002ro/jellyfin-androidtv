@@ -133,10 +133,11 @@ fun createDeviceProfile(
 	forceEnabledHdr: Set<VideoRangeType>,
 	forceDisabledHdr: Set<VideoRangeType>
 ) = buildDeviceProfile {
+	val supportsOpus = mediaTest.supportsOpus()
 	val allowedAudioCodecs = when {
 		downMixAudio -> downmixSupportedAudioCodecs
-		else -> supportedAudioCodecs.filterNot { supportedPassthroughAudioCodecs ->
-			when (supportedPassthroughAudioCodecs) {
+		else -> supportedAudioCodecs.filterNot { audioCodec ->
+			!isAudioCodecAvailable(audioCodec, supportsOpus) || when (audioCodec) {
 				// Remove codec if false.
 				Codec.Audio.AC3 -> !isAC3PrefEnabled
 				Codec.Audio.EAC3 -> !isEAC3PrefEnabled

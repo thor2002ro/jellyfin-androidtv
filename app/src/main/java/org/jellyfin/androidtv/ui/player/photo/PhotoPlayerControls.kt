@@ -72,12 +72,14 @@ fun PhotoPlayerControls() {
 private fun PreviousButton(
 	onClick: () -> Unit,
 ) {
+	val tooltip = stringResource(R.string.lbl_prev_item)
 	IconButton(
 		onClick = onClick,
+		tooltip = tooltip,
 	) {
 		Icon(
 			imageVector = ImageVector.vectorResource(R.drawable.ic_previous),
-			contentDescription = stringResource(R.string.lbl_prev_item),
+			contentDescription = tooltip,
 		)
 	}
 }
@@ -86,12 +88,14 @@ private fun PreviousButton(
 private fun NextButton(
 	onClick: () -> Unit,
 ) {
+	val tooltip = stringResource(R.string.lbl_next_item)
 	IconButton(
 		onClick = onClick,
+		tooltip = tooltip,
 	) {
 		Icon(
 			imageVector = ImageVector.vectorResource(R.drawable.ic_next),
-			contentDescription = stringResource(R.string.lbl_next_item),
+			contentDescription = tooltip,
 		)
 	}
 }
@@ -102,6 +106,7 @@ private fun PlayPauseButton(
 	onSetPresentationActive: (presentationActive: Boolean) -> Unit,
 ) {
 	val focusRequester = remember { FocusRequester() }
+	val tooltip = stringResource(if (presentationActive) R.string.lbl_pause else R.string.lbl_play)
 	IconButton(
 		onClick = {
 			onSetPresentationActive(!presentationActive)
@@ -110,18 +115,19 @@ private fun PlayPauseButton(
 			.focusRequester(focusRequester)
 			.onVisibilityChanged {
 				focusRequester.requestFocus()
-			}
+			},
+		tooltip = tooltip,
 	) {
 		AnimatedContent(presentationActive) { presentationActive ->
 			if (presentationActive) {
 				Icon(
 					imageVector = ImageVector.vectorResource(R.drawable.ic_pause),
-					contentDescription = stringResource(R.string.lbl_pause),
+					contentDescription = tooltip,
 				)
 			} else {
 				Icon(
 					imageVector = ImageVector.vectorResource(R.drawable.ic_play),
-					contentDescription = stringResource(R.string.lbl_play),
+					contentDescription = tooltip,
 				)
 			}
 		}

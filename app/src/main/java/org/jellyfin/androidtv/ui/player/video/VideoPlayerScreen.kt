@@ -1,43 +1,83 @@
 package org.jellyfin.androidtv.ui.player.video
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import kotlinx.coroutines.flow.map
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.service.BackgroundService
+import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.constant.ZoomMode
 import org.jellyfin.androidtv.ui.ScreensaverLock
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.ui.player.base.PlayerSubtitles
 import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
+import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
+import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
+import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.queue.queue
+import org.jellyfin.playback.jellyfin.queue.baseItem
+import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.koin.compose.koinInject
 
 private const val DefaultVideoAspectRatio = 16f / 9f
+private const val BufferingBlockCount = 5
 
 @Composable
-fun VideoPlayerScreen() {
+fun VideoPlayerScreen(
+	onRemoteKeyEventHandlerChanged: (((keyCode: Int, event: android.view.KeyEvent?) -> Boolean)?) -> Unit = {},
+	onClosePlayer: () -> Unit = {},
+) {
 	val playbackManager = koinInject<PlaybackManager>()
+	val userPreferences = koinInject<UserPreferences>()
+	var zoomMode by remember { mutableStateOf(userPreferences[UserPreferences.playerZoomMode]) }
 
 	val backgroundService = koinInject<BackgroundService>()
 	LaunchedEffect(backgroundService) {
 		backgroundService.clearBackgrounds()
 	}
 
-	val playing by remember {
-		playbackManager.state.playState.map { it == PlayState.PLAYING }
-	}.collectAsState(false)
+	val playState by playbackManager.state.playState.collectAsState()
+	LiveTvTrackCacheUpdater(playbackManager)
+	val playing = playState.isActivePlayback
 	ScreensaverLock(
 		enabled = playing,
 	)
@@ -49,30 +89,181 @@ fun VideoPlayerScreen() {
 	val mediaToastRegistry = remember { MediaToastRegistry(coroutineScope) }
 	rememberPlaybackManagerMediaToastEmitter(playbackManager, mediaToastRegistry)
 
-	Box(
+	BoxWithConstraints(
 		modifier = Modifier
 			.background(Color.Black)
 			.fillMaxSize()
+			.clipToBounds()
 	) {
+		val viewportSize = remember(maxWidth, maxHeight, aspectRatio, zoomMode) {
+			calculateVideoViewportSize(maxWidth, maxHeight, aspectRatio, zoomMode)
+		}
+		val videoModifier = Modifier
+			.requiredSize(viewportSize.width, viewportSize.height)
+			.align(Alignment.Center)
+
 		PlayerSurface(
 			playbackManager = playbackManager,
-			modifier = Modifier
-				.aspectRatio(aspectRatio, videoSize.height < videoSize.width)
-				.fillMaxSize()
-				.align(Alignment.Center)
+			modifier = videoModifier
+		)
+
+		PlayerSubtitles(
+			playbackManager = playbackManager,
+			modifier = videoModifier
+		)
+
+		VideoBufferingIndicator(
+			visible = playState == PlayState.BUFFERING,
+			modifier = Modifier.align(Alignment.Center),
 		)
 
 		VideoPlayerOverlay(
 			playbackManager = playbackManager,
 			mediaToastRegistry = mediaToastRegistry,
-		)
-
-		PlayerSubtitles(
-			playbackManager = playbackManager,
-			modifier = Modifier
-				.aspectRatio(aspectRatio, videoSize.height < videoSize.width)
-				.fillMaxSize()
-				.align(Alignment.Center)
+			zoomMode = zoomMode,
+			onZoomModeSelected = { zoomMode = it },
+			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
+			onClosePlayer = onClosePlayer,
 		)
 	}
+}
+
+@Composable
+private fun LiveTvTrackCacheUpdater(playbackManager: PlaybackManager) {
+	val entry by playbackManager.queue.entry.collectAsState()
+	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val stream = entry?.run { mediaStreamFlow.collectAsState(mediaStream) }?.value
+	val channelId = item?.liveTvChannelId()
+	val audio = stream?.tracks
+		?.filterIsInstance<MediaStreamAudioTrack>()
+		?.map { track ->
+			LiveTvTrackCache.Track(
+				index = track.index,
+				language = track.language,
+				title = track.title,
+				codec = track.codec,
+			)
+		}
+		.orEmpty()
+	val subtitles = stream?.tracks
+		?.filterIsInstance<MediaStreamSubtitleTrack>()
+		?.map { track ->
+			LiveTvTrackCache.Track(
+				index = track.index,
+				language = track.language,
+				title = track.title,
+				codec = track.codec,
+			)
+		}
+		.orEmpty()
+
+	LaunchedEffect(channelId, audio, subtitles) {
+		LiveTvTrackCache.update(
+			channelId = channelId,
+			audio = audio,
+			subtitles = subtitles,
+			selectedAudioTrackIndex = stream?.selectedAudioStreamIndex,
+			selectedSubtitleTrackIndex = stream?.selectedSubtitleStreamIndex,
+		)
+	}
+}
+
+@Composable
+private fun VideoBufferingIndicator(
+	visible: Boolean,
+	modifier: Modifier = Modifier,
+) {
+	val description = stringResource(R.string.loading)
+
+	AnimatedVisibility(
+		visible = visible,
+		modifier = modifier.semantics { contentDescription = description },
+		enter = fadeIn(animationSpec = tween(durationMillis = 150)),
+		exit = fadeOut(animationSpec = tween(durationMillis = 150)),
+	) {
+		Box(
+			contentAlignment = Alignment.Center,
+			modifier = Modifier.size(width = 144.dp, height = 40.dp),
+		) {
+			val transition = rememberInfiniteTransition(label = "video-buffering")
+			val phase by transition.animateFloat(
+				initialValue = 0f,
+				targetValue = 1f,
+				animationSpec = infiniteRepeatable(
+					animation = tween(
+						durationMillis = 1_400,
+						easing = LinearEasing,
+					)
+				),
+				label = "video-buffering-phase",
+			)
+			val colors = listOf(
+				Color(0xFFAA5CC3),
+				Color.White,
+				Color(0xFF00A4DC),
+			)
+
+			Canvas(modifier = Modifier.fillMaxSize()) {
+				drawRoundRect(
+					color = Color.Black.copy(alpha = 0.42f),
+					cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+				)
+
+				val blockWidth = size.width * 0.16f
+				val blockHeight = size.height * 0.16f
+				val cornerRadius = CornerRadius(blockHeight / 2f, blockHeight / 2f)
+				val travelWidth = size.width + blockWidth
+				val top = (size.height - blockHeight) / 2f
+
+				repeat(BufferingBlockCount) { index ->
+					val blockPhase = (phase + (index.toFloat() / BufferingBlockCount)) % 1f
+					val x = blockPhase * travelWidth - blockWidth
+					val edgeFade = minOf(blockPhase, 1f - blockPhase).coerceIn(0f, 0.16f) / 0.16f
+					val alpha = 0.28f + edgeFade * 0.72f
+
+					drawRoundRect(
+						color = colors[index % colors.size].copy(alpha = alpha),
+						topLeft = Offset(x = x, y = top),
+						size = Size(
+							width = blockWidth,
+							height = blockHeight,
+						),
+						cornerRadius = cornerRadius,
+					)
+				}
+			}
+		}
+	}
+}
+
+private data class VideoViewportSize(
+	val width: Dp,
+	val height: Dp,
+)
+
+private fun calculateVideoViewportSize(
+	containerWidth: Dp,
+	containerHeight: Dp,
+	videoAspectRatio: Float,
+	zoomMode: ZoomMode,
+): VideoViewportSize {
+	if (containerWidth <= 0.dp || containerHeight <= 0.dp || videoAspectRatio <= 0f) {
+		return VideoViewportSize(containerWidth, containerHeight)
+	}
+
+	if (zoomMode == ZoomMode.STRETCH) {
+		return VideoViewportSize(containerWidth, containerHeight)
+	}
+
+	val containerAspectRatio = containerWidth.value / containerHeight.value
+	val matchContainerWidth = when (zoomMode) {
+		ZoomMode.FIT -> videoAspectRatio >= containerAspectRatio
+		ZoomMode.AUTO_CROP -> videoAspectRatio < containerAspectRatio
+		ZoomMode.STRETCH -> true
+	}
+
+	val width = if (matchContainerWidth) containerWidth else (containerHeight.value * videoAspectRatio).dp
+	val height = if (matchContainerWidth) (containerWidth.value / videoAspectRatio).dp else containerHeight
+
+	return VideoViewportSize(width, height)
 }

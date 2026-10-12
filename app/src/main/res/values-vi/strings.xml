@@ -144,7 +144,6 @@
     <string name="lbl_song_title">Tựa bài hát</string>
     <string name="lbl_album_name">Tên Album</string>
     <string name="lbl_next_episode">Tập kế tiếp</string>
-    <string name="lbl_previous_episode">Tập trước</string>
     <string name="lbl_more_like_this">Thêm nữa giống vậy</string>
     <string name="lbl_resume_from">Tiếp tục từ %1$s</string>
     <string name="lbl_guide_option_number">Số kênh</string>
@@ -605,19 +604,6 @@
     <string name="playback_video_player_external_empty">Bạn chưa cài đặt bất kỳ ứng dụng trình phát video nào trên thiết bị của mình có thể mở video Jellyfin.</string>
     <string name="filters">Bộ lọc</string>
     <string name="playback_info">Thông tin phát lại</string>
-    <string name="playback_info_play_method">Phương thức phát: %1$s</string>
-    <string name="playback_info_direct_play">Phát trực tiếp</string>
-    <string name="playback_info_direct_stream">Luồng trực tiếp</string>
-    <string name="playback_info_transcoding">Chuyển mã</string>
-    <string name="playback_info_container">Vùng chứa: %1$s</string>
-    <string name="playback_info_video_title">Video</string>
-    <string name="playback_info_audio_title">Âm thanh</string>
-    <string name="playback_info_codec">Mã hóa: %1$s</string>
-    <string name="playback_info_resolution">Độ phân giải: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">Tốc độ bit: %1$s</string>
-    <string name="playback_info_channels">Kênh: %1$d</string>
-    <string name="playback_info_video_range">Dải video: %1$s</string>
-    <string name="playback_info_transcoding_note">Máy chủ đang chuyển mã tập tin này</string>
     <string name="playback_buffer_length">Kích thước bộ đệm phát lại</string>
     <string name="playback_buffer_auto">Tự động</string>
     <string name="playback_buffer_large">Lớn</string>
@@ -649,7 +635,6 @@
     <string name="hlg">HLG</string>
     <string name="preference_enable_ass">Phụ đề ASS phát trực tiếp</string>
     <string name="preference_enable_pgs_description">Yêu cầu chuyển mã khi bị vô hiệu hóa</string>
-    <string name="preference_enable_ass_description">Tính năng thử nghiệm, có thể không hoạt động ổn định</string>
     <string name="pref_software_codecs_enabled">Sử dụng mã hóa phần mềm</string>
     <string name="pref_software_codecs_enabled_description">Một số phương pháp triển khai dựa trên phần mềm có thể làm giảm hiệu suất. Việc tắt tùy chọn này sẽ làm tăng khả năng chuyển mã.</string>
     <string name="lbl_date_episode_added">Ngày tập phim được thêm vào</string>

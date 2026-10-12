@@ -4,6 +4,7 @@ import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.HdrFormat
 import org.jellyfin.androidtv.ui.navigation.RouteComposable
 import org.jellyfin.androidtv.ui.settings.screen.SettingsDeveloperScreen
+import org.jellyfin.androidtv.ui.settings.screen.SettingsDebugCapabilitiesScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsMainScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsTelemetryScreen
 import org.jellyfin.androidtv.ui.settings.screen.about.SettingsAboutScreen
@@ -44,6 +45,11 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackHEVCLe
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackHdrOverrideScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackHdrOverridesScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackInactivityPromptScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibassCacheSizeScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibassGlyphSizeScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibassMaxRenderPixelsScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibassRenderTypeScreen
+import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackLibassScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackMaxBitrateScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPhotoPlayerScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackPlayerScreen
@@ -103,6 +109,11 @@ object Routes {
 	const val PLAYBACK_MEDIA_SEGMENTS = "/playback/media-segments"
 	const val PLAYBACK_MEDIA_SEGMENT = "/playback/media-segments/{segmentType}"
 	const val PLAYBACK_ADVANCED = "/playback/advanced"
+	const val PLAYBACK_LIBASS = "/playback/advanced/libass"
+	const val PLAYBACK_LIBASS_RENDER_TYPE = "/playback/advanced/libass/render-type"
+	const val PLAYBACK_LIBASS_MAX_RENDER_PIXELS = "/playback/advanced/libass/max-render-pixels"
+	const val PLAYBACK_LIBASS_CACHE_SIZE = "/playback/advanced/libass/cache-size"
+	const val PLAYBACK_LIBASS_GLYPH_SIZE = "/playback/advanced/libass/glyph-size"
 	const val PLAYBACK_RESUME_SUBTRACT_DURATION = "/playback/resume-subtract-duration"
 	const val PLAYBACK_MAX_BITRATE = "/playback/max-bitrate"
 	const val PLAYBACK_REFRESH_RATE_SWITCHING_BEHAVIOR = "/playback/refresh-rate-switching-behavior"
@@ -115,6 +126,7 @@ object Routes {
 	const val PLAYBACK_BITSTREAM_AUDIO = "/playback/codec/bitstream-audio/{format}"
 	const val PLAYBACK_AVC_LEVEL = "/playback/codec/avc-level"
 	const val PLAYBACK_HEVC_LEVEL = "/playback/codec/hevc-level"
+	const val PLAYBACK_DEBUG_CAPABILITIES = "/playback/advanced/debug-capabilities"
 	const val TELEMETRY = "/telemetry"
 	const val DEVELOPER = "/developer"
 	const val ABOUT = "/about"
@@ -256,6 +268,21 @@ val routes = mapOf<String, RouteComposable>(
 	Routes.PLAYBACK_ADVANCED to {
 		SettingsPlaybackAdvancedScreen()
 	},
+	Routes.PLAYBACK_LIBASS to {
+		SettingsPlaybackLibassScreen()
+	},
+	Routes.PLAYBACK_LIBASS_RENDER_TYPE to {
+		SettingsPlaybackLibassRenderTypeScreen()
+	},
+	Routes.PLAYBACK_LIBASS_MAX_RENDER_PIXELS to {
+		SettingsPlaybackLibassMaxRenderPixelsScreen()
+	},
+	Routes.PLAYBACK_LIBASS_CACHE_SIZE to {
+		SettingsPlaybackLibassCacheSizeScreen()
+	},
+	Routes.PLAYBACK_LIBASS_GLYPH_SIZE to {
+		SettingsPlaybackLibassGlyphSizeScreen()
+	},
 	Routes.PLAYBACK_RESUME_SUBTRACT_DURATION to {
 		SettingsPlaybackResumeSubtractDurationScreen()
 	},
@@ -295,6 +322,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.PLAYBACK_HEVC_LEVEL to {
 		SettingsPlaybackHEVCLevelScreen()
+	},
+	Routes.PLAYBACK_DEBUG_CAPABILITIES to {
+		SettingsDebugCapabilitiesScreen()
 	},
 	Routes.TELEMETRY to {
 		SettingsTelemetryScreen()

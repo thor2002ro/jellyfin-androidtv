@@ -1,8 +1,11 @@
 package org.jellyfin.androidtv.util.profile
 
 import android.media.MediaCodecList
+import android.media.MediaCodecInfo.CodecProfileLevel
 import android.util.Size
+import androidx.annotation.OptIn
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import org.jellyfin.androidtv.util.profile.codec.Av1CodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.AvcCodecCapabilities
 import org.jellyfin.androidtv.util.profile.codec.HevcCodecCapabilities
@@ -26,6 +29,8 @@ class MediaCodecCapabilitiesTest(
 	fun supportsAV1HDR10(): Boolean = av1.supportsAv1HDR10()
 
 	fun supportsAV1HDR10Plus(): Boolean = av1.supportsAv1HDR10Plus()
+
+	fun supportsOpus(): Boolean = codecQuery.hasCodecForMime(MimeTypes.AUDIO_OPUS)
 
 	fun supportsAVC(): Boolean = avc.supportsAvc()
 
@@ -52,6 +57,13 @@ class MediaCodecCapabilitiesTest(
 	fun getHevcMain10Level(): Int = hevc.getMain10Level()
 
 	fun supportsVc1(): Boolean = codecQuery.hasCodecForMime(MimeTypes.VIDEO_VC1)
+
+	fun supportsMimeType(mime: String): Boolean = codecQuery.hasCodecForMime(mime)
+
+	@OptIn(UnstableApi::class)
+	fun supportsVp9Main10(): Boolean =
+		codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile2, CodecProfileLevel.VP9Level1) ||
+			codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile3, CodecProfileLevel.VP9Level1)
 
 	fun getMaxResolution(mime: String): Size = codecQuery.getMaxResolution(mime)
 }
