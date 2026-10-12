@@ -273,18 +273,22 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     private void createGrid() {
         mGridViewHolder = mGridPresenter.onCreateViewHolder(binding.rowsFragment);
-        if (mGridViewHolder instanceof HorizontalGridPresenter.ViewHolder) {
+        if (mGridViewHolder instanceof ComposeBrowseListPresenter.ViewHolder) {
+            ComposeBrowseListPresenter presenter = (ComposeBrowseListPresenter) mGridPresenter;
+            mGridView = ((ComposeBrowseListPresenter.ViewHolder) mGridViewHolder).getListView();
+            presenter.configure(8, 12, resolveBrowseGridSpacing(6, mCardSpacing));
+        } else if (mGridViewHolder instanceof HorizontalGridPresenter.ViewHolder) {
             mGridView = ((HorizontalGridPresenter.ViewHolder) mGridViewHolder).getGridView();
             mGridView.setGravity(Gravity.CENTER_VERTICAL);
             ViewGroup.MarginLayoutParams titleMargin = (ViewGroup.MarginLayoutParams) binding.title.getLayoutParams();
             ViewGroup.MarginLayoutParams clockMargin = (ViewGroup.MarginLayoutParams) binding.clock.getLayoutParams();
             mGridView.setPadding(titleMargin.getMarginStart(), mGridPaddingTop, clockMargin.getMarginEnd(), mGridPaddingTop); // prevent initial card cutoffs
-                    shouldShowBrowseCardInfo(mShowCardTitles),
+                    shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles),
         } else if (mGridViewHolder instanceof VerticalGridPresenter.ViewHolder) {
             mGridView = ((VerticalGridPresenter.ViewHolder) mGridViewHolder).getGridView();
             mGridView.setGravity(Gravity.CENTER_HORIZONTAL);
             mGridView.setPadding(mGridPaddingLeft, mGridPaddingTop, mGridPaddingLeft, mGridPaddingTop); // prevent initial card cutoffs
-                    shouldShowBrowseCardInfo(mShowCardTitles),
+                    shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles),
         }
         mGridView.setHorizontalSpacing(mGridItemSpacingHorizontal);
         mGridView.setVerticalSpacing(mGridItemSpacingVertical);
@@ -361,9 +365,14 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mAdapter.loadMoreItemsIfNeeded(loadedPosition);
             prefetchCardImages(loadedPosition);
         }
+        if (mGridPresenter instanceof ComposeBrowseListPresenter) {
+            return ((ComposeBrowseListPresenter) mGridPresenter).getPosition();
+        }
         keepGridFocused();
 
+        } else if (mGridPresenter instanceof ComposeBrowseListPresenter) {
         return true;
+            ((ComposeBrowseListPresenter) mGridPresenter).setPosition(position);
     }
 
     private void keepGridFocused() {
@@ -434,14 +443,20 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mLastImagePrefetchPosition = position;
         mLastImagePrefetchItemsLoaded = itemsLoaded;
 
-        int maxHeight = Utils.convertDpToPixel(requireContext(), mCardHeight);
-        int maxWidth = Utils.convertDpToPixel(requireContext(), (int) getCardWidthBy(mCardHeight, mImageType, mFolder));
+        ImageType prefetchImageType = mViewStyle == LibraryViewStyle.DENSE_LIST ? ImageType.THUMB : mImageType;
+        BrowseImageRequestSize imageRequestSize = resolveBrowseImageRequestSize(
+                mViewStyle,
+                (int) getCardWidthBy(mCardHeight, prefetchImageType, mFolder),
+                mCardHeight
+        );
+        int maxHeight = Utils.convertDpToPixel(requireContext(), imageRequestSize.getHeightDp());
+        int maxWidth = Utils.convertDpToPixel(requireContext(), imageRequestSize.getWidthDp());
         int start = Math.min(itemsLoaded, position + 1 + Math.max(1, mCardsScreenEst));
         int end = Math.min(itemsLoaded, start + Math.max(1, mCardsScreenStride));
         for (int i = start; i < end; i++) {
             if (!(mAdapter.get(i) instanceof BaseRowItem)) continue;
 
-            JellyfinImage image = ((BaseRowItem) mAdapter.get(i)).getImage(mImageType);
+            JellyfinImage image = ((BaseRowItem) mAdapter.get(i)).getImage(prefetchImageType);
             if (image == null) continue;
 
             String url = JellyfinImageKt.getUrl(image, api.getValue(), maxWidth, maxHeight, null, null);
@@ -476,9 +491,11 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     /**
      * Sets the grid presenter.
      */
+            presenter.setOnKeyListener(this);
     public void setGridPresenter(VerticalGridPresenter gridPresenter) {
         if (gridPresenter == null) {
             throw new IllegalArgumentException("Grid presenter may not be null");
+            presenter.setOnKeyListener(this);
         }
         gridPresenter.setOnItemViewSelectedListener(mRowSelectedListener);
         gridPresenter.setOnItemViewClickedListener(mClickedListener);
@@ -486,6 +503,28 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mGridPresenter = gridPresenter;
     }
 
+        if (!shouldConfigureNavigationControlsFocus(getNavigationControlsDirection())) return;
+
+        View homeButton = binding.clock.getHomeButton();
+        View firstToolbarAction = mActiveToolBar.getChildAt(0);
+        if (firstToolbarAction == null) return;
+
+        for (int index = 0; index < mActiveToolBar.getChildCount(); index++) {
+            View action = mActiveToolBar.getChildAt(index);
+            if (action.getId() == View.NO_ID) action.setId(View.generateViewId());
+            action.setOnKeyListener((view, keyCode, event) ->
+                    shouldMoveFocusFromToolbarToHome(getNavigationControlsDirection(), event.getAction(), keyCode) &&
+                            homeButton.requestFocus());
+            action.setNextFocusDownId(mGridView.getId());
+        }
+
+        homeButton.setNextFocusDownId(firstToolbarAction.getId());
+    }
+
+    private boolean focusFirstToolbarAction() {
+        return mActiveToolBar != null &&
+                mActiveToolBar.getChildCount() > 0 &&
+                mActiveToolBar.getChildAt(0).requestFocus();
 
     public void setItem(BaseRowItem item) {
         if (item != null) {
@@ -622,6 +661,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void setDefaultGridRowCols(PosterSize posterSize, ImageType imageType) {
+        if (mGridPresenter instanceof ComposeBrowseListPresenter) return;
+
         // HINT: use uneven Rows/Cols if possible, so selected middle lines up with TV middle!
         if (mGridPresenter instanceof VerticalGridPresenter) {
             int numCols;
@@ -673,6 +714,16 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private void setAutoCardGridValues() {
         if (mGridPresenter == null) {
             Timber.e("Invalid presenter, cannot calculate CardGridValues");
+            return;
+        }
+        if (mGridPresenter instanceof ComposeBrowseListPresenter) {
+            mCardHeight = BROWSE_LIST_THUMBNAIL_HEIGHT_DP;
+            mGridItemSpacingHorizontal = 0;
+            mGridItemSpacingVertical = resolveBrowseGridSpacing(6, mCardSpacing);
+            mGridPaddingLeft = 0;
+            mGridPaddingTop = 12;
+            mCardsScreenEst = Math.max(mGridHeight / (mCardHeight + mGridItemSpacingVertical), MIN_NUM_CARDS);
+            mCardsScreenStride = mCardsScreenEst;
             return;
         }
         double cardScaling = Math.max(mCardFocusScale - 1.0, 0.0);
@@ -800,21 +851,24 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         ImageType imageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
         GridDirection gridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
         LibraryCardSpacing cardSpacing = libraryPreferences.get(LibraryPreferences.Companion.getCardSpacing());
+        LibraryViewStyle viewStyle = libraryPreferences.get(LibraryPreferences.Companion.getViewStyle());
         boolean showCardTitles = libraryPreferences.get(LibraryPreferences.Companion.getShowCardTitles());
 
         if (mImageType != imageType || mPosterSizeSetting != posterSizeSetting || mGridDirection != gridDirection ||
-                mCardSpacing != cardSpacing || mShowCardTitles != showCardTitles || mDirty) {
+                mCardSpacing != cardSpacing || mViewStyle != viewStyle || mShowCardTitles != showCardTitles || mDirty) {
             determiningPosterSize = true;
 
             mImageType = imageType;
             mPosterSizeSetting = posterSizeSetting;
             mGridDirection = gridDirection;
             mCardSpacing = cardSpacing;
+            mViewStyle = viewStyle;
             mShowCardTitles = showCardTitles;
 
             if (mGridDirection.equals(GridDirection.VERTICAL) && (mGridPresenter == null || !(mGridPresenter instanceof VerticalGridPresenter))) {
                 setGridPresenter(new VerticalGridPresenter(FocusHighlight.ZOOM_FACTOR_LARGE, false));
-            } else if (mGridDirection.equals(GridDirection.HORIZONTAL) && (mGridPresenter == null || !(mGridPresenter instanceof HorizontalGridPresenter))) {
+            } else if (mViewStyle == LibraryViewStyle.CARDS && mGridDirection.equals(GridDirection.HORIZONTAL) &&
+                    !(mGridPresenter instanceof HorizontalGridPresenter)) {
                 setGridPresenter(new HorizontalGridPresenter());
             }
             setDefaultGridRowCols(mPosterSizeSetting, mImageType);
@@ -1122,6 +1176,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (mGridPresenter != null) {
             if (mGridPresenter instanceof HorizontalGridPresenter)
                 ((HorizontalGridPresenter) mGridPresenter).setOnItemViewClickedListener(mClickedListener);
+            else if (mGridPresenter instanceof ComposeBrowseListPresenter)
+                ((ComposeBrowseListPresenter) mGridPresenter).setOnItemViewClickedListener(mClickedListener);
             else if (mGridPresenter instanceof VerticalGridPresenter)
                 ((VerticalGridPresenter) mGridPresenter).setOnItemViewClickedListener(mClickedListener);
         }

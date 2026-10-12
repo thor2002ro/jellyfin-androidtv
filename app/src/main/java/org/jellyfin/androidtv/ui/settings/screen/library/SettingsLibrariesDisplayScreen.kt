@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.LibraryViewStyle
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.preference.LibraryPreferences
 import org.jellyfin.androidtv.ui.base.Text
@@ -26,6 +27,7 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 	val userViewsRepository = koinInject<UserViewsRepository>()
 	val userView = rememberUserView(itemId)
 	val libraryPreferences = rememberLibraryPreferences(displayPreferencesId) ?: return
+	var viewStyle by rememberPreference(libraryPreferences, LibraryPreferences.viewStyle)
 
 	val allowViewSelection = userViewsRepository.allowViewSelection(userView?.collectionType)
 
@@ -38,35 +40,51 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 		}
 
 		item {
-			var posterSize by rememberPreference(libraryPreferences, LibraryPreferences.posterSize)
-
 			ListButton(
-				headingContent = { Text(stringResource(R.string.lbl_image_size)) },
-				captionContent = { Text(stringResource(posterSize.nameRes)) },
+				headingContent = { Text(stringResource(R.string.library_view_style)) },
+				captionContent = { Text(stringResource(viewStyle.nameRes)) },
 				onClick = {
 					router.push(
-						Routes.LIBRARIES_DISPLAY_IMAGE_SIZE,
-						mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId)
+						Routes.LIBRARIES_DISPLAY_VIEW_STYLE,
+						mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId),
 					)
 				},
-				modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_IMAGE_SIZE)
+				modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_VIEW_STYLE),
 			)
 		}
 
-		item {
-			var imageType by rememberPreference(libraryPreferences, LibraryPreferences.imageType)
+		if (cardDisplayOptionsVisible(viewStyle)) {
+			item {
+				var posterSize by rememberPreference(libraryPreferences, LibraryPreferences.posterSize)
 
-			ListButton(
-				headingContent = { Text(stringResource(R.string.lbl_image_type)) },
-				captionContent = { Text(stringResource(imageType.nameRes)) },
-				onClick = {
-					router.push(
-						Routes.LIBRARIES_DISPLAY_IMAGE_TYPE,
-						mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId)
-					)
-				},
-				modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_IMAGE_TYPE)
-			)
+				ListButton(
+					headingContent = { Text(stringResource(R.string.lbl_image_size)) },
+					captionContent = { Text(stringResource(posterSize.nameRes)) },
+					onClick = {
+						router.push(
+							Routes.LIBRARIES_DISPLAY_IMAGE_SIZE,
+							mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId)
+						)
+					},
+					modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_IMAGE_SIZE)
+				)
+			}
+
+			item {
+				var imageType by rememberPreference(libraryPreferences, LibraryPreferences.imageType)
+
+				ListButton(
+					headingContent = { Text(stringResource(R.string.lbl_image_type)) },
+					captionContent = { Text(stringResource(imageType.nameRes)) },
+					onClick = {
+						router.push(
+							Routes.LIBRARIES_DISPLAY_IMAGE_TYPE,
+							mapOf("itemId" to itemId.toString(), "displayPreferencesId" to displayPreferencesId)
+						)
+					},
+					modifier = Modifier.focusKey(Routes.LIBRARIES_DISPLAY_IMAGE_TYPE)
+				)
+			}
 		}
 
 		item {
@@ -98,3 +116,6 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 		}
 	}
 }
+
+internal fun cardDisplayOptionsVisible(viewStyle: LibraryViewStyle): Boolean =
+	viewStyle == LibraryViewStyle.CARDS

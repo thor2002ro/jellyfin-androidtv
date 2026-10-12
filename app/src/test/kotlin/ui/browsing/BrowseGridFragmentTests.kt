@@ -1,8 +1,11 @@
 package org.jellyfin.androidtv.ui.browsing
 
+import android.view.KeyEvent
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.jellyfin.androidtv.data.repository.ItemRepository
+import org.jellyfin.androidtv.constant.LibraryViewStyle
+import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
@@ -48,4 +51,86 @@ class BrowseGridFragmentTests : FunSpec({
 
 		BrowsingUtils.createBrowseGridItemsRequest(library).fields shouldBe ItemRepository.browseFields
 	}
+	test("dense list overrides the saved card direction") {
+		BrowseGridFragment.createGridPresenter(
+			GridDirection.HORIZONTAL,
+			LibraryViewStyle.DENSE_LIST,
+		).javaClass shouldBe ComposeBrowseListPresenter::class.java
+	}
+
+	test("dense list uses vertical navigation controls while cards honor their direction") {
+		BrowseGridFragment.effectiveNavigationControlsDirection(
+			LibraryViewStyle.DENSE_LIST,
+			GridDirection.HORIZONTAL,
+		) shouldBe GridDirection.VERTICAL
+		BrowseGridFragment.effectiveNavigationControlsDirection(
+			LibraryViewStyle.CARDS,
+			GridDirection.HORIZONTAL,
+		) shouldBe GridDirection.HORIZONTAL
+	}
+
+	test("horizontal grid handoff routes up to customization") {
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe true
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_DOWN,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_UP,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+	}
+
+	test("vertical grid handoff routes up to home") {
+		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe true
+		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_DOWN,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+	}
+
+	test("custom navigation control focus routing is horizontal only") {
+		BrowseGridFragment.shouldConfigureNavigationControlsFocus(GridDirection.HORIZONTAL) shouldBe true
+		BrowseGridFragment.shouldConfigureNavigationControlsFocus(GridDirection.VERTICAL) shouldBe false
+	}
+
+	test("horizontal customization routes up to home") {
+		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe true
+		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_DOWN,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+	}
+
 })
