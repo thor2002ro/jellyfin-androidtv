@@ -60,7 +60,7 @@ class NetworkPlaybackRecoveryService(
 				startRecovery(
 					entry = entry,
 					reason = "Playback error ${error.codeName}",
-					playWhenReady = state.playState.value.isActivePlayback,
+					playWhenReady = error.codeName == "MEDIA_STREAM_NETWORK_ERROR" || state.playState.value.isActivePlayback,
 				)
 			}
 		})
@@ -72,12 +72,16 @@ class NetworkPlaybackRecoveryService(
 			var bufferingEntry: QueueEntry? = null
 			var consecutiveBufferingChecks = 0
 			var playedEntry: QueueEntry? = null
+			var lastPositionInfo = state.positionInfo
 
 			while (true) {
 				delay(NETWORK_RECOVERY_CHECK_INTERVAL)
 
 				val entry = manager.queue.entry.value
 				val playState = state.playState.value
+				val positionInfo = state.positionInfo
+				val bufferingProgressed = hasBufferingProgress(lastPositionInfo, positionInfo)
+				lastPositionInfo = positionInfo
 				if (playState == PlayState.PLAYING) playedEntry = entry
 				if (
 					entry !== errorRecoveryAttemptedEntry ||
@@ -129,7 +133,7 @@ class NetworkPlaybackRecoveryService(
 						bufferingEntry = entry
 						consecutiveBufferingChecks = 0
 					}
-					consecutiveBufferingChecks++
+					consecutiveBufferingChecks = if (bufferingProgressed) 0 else consecutiveBufferingChecks + 1
 					if (
 						shouldRecoverStalledBuffer(
 							consecutiveChecks = consecutiveBufferingChecks,
@@ -204,20 +208,22 @@ class NetworkPlaybackRecoveryService(
 				continue
 			}
 
-			val positionBeforeGrace = state.positionInfo.active
+			val positionBeforeGrace = state.positionInfo
 			delay(PLAYBACK_RECOVERY_RETRY_INTERVAL)
 			if (!isCurrentRecoverableEntry(entry)) return
 			if (!isNetworkAvailable()) continue
 
 			val playState = state.playState.value
-			val positionAfterGrace = state.positionInfo.active
-			if (hasPlaybackRecovered(playState, positionBeforeGrace, positionAfterGrace)) {
-				Timber.i("Playback recovered without reloading")
+			val positionAfterGrace = state.positionInfo
+			if (hasPlaybackRecovered(playState, positionBeforeGrace.active, positionAfterGrace.active) ||
+				playState == PlayState.BUFFERING && hasBufferingProgress(positionBeforeGrace, positionAfterGrace)
+			) {
+				Timber.i("Playback or buffering progressed without reloading")
 				return
 			}
 
-			Timber.i("$reason; reloading playback at $positionAfterGrace")
-			if (manager.reloadCurrentMediaStream(position = positionAfterGrace, playWhenReady = playWhenReady)) {
+			Timber.i("$reason; reloading playback at ${positionAfterGrace.active}")
+			if (manager.reloadCurrentMediaStream(position = entry.startPosition ?: positionAfterGrace.active, playWhenReady = playWhenReady)) {
 				Timber.i("Reloaded playback after error")
 			} else {
 				Timber.w("Unable to reload playback after error")
@@ -279,6 +285,10 @@ internal suspend fun cancelAndJoinRecoveryJob(job: Job, currentJob: Job?): Boole
 	return true
 }
 
+// A changed playback position also covers seeking; buffer growth is healthy loading.
+internal fun hasBufferingProgress(before: PositionInfo, after: PositionInfo) =
+	after.active != before.active || after.buffer > before.buffer
+
 internal fun shouldRecoverStalledBuffer(consecutiveChecks: Int, requiredChecks: Int, hasPlayed: Boolean) =
 	consecutiveChecks >= if (hasPlayed) requiredChecks else requiredChecks * 2
 
@@ -292,7 +302,11 @@ internal fun hasPlaybackRecovered(
 internal fun isRecoverablePlaybackError(codeName: String) = doviTransformationFailureStatus(codeName) == null && when (codeName) {
 	"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
 	"ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT",
+	"ERROR_CODE_IO_BAD_HTTP_STATUS",
+	"MPV_HTTP_ERROR",
+	"MPV_ERROR",
 	"LIBVLC_ERROR",
+	"MEDIA_STREAM_NETWORK_ERROR",
 	-> true
 	else -> false
 }
