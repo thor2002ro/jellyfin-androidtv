@@ -174,6 +174,7 @@ class ExoPlayerBackend(
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
 			onIsPlayingChanged(exoPlayer.isPlaying)
+			notifyTracksChanged()
 		}
 
 		override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
