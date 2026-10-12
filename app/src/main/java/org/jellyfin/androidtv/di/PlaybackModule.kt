@@ -67,6 +67,7 @@ import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
+import org.jellyfin.androidtv.util.AppLogging
 import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -135,6 +136,7 @@ private fun Scope.createLibVLCBackend(): LibVLCBackend {
 		},
 		videoDecoderProvider = { userPreferences[UserPreferences.libVLCDecoder].decoder },
 		playbackOptionsProvider = { userPreferences.libVLCPlaybackOptions() },
+		nativeLogSink = AppLogging::appendNativeLog,
 	)
 }
 
