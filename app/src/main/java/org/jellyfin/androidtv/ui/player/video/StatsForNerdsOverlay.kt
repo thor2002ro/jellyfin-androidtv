@@ -50,6 +50,7 @@ import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
+import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -96,6 +97,7 @@ fun PlaybackInfoOverlay(
 	val mediaStream by entry?.mediaStreamFlow?.collectAsState(null) ?: return
 	val stream = mediaStream ?: return
 	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val liveTvDirectPlayDisabled = item?.isLiveTv() == true && !userPreferences[UserPreferences.liveTvDirectPlayEnabled]
 	val itemId = item?.id ?: entry?.baseItem?.id
 	val mediaSourceId = entry?.mediaSourceId
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
@@ -103,9 +105,11 @@ fun PlaybackInfoOverlay(
 	val speed by playbackManager.state.speed.collectAsState()
 	val playerVideoSize by playbackManager.state.videoGeometry.collectAsState()
 	val subtitleOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
+	val subtitleSpeed by playbackManager.state.subtitleTimingSpeed.collectAsState()
 	val subtitleOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
 	val softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled]
-	val parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction]
+	val parseSubtitlesDuringExtraction =
+		userPreferences[UserPreferences.exoPlayerParseSubtitlesDuringExtraction] && !userPreferences[UserPreferences.assDirectPlay]
 	val mediaTest = remember(softwareCodecsEnabled) { MediaCodecCapabilitiesTest(softwareCodecsEnabled) }
 	val forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE)
 	val forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE)
@@ -134,7 +138,6 @@ fun PlaybackInfoOverlay(
 
 		while (true) {
 			transcodingInfo = transcodingStatusRepository.getTranscodingInfo(
-				playSessionId = stream.identifier,
 				itemId = itemId,
 				mediaSourceId = mediaSourceId,
 			)
@@ -169,9 +172,12 @@ fun PlaybackInfoOverlay(
 	}
 	val sections = remember(
 		stream,
+		liveTvDirectPlayDisabled,
+		selectedAudio,
 		speed,
 		playerVideoSize,
 		subtitleOffset,
+		subtitleSpeed,
 		subtitleOffsetSupported,
 		parseSubtitlesDuringExtraction,
 		transcodingInfo,
@@ -185,9 +191,12 @@ fun PlaybackInfoOverlay(
 		NewPlayerStreamStatusBuilder.build(
 			playbackManager = playbackManager,
 			stream = stream,
+			liveTvDirectPlayDisabled = liveTvDirectPlayDisabled,
+			selectedAudio = selectedAudio,
 			speed = speed,
 			playerVideoSize = playerVideoSize,
 			subtitleOffset = subtitleOffset,
+			subtitleSpeed = subtitleSpeed,
 			subtitleOffsetSupported = subtitleOffsetSupported,
 			parseSubtitlesDuringExtraction = parseSubtitlesDuringExtraction,
 			positionInfo = positionInfo,
@@ -208,15 +217,10 @@ fun PlaybackInfoOverlay(
 	val chapterCacheUrls = remember(item?.id, item?.chapters, api.accessToken, chapterThumbnailWidth, chapterThumbnailHeight) {
 		item?.getChapterThumbnailUrls(api, chapterThumbnailWidth, chapterThumbnailHeight).orEmpty()
 	}
-	val thumbnailCacheRows = remember(trickplayCacheUrls, chapterCacheUrls, refreshTick) {
-		buildThumbnailCacheRows(
-			trickplayUrls = trickplayCacheUrls,
-			chapterUrls = chapterCacheUrls,
-		)
-	}
 	val playerMetricSections = sections.filter { it.title == "${frameStats.playerName} Metrics" }
 	val libassMetricSections = sections.filter { it.title == "libass Metrics" }
-	val playbackInfoSections = sections - playerMetricSections - libassMetricSections
+	val playbackInfoSections = sections - playerMetricSections - libassMetricSections +
+		listOfNotNull(originalMediaInfo.takeIf { it.rows.isNotEmpty() })
 
 	Row(
 		modifier = modifier,
@@ -225,13 +229,14 @@ fun PlaybackInfoOverlay(
 	) {
 		Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 			PlaybackPerformanceOverlay(
+				playbackManager = playbackManager,
 				stream = stream,
 				frameStats = frameStats,
 			)
 			if (playerMetricSections.isNotEmpty() || libassMetricSections.isNotEmpty()) {
 				PlayerMetricsPanel(sections = playerMetricSections + libassMetricSections)
 			}
-			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
+			PlaybackThumbnailCachePanel(trickplayCacheUrls, chapterCacheUrls)
 		}
 
 		PlaybackInfoTextPanel(sections = playbackInfoSections)
@@ -240,8 +245,18 @@ fun PlaybackInfoOverlay(
 
 @Composable
 private fun PlaybackThumbnailCachePanel(
-	rows: List<PlaybackInfoRowModel>,
+	trickplayUrls: List<String>,
+	chapterUrls: List<String>,
 ) {
+	var rows by remember(trickplayUrls, chapterUrls) {
+		mutableStateOf(buildThumbnailCacheRows(trickplayUrls, chapterUrls))
+	}
+	LaunchedEffect(trickplayUrls, chapterUrls) {
+		while (true) {
+			delay(1_000)
+			rows = buildThumbnailCacheRows(trickplayUrls, chapterUrls)
+		}
+	}
 	Column(
 		modifier = Modifier
 			.width(146.dp)
@@ -344,9 +359,12 @@ private object NewPlayerStreamStatusBuilder {
 	fun build(
 		playbackManager: PlaybackManager,
 		stream: MediaStream,
+		liveTvDirectPlayDisabled: Boolean,
+		selectedAudio: PlayerTrack?,
 		speed: Float,
 		playerVideoSize: VideoGeometry,
 		subtitleOffset: Duration,
+		subtitleSpeed: Float,
 		subtitleOffsetSupported: Boolean,
 		parseSubtitlesDuringExtraction: Boolean,
 		positionInfo: PositionInfo,
@@ -359,9 +377,6 @@ private object NewPlayerStreamStatusBuilder {
 	): List<PlaybackInfoSection> {
 		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
 		val trackSelection = playbackManager.trackSelection
-		val selectedAudio = trackSelection
-			?.getAvailableTracks(TrackType.AUDIO)
-			?.firstOrNull(PlayerTrack::isSelected)
 		val audioTrack = stream.tracks
 			.filterIsInstance<MediaStreamAudioTrack>()
 			.selectedTrack(selectedAudio)
@@ -382,15 +397,16 @@ private object NewPlayerStreamStatusBuilder {
 					externalSubtitle.index == selectedSubtitle?.index
 			}
 		val selectedSubtitleCodec = subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle)
-		val showLibassStats = selectedSubtitle != null && frameStats.libass != null
+		val showAssStats = selectedSubtitle != null && selectedSubtitleCodec.isAssSubtitleCodec()
 		val doviFailure = (stream as? PlayableMediaStream)?.queueEntry?.doviTransformFailure
 
 		return listOf(
 			PlaybackInfoSection(
 				title = "",
 				rows = rows {
-					row("Player", "ExoPlayer")
-					row("Play method", stream.conversionMethod.displayName())
+					row("Player", frameStats.playerName)
+					row("Play method", stream.conversionMethod.displayName(transcodingInfo?.isVideoDirect))
+					if (liveTvDirectPlayDisabled) row("Live TV Direct Play", "Disabled")
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
 					row("Display HDR support", displayHdrModes)
@@ -419,6 +435,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Conversion speed", TranscodingStatusFormatter.speed(transcodingInfo))
 					row("Conversion reason", conversionReason(stream, transcodingInfo, isQualityForcedTranscode))
 					row("Workaround", clientWorkaroundInfo)
+					row("Extractor flags", frameStats.extractorFlags)
 					row("Transcoding progress", TranscodingStatusFormatter.progress(transcodingInfo))
 					row("Hardware acceleration", TranscodingStatusFormatter.hardwareAcceleration(transcodingInfo))
 					row(
@@ -441,15 +458,27 @@ private object NewPlayerStreamStatusBuilder {
 					row("Codec", selectedSubtitleCodec.formatCodec())
 					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
-					subtitleDiagnosticValues(frameStats).forEach { (label, value) -> row(label, value) }
+					if (selectedSubtitle != null) {
+						subtitleDiagnosticValues(frameStats, isAssSubtitle = showAssStats)
+							.forEach { (label, value) -> row(label, value) }
+					}
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
-					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
+					row(
+						"Timing",
+						subtitleTimingInfo(
+							selectedSubtitle,
+							selectedSubtitleStream,
+							subtitleOffset,
+							subtitleSpeed,
+							subtitleOffsetSupported,
+						),
+					)
 				},
 			),
 			PlaybackInfoSection(
 				title = "libass Metrics",
 				rows = rows {
-					if (showLibassStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
+					if (showAssStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
 				},
 			),
 			PlaybackInfoSection(
@@ -632,14 +661,16 @@ private object NewPlayerStreamStatusBuilder {
 		if (externalSubtitle?.isForced == true) appendInline("Forced")
 	}.takeIf { it.isNotBlank() }
 
-	private fun subtitleOffsetInfo(
+	private fun subtitleTimingInfo(
 		track: PlayerTrack?,
 		stream: MediaStreamSubtitleTrack?,
 		offset: Duration,
+		speed: Float,
 		supported: Boolean,
 	): String? = when {
 		track == null && stream == null -> null
-		else -> "${offset.formatSignedSeconds()} ${if (supported) "supported" else "unsupported"}"
+		else -> "${offset.formatSignedSeconds()} @ ${"%.3f".format(speed)}x " +
+			if (supported) "supported" else "unsupported"
 	}
 
 	private fun streamBitrate(
@@ -943,11 +974,18 @@ private fun PlaybackInfoStaticRow(
 	}
 }
 
-internal fun subtitleDiagnosticValues(stats: PlaybackFrameStats): List<Pair<String, String>> = buildList {
-	stats.subtitleExtractor?.takeIf(String::isNotBlank)?.let { add("Provider" to it) }
-	stats.subtitleRender?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
-	stats.subtitleParser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
-	stats.subtitlePath?.takeIf(String::isNotBlank)?.let { add("Path" to it) }
+internal fun subtitleDiagnosticValues(
+	stats: PlaybackFrameStats,
+	isAssSubtitle: Boolean,
+): List<Pair<String, String>> = buildList {
+	val media3Cues = stats.playerName == "ExoPlayer" && !isAssSubtitle
+	val provider = if (media3Cues) "Media3 default" else stats.subtitleExtractor
+	val renderer = if (media3Cues) "Media3 cues" else stats.subtitleRender
+	val parser = if (media3Cues) "DefaultSubtitleParserFactory" else stats.subtitleParser
+
+	provider?.takeIf(String::isNotBlank)?.let { add("Provider" to it) }
+	renderer?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
+	parser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
 }
 
 internal fun videoDiagnosticValues(
@@ -1022,15 +1060,15 @@ private fun buildThumbnailCacheRows(
 ) = listOf(
 	PlaybackInfoRowModel(
 		label = "Trickplay",
-		value = TrickplayTileSheetMemoryCache.stats(trickplayUrls).formatCacheStats(trickplayUrls.size),
+		value = PlayerThumbnailMemoryCache.stats(trickplayUrls).formatCacheStats(trickplayUrls.size),
 	),
 	PlaybackInfoRowModel(
 		label = "Chapters",
-		value = ChapterThumbnailMemoryCache.stats(chapterUrls).formatCacheStats(chapterUrls.size),
+		value = PlayerThumbnailMemoryCache.stats(chapterUrls).formatCacheStats(chapterUrls.size),
 	),
 )
 
-private fun TrickplayTileSheetMemoryStats.formatCacheStats(total: Int) =
+private fun PlayerThumbnailMemoryStats.formatCacheStats(total: Int) =
 	"$count/$total ${bytes.formatCacheBytes()}"
 
 private fun Long.formatCacheBytes() = "%.1f MiB".format(this / 1024.0 / 1024.0)

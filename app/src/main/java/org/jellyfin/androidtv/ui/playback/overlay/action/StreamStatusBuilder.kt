@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.ui.playback.getSubtitleMediaStreamCodec
 import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
+import org.jellyfin.androidtv.util.sdk.formatVideoRange
 import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
@@ -53,7 +54,6 @@ object StreamStatusBuilder {
 			row("ASS extractor", playbackController.subtitleExtractorDebug)
 			row("ASS render", playbackController.subtitleRenderDebug)
 			row("ASS parser", playbackController.subtitleParserDebug)
-			row("ASS path", playbackController.subtitlePathDebug)
 		}
 		row("Progress", TranscodingStatusFormatter.progress(transcodingInfo))
 		row("T speed", TranscodingStatusFormatter.speed(transcodingInfo))
@@ -95,7 +95,7 @@ object StreamStatusBuilder {
 
 		appendInline(resolution(stream))
 		appendInline(stream.codec?.uppercase())
-		appendInline(stream.videoRange.toString())
+		appendInline(formatVideoRange(stream.videoRangeType, stream.videoRange))
 		appendInline(stream.realFrameRate?.let { "%.3f fps".format(it) })
 		if (stream.isInterlaced) appendInline("Interlaced")
 	}

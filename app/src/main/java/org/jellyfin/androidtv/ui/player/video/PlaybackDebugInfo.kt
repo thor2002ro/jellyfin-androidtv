@@ -16,17 +16,25 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
+import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.ui.playback.appendInline
 import org.jellyfin.androidtv.ui.playback.appendStatusPart
 import org.jellyfin.androidtv.ui.playback.displayName
+import org.jellyfin.androidtv.util.sdk.formatVideoRange
 import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
+import org.jellyfin.playback.jellyfin.queue.baseItem
+import org.jellyfin.playback.jellyfin.queue.mediaSourceId
+import org.koin.compose.koinInject
+
+private const val TRANSCODING_STATUS_REFRESH_MS = 2_000L
 
 @Composable
 fun PlaybackDebugInfo(
@@ -36,6 +44,17 @@ fun PlaybackDebugInfo(
 	val entry by rememberQueueEntry(playbackManager)
 	val mediaStream by entry?.mediaStreamFlow?.collectAsState(null) ?: return
 	val stream = mediaStream ?: return
+	val transcodingStatusRepository = koinInject<TranscodingStatusRepository>()
+	val itemId = entry?.baseItem?.id
+	val mediaSourceId = entry?.mediaSourceId
+	var isVideoDirect by remember(stream.identifier, itemId, mediaSourceId) { mutableStateOf<Boolean?>(null) }
+	LaunchedEffect(stream.identifier, itemId, mediaSourceId, stream.conversionMethod) {
+		if (stream.conversionMethod != MediaConversionMethod.Transcode) return@LaunchedEffect
+		while (true) {
+			isVideoDirect = transcodingStatusRepository.getTranscodingInfo(itemId, mediaSourceId)?.isVideoDirect
+			delay(TRANSCODING_STATUS_REFRESH_MS)
+		}
+	}
 
 	var refreshTick by remember { mutableStateOf(0) }
 	LaunchedEffect(playbackManager.trackSelection) {
@@ -45,8 +64,8 @@ fun PlaybackDebugInfo(
 		}
 	}
 
-	val debugInfo = remember(stream, refreshTick) {
-		buildPlaybackDebugInfo(playbackManager, stream)
+	val debugInfo = remember(stream, refreshTick, isVideoDirect) {
+		buildPlaybackDebugInfo(playbackManager, stream, isVideoDirect)
 	}
 
 	if (debugInfo.isBlank()) return
@@ -68,6 +87,7 @@ fun PlaybackDebugInfo(
 private fun buildPlaybackDebugInfo(
 	playbackManager: PlaybackManager,
 	stream: MediaStream,
+	isVideoDirect: Boolean?,
 ): String = buildString {
 	val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
 	val audioTrack = stream.tracks.filterIsInstance<MediaStreamAudioTrack>().firstOrNull()
@@ -79,7 +99,7 @@ private fun buildPlaybackDebugInfo(
 		?.getAvailableTracks(TrackType.SUBTITLE)
 		?.firstOrNull(PlayerTrack::isSelected)
 
-	appendStatusPart(stream.conversionMethod.displayName())
+	appendStatusPart(stream.conversionMethod.displayName(isVideoDirect))
 	appendStatusPart(videoTrack.videoSummary())
 	appendStatusPart(audioTrack.audioSummary(selectedAudio))
 	appendStatusPart(selectedSubtitle.subtitleSummary())
@@ -91,7 +111,7 @@ private fun MediaStreamVideoTrack?.videoSummary(): String? {
 	return buildString {
 		if (width > 0 && height > 0) append("${width}x$height")
 		appendInline(codec.uppercase())
-		appendInline(videoRange)
+		appendInline(videoRange.formatVideoRange())
 	}
 }
 
