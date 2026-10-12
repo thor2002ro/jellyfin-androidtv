@@ -368,7 +368,6 @@
     <string name="random">ランダム</string>
     <string name="msg_playback_not_allowed">現在、再生を許可していません</string>
     <string name="msg_playback_restricted">管理者は現在このアイテムの再生を制限しています</string>
-    <string name="msg_live_tv_next">次の %1$d 時間を読み込みますか？</string>
     <string name="pref_playback_advanced">詳細な再生設定</string>
     <string name="server_issue_outdated_version">サーバーはサポートしていないバージョン（%1$s）を使用しています。バージョン %2$s 以降に更新してください</string>
     <string name="login_connect_to">%1$s に接続中</string>
@@ -424,7 +423,6 @@
     <string name="enable_smart_view">スマートスクリーンを有効に</string>
     <string name="desc_audio_night_mode">音量を自動的に調整します</string>
     <string name="lbl_subtitle_delay">字幕の遅延</string>
-    <string name="msg_live_tv_prev">前の %1$d 時間を読み込みますか？</string>
     <string name="server_issue_invalid_product">サーバーソフトウェアに互換性がありません</string>
     <string name="server_issue_timeout">接続タイムアウト</string>
     <string name="pref_libraries_description">ライブラリーの表示方法を変更</string>

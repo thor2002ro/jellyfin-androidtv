@@ -209,10 +209,17 @@ class QueueService internal constructor() : PlayerService(), Queue {
 		getOrSupplyEntry(it)
 	}
 
+	override fun peekPreviousCached(): QueueEntry? = currentQueueIndicesPlayed.lastOrNull()?.let(fetchedEntries::getOrNull)
+
 	override suspend fun peekNext(
 		usePlaybackOrder: Boolean,
 		useRepeatMode: Boolean,
 	): QueueEntry? = peekNext(1, usePlaybackOrder, useRepeatMode).firstOrNull()
+
+	override fun peekNextCached(
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): QueueEntry? = peekNextCached(1, usePlaybackOrder, useRepeatMode).firstOrNull()
 
 	override suspend fun peekNext(
 		amount: Int,
@@ -221,6 +228,24 @@ class QueueService internal constructor() : PlayerService(), Queue {
 	): Collection<QueueEntry> {
 		return getNextIndices(amount, usePlaybackOrder, useRepeatMode)
 			.mapNotNull { index -> getOrSupplyEntry(index) }
+	}
+
+	override fun peekNextCached(
+		amount: Int,
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): Collection<QueueEntry> {
+		if (amount <= 0) return emptyList()
+
+		return getNextIndices(amount, usePlaybackOrder, useRepeatMode)
+			.mapNotNull(fetchedEntries::getOrNull)
+	}
+
+	override fun hasNext(
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): Boolean {
+		return _entryIndex.value != Queue.INDEX_NONE && getNextIndices(1, usePlaybackOrder, useRepeatMode).isNotEmpty()
 	}
 }
 

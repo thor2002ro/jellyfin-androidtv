@@ -11,7 +11,6 @@
     <string name="no_program_data">Program verisi mevcut değil</string>
     <string name="msg_record_entire_series">Tüm sezon kaydedilsin mi\?</string>
     <string name="lbl_just_this_once">Sadece bu kez</string>
-    <string name="lbl_select_date">Tarih seç</string>
     <string name="lbl_in_x_days">%d günde</string>
     <string name="desc_premieres">İzlediğiniz herhangi bir seri için, bir sıra yeni bölüm pilot bölümleri göster</string>
     <string name="lbl_show_premieres">Sezon prömiyerlerini göster</string>
@@ -59,7 +58,6 @@
     <string name="msg_burn_sub_warning">Altyazılar gömülüyor. Bu işlem birkaç saniye sürebilir…</string>
     <string name="msg_unable_load_subs">Altyazı yüklenemedi</string>
     <string name="msg_subtitles_loading">Altyazılar yükleniyor…</string>
-    <string name="lbl_filters">Canlı TV filtreleri</string>
     <string name="lbl_ended">BİTTİ</string>
     <string name="lbl__continuing">DEVAM EDİYOR</string>
     <string name="lbl_display_preferences">Görüntüleme tercihleri</string>
@@ -203,9 +201,6 @@
     <string name="too_many_errors">Çok fazla hata. Bırakılıyor</string>
     <string name="player_error">Oynatıcı hatasıyla karşılaşıldı. Yeniden denenecek…</string>
     <string name="seek_error">Gezinilemiyor</string>
-    <string name="msg_live_tv_prev">Önceki %1$d saati yükle?</string>
-    <string name="msg_live_tv_next">Sıradaki %1$d saati yükle?</string>
-    <string name="lbl_load_guide_data">Rehber verilerini yükle</string>
     <string name="episode_missing_message_2">Bu bölüm kütüphanenizde eksik. Oynatma duracak.</string>
     <string name="episode_missing_message">Bu bölüm kütüphanenizde eksik. Bunu atlayıp bir sonrakine geçmek ister misiniz?</string>
     <string name="episode_missing">Bölüm eksik</string>
@@ -241,8 +236,6 @@
     <string name="lbl_new_episodes">Yeni bölümler</string>
     <string name="lbl_new_only">Sadece yeni</string>
     <string name="lbl_news">Yeniler</string>
-    <string name="lbl_tv_filter_status">sonraki %1$d saat için</string>
-    <string name="lbl_tv_channel_status">kanal %1$d / %2$d</string>
     <string name="lbl_song_title">Şarkı başlığı</string>
     <string name="lbl_album_name">Albüm ismi</string>
     <string name="lbl_next_episode">Sonraki bölüm</string>

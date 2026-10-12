@@ -185,9 +185,7 @@ class RewriteMediaManager(
 		playbackManager.state.setPlaybackOrder(newMode)
 	}
 
-	override fun hasNextAudioItem(): Boolean = runBlocking {
-		playbackManager.queue.peekNext() != null
-	}
+	override fun hasNextAudioItem(): Boolean = playbackManager.queue.hasNext()
 
 	override fun hasPrevAudioItem(): Boolean = playbackManager.queue.entryIndex.value > 0
 

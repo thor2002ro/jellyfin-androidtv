@@ -128,7 +128,6 @@
     <string name="msg_burn_sub_warning">Η ενσωμάτωση υποτίτλων στο βίντεο μπορεί να κρατήσει μερικά λεπτά. Παρακαλώ περιμένετε…</string>
     <string name="msg_unable_load_subs">Δεν μπορεί να φορτωθεί ο υπότιτλος</string>
     <string name="msg_subtitles_loading">Φόρτωση υποτίτλων…</string>
-    <string name="lbl_filters">Φίλτρα Ζωντανής Τηλεόρασης</string>
     <string name="lbl_ended">ΟΛΟΚΛΗΡΩΘΗΚΕ</string>
     <string name="lbl__continuing">ΣΥΝΕΧΙΖΕΤΑΙ</string>
     <string name="lbl_display_preferences">Προτιμήσεις οθόνης</string>
@@ -194,7 +193,6 @@
     <string name="lbl_sports">Αθλητικά</string>
     <string name="no_program_data">Δεν υπάρχουν διαθέσιμα δεδομένα προγράμματος</string>
     <string name="msg_record_entire_series">Εγγραφή ολόκληρης της σειράς;</string>
-    <string name="lbl_select_date">Επιλέξτε ημερομηνία</string>
     <string name="lbl_in_x_days">Σε %d μέρες</string>
     <string name="desc_premieres">Εμφάνιση μίας σειράς από νέα πιλοτικά επισόδια για οποιαδήποτε σειρά παρακολουθείτε</string>
     <string name="lbl_show_premieres">Εμφάνιζε τις πρεμιέρες των σεζόν</string>
@@ -228,8 +226,6 @@
     <string name="lbl_new_episodes">Νέα επεισόδια</string>
     <string name="lbl_new_only">Μόνο νέα</string>
     <string name="lbl_news">Νέα</string>
-    <string name="lbl_tv_filter_status">για τις επόμενες %1$d ώρες</string>
-    <string name="lbl_tv_channel_status">%1$d από %2$d κανάλια</string>
     <string name="lbl_recorded_tv">Εγγραφές TV</string>
     <string name="lbl_Reset">Επαναφορά</string>
     <string name="pref_button_remapping_description">Πατήστε οποιδήποτε κουμπί του τηλεχειριστηρίου για να το αναθέσετε</string>
@@ -247,7 +243,6 @@
     <string name="too_many_errors">Πάρα πολλά σφάλματα. Εγκατάλειψη</string>
     <string name="player_error">Σφάλμα προγράμματος αναπαραγωγής. Γίνεται ξανά απόπειρα…</string>
     <string name="seek_error">Αδυναμία αναζήτησης</string>
-    <string name="msg_live_tv_prev">Φόρτωση των προηγούμενων %1$d ωρών;</string>
     <string name="no_player_message">Δεν υπάρχει κάποια εφαρμογή για αναπαραγωγή βίντεο. Αυτή η επιλογή απαιτεί την εγκατάσταση κάποιας τρίτης εφαρμογής για την αναπαραγωγή περιεχομένου βίντεο.</string>
     <string name="no_player">Δεν υπάρχει πρόγραμμα αναπαραγωγής</string>
     <string name="mark_watched_message">Αυτό το αντικείμενο δεν φαίνεται να έχει αναπαραχθεί για διάστημα ίσο με τη διάρκεια του. Να επιλεχθεί ως \"έχει προβληθεί\";</string>
@@ -358,8 +353,6 @@
     <string name="lbl_playback_control_ends">Τελειώνει στις %1$s</string>
     <string name="audio_error">Δεν είναι δυνατή η αναπαραγωγή ήχου %1$s</string>
     <string name="subtitle_error">Δεν είναι δυνατή η επιλογή υποτίτλων</string>
-    <string name="msg_live_tv_next">Φόρτωση των επόμενων %1$d ωρών;</string>
-    <string name="lbl_load_guide_data">Φόρτωση δεδομένων πλοήγησης</string>
     <string name="episode_missing_message_2">Αυτό το επεισόδιο λείπει από τη βιβλιοθήκη σας. Η αναπαραγωγή θα σταματήσει.</string>
     <string name="episode_missing_message">Αυτό το επεισόδιο λείπει από τη βιβλιοθήκη σας. Θέλετε να το προσπεράσετε και να συνεχίσετε στο επόμενο;</string>
     <string name="episode_missing">Λείπει επεισόδιο</string>
