@@ -45,5 +45,7 @@ interface PlayerBackend {
 
 	fun setSpeed(speed: Float)
 
+	fun setSubtitleTiming(offset: Duration, speed: Float)
+
 	fun setTimedEvents(timedEvents: List<TimedEvent>)
 }

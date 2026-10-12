@@ -9,4 +9,8 @@ abstract class PlayerBackendEventListener {
 	open fun onVideoGeometryChange(geometry: VideoGeometry) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream) = Unit
 	open fun onTracksChanged() = Unit
+	open fun onSubtitleTimingOffsetSupportChange(
+		supported: Boolean,
+		resetTimingOnUnsupported: Boolean = true,
+	) = Unit
 }

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
+import org.jellyfin.playback.core.resetSubtitleTiming
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
@@ -83,6 +84,7 @@ internal class MediaStreamService(
 		val hasMediaStream = entry.ensureMediaStream()
 
 		if (hasMediaStream) {
+			manager.state.resetSubtitleTiming()
 			backend.playItem(entry)
 			return true
 		} else {

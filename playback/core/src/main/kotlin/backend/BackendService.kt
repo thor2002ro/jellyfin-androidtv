@@ -121,10 +121,14 @@ class BackendService {
 		override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
 			callListeners { onMediaStreamEnd(mediaStream) }
 		}
+
 		override fun onTracksChanged() {
 			callListeners { onTracksChanged() }
 		}
 
+		override fun onSubtitleTimingOffsetSupportChange(supported: Boolean, resetTimingOnUnsupported: Boolean) {
+			callListeners { onSubtitleTimingOffsetSupportChange(supported, resetTimingOnUnsupported) }
+		}
 	}
 
 	private fun <T> callListeners(
