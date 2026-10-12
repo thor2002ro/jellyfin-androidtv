@@ -19,6 +19,7 @@ import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.appendInline
 import org.jellyfin.androidtv.ui.playback.appendStatusPart
 import org.jellyfin.androidtv.ui.playback.displayName
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -101,7 +102,7 @@ private fun MediaStreamAudioTrack?.audioSummary(selectedTrack: PlayerTrack?): St
 		append("Audio:")
 		appendInline(selectedTrack?.codec?.uppercase() ?: this@audioSummary?.codec?.uppercase())
 		this@audioSummary?.channels?.takeIf { it > 0 }?.let { appendInline("${it}ch") }
-		appendInline(selectedTrack?.language)
+		appendInline(selectedTrack?.language.toIso2LanguageDisplayOrSelf())
 	}
 }
 
@@ -111,6 +112,6 @@ private fun PlayerTrack?.subtitleSummary(): String {
 	return buildString {
 		append("Sub:")
 		appendInline(codec?.uppercase())
-		appendInline(language)
+		appendInline(language.toIso2LanguageDisplayOrSelf())
 	}
 }

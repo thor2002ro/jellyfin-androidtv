@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.util
 
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
+import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.sdk.trackSelectionIds
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.MediaSourceInfo
@@ -55,6 +56,7 @@ object TrackSelectionResolver {
 	): Int? {
 		val itemIds = item.trackSelectionIds()
 		val streamIndex = TrackSelectionManager.getSelectedAudioTrack(itemIds) ?: return null
+		if (item.isLiveTv()) return streamIndex
 		if (mediaSource == null) return null
 		if (mediaSource.hasMediaStream(MediaStreamType.AUDIO, streamIndex)) return streamIndex
 
@@ -71,6 +73,7 @@ object TrackSelectionResolver {
 		val selection = TrackSelectionManager.getSelectedSubtitleTrackSelection(itemIds)
 		if (!selection.hasSelection) return selection
 		if (selection.trackIndex == -1) return selection
+		if (item.isLiveTv()) return selection
 		if (mediaSource == null) return TrackSelectionManager.TrackSelection(hasSelection = false, trackIndex = null)
 		if (selection.trackIndex != null && mediaSource.hasMediaStream(MediaStreamType.SUBTITLE, selection.trackIndex)) return selection
 
@@ -92,7 +95,7 @@ object TrackSelectionResolver {
 		streamIndex: Int?,
 	): MediaStream? {
 		val stream = mediaSource.findMediaStream(MediaStreamType.AUDIO, streamIndex)
-		if (streamIndex != null && stream == null) return null
+		if (streamIndex != null && stream == null && !item.isLiveTv()) return null
 
 		TrackSelectionManager.setSelectedAudioTracks(item.trackSelectionIds(), streamIndex)
 		videoQueueManager.setLastPlayedAudioLanguageIsoCode(stream?.language)
@@ -117,7 +120,13 @@ object TrackSelectionResolver {
 			return null
 		}
 
-		val stream = mediaSource.findMediaStream(MediaStreamType.SUBTITLE, selectedIndex) ?: return null
+		val stream = mediaSource.findMediaStream(MediaStreamType.SUBTITLE, selectedIndex)
+		if (stream == null) {
+			if (!item.isLiveTv()) return null
+
+			TrackSelectionManager.setSelectedSubtitleTracks(item.trackSelectionIds(), selectedIndex)
+			return null
+		}
 		TrackSelectionManager.setSelectedSubtitleTracks(item.trackSelectionIds(), selectedIndex)
 		videoQueueManager.setLastPlayedSubtitleLanguageIsoCode(stream.language)
 		videoQueueManager.setLastPlayedSubtitleForcedState(stream.isForced == true)
@@ -135,9 +144,9 @@ object TrackSelectionResolver {
 		val audioStreams = mediaSource.mediaStreamsOfType(MediaStreamType.AUDIO)
 
 		return audioStreams.firstOrNull { stream ->
-			stream.language == language && codec != null && stream.codec == codec
+			languageCodesMatch(stream.language, language) && codec != null && stream.codec == codec
 		}?.index ?: audioStreams.firstOrNull { stream ->
-			stream.language == language
+			languageCodesMatch(stream.language, language)
 		}?.index
 	}
 
@@ -145,29 +154,33 @@ object TrackSelectionResolver {
 		mediaSource: MediaSourceInfo?,
 		videoQueueManager: VideoQueueManager,
 	): Int? {
-		val language = videoQueueManager.getLastPlayedSubtitleLanguageIsoCode() ?: return null
-		if (language.isEmpty()) return -1
+		val languages = videoQueueManager.getLastPlayedSubtitleLanguageIsoCodes() ?: return null
+		if (languages.firstOrNull().orEmpty().isEmpty()) return -1
 
 		val forced = videoQueueManager.getLastPlayedSubtitleForcedState()
 		val codec = videoQueueManager.getLastPlayedSubtitleCodec()
 		val title = videoQueueManager.getLastPlayedSubtitleTitle()
 		val subtitleStreams = mediaSource.mediaStreamsOfType(MediaStreamType.SUBTITLE)
 
-		return subtitleStreams.firstOrNull { stream ->
-			stream.language == language &&
-				stream.isForced == forced &&
-				codec != null &&
-				stream.codec == codec &&
-				title != null &&
-				stream.matchesTitle(title)
-		}?.index ?: subtitleStreams.firstOrNull { stream ->
-			stream.language == language &&
-				stream.isForced == forced &&
-				codec != null &&
-				stream.codec == codec
-		}?.index ?: subtitleStreams.firstOrNull { stream ->
-			stream.language == language && stream.isForced == forced
-		}?.index
+		for (language in languages) {
+			val match = subtitleStreams.firstOrNull { stream ->
+				languageCodesMatch(stream.language, language) &&
+					stream.isForced == forced &&
+					codec != null &&
+					stream.codec == codec &&
+					title != null &&
+					stream.matchesTitle(title)
+			}?.index ?: subtitleStreams.firstOrNull { stream ->
+				languageCodesMatch(stream.language, language) &&
+					stream.isForced == forced &&
+					codec != null &&
+					stream.codec == codec
+			}?.index ?: subtitleStreams.firstOrNull { stream ->
+				languageCodesMatch(stream.language, language) && stream.isForced == forced
+			}?.index
+			if (match != null) return match
+		}
+		return null
 	}
 
 	private fun MediaSourceInfo?.findMediaStream(

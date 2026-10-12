@@ -20,6 +20,7 @@ import org.jellyfin.androidtv.ui.playback.external.ExternalPlayResult
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.util.componentName
 import org.jellyfin.androidtv.util.sdk.getDisplayName
+import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.playStateApi
 import org.jellyfin.sdk.api.client.extensions.subtitleApi
@@ -162,7 +163,8 @@ class ExternalPlayerActivity : FragmentActivity() {
 					ExternalPlayData.Subtitle(
 						mediaStream = mediaStream,
 						url = url,
-						name = mediaStream.displayTitle ?: mediaStream.title,
+						name = mediaStream.displayTitle.withoutUndeterminedLanguagePrefix()
+							?: mediaStream.title.withoutUndeterminedLanguagePrefix(),
 						language = mediaStream.language
 					)
 				},

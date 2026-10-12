@@ -35,11 +35,15 @@ import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButton
+import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.ui.base.popover.Popover
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.overlay.action.formatSubtitleOffsetSeconds
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.sdk.isLiveTv
+import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
+import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
@@ -57,7 +61,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 private val POPOVER_VERTICAL_OFFSET = 5.dp
@@ -189,6 +192,7 @@ private fun PlaybackManager.saveSelectedAudioTrack(
 	val item = entry?.baseItem ?: return
 	val mediaSource = item.findMediaSource(entry.mediaSourceId)
 	TrackSelectionResolver.storeSelectedAudioTrack(item, mediaSource, videoQueueManager, streamIndex)
+	LiveTvTrackCache.updateSelectedAudioTrack(item.liveTvChannelId(), streamIndex)
 }
 
 private fun PlaybackManager.saveSelectedSubtitleTrack(
@@ -199,6 +203,7 @@ private fun PlaybackManager.saveSelectedSubtitleTrack(
 	val item = entry?.baseItem ?: return
 	val mediaSource = item.findMediaSource(entry.mediaSourceId)
 	TrackSelectionResolver.storeSelectedSubtitleTrack(item, mediaSource, videoQueueManager, streamIndex)
+	LiveTvTrackCache.updateSelectedSubtitleTrack(item.liveTvChannelId(), streamIndex)
 }
 
 private fun BaseItemDto.findMediaSource(mediaSourceId: String?) = mediaSources
@@ -377,15 +382,13 @@ private fun SubtitleOffsetControls(
 
 private val PlayerTrack.displayLabel: String
 	get() {
-		val languageName = language?.let { code ->
-			Locale.forLanguageTag(code).displayLanguage.takeIf { it.isNotBlank() && it != code }
-		}
+		val displayLanguage = language.toIso2LanguageDisplayOrSelf()
+		val displayLabel = label.withoutUndeterminedLanguagePrefix()
 
 		return buildString {
 			when {
-				!label.isNullOrBlank() -> append(label)
-				languageName != null -> append(languageName)
-				!language.isNullOrBlank() -> append(language)
+				displayLabel != null -> append(displayLabel)
+				!displayLanguage.isNullOrBlank() -> append(displayLanguage)
 				else -> append("Track ${index + 1}")
 			}
 		}
