@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import `is`.xyz.mpv.BuildConfig as LibMPVBuildConfig
+import `is`.xyz.mpv.Utils
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Icon
@@ -56,6 +58,29 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 				captionContent = { Text(caption) },
 				onClick = copyAction(ClipData.newPlainText(heading, caption)),
 				modifier = Modifier.focusKey("device_model")
+			)
+		}
+
+		item {
+			val heading = "Main library versions"
+			val caption = listOf(
+				"Media3 ${BuildConfig.MEDIA3_VERSION}",
+				"Media3 FFmpeg decoder ${BuildConfig.MEDIA3_FFMPEG_DECODER_VERSION}",
+				"FFmpeg ${BuildConfig.FFMPEG_VERSION}",
+				"libyuv ${BuildConfig.LIBYUV_VERSION}",
+				"libdovi-android ${BuildConfig.LIBDOVI_ANDROID_VERSION}",
+				"libdovi ${BuildConfig.LIBDOVI_VERSION}",
+				"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
+				"libass ${BuildConfig.LIBASS_VERSION}",
+				"libVLC ${BuildConfig.LIBVLC_VERSION}",
+				"mpv-android-lib ${LibMPVBuildConfig.VERSION}",
+				"libMPV ${Utils.VERSIONS.mpv}",
+			).joinToString("\n")
+			ListButton(
+				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },
+				headingContent = { Text(heading) },
+				captionContent = { Text(caption) },
+				onClick = copyAction(ClipData.newPlainText(heading, caption)),
 			)
 		}
 
