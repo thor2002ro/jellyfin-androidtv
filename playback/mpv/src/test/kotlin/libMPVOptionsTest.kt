@@ -686,11 +686,6 @@ class LibMPVOptionsTest : StringSpec({
 		)
 	}
 
-	"missing MPV stats use a retry backoff" {
-		shouldReadLibMPVStatProperty(lastMissNanos = null, nowNanos = 100, retryNanos = 10) shouldBe true
-		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 109, retryNanos = 10) shouldBe false
-		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 110, retryNanos = 10) shouldBe true
-	}
 
 	"typed profile and universal controls cannot be replaced by expert overrides" {
 		isLibMPVOptionManagedByJellyfin("speed") shouldBe true
