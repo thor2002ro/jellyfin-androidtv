@@ -38,6 +38,8 @@ class LiveTvPlaybackPolicy(
 		else -> false
 	}
 
+	internal fun isLiveTv(entry: QueueEntry): Boolean = entry.baseItem?.let(::isLiveTv) == true
+
 	fun getPlaybackOptions(item: BaseItemDto): PlaybackOptions {
 		if (!isLiveTv(item)) {
 			return PlaybackOptions(

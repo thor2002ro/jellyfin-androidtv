@@ -21,6 +21,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class LiveTvPlaybackRecoveryService(
 	private val liveTvPlaybackPolicy: LiveTvPlaybackPolicy,
+	private val networkAvailable: () -> Boolean = { true },
 ) : PlayerService() {
 	private var stalledBufferRecoveryJob: Job? = null
 
