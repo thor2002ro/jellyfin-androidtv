@@ -152,6 +152,8 @@ internal fun PlayerVideoOutput(
 	val playState by playbackManager.state.playState.collectAsState()
 	val videoGeometry by playbackManager.state.videoGeometry.collectAsState()
 	val currentEntry by playbackManager.queue.entry.collectAsState()
+	val preparingEntry by playbackManager.preparingEntry?.collectAsState()
+		?: remember { mutableStateOf(null) }
 	val networkRecoveryService = remember(playbackManager) {
 		playbackManager.getService<NetworkPlaybackRecoveryService>()
 	}
@@ -216,7 +218,10 @@ internal fun PlayerVideoOutput(
 		)
 
 		VideoBufferingIndicator(
-			visible = showBufferingIndicator && (playState == PlayState.BUFFERING || networkRecovering),
+			visible = showBufferingIndicator && (
+				playState == PlayState.BUFFERING || networkRecovering ||
+				(preparingEntry != null && preparingEntry === currentEntry)
+			),
 			modifier = Modifier.align(Alignment.Center),
 		)
 	}

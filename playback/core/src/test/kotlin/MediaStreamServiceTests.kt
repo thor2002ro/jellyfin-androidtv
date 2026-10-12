@@ -165,6 +165,39 @@ class MediaStreamServiceTests : FunSpec({
 		verify(exactly = 0) { fixture.backend.stop() }
 	}
 
+	test("startup loading covers stream resolution and display preparation and clears on cancellation") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		val preparing = CompletableDeferred<Unit>()
+		val ready = CompletableDeferred<Boolean>()
+		fixture.manager.options.beforePlayItem = {
+			preparing.complete(Unit)
+			ready.await()
+		}
+		coroutineScope {
+			val startup = async(start = CoroutineStart.UNDISPATCHED) { fixture.service.playEntry(fixture.first) }
+			fixture.resolver.started.await()
+			fixture.manager.preparingEntry?.value shouldBeSameInstanceAs fixture.first
+			fixture.resolver.response.complete(fixture.firstStream)
+			preparing.await()
+			fixture.manager.preparingEntry?.value shouldBeSameInstanceAs fixture.first
+			verify(exactly = 0) { fixture.backend.playItem(any()) }
+			ready.complete(true)
+			startup.await() shouldBe true
+			fixture.manager.preparingEntry?.value shouldBe null
+			verify(exactly = 1) { fixture.backend.playItem(fixture.first) }
+
+			val neverReady = CompletableDeferred<Boolean>()
+			fixture.manager.options.beforePlayItem = { neverReady.await() }
+			val cancelled = async(start = CoroutineStart.UNDISPATCHED) { fixture.service.playEntry(fixture.first) }
+			fixture.manager.preparingEntry?.value shouldBeSameInstanceAs fixture.first
+			cancelled.cancel()
+			cancelled.join()
+			fixture.manager.preparingEntry?.value shouldBe null
+		}
+	}
+
 	test("stream replacement waits for window preparation and rejects a stop during the wait") {
 		val fixture = ReloadFixture()
 		fixture.selectFirst()
@@ -377,9 +410,10 @@ private class ReloadFixture(resolverOverride: MediaStreamResolver? = null) {
 	val backend = mockk<PlayerBackend>(relaxed = true)
 	val resolver = DelayedResolver()
 	val queue = QueueService()
+	val service = MediaStreamService(listOf(resolverOverride ?: resolver), Duration.ZERO)
 	val manager = PlaybackManager(
 		backend = backend,
-		services = mutableListOf(queue, MediaStreamService(listOf(resolverOverride ?: resolver), Duration.ZERO)),
+		services = mutableListOf(queue, service),
 		options = PlaybackManagerOptions(NoOpPlayerVolumeState(), { 10.seconds }, { 10.seconds }),
 		// These tests drive queue selection and reload directly, without background playback services.
 		parentJob = Job().apply { cancel() },

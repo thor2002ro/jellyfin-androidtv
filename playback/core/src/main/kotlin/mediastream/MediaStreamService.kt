@@ -2,6 +2,8 @@ package org.jellyfin.playback.core.mediastream
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -31,6 +33,8 @@ internal class MediaStreamService(
 		private const val TIMED_EVENT_PRELOAD = "MediaStreamServicePreloadNext"
 	}
 	private var latestStreamRequest: Any? = null
+	private val _preparingEntry = MutableStateFlow<QueueEntry?>(null)
+	val preparingEntry = _preparingEntry.asStateFlow()
 
 	override suspend fun onInitialize() {
 		manager.queue.entry.onEach { entry ->
@@ -94,7 +98,16 @@ internal class MediaStreamService(
 		)
 	}
 
-	private suspend fun playEntry(entry: QueueEntry): Boolean {
+	internal suspend fun playEntry(entry: QueueEntry): Boolean {
+		_preparingEntry.value = entry
+		return try {
+			resolveAndPlayEntry(entry)
+		} finally {
+			_preparingEntry.value = null
+		}
+	}
+
+	private suspend fun resolveAndPlayEntry(entry: QueueEntry): Boolean {
 		val backend = requireNotNull(manager.backend)
 		val queue = requireNotNull(manager.getService<QueueService>())
 		val entryRevision = queue.entryRevision
