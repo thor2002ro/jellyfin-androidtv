@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.util.profile
 
+import android.content.Context
 import android.util.Size
 import androidx.media3.common.MimeTypes
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
@@ -13,10 +14,23 @@ import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
 import io.mockk.unmockkConstructor
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import org.jellyfin.androidtv.constant.Codec
+import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.constant.AudioBehavior
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
+import org.jellyfin.androidtv.preference.constant.HdrFormat
+import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
+import org.jellyfin.androidtv.preference.playbackBackend
+import org.jellyfin.androidtv.preference.mpvAudioPreset
+import org.jellyfin.androidtv.preference.mpvAudioOutput
+import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioPresetOption
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioOutput
+import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.CodecType
 import org.jellyfin.sdk.model.api.DlnaProfileType
@@ -36,12 +50,48 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		unmockkStatic(FfmpegLibrary::class)
 	}
 
+	test("server profile honors forced codec families without detected support or local decoders") {
+		val codecsByFormat = mapOf(
+			BitstreamAudioFormat.AC3 to setOf(Codec.Audio.AC3),
+			BitstreamAudioFormat.EAC3 to setOf(Codec.Audio.EAC3),
+			BitstreamAudioFormat.DTS to setOf(Codec.Audio.DCA, Codec.Audio.DTS),
+			BitstreamAudioFormat.TRUEHD to setOf(Codec.Audio.MLP, Codec.Audio.TRUEHD),
+		)
+		for ((format, codecs) in codecsByFormat) for (mode in BitstreamAudioMode.entries) {
+			val preferences = mockk<UserPreferences>()
+			every { preferences[UserPreferences.audioNightMode] } returns false
+			for (entry in BitstreamAudioFormat.entries) {
+				every { preferences[entry.preference] } returns if (entry == format) mode else BitstreamAudioMode.AUTO
+			}
+			val resolved = preferences.profilePassthroughAudioCodecs(emptySet())
+			resolved shouldBe if (mode == BitstreamAudioMode.ENABLE) codecs else emptySet()
+			val announced = deviceProfile(passthroughAudioCodecs = resolved).announcedAudioCodecs()
+			for (codec in codecs) (codec in announced) shouldBe (mode == BitstreamAudioMode.ENABLE)
+			val downmixed = deviceProfile(downMixAudio = true, passthroughAudioCodecs = resolved).announcedAudioCodecs()
+			for (codec in codecs) (codec in downmixed) shouldBe false
+		}
+	}
+
+	test("forced EAC3 respects disabled AC3 and detected codec aliases survive auto mode") {
+		val preferences = mockk<UserPreferences>()
+		every { preferences[UserPreferences.audioNightMode] } returns false
+		for (entry in BitstreamAudioFormat.entries) {
+			every { preferences[entry.preference] } returns BitstreamAudioMode.AUTO
+		}
+		preferences.profilePassthroughAudioCodecs(setOf(MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_DTS_HD)) shouldBe
+			setOf(Codec.Audio.EAC3, Codec.Audio.DCA, Codec.Audio.DTS)
+		every { preferences[UserPreferences.bitstreamAc3] } returns BitstreamAudioMode.DISABLE
+		every { preferences[UserPreferences.bitstreamEac3] } returns BitstreamAudioMode.ENABLE
+		preferences.profilePassthroughAudioCodecs(emptySet()) shouldBe emptySet()
+	}
+
 	test("MPV profile uses carrier-probed passthrough support") {
 		mockkStatic(::getSupportedPassthroughAudioMimes)
 		mockkStatic(::getSupportedMPVPassthroughAudioMimes)
 		try {
 			val context = mockk<Context>()
 			val preferences = mockk<UserPreferences>()
+			every { preferences[UserPreferences.audioNightMode] } returns false
 			mockkConstructor(Size::class)
 			every { anyConstructed<Size>().width } returns 0
 			every { anyConstructed<Size>().height } returns 0
@@ -56,6 +106,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 			every { preferences[UserPreferences.audioBehaviour] } returns AudioBehavior.TRANSCODE_TO_PASSTHROUGH
 			every { preferences[UserPreferences.mpvAudioPreset] } returns LibMPVAudioPresetOption.OFF
 			every { preferences[UserPreferences.mpvAudioOutput] } returns LibMPVAudioOutput.AUDIOTRACK
+			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns false
 			every { preferences[UserPreferences.maxBitrate] } returns "100"
 			every { preferences[UserPreferences.maxResolution] } returns PlaybackResolution.NATIVE
 			every { preferences[UserPreferences.assDirectPlay] } returns true
@@ -83,6 +134,25 @@ class DeviceProfileCompatibilityTests : FunSpec({
 						condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
 					}
 			} shouldBe true
+			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns true
+			val localProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+			(Codec.Audio.EAC3 in localProfile.announcedAudioCodecs()) shouldBe true
+			localProfile.codecProfiles.any { codecProfile ->
+				codecProfile.type == CodecType.VIDEO_AUDIO &&
+					Codec.Audio.EAC3 in codecProfile.codec.declarations() &&
+					codecProfile.conditions.any { condition ->
+						condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
+					}
+			} shouldBe false
+			localProfile.codecProfiles.filter { it.type == CodecType.VIDEO } shouldBe
+				profile.codecProfiles.filter { it.type == CodecType.VIDEO }
+			every { getSupportedMPVPassthroughAudioMimes(context, any()) } returns setOf(MimeTypes.AUDIO_E_AC3)
+			val gatedProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns false
+			val serverProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+			gatedProfile.codecProfiles shouldBe serverProfile.codecProfiles
+			gatedProfile.transcodingProfiles shouldBe serverProfile.transcodingProfiles
+			every { getSupportedMPVPassthroughAudioMimes(context, any()) } returns setOf(MimeTypes.AUDIO_AC3)
 			for (disabledBy in listOf("preset", "downmix", "codec switches")) {
 				every { preferences[UserPreferences.mpvAudioPreset] } returns
 					if (disabledBy == "preset") LibMPVAudioPresetOption.CINEMA_SPATIAL else LibMPVAudioPresetOption.OFF
@@ -99,7 +169,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 						it.conditions.any { condition -> condition.property == ProfileConditionValue.AUDIO_CHANNELS }
 				} shouldBe false
 			}
-			verify(exactly = 1) { getSupportedMPVPassthroughAudioMimes(context, any()) }
+			verify(exactly = 4) { getSupportedMPVPassthroughAudioMimes(context, any()) }
 			verify(exactly = 0) { getSupportedPassthroughAudioMimes(context, any()) }
 		} finally {
 			unmockkStatic(::getSupportedMPVPassthroughAudioMimes)
@@ -211,6 +281,20 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		profile.codecProfiles.filter { it.type == CodecType.VIDEO_AUDIO }.flatMap { it.conditions }
 			.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "8"
 	}
+
+	test("MPV stereo downmix retains native audio codecs and multichannel input") {
+		val profile = deviceProfile(
+			downMixAudio = true,
+			enableFfmpegAudio = false,
+			enableMpvAudio = true,
+			passthroughAudioCodecs = emptySet(),
+		)
+
+		profile.announcedAudioCodecs().containsAll(listOf("ac3", "eac3", "dts", "truehd")) shouldBe true
+		profile.codecProfiles.filter { it.type == CodecType.VIDEO_AUDIO }.flatMap { it.conditions }
+			.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "8"
+	}
+
 	test("standalone audio downmix does not advertise channels beyond the local mixer limit") {
 		val profile = deviceProfile(downMixAudio = true)
 		profile.codecProfiles.filter { it.type == CodecType.AUDIO }.flatMap { it.conditions }
@@ -233,6 +317,108 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		profile.announcedAudioCodecs().toSet() shouldBe setOf("aac", "mp2", "mp3")
 	}
 
+	test("surround conversion uses route passthrough codecs for multichannel audio") {
+		val profile = deviceProfile(
+			enableMpvAudio = true,
+			transcodeToPassthrough = true,
+			passthroughAudioCodecs = setOf(Codec.Audio.AC3, Codec.Audio.DCA, Codec.Audio.DTS),
+		)
+
+		profile.videoTranscodeProfiles(Codec.Container.TS).first().run {
+			audioCodec.declarations() shouldBe listOf(Codec.Audio.AC3)
+			maxAudioChannels shouldBe null
+		}
+		profile.videoTranscodeProfiles(Codec.Container.MP4).first().run {
+			audioCodec.declarations() shouldBe listOf(Codec.Audio.AC3, Codec.Audio.DTS)
+			maxAudioChannels shouldBe null
+		}
+		profile.videoTranscodeProfiles(Codec.Container.TS).last().audioCodec.declarations() shouldBe
+			listOf(Codec.Audio.AAC, Codec.Audio.EAC3, Codec.Audio.MP3)
+		profile.videoTranscodeProfiles(Codec.Container.MP4).last().audioCodec.declarations() shouldBe
+			listOf(Codec.Audio.AAC, Codec.Audio.EAC3, Codec.Audio.MP3, Codec.Audio.ALAC, Codec.Audio.FLAC, Codec.Audio.OPUS)
+		profile.codecProfiles.single { codecProfile ->
+			codecProfile.type == CodecType.VIDEO_AUDIO && codecProfile.codec.declarations().contains(Codec.Audio.AAC)
+		}.run {
+			codec.declarations().containsAll(listOf(Codec.Audio.AAC, Codec.Audio.FLAC, Codec.Audio.OPUS)) shouldBe true
+			codec.declarations().any { it in setOf(Codec.Audio.AC3, Codec.Audio.DCA, Codec.Audio.DTS) } shouldBe false
+			conditions.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "2"
+		}
+	}
+
+	test("DTS-only conversion rejects unsupported DTS-HD while allowing six channel core output") {
+		val profile = deviceProfile(
+			transcodeToPassthrough = true,
+			supportsDtsHdPassthrough = false,
+			passthroughAudioCodecs = setOf(Codec.Audio.DCA, Codec.Audio.DTS),
+		)
+
+		profile.codecProfiles.single { codecProfile ->
+			codecProfile.type == CodecType.VIDEO_AUDIO &&
+				codecProfile.codec.declarations().contains(Codec.Audio.DTS) &&
+				codecProfile.conditions.any { it.property == ProfileConditionValue.AUDIO_PROFILE }
+		}.run {
+			conditions.single { it.property == ProfileConditionValue.AUDIO_CHANNELS }.value shouldBe "6"
+			conditions.filter { it.property == ProfileConditionValue.AUDIO_PROFILE }.map { it.value }.toSet() shouldBe
+				setOf("DTS-HD HRA", "DTS-HD MA")
+			conditions.filter { it.property == ProfileConditionValue.AUDIO_PROFILE }.all {
+				it.condition == ProfileConditionType.NOT_EQUALS
+			} shouldBe true
+			applyConditions.isEmpty() shouldBe true
+		}
+	}
+
+	test("DTS-only surround conversion prefers fMP4 and keeps the MPEG-TS fallback") {
+		val profile = deviceProfile(
+			transcodeToPassthrough = true,
+			passthroughAudioCodecs = setOf(Codec.Audio.DCA, Codec.Audio.DTS),
+		)
+
+		profile.transcodingProfiles
+			.filter { it.type == DlnaProfileType.VIDEO }
+			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.TS, Codec.Container.MP4)
+		profile.videoTranscodeProfiles(Codec.Container.MP4).first().run {
+			audioCodec.declarations().first() shouldBe Codec.Audio.DTS
+			maxAudioChannels shouldBe null
+		}
+		profile.videoTranscodeProfile(Codec.Container.TS).audioCodec.declarations().first() shouldBe Codec.Audio.AAC
+	}
+
+	test("surround conversion leaves supported DTS-HD and EAC3 7.1 unrestricted") {
+		val profile = deviceProfile(
+			transcodeToPassthrough = true,
+			passthroughAudioCodecs = setOf(Codec.Audio.AC3, Codec.Audio.EAC3, Codec.Audio.DCA, Codec.Audio.DTS),
+		)
+		profile.transcodingProfiles.filter { it.type == DlnaProfileType.VIDEO }.all { it.maxAudioChannels == null } shouldBe true
+		profile.videoTranscodeProfiles(Codec.Container.MP4).last().audioCodec.declarations().contains(Codec.Audio.EAC3) shouldBe true
+		profile.codecProfiles.single {
+			it.type == CodecType.VIDEO_AUDIO && it.codec.declarations().toSet() == setOf(Codec.Audio.DCA, Codec.Audio.DTS)
+		}.run {
+			conditions.single().value shouldBe "6"
+			applyConditions.map { it.value }.toSet() shouldBe setOf("DTS-HD HRA", "DTS-HD MA")
+			applyConditions.all { it.condition == ProfileConditionType.NOT_EQUALS } shouldBe true
+		}
+		profile.codecProfiles.single { it.type == CodecType.VIDEO_AUDIO && it.codec == Codec.Audio.AC3 }
+			.conditions.single().value shouldBe "6"
+	}
+
+	test("surround conversion keeps the normal profile without an encodable route codec") {
+		val profile = deviceProfile(
+			transcodeToPassthrough = true,
+			passthroughAudioCodecs = setOf(Codec.Audio.AC4),
+		)
+
+		profile.videoTranscodeProfile(Codec.Container.TS).run {
+			audioCodec.declarations().first() shouldBe Codec.Audio.AAC
+			maxAudioChannels shouldBe null
+		}
+		profile.codecProfiles.any { codecProfile ->
+			codecProfile.type == CodecType.VIDEO_AUDIO && codecProfile.codec.isNullOrBlank().not() &&
+				codecProfile.conditions.any { condition ->
+					condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
+				}
+		} shouldBe false
+	}
+
 	test("fMP4 audio codecs have individual remux profiles") {
 		val profile = deviceProfile()
 
@@ -249,7 +435,6 @@ class DeviceProfileCompatibilityTests : FunSpec({
 				Codec.Audio.FLAC,
 				Codec.Audio.OPUS,
 				Codec.Audio.DTS,
-				Codec.Audio.TRUEHD,
 			)
 	}
 
@@ -600,7 +785,10 @@ class DeviceProfileCompatibilityTests : FunSpec({
 
 private fun deviceProfile(
 	enableFfmpegAudio: Boolean = true,
+	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
+	transcodeToPassthrough: Boolean = false,
+	supportsDtsHdPassthrough: Boolean = true,
 	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
 	downMixAudio: Boolean = false,
 	ac3: Boolean = true,
@@ -679,7 +867,10 @@ private fun deviceProfile(
 		forceEnabledHdr = forceEnabledHdr,
 		forceDisabledHdr = forceDisabledHdr,
 		passthroughAudioCodecs = passthroughAudioCodecs,
+		transcodeToPassthrough = transcodeToPassthrough,
+		supportsDtsHdPassthrough = supportsDtsHdPassthrough,
 		enableFfmpegAudio = enableFfmpegAudio,
+		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
 	)
 }
@@ -689,6 +880,10 @@ private fun DeviceProfile.generalAudioProfile() = directPlayProfiles.single { pr
 }
 
 private fun DeviceProfile.videoTranscodeProfile(container: String) = transcodingProfiles.single { profile ->
+	profile.type == DlnaProfileType.VIDEO && profile.container == container
+}
+
+private fun DeviceProfile.videoTranscodeProfiles(container: String) = transcodingProfiles.filter { profile ->
 	profile.type == DlnaProfileType.VIDEO && profile.container == container
 }
 

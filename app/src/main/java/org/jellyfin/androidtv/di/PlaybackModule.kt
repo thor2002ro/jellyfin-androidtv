@@ -19,6 +19,8 @@ import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
+import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCDecoder
 import org.jellyfin.androidtv.preference.mpvDecoder
@@ -39,6 +41,7 @@ import org.jellyfin.androidtv.util.DeviceGraphicsInfoProvider
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.androidtv.util.AndroidVersion
+import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
@@ -46,8 +49,10 @@ import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.DoviPlaybackNegotiationStore
 import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.getSupportedMPVPassthroughAudioMimes
 import org.jellyfin.androidtv.util.profile.softwareCodecsEnabledForProfile
 import org.jellyfin.playback.core.playbackManager
+import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.plugin.playbackPlugin
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.dovi.doviTransformationSuppressed
@@ -113,6 +118,7 @@ private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
 	val userPreferences = get<UserPreferences>()
 	val exoPlayerOptions = ExoPlayerOptions(
 		isAudioPassthroughEnabled = userPreferences::isAudioPassthroughEnabled,
+		downmixToStereo = { userPreferences[UserPreferences.audioBehaviour] == AudioBehavior.DOWNMIX_TO_STEREO },
 		surroundVolumeBoost = { userPreferences[UserPreferences.surroundVolumeBoost] },
 		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
 		preferFfmpegAudioForLiveTv = { userPreferences[UserPreferences.preferExoPlayerFfmpegAudioForLiveTv] },

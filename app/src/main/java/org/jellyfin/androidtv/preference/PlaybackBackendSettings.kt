@@ -3,13 +3,13 @@ package org.jellyfin.androidtv.preference
 import org.jellyfin.androidtv.preference.constant.LibVLCDeblocking
 import org.jellyfin.androidtv.preference.constant.LibVLCDecoder
 import org.jellyfin.androidtv.preference.constant.libVLCPlaybackOptions
-import org.jellyfin.androidtv.preference.constant.mpvPlaybackOptions
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.libvlc.LibVLCBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.playback.mpv.LibMPVBackend
 import org.jellyfin.playback.mpv.LibMPVOptionInfo
+import org.jellyfin.playback.mpv.LibMPVPlaybackOptions
 import org.jellyfin.playback.mpv.isLibMPVOptionManagedByJellyfin
 import org.jellyfin.playback.mpv.parseLibMPVOptionOverrides
 import org.jellyfin.playback.mpv.serializeLibMPVOptionOverrides
@@ -53,6 +53,7 @@ class LibVLCBackendSettings(
 class LibMPVBackendSettings(
 	private val userPreferences: UserPreferences,
 	private val backend: LibMPVBackend,
+	private val playbackOptionsProvider: () -> LibMPVPlaybackOptions,
 ) {
 	fun applyPreferences(clearOverrides: Set<String> = emptySet()) {
 		val storedOverrides = userPreferences[UserPreferences.mpvOptionOverrides]
@@ -65,7 +66,7 @@ class LibMPVBackendSettings(
 		}
 		backend.setConfiguration(
 			decoder = userPreferences[UserPreferences.mpvDecoder].decoder,
-			options = userPreferences.mpvPlaybackOptions(),
+			options = playbackOptionsProvider(),
 		)
 	}
 

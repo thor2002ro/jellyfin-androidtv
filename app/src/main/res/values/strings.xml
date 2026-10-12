@@ -130,6 +130,7 @@
     <string name="msg_cancel_entire_series">Are you sure you want to cancel this ENTIRE SERIES?</string>
     <string name="pref_audio_direct">Direct</string>
     <string name="pref_audio_compat">Downmix to stereo</string>
+    <string name="pref_audio_surround_compat">Convert to supported surround</string>
     <string name="pref_audio_night_mode">Audio night mode (experimental)</string>
     <string name="lbl_audio_output">Audio output</string>
     <string name="lbl_goto_series">Go to series</string>
@@ -794,6 +795,8 @@
     <string name="lbl_bitstream_eac3">Bitstream Dolby Digital Plus</string>
     <string name="lbl_bitstream_dts">Bitstream Digital Theater System</string>
     <string name="lbl_bitstream_truehd">Bitstream Dolby TrueHD</string>
+    <string name="lbl_passthrough_supported_formats">Supported: %1$s</string>
+    <string name="lbl_passthrough_unsupported">Unsupported by current audio output</string>
     <string name="preference_save_failed">Unable to save setting. Check your Jellyfin server connection.</string>
     <string name="pref_surround_volume_boost">Surround volume boost</string>
     <string name="pref_surround_volume_boost_summary">Boost locally decoded surround audio, including stereo downmix. Higher levels may distort loud passages.</string>

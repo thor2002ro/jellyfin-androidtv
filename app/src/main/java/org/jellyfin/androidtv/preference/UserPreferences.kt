@@ -148,7 +148,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Preferred behavior for audio streaming.
 		 */
-		var audioNightMode = enumPreference("audio_night_mode", true)
+		var audioNightMode = enumPreference("audio_night_mode", false)
 
 		/**
 		 * AC3 bitstream device profile override.

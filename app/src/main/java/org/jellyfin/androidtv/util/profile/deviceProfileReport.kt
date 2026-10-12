@@ -167,14 +167,6 @@ fun createDeviceProfileReport(
 		}
 	}
 
-	appendDetails("Audio passthrough capabilities") {
-		appendLine("***AC3 (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_AC3)}")
-		appendLine("***EAC3 (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_E_AC3)}")
-		appendLine("***DTS (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_DTS)}")
-		appendLine("***TrueHD (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_TRUEHD)}")
-		appendLine()
-	}
-
 	appendDetails("Known media types") {
 		codecs
 			.flatMap { codec -> codec.supportedTypes.asIterable() }
@@ -301,12 +293,18 @@ fun createDeviceProfileReport(
 	}
 
 	appendSection("Audio Passthrough Capabilities") {
-		appendLine("***AC3 (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_AC3)}")
-		appendLine("***EAC3 (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_E_AC3)}")
-		appendLine("***EAC3-JOC (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_E_AC3_JOC)}")
-		appendLine("***DTS (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_DTS)}")
-		appendLine("***DTS-HD (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_DTS_HD)}")
-		appendLine("***TrueHD (2.0)***: ${isPassthroughAudioAvailable(context, MimeTypes.AUDIO_TRUEHD)}")
+		val formats = mapOf(
+			"AC3" to MimeTypes.AUDIO_AC3,
+			"EAC3" to MimeTypes.AUDIO_E_AC3,
+			"EAC3-JOC" to MimeTypes.AUDIO_E_AC3_JOC,
+			"DTS" to MimeTypes.AUDIO_DTS,
+			"DTS-HD" to MimeTypes.AUDIO_DTS_HD,
+			"TrueHD" to MimeTypes.AUDIO_TRUEHD,
+		)
+		val supportedMimes = getSupportedPassthroughAudioMimes(context, formats.values)
+		for ((label, mime) in formats) {
+			appendLine("***$label (2.0)***: ${mime in supportedMimes}")
+		}
 		appendLine()
 	}
 }
