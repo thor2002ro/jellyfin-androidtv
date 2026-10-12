@@ -541,6 +541,13 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		else -> query?.nameStartsWith
 	}
 
+	internal fun alphabetCountRequest(): Any? = when (queryType) {
+		QueryType.Items -> query?.let { it.copy(userId = it.userId ?: userRepository.currentUser.value?.id) }
+		QueryType.Artists -> artistsQuery?.let { it.copy(userId = it.userId ?: userRepository.currentUser.value?.id) }
+		QueryType.AlbumArtists -> albumArtistsQuery?.let { it.copy(userId = it.userId ?: userRepository.currentUser.value?.id) }
+		else -> null
+	}
+
 	fun setStartLetter(value: String?) {
 		val normalizedValue = value.takeUnless { it == "#" }
 		if (normalizedValue == getStartLetter()) return
