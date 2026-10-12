@@ -30,7 +30,7 @@ import org.jellyfin.playback.jellyfin.queue.liveStreamId
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
-import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.PlayMethod
 import org.jellyfin.sdk.model.api.PlaybackOrder
@@ -313,7 +313,7 @@ class PlaySessionService(
 		var reported = false
 
 		runCatching {
-			api.playStateApi.reportPlaybackStart(
+			api.sessionApi.reportPlaybackStart(
 				PlaybackStartInfo(
 					itemId = item.id,
 					item = reporting.item,
@@ -339,23 +339,6 @@ class PlaySessionService(
 			reported = true
 			Timber.i("Reported playback start for ${item.id} session ${stream.identifier}")
 		}.onFailure { error -> Timber.w(error, "Failed to send playback start event") }
-
-		@Suppress("DEPRECATION")
-		runCatching {
-			api.playStateApi.onPlaybackStart(
-				itemId = item.id,
-				mediaSourceId = entry.mediaSourceId,
-				audioStreamIndex = audioStreamIndex,
-				subtitleStreamIndex = subtitleStreamIndex,
-				playMethod = playMethod,
-				liveStreamId = entry.liveStreamId,
-				playSessionId = stream.identifier,
-				canSeek = canSeek,
-			)
-		}.onSuccess {
-			reported = true
-			Timber.i("Reported legacy playback start for ${item.id} session ${stream.identifier}")
-		}.onFailure { error -> Timber.w(error, "Failed to send legacy playback start event") }
 
 		if (reported) {
 			activePlaybackKey = playbackKey
@@ -398,7 +381,7 @@ class PlaySessionService(
 		val isPaused = state.playState.value == PlayState.PAUSED
 
 		runCatching {
-			api.playStateApi.reportPlaybackProgress(
+			api.sessionApi.reportPlaybackProgress(
 				PlaybackProgressInfo(
 					itemId = session.item.id,
 					item = reporting.item,
@@ -422,27 +405,9 @@ class PlaySessionService(
 			)
 		}.onFailure { error -> Timber.w("Failed to send playback update event", error) }
 
-		@Suppress("DEPRECATION")
-		runCatching {
-			api.playStateApi.onPlaybackProgress(
-				itemId = session.item.id,
-				mediaSourceId = session.mediaSourceId,
-				positionTicks = reporting.positionTicks,
-				audioStreamIndex = audioStreamIndex,
-				subtitleStreamIndex = subtitleStreamIndex,
-				volumeLevel = (state.volume.volume * 100).roundToInt(),
-				playMethod = playMethod,
-				liveStreamId = session.liveStreamId,
-				playSessionId = session.playSessionId,
-				repeatMode = repeatMode,
-				isPaused = isPaused,
-				isMuted = state.volume.muted,
-			)
-		}.onFailure { error -> Timber.w(error, "Failed to send legacy playback update event") }
-
 		if (session.playSessionId.isNotBlank()) {
 			runCatching {
-				api.playStateApi.pingPlaybackSession(session.playSessionId)
+				api.sessionApi.pingPlaybackSession(session.playSessionId)
 			}.onFailure { error -> Timber.w(error, "Failed to ping playback session") }
 		}
 	}
@@ -639,7 +604,7 @@ class PlaySessionService(
 		queue: List<QueueItem>,
 	) {
 		runCatching {
-			api.playStateApi.reportPlaybackStopped(
+			api.sessionApi.reportPlaybackStopped(
 				PlaybackStopInfo(
 					itemId = itemId,
 					item = item,
@@ -660,22 +625,6 @@ class PlaySessionService(
 			}
 		}.onFailure { error -> Timber.w("Failed to send playback stop event", error) }
 
-		@Suppress("DEPRECATION")
-		runCatching {
-			api.playStateApi.onPlaybackStopped(
-				itemId = itemId,
-				mediaSourceId = mediaSourceId,
-				positionTicks = positionTicks,
-				liveStreamId = liveStreamId,
-				playSessionId = playSessionId,
-			)
-		}.onSuccess {
-			Timber.i("Reported legacy playback stopped for $itemId session $playSessionId")
-			if (activeSession?.playSessionId == playSessionId) {
-				activeSession = null
-				activePlaybackKey = null
-			}
-		}.onFailure { error -> Timber.w(error, "Failed to send legacy playback stop event") }
 	}
 }
 

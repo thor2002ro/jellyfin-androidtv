@@ -19,17 +19,19 @@ import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
-import org.jellyfin.androidtv.preference.constant.BufferLength
 import org.jellyfin.androidtv.preference.libVLCAudioOutput
 import org.jellyfin.androidtv.preference.libVLCDecoder
 import org.jellyfin.androidtv.preference.mpvDecoder
+import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpeg
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegAudioForLiveTv
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideoForLiveTv
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.preference.constant.libVLCPlaybackOptions
 import org.jellyfin.androidtv.preference.constant.libVLCStartupOptions
 import org.jellyfin.androidtv.preference.constant.mpvPlaybackOptions
+import org.jellyfin.androidtv.preference.constant.toPlaybackBufferOptions
 import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
@@ -46,6 +48,7 @@ import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.softwareCodecsEnabledForProfile
 import org.jellyfin.playback.core.playbackManager
+import org.jellyfin.playback.core.plugin.playbackPlugin
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.dovi.doviTransformationSuppressed
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
@@ -60,10 +63,9 @@ import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerOptions
 import org.jellyfin.playback.media3.session.MediaSessionOptions
 import org.jellyfin.playback.media3.session.media3SessionPlugin
-import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.okhttp.OkHttpFactory
-import org.jellyfin.sdk.model.api.MediaSourceInfo
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
@@ -271,6 +273,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	val userSettingPreferences = get<UserSettingPreferences>()
 	defaultRewindAmount = { userSettingPreferences[UserSettingPreferences.skipBackLength].milliseconds }
 	defaultFastForwardAmount = { userSettingPreferences[UserSettingPreferences.skipForwardLength].milliseconds }
+	bufferOptions = { userPreferences[UserPreferences.bufferLength].toPlaybackBufferOptions() }
 }
 
 private fun createJellyfinMediaStreamOptions(

@@ -15,16 +15,19 @@ import kotlin.reflect.KClass
 import kotlin.time.Duration
 
 class PlaybackManager internal constructor(
-	val backend: PlayerBackend,
+	backend: PlayerBackend,
 	private val services: MutableList<PlayerService>,
 	val options: PlaybackManagerOptions,
 	parentJob: Job? = null,
 ) {
 	internal val backendService = BackendService().also { service ->
+		applyBackendOptions(backend)
 		service.switchBackend(backend)
 	}
 
 	private val job = SupervisorJob(parentJob)
+	val backend: PlayerBackend get() = requireNotNull(backendService.backend)
+	val activeBackends: List<PlayerBackend> get() = backendService.activeBackends
 	val state: PlayerState = MutablePlayerState(
 		options = options,
 		backendService = backendService,
@@ -51,8 +54,31 @@ class PlaybackManager internal constructor(
 		backendService.addListener(listener)
 	}
 
+	fun removeBackendEventListener(listener: PlayerBackendEventListener) {
+		backendService.removeListener(listener)
+	}
+
+	fun switchBackend(backend: PlayerBackend) {
+		applyBackendOptions(backend)
+		if (backend !== backendService.backend) {
+			backendService.switchBackend(backend)
+			backend.setSpeed(state.speed.value)
+		}
+	}
+
+	fun isBackendActive(backend: PlayerBackend): Boolean =
+		activeBackends.any { activeBackend -> activeBackend === backend }
+
+	fun setBufferOptions(options: PlaybackBufferOptions) {
+		activeBackends.forEach { backend -> backend.setBufferOptions(options) }
+	}
+
 	fun setVideoOutputTransform(transform: VideoOutputTransform) {
 		backendService.setVideoOutputTransform(transform)
+	}
+
+	private fun applyBackendOptions(backend: PlayerBackend) {
+		options.bufferOptions?.invoke()?.let(backend::setBufferOptions)
 	}
 
 	fun <T : PlayerService> getService(kclass: KClass<T>): T? {

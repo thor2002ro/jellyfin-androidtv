@@ -18,6 +18,7 @@ import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.livetv.LiveTvPlaybackPolicy
 import timber.log.Timber
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class NetworkPlaybackRecoveryService(
@@ -26,6 +27,7 @@ class NetworkPlaybackRecoveryService(
 ) : PlayerService() {
 	private var recoveryJob: Job? = null
 	private var recoveringEntry: QueueEntry? = null
+	private var errorRecoveryAttemptedEntry: QueueEntry? = null
 	private val _recovering = MutableStateFlow(false)
 	val recovering: StateFlow<Boolean> = _recovering.asStateFlow()
 
@@ -33,9 +35,22 @@ class NetworkPlaybackRecoveryService(
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
 			override fun onPlaybackError(error: PlaybackError) {
 				val entry = manager.queue.entry.value
-				if (entry != null && !liveTvPlaybackPolicy.isLiveTv(entry)) {
-					startRecovery(entry, "Playback error ${error.codeName}")
+				if (
+					entry == null ||
+					liveTvPlaybackPolicy.isLiveTv(entry) ||
+					!isRecoverablePlaybackError(error.codeName)
+				) return
+				if (errorRecoveryAttemptedEntry === entry) {
+					Timber.w("Automatic recovery already attempted for ${error.codeName}")
+					return
 				}
+
+				errorRecoveryAttemptedEntry = entry
+				startRecovery(
+					entry = entry,
+					reason = "Playback error ${error.codeName}",
+					playWhenReady = state.playState.value.isActivePlayback,
+				)
 			}
 		})
 
@@ -49,7 +64,14 @@ class NetworkPlaybackRecoveryService(
 
 				val entry = manager.queue.entry.value
 				val playState = state.playState.value
-				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry)) {
+				if (
+					entry !== errorRecoveryAttemptedEntry ||
+					recoveryJob?.isActive != true &&
+					(playState == PlayState.PLAYING || playState == PlayState.PAUSED)
+				) {
+					errorRecoveryAttemptedEntry = null
+				}
+				if (entry == null || liveTvPlaybackPolicy.isLiveTv(entry) || playState == PlayState.STOPPED) {
 					disconnectedEntry = null
 					clearRecovering()
 					wasNetworkAvailable = isNetworkAvailable()
@@ -70,7 +92,11 @@ class NetworkPlaybackRecoveryService(
 				}
 
 				if (!wasNetworkAvailable && disconnectedEntry === entry) {
-					startRecovery(entry, "Network restored")
+					startRecovery(
+						entry = entry,
+						reason = "Network restored",
+						playWhenReady = playState.isActivePlayback || playState == PlayState.ERROR,
+					)
 					disconnectedEntry = null
 				}
 
@@ -80,7 +106,7 @@ class NetworkPlaybackRecoveryService(
 		}
 	}
 
-	private fun startRecovery(entry: QueueEntry, reason: String) {
+	private fun startRecovery(entry: QueueEntry, reason: String, playWhenReady: Boolean) {
 		if (recoveryJob?.isActive == true) {
 			if (recoveringEntry === entry) return
 			recoveryJob?.cancel()
@@ -89,7 +115,7 @@ class NetworkPlaybackRecoveryService(
 
 		recoveryJob = coroutineScope.launch(Dispatchers.Main) {
 			try {
-				recoverEntry(entry, reason)
+				recoverEntry(entry, reason, playWhenReady)
 			} finally {
 				if (recoveryJob === coroutineContext[Job]) {
 					recoveryJob = null
@@ -99,7 +125,7 @@ class NetworkPlaybackRecoveryService(
 		}
 	}
 
-	private suspend fun recoverEntry(entry: QueueEntry, reason: String) {
+	private suspend fun recoverEntry(entry: QueueEntry, reason: String, playWhenReady: Boolean) {
 		var loggedWaitingForNetwork = false
 
 		while (isCurrentRecoverableEntry(entry)) {
@@ -112,25 +138,33 @@ class NetworkPlaybackRecoveryService(
 				continue
 			}
 
+			val positionBeforeGrace = state.positionInfo.active
 			delay(PLAYBACK_RECOVERY_RETRY_INTERVAL)
 			if (!isCurrentRecoverableEntry(entry)) return
 			if (!isNetworkAvailable()) continue
 
+			val playState = state.playState.value
 			val positionAfterGrace = state.positionInfo.active
-			Timber.i("$reason; reloading playback at $positionAfterGrace")
-			if (manager.reloadCurrentMediaStream(position = positionAfterGrace, playWhenReady = true)) {
-				Timber.i("Reloaded playback after error")
+			if (hasPlaybackRecovered(playState, positionBeforeGrace, positionAfterGrace)) {
+				Timber.i("Playback recovered without reloading")
 				return
 			}
 
-			Timber.w("Unable to reload playback after error; retrying")
+			Timber.i("$reason; reloading playback at $positionAfterGrace")
+			if (manager.reloadCurrentMediaStream(position = positionAfterGrace, playWhenReady = playWhenReady)) {
+				Timber.i("Reloaded playback after error")
+			} else {
+				Timber.w("Unable to reload playback after error")
+			}
+			return
 		}
 	}
 
 	private fun isCurrentRecoverableEntry(entry: QueueEntry): Boolean {
 		val currentEntry = manager.queue.entry.value
 		return currentEntry === entry &&
-			!liveTvPlaybackPolicy.isLiveTv(entry)
+			!liveTvPlaybackPolicy.isLiveTv(entry) &&
+			state.playState.value != PlayState.STOPPED
 	}
 
 	private fun isNetworkAvailable(): Boolean {
@@ -155,4 +189,19 @@ class NetworkPlaybackRecoveryService(
 		private val NETWORK_RECOVERY_CHECK_INTERVAL = 3.seconds
 		private val PLAYBACK_RECOVERY_RETRY_INTERVAL = 3.seconds
 	}
+}
+
+internal fun hasPlaybackRecovered(
+	playState: PlayState,
+	positionBeforeGrace: Duration,
+	positionAfterGrace: Duration,
+) = playState == PlayState.PAUSED ||
+	playState == PlayState.PLAYING && positionAfterGrace > positionBeforeGrace
+
+internal fun isRecoverablePlaybackError(codeName: String) = when (codeName) {
+	"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
+	"ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT",
+	"LIBVLC_ERROR",
+	-> true
+	else -> false
 }

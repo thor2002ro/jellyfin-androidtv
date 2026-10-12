@@ -8,6 +8,7 @@ class PlaybackManagerOptions(
 
 	val defaultRewindAmount: () -> Duration,
 	val defaultFastForwardAmount: () -> Duration,
+	val bufferOptions: (() -> PlaybackBufferOptions)? = null,
 ) {
 	/**
 	 * Complete window preparation before the backend opens or replaces a stream.

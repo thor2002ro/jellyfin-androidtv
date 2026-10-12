@@ -4,9 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -16,6 +14,8 @@ import coil3.compose.rememberAsyncImagePainter
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.repository.ExternalAppRepository
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.playbackBackend
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.base.LocalShapes
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -24,7 +24,6 @@ import org.jellyfin.androidtv.ui.base.list.ListMessage
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.navigation.focus.focusKey
-import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.componentName
 import org.koin.compose.koinInject
@@ -40,7 +39,8 @@ fun SettingsPlaybackPlayerScreen() {
 	val externalPlayerApps = remember(context) { externalAppRepository.getExternalPlayerApps(context) }
 	val currentExternalPlayer = remember(context) { externalAppRepository.getCurrentExternalPlayerApp(context) }
 
-	var playbackRewriteVideoEnabled by rememberPreference(userPreferences, UserPreferences.playbackRewriteVideoEnabled)
+	val playbackRewriteVideoEnabled = userPreferences[UserPreferences.playbackRewriteVideoEnabled]
+	val playbackBackend = userPreferences[UserPreferences.playbackBackend]
 
 	SettingsColumn {
 		item {
@@ -65,7 +65,7 @@ fun SettingsPlaybackPlayerScreen() {
 				trailingContent = { RadioButton(checked = currentExternalPlayer == null && !playbackRewriteVideoEnabled) },
 				captionContent = { Text(stringResource(R.string.video_player_internal)) },
 				onClick = {
-					playbackRewriteVideoEnabled = false
+					userPreferences[UserPreferences.playbackRewriteVideoEnabled] = false
 					externalAppRepository.setExternalPlayerapp(null)
 					router.back()
 				},

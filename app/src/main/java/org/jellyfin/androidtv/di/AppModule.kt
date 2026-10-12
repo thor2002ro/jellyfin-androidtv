@@ -41,7 +41,6 @@ import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.ui.playback.external.DefaultExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.LibMPVExternalPlayerApi
-import org.jellyfin.androidtv.ui.playback.external.MpvExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.MxExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.VimuExternalPlayerApi
 import org.jellyfin.androidtv.ui.playback.external.VlcExternalPlayerApi

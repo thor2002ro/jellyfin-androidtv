@@ -156,6 +156,7 @@ fun SubtitleTrackButton(
 		availableTracks.any(PlayerTrack::supportsSubtitleTimingOffset)
 	}
 	val subtitleTimingOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
+	val subtitleTimingSpeedSupported = playbackManager.backend.supportsSubtitleTimingSpeed
 	LaunchedEffect(subtitleTimingOffsetSupported) {
 		if (!subtitleTimingOffsetSupported) offsetControlsExpanded = false
 	}
@@ -191,6 +192,7 @@ fun SubtitleTrackButton(
 						playbackManager = playbackManager,
 						expanded = offsetControlsExpanded,
 						enabled = subtitleTimingOffsetSupported,
+						speedSupported = subtitleTimingSpeedSupported,
 						onClick = {
 							if (subtitleTimingOffsetSupported) {
 								offsetControlsExpanded = !offsetControlsExpanded
@@ -318,6 +320,7 @@ private fun SubtitleOffsetTrackItem(
 	playbackManager: PlaybackManager,
 	expanded: Boolean,
 	enabled: Boolean,
+	speedSupported: Boolean,
 	onClick: () -> Unit,
 ) {
 	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
@@ -325,18 +328,7 @@ private fun SubtitleOffsetTrackItem(
 	val itemMinHeight = dimensionResource(R.dimen.player_popup_menu_item_min_height)
 	val popupMinWidth = dimensionResource(R.dimen.player_popup_menu_wide_min_width)
 	val popupMaxWidth = dimensionResource(R.dimen.player_popup_menu_wide_max_width)
-	val label = if (
-		subtitleTimingOffset == kotlin.time.Duration.ZERO &&
-		subtitleTimingSpeed == DEFAULT_SUBTITLE_TIMING_SPEED
-	) {
-		stringResource(R.string.lbl_subtitle_sync)
-	} else {
-		stringResource(
-			R.string.lbl_subtitle_sync_current,
-			stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(subtitleTimingOffset)),
-			formatSubtitleTimingSpeed(subtitleTimingSpeed),
-		)
-	}
+	val label = subtitleTimingLabel(subtitleTimingOffset, subtitleTimingSpeed, speedSupported)
 
 	ListButton(
 		onClick = onClick,
@@ -363,6 +355,7 @@ private fun SubtitleOffsetTrackItem(
 	if (expanded) {
 		SubtitleOffsetControls(
 			playbackManager = playbackManager,
+			speedSupported = speedSupported,
 			modifier = Modifier.widthIn(min = popupMinWidth, max = popupMaxWidth),
 		)
 	}
@@ -371,6 +364,7 @@ private fun SubtitleOffsetTrackItem(
 @Composable
 private fun SubtitleOffsetControls(
 	playbackManager: PlaybackManager,
+	speedSupported: Boolean,
 	modifier: Modifier = Modifier,
 ) {
 	val subtitleTimingOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
@@ -381,11 +375,7 @@ private fun SubtitleOffsetControls(
 		modifier = modifier.padding(horizontal = 10.dp, vertical = 6.dp),
 	) {
 		Text(
-			text = stringResource(
-				R.string.lbl_subtitle_sync_current,
-				stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(subtitleTimingOffset)),
-				formatSubtitleTimingSpeed(subtitleTimingSpeed),
-			),
+			text = subtitleTimingLabel(subtitleTimingOffset, subtitleTimingSpeed, speedSupported),
 			style = LocalTextStyle.current.copy(fontSize = 12.sp),
 		)
 
@@ -407,23 +397,25 @@ private fun SubtitleOffsetControls(
 			}
 		}
 
-		Text(
-			text = stringResource(R.string.lbl_subtitle_speed),
-			style = LocalTextStyle.current.copy(fontSize = 12.sp),
-		)
-		Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-			listOf(
-				-SUBTITLE_TIMING_SPEED_STEP_LARGE,
-				-SUBTITLE_TIMING_SPEED_STEP_SMALL,
-				SUBTITLE_TIMING_SPEED_STEP_SMALL,
-				SUBTITLE_TIMING_SPEED_STEP_LARGE,
-			).chunked(2).forEach { amounts ->
-				Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-					amounts.forEach { amount ->
-						AdjustmentButton(
-							label = formatSubtitleTimingSpeedDelta(amount),
-							onClick = { playbackManager.state.adjustSubtitleTimingSpeed(amount) },
-						)
+		if (speedSupported) {
+			Text(
+				text = stringResource(R.string.lbl_subtitle_speed),
+				style = LocalTextStyle.current.copy(fontSize = 12.sp),
+			)
+			Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+				listOf(
+					-SUBTITLE_TIMING_SPEED_STEP_LARGE,
+					-SUBTITLE_TIMING_SPEED_STEP_SMALL,
+					SUBTITLE_TIMING_SPEED_STEP_SMALL,
+					SUBTITLE_TIMING_SPEED_STEP_LARGE,
+				).chunked(2).forEach { amounts ->
+					Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+						amounts.forEach { amount ->
+							AdjustmentButton(
+								label = formatSubtitleTimingSpeedDelta(amount),
+								onClick = { playbackManager.state.adjustSubtitleTimingSpeed(amount) },
+							)
+						}
 					}
 				}
 			}
@@ -435,6 +427,25 @@ private fun SubtitleOffsetControls(
 		) {
 			Text(stringResource(R.string.lbl_reset), fontSize = 12.sp)
 		}
+	}
+}
+
+@Composable
+private fun subtitleTimingLabel(
+	offset: kotlin.time.Duration,
+	speed: Float,
+	speedSupported: Boolean,
+): String {
+	val formattedOffset = stringResource(R.string.lbl_subtitle_offset_seconds, formatSubtitleOffsetSeconds(offset))
+	return when {
+		offset == kotlin.time.Duration.ZERO && (!speedSupported || speed == DEFAULT_SUBTITLE_TIMING_SPEED) ->
+			stringResource(R.string.lbl_subtitle_sync)
+		speedSupported -> stringResource(
+			R.string.lbl_subtitle_sync_current,
+			formattedOffset,
+			formatSubtitleTimingSpeed(speed),
+		)
+		else -> stringResource(R.string.lbl_subtitle_offset_current, formattedOffset)
 	}
 }
 
