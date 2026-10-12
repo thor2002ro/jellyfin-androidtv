@@ -82,6 +82,8 @@ private fun getVideoTrack(stream: MediaStream): MediaStreamVideoTrack? {
 		videoRange = stream.videoRangeType.name,
 		realFrameRate = stream.referenceFrameRate ?: stream.realFrameRate,
 		isInterlaced = stream.isInterlaced,
+		profile = stream.profile,
+		bitDepth = stream.bitDepth,
 	)
 }
 
