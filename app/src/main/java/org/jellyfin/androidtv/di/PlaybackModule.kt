@@ -97,7 +97,7 @@ private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
 		libassGlyphSize = userPreferences[UserPreferences.libassGlyphSize].glyphs,
 		libassCacheSize = userPreferences[UserPreferences.libassCacheSize].megabytes,
 		libassMaxRenderPixels = userPreferences[UserPreferences.libassMaxRenderPixels].pixels,
-		parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction],
+		parseSubtitlesDuringExtraction = userPreferences[UserPreferences.exoPlayerParseSubtitlesDuringExtraction],
 		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
 		baseDataSourceFactory = get<HttpDataSource.Factory>(),
 	)

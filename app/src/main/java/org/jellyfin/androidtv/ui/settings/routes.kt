@@ -60,6 +60,7 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackResume
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.SettingsPlaybackZoomModeScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.PreferredLanguageType
+import org.jellyfin.androidtv.ui.settings.screen.playback.exoPlayerSettingsRoutes
 import org.jellyfin.androidtv.ui.settings.screen.playback.libVLCSettingsRoutes
 import org.jellyfin.androidtv.ui.settings.screen.playback.mpvSettingsRoutes
 import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsPlaybackMediaSegmentScreen

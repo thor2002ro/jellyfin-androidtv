@@ -580,14 +580,6 @@
     <string name="past_week">Past week</string>
     <string name="scheduled_in_next_24_hours">Scheduled in next 24 hours</string>
     <string name="past_24_hours">Past 24 hours</string>
-    <string name="prefer_exoplayer_ffmpeg">Prefer FFmpeg for audio playback</string>
-    <string name="prefer_exoplayer_ffmpeg_content">Use FFmpeg to decode audio, even if platform codecs are available.</string>
-    <string name="prefer_exoplayer_ffmpeg_video">Prefer FFmpeg for video playback</string>
-    <string name="prefer_exoplayer_ffmpeg_video_content">Use FFmpeg to decode video, even if platform codecs are available.</string>
-    <string name="prefer_exoplayer_ffmpeg_video_livetv">Prefer FFmpeg for Live TV video</string>
-    <string name="prefer_exoplayer_ffmpeg_video_livetv_content">Use FFmpeg to decode Live TV video, even if platform codecs are available.</string>
-    <string name="prefer_exoplayer_ffmpeg_audio_livetv">Prefer FFmpeg for Live TV audio</string>
-    <string name="prefer_exoplayer_ffmpeg_audio_livetv_content">Use FFmpeg to decode Live TV audio, even if platform codecs are available.</string>
     <string name="default_video_zoom">Default zoom mode</string>
     <string name="video_start_delay">Video start delay</string>
     <string name="playback_buffer_length">Playback buffer size</string>
