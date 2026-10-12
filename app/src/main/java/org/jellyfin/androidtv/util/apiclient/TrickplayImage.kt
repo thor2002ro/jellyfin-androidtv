@@ -2,7 +2,7 @@ package org.jellyfin.androidtv.util.apiclient
 
 import coil3.network.NetworkHeaders
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.trickplayApi
+import org.jellyfin.sdk.api.client.extensions.trickPlayApi
 import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.TrickplayInfoDto
@@ -78,7 +78,7 @@ private fun BaseItemDto.getTrickplayTileSheet(
 	headers: NetworkHeaders,
 ): TrickplayTileSheet {
 	return TrickplayTileSheet(
-		url = api.trickplayApi.getTrickplayTileImageUrl(
+		url = api.trickPlayApi.getTrickplayTileImageUrl(
 			itemId = id,
 			width = info.width,
 			index = sheetIndex,
