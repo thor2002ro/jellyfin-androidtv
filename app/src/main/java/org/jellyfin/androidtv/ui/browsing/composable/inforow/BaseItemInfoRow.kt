@@ -24,13 +24,13 @@ import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.sdk.getProgramSubText
 import org.jellyfin.androidtv.util.sdk.getSeasonEpisodeName
 import org.jellyfin.androidtv.util.sdk.isNew
+import org.jellyfin.androidtv.util.sdk.videoRangeLabels
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.SeriesStatus
-import org.jellyfin.sdk.model.api.VideoRangeType
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
 import java.time.LocalDateTime
@@ -199,21 +199,7 @@ fun InfoRowMediaDetails(mediaSource: MediaSourceInfo) {
 	}
 
 	// Video range
-	val videoRangeNames: Set<String> = when (videoStream?.videoRangeType) {
-		VideoRangeType.SDR -> setOf(stringResource(R.string.sdr))
-		VideoRangeType.HDR10 -> setOf(stringResource(R.string.hdr10))
-		VideoRangeType.HDR10_PLUS -> setOf(stringResource(R.string.hdr10_plus))
-		VideoRangeType.HLG -> setOf(stringResource(R.string.hlg))
-		VideoRangeType.DOVI -> setOf("DV P5")
-		VideoRangeType.DOVI_WITH_HDR10 -> setOf("DV P8", stringResource(R.string.hdr10))
-		VideoRangeType.DOVI_WITH_HLG -> setOf("DV P8", stringResource(R.string.hlg))
-		VideoRangeType.DOVI_WITH_SDR -> setOf("DV P8", stringResource(R.string.sdr))
-		VideoRangeType.DOVI_WITH_EL -> setOf("DV P7")
-		VideoRangeType.DOVI_WITH_HDR10_PLUS -> setOf("DV P8", stringResource(R.string.hdr10_plus))
-		VideoRangeType.DOVI_WITH_ELHDR10_PLUS -> setOf("DV P7", stringResource(R.string.hdr10_plus))
-		VideoRangeType.DOVI_INVALID -> setOf("DV invalid")
-		else -> emptySet()
-	}
+	val videoRangeNames = videoStream?.videoRangeType?.videoRangeLabels().orEmpty()
 	videoRangeNames.forEach {
 		InfoRowItem(contentDescription = null, colors = InfoRowColors.Default) { Text(it) }
 	}
