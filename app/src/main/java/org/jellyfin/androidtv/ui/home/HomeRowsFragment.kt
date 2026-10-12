@@ -43,6 +43,7 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.itemhandling.refreshItem
+import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.AudioEventListener
@@ -134,14 +135,18 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 
 				// Wire up Live TV sibling rows so the On Now row removes the buttons row when empty
+
 				@Suppress("UNCHECKED_CAST")
 				val rowsAdapter = adapter as MutableObjectAdapter<Row>
 				for (i in 0 until rowsAdapter.size()) {
+				if (currentUser.policy?.enableLiveTvAccess == true) {
 					val listRow = rowsAdapter.get(i) as? ListRow ?: continue
 					val itemAdapter = listRow.adapter as? ItemRowAdapter ?: continue
+					TvManager.preloadChannels(this@HomeRowsFragment)
 					if (itemAdapter.queryType == QueryType.LiveTvProgram && i > 0) {
 						val previousRow = rowsAdapter.get(i - 1)
 						if (previousRow != null) itemAdapter.setSiblingRow(previousRow)
+				}
 					}
 				}
 			}
@@ -190,8 +195,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		super.onResume()
 
 		//React to deletion
-		if (currentRow != null && currentItem != null && currentItem?.baseItem != null && currentItem!!.baseItem!!.id == dataRefreshService.lastDeletedItemId) {
-			(currentRow!!.adapter as ItemRowAdapter).remove(currentItem)
+		val deletedItem = currentItem
+		if (currentRow != null && deletedItem != null && deletedItem.baseItem?.id == dataRefreshService.lastDeletedItemId) {
+			(currentRow!!.adapter as ItemRowAdapter).remove(deletedItem)
 			currentItem = null
 			dataRefreshService.lastDeletedItemId = null
 		}
@@ -205,14 +211,14 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 
 		// Update audio queue
-		Timber.i("Updating audio queue in HomeFragment (onResume)")
+		Timber.d("Updating audio queue in HomeFragment (onResume)")
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
 	}
 
 	override fun onQueueStatusChanged(hasQueue: Boolean) {
 		if (activity == null || requireActivity().isFinishing) return
 
-		Timber.i("Updating audio queue in HomeFragment (onQueueStatusChanged)")
+		Timber.d("Updating audio queue in HomeFragment (onQueueStatusChanged)")
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
 	}
 
@@ -232,7 +238,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		val adapter = currentRow?.adapter as? ItemRowAdapter ?: return
 		val item = currentItem ?: return
 
-		Timber.i("Refresh item ${item.getFullName(requireContext())}")
+		Timber.d("Refresh item ${item.getFullName(requireContext())}")
 		adapter.refreshItem(api, this, item)
 	}
 
