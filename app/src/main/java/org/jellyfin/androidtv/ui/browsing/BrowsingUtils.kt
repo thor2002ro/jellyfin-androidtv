@@ -201,10 +201,15 @@ object BrowsingUtils {
 	)
 
 	@JvmStatic
-	fun createLiveTVChannelsRequest() = GetLiveTvChannelsRequest()
+	fun createLiveTVChannelsRequest() = GetLiveTvChannelsRequest(
+		addCurrentProgram = true,
+		fields = liveTvChannelFields,
+	)
 
 	@JvmStatic
 	fun createLiveTVRecentlyPlayedChannelsRequest() = GetLiveTvChannelsRequest(
+		addCurrentProgram = true,
+		fields = liveTvChannelFields,
 		sortBy = setOf(ItemSortBy.DATE_PLAYED),
 		sortOrder = SortOrder.DESCENDING,
 		enableFavoriteSorting = false,
@@ -213,6 +218,8 @@ object BrowsingUtils {
 
 	@JvmStatic
 	fun createLiveTVMostPlayedChannelsRequest() = GetLiveTvChannelsRequest(
+		addCurrentProgram = true,
+		fields = liveTvChannelFields,
 		sortBy = setOf(ItemSortBy.PLAY_COUNT),
 		sortOrder = SortOrder.DESCENDING,
 		enableFavoriteSorting = false,
@@ -221,6 +228,8 @@ object BrowsingUtils {
 
 	@JvmStatic
 	fun createLiveTVChannelsRequest(isFavorite: Boolean) = GetLiveTvChannelsRequest(
+		addCurrentProgram = true,
+		fields = liveTvChannelFields,
 		isFavorite = isFavorite,
 	)
 

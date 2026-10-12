@@ -107,7 +107,7 @@ class CardPresenter(
 
 				CardViewHolderContent(
 					item = item,
-					focused = false,
+					focused = focused,
 					showInfo = showInfo,
 					imageType = imageType,
 					staticHeight = staticHeight,
