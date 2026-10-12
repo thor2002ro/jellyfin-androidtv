@@ -7,6 +7,8 @@ import android.content.pm.ActivityInfo
 import android.content.pm.ResolveInfo
 import androidx.core.net.toUri
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.playbackPlayerPreferences
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.util.componentName
 
@@ -29,37 +31,45 @@ class ExternalAppRepository(
 		// Hide apps with priority below zero (system stubs)
 		.filter { it.priority >= 0 }
 
-	fun getCurrentExternalPlayerApp(context: Context): ActivityInfo? {
+	fun getCurrentExternalPlayerApp(
+		context: Context,
+		hdr: Boolean = false,
+		externalApps: List<ResolveInfo>? = null,
+	): ActivityInfo? {
+		val effectiveHdr = hdr && userPreferences[UserPreferences.playbackPlayerPreferences(hdr).playbackBackend] != PlaybackBackend.SAME_VIDEO_PLAYER
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(effectiveHdr)
+
 		// Validate if external app should be used at all
-		val useExternalPlayer = userPreferences[UserPreferences.useExternalPlayer]
+		val useExternalPlayer = userPreferences[playerPreferences.useExternalPlayer]
 		if (!useExternalPlayer) return null
 
 		// Resolve external app information
-		val resolvedInfo = userPreferences[UserPreferences.externalPlayerComponentName]
+		val apps = externalApps ?: getExternalPlayerApps(context)
+		val configuredComponent = userPreferences[playerPreferences.externalPlayerComponentName]
 			.takeIf { it.isNotEmpty() }
 			?.let(ComponentName::unflattenFromString)
-			?.runCatching { context.packageManager.getActivityInfo(this, 0) }
-			?.getOrNull()
+		val resolvedInfo = apps
+			.firstOrNull { it.activityInfo.componentName == configuredComponent }
+			?.activityInfo
 		if (resolvedInfo != null) return resolvedInfo
 
 		// Fallback in case the app is uninstalled or unavailable for some other reason
-		val externalApps = getExternalPlayerApps(context)
+		val fallback = apps
+			.let { compatibleApps -> compatibleApps.find { it.isDefault } ?: compatibleApps.firstOrNull() }
+			?.activityInfo
 
-		// System default
-		val systemDefault = externalApps.find { it.isDefault }?.activityInfo
-		if (systemDefault != null) return systemDefault
-
-		// First compatible, or none
-		return externalApps.firstOrNull()?.activityInfo
+		setExternalPlayerapp(fallback, effectiveHdr)
+		return fallback
 	}
 
-	fun setExternalPlayerapp(activityInfo: ActivityInfo?) {
+	fun setExternalPlayerapp(activityInfo: ActivityInfo?, hdr: Boolean = false) {
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr)
 		if (activityInfo == null) {
-			userPreferences[UserPreferences.useExternalPlayer] = false
-			userPreferences[UserPreferences.externalPlayerComponentName] = ""
+			userPreferences[playerPreferences.useExternalPlayer] = false
+			userPreferences[playerPreferences.externalPlayerComponentName] = ""
 		} else {
-			userPreferences[UserPreferences.useExternalPlayer] = true
-			userPreferences[UserPreferences.externalPlayerComponentName] = activityInfo.componentName.flattenToShortString()
+			userPreferences[playerPreferences.useExternalPlayer] = true
+			userPreferences[playerPreferences.externalPlayerComponentName] = activityInfo.componentName.flattenToShortString()
 		}
 	}
 

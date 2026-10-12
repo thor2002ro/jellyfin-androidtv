@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,8 +53,8 @@ import org.jellyfin.androidtv.ui.base.button.ProgressButton
 import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.FixedMotionDurationScale
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
-import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
+import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -63,9 +64,10 @@ import java.util.UUID
 fun NextUpScreen(
 	itemId: UUID,
 ) {
+	val context = LocalContext.current
 	val navigationRepository = koinInject<NavigationRepository>()
+	val playbackLauncher = koinInject<PlaybackLauncher>()
 	val backgroundService = koinInject<BackgroundService>()
-	val userPreferences = koinInject<UserPreferences>()
 	val viewModel = koinViewModel<NextUpViewModel>()
 
 	val state by viewModel.state.collectAsState()
@@ -84,11 +86,7 @@ fun NextUpScreen(
 	LaunchedEffect(state) {
 		when (state) {
 			// Open next item
-			NextUpState.PLAY_NEXT -> navigationRepository.navigate(
-				if (userPreferences[UserPreferences.playbackRewriteVideoEnabled]) Destinations.videoPlayerNew(0)
-				else Destinations.videoPlayer(0),
-				replace = true,
-			)
+			NextUpState.PLAY_NEXT -> playbackLauncher.launchCurrentVideoQueue(context)
 			// Close activity
 			NextUpState.CLOSE -> navigationRepository.goBack()
 			// Unknown state

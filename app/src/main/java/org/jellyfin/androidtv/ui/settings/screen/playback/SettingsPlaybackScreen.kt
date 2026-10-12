@@ -1,10 +1,17 @@
 package org.jellyfin.androidtv.ui.settings.screen.playback
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ResolveInfo
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -14,11 +21,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil3.compose.rememberAsyncImagePainter
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.data.repository.ExternalAppRepository
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.constant.PlaybackBackend
+import org.jellyfin.androidtv.preference.playbackPlayerPreferences
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.LocalShapes
 import org.jellyfin.androidtv.ui.base.Text
@@ -54,6 +64,7 @@ fun SettingsPlaybackScreen() {
 		subtitleLanguagePreferences.toSubtitleLanguagePreferences()
 			.ifEmpty { listOfNotNull(configuration?.subtitleLanguagePreference.toIso2LanguageCodeOrNull()) }
 	}
+	val externalPlayerApps = rememberExternalPlayerApps(context, externalAppRepository)
 
 	SettingsColumn {
 		item {
@@ -64,24 +75,22 @@ fun SettingsPlaybackScreen() {
 		}
 
 		item {
-			ListButton(
-				leadingContent = { Icon(painterResource(R.drawable.ic_tv_play), contentDescription = null) },
-				headingContent = { Text(stringResource(R.string.playback_video_player)) },
-				trailingContent = {
-					val iconDrawable = remember(context) {
-						externalAppRepository.getCurrentExternalPlayerApp(context)?.loadIcon(context.packageManager)
-					}
-					Image(
-						painter = if (iconDrawable == null) rememberAsyncImagePainter(R.mipmap.app_icon)
-						else rememberAsyncImagePainter(iconDrawable),
-						contentDescription = null,
-						modifier = Modifier
-							.size(24.dp)
-							.clip(LocalShapes.current.small)
-					)
-				},
+			PlayerButton(
+				heading = stringResource(R.string.playback_video_player),
+				hdr = false,
+				externalPlayerApps = externalPlayerApps,
 				onClick = { router.push(Routes.PLAYBACK_PLAYER) },
 				modifier = Modifier.focusKey(Routes.PLAYBACK_PLAYER)
+			)
+		}
+
+		item {
+			PlayerButton(
+				heading = stringResource(R.string.playback_hdr_player),
+				hdr = true,
+				externalPlayerApps = externalPlayerApps,
+				onClick = { router.push(Routes.PLAYBACK_HDR_PLAYER) },
+				modifier = Modifier.focusKey(Routes.PLAYBACK_HDR_PLAYER)
 			)
 		}
 
@@ -191,6 +200,102 @@ fun SettingsPlaybackScreen() {
 				modifier = Modifier.focusKey(Routes.PLAYBACK_ADVANCED)
 			)
 		}
+	}
+}
+
+@Composable
+private fun PlayerButton(
+	heading: String,
+	hdr: Boolean,
+	externalPlayerApps: List<ResolveInfo>,
+	onClick: () -> Unit,
+	modifier: Modifier,
+) {
+	val context = LocalContext.current
+	val userPreferences = koinInject<UserPreferences>()
+	val externalAppRepository = koinInject<ExternalAppRepository>()
+	val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr)
+	val useExternalPlayer = userPreferences[playerPreferences.useExternalPlayer]
+	val externalPlayerComponentName = userPreferences[playerPreferences.externalPlayerComponentName]
+	val playbackRewriteVideoEnabled = userPreferences[playerPreferences.playbackRewriteVideoEnabled]
+	val playbackBackend = userPreferences[playerPreferences.playbackBackend]
+	val packageManager = context.packageManager
+	val externalPlayer = remember(context, hdr, useExternalPlayer, externalPlayerComponentName, externalPlayerApps) {
+		externalAppRepository.getCurrentExternalPlayerApp(context, hdr, externalPlayerApps)
+	}
+	val iconDrawable = remember(externalPlayer, packageManager) { externalPlayer?.loadIcon(packageManager) }
+	val externalPlayerName = remember(externalPlayer, packageManager) {
+		externalPlayer?.loadLabel(packageManager)?.toString()
+	}
+	val (iconResource, nameResource) = playerResourceIds(
+		useExternalPlayer = useExternalPlayer,
+		playbackRewriteVideoEnabled = playbackRewriteVideoEnabled,
+		playbackBackend = playbackBackend,
+	)
+	ListButton(
+		leadingContent = {
+			PlayerIcon(iconDrawable ?: iconResource)
+		},
+		headingContent = { Text(heading) },
+		captionContent = { Text(externalPlayerName ?: stringResource(nameResource)) },
+		onClick = onClick,
+		modifier = modifier,
+	)
+}
+
+@Composable
+internal fun rememberExternalPlayerApps(
+	context: Context,
+	externalAppRepository: ExternalAppRepository,
+): List<ResolveInfo> {
+	val externalPlayerApps = remember { mutableStateOf(externalAppRepository.getExternalPlayerApps(context)) }
+
+	DisposableEffect(context, externalAppRepository) {
+		val receiver = object : BroadcastReceiver() {
+			override fun onReceive(context: Context, intent: Intent) {
+				externalPlayerApps.value = externalAppRepository.getExternalPlayerApps(context)
+			}
+		}
+		val filter = IntentFilter().apply {
+			addAction(Intent.ACTION_PACKAGE_ADDED)
+			addAction(Intent.ACTION_PACKAGE_CHANGED)
+			addAction(Intent.ACTION_PACKAGE_REMOVED)
+			addDataScheme("package")
+		}
+		ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+		onDispose { context.unregisterReceiver(receiver) }
+	}
+
+	return externalPlayerApps.value
+}
+
+@Composable
+internal fun PlayerIcon(model: Any) {
+	Image(
+		painter = rememberAsyncImagePainter(model),
+		contentDescription = null,
+		modifier = Modifier
+			.size(32.dp)
+			.clip(LocalShapes.current.small)
+	)
+}
+
+internal fun playerResourceIds(
+	useExternalPlayer: Boolean,
+	playbackRewriteVideoEnabled: Boolean,
+	playbackBackend: PlaybackBackend,
+): Pair<Int, Int> {
+	val backendResources = when (playbackBackend) {
+		PlaybackBackend.SAME_VIDEO_PLAYER -> R.drawable.ic_tv_play to R.string.playback_hdr_follow_video_player
+		PlaybackBackend.EXOPLAYER -> R.drawable.ic_exoplayer to R.string.playback_backend_exoplayer_name
+		PlaybackBackend.LIBVLC -> R.drawable.ic_libvlc to R.string.playback_backend_libvlc_name
+		PlaybackBackend.MPV -> R.drawable.ic_mpv to R.string.playback_backend_mpv_name
+	}
+	return when {
+		playbackBackend == PlaybackBackend.SAME_VIDEO_PLAYER -> backendResources
+		useExternalPlayer -> R.drawable.ic_tv_play to R.string.video_player_external
+		!playbackRewriteVideoEnabled -> R.mipmap.app_icon to R.string.app_name
+		else -> backendResources
 	}
 }
 
