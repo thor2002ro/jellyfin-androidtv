@@ -57,14 +57,11 @@ import org.jellyfin.androidtv.ui.itemhandling.GridButtonBaseRowItem
 import org.jellyfin.androidtv.util.ImageHelper
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage
 import org.jellyfin.androidtv.util.apiclient.channelPrimaryImage
-import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.getActivity
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.design.Tokens
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
-import org.koin.compose.koinInject
 
 class CardPresenter(
 	val showInfo: Boolean,
@@ -349,14 +346,10 @@ private fun CardViewHolderContent(
 			focused = focused,
 			image = {
 				if (image != null) {
-					val api = koinInject<ApiClient>()
 					AsyncImage(
-						url = image.getUrl(
-							api,
-							maxWidth = with(localDensity) { size.width.roundToPx() },
-							maxHeight = with(localDensity) { size.height.roundToPx() },
-						),
-						blurHash = image.blurHash,
+						image = image,
+						maxWidth = with(localDensity) { size.width.roundToPx() },
+						maxHeight = with(localDensity) { size.height.roundToPx() },
 						aspectRatio = aspectRatio,
 						scaleType = displayConfig.scaleType ?: ImageView.ScaleType.CENTER_CROP,
 						modifier = displayConfig.imageHeightRes?.let { heightRes ->

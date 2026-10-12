@@ -69,6 +69,7 @@ import org.jellyfin.androidtv.ui.presentation.MyDetailsOverviewRowPresenter;
 import org.jellyfin.androidtv.util.CoroutineUtils;
 import org.jellyfin.androidtv.util.DateTimeExtensionsKt;
 import org.jellyfin.androidtv.util.ImageHelper;
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage;
 import org.jellyfin.androidtv.util.KeyProcessor;
 import org.jellyfin.androidtv.util.MarkdownRenderer;
 import org.jellyfin.androidtv.util.PlaybackHelper;
@@ -414,10 +415,9 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
 
         mDetailsOverviewRow = new MyDetailsOverviewRow(item);
 
-        String primaryImageUrl = imageHelper.getValue().getLogoImageUrl(mBaseItem, 600);
-        if (primaryImageUrl == null) {
-            primaryImageUrl = imageHelper.getValue().getPrimaryImageUrl(mBaseItem, false, null, posterHeight);
-        }
+        JellyfinImage primaryImage = imageHelper.getValue().getLogoImage(mBaseItem);
+        boolean imageIsLogo = primaryImage != null;
+        if (primaryImage == null) primaryImage = imageHelper.getValue().getPrimaryImage(mBaseItem, false);
 
         mDetailsOverviewRow.setSummary(item.getOverview());
         switch (item.getType()) {
@@ -453,7 +453,10 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 }
         }
 
-        mDetailsOverviewRow.setImageDrawable(primaryImageUrl);
+        mDetailsOverviewRow.setImage(primaryImage);
+        mDetailsOverviewRow.setImageMaxWidth(imageIsLogo ? 600 : null);
+        mDetailsOverviewRow.setImageFillHeight(imageIsLogo ? null : posterHeight);
+        mDetailsOverviewRow.setImageAspectRatio(imageIsLogo ? 1.0 : aspect);
 
         ClassPresenterSelector ps = new ClassPresenterSelector();
         ps.addClassPresenter(MyDetailsOverviewRow.class, mDorPresenter);

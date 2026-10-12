@@ -35,15 +35,12 @@ import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.AsyncImage
-import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.sdk.getDisplayName
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.model.PositionInfo
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ImageType
-import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -63,7 +60,6 @@ fun VideoPlayerNextUpOverlay(
 	seekOverlayVisible: Boolean,
 	modifier: Modifier = Modifier,
 ) {
-	val api = koinInject<ApiClient>()
 	val showThumbnail = nextUpBehavior == NextUpBehavior.EXTENDED
 
 	AnimatedVisibility(
@@ -97,8 +93,8 @@ fun VideoPlayerNextUpOverlay(
 		) {
 			if (thumbnail != null) {
 				AsyncImage(
-					url = thumbnail.getUrl(api, fillHeight = 64),
-					blurHash = thumbnail.blurHash,
+					image = thumbnail,
+					fillHeight = 64,
 					aspectRatio = thumbnail.aspectRatio ?: 2f / 3f,
 					modifier = Modifier
 						.height(64.dp)
