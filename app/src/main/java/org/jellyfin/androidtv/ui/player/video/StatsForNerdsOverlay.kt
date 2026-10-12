@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.thor2002ro.libdovi.DoviStatus
 import kotlinx.coroutines.delay
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
@@ -61,9 +62,13 @@ import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoGeometry
+import org.jellyfin.playback.dovi.doviTransformFailure
+import org.jellyfin.playback.dovi.doviVideoDecoderFailure
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
@@ -378,6 +383,7 @@ private object NewPlayerStreamStatusBuilder {
 			}
 		val selectedSubtitleCodec = subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle)
 		val showLibassStats = selectedSubtitle != null && frameStats.libass != null
+		val doviFailure = (stream as? PlayableMediaStream)?.queueEntry?.doviTransformFailure
 
 		return listOf(
 			PlaybackInfoSection(
@@ -403,6 +409,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
 					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, stream.conversionMethod) ?: frameStats.videoCodec)
 					row("HDR mode", streamingHdrMode(frameStats.videoHdrMode, videoTrack, transcodingInfo))
+					row("Dolby Vision", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
 					row("Audio decoder", frameStats.audioDecoderLabel())
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec))
 					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
@@ -684,9 +691,19 @@ private object NewPlayerStreamStatusBuilder {
 		stream: MediaStream,
 		transcodingInfo: TranscodingInfo?,
 		isQualityForcedTranscode: Boolean,
-	): String? = when {
-		isQualityForcedTranscode && stream.conversionMethod == MediaConversionMethod.Transcode -> "Bitrate limit"
-		else -> TranscodingStatusFormatter.reason(transcodingInfo) ?: stream.transcodeReasonFromUrl()
+	): String? {
+		val serverReason = when {
+			isQualityForcedTranscode && stream.conversionMethod == MediaConversionMethod.Transcode -> "Bitrate limit"
+			else -> TranscodingStatusFormatter.reason(transcodingInfo) ?: stream.transcodeReasonFromUrl()
+		}
+		val hardwareDoviDecoderFailed = (stream as? PlayableMediaStream)
+			?.queueEntry
+			?.doviVideoDecoderFailure == true
+		return formatConversionReason(
+			serverReason = serverReason,
+			hardwareDoviDecoderFailed = hardwareDoviDecoderFailed,
+			isTranscoding = stream.conversionMethod == MediaConversionMethod.Transcode,
+		)
 	}
 
 	private fun String.displayTranscodeReason() = replace('_', ' ')
@@ -944,6 +961,31 @@ internal fun videoDiagnosticValues(
 		.takeIf { it.isFinite() && it > 0f }
 		?.let { aspect -> add("Aspect" to String.format(Locale.ROOT, "%.4f:1", aspect)) }
 	add("Zoom" to zoomStatus)
+}
+
+internal fun libdoviConversionDiagnostic(
+	observed: PlaybackDoviTransformStats?,
+	failure: DoviStatus?,
+): String? = when {
+	failure != null -> "failed — ${failure.name}"
+	observed != null -> "${observed.processor.diagnosticLabel()} — " +
+		"${observed.inputPresentation} → ${observed.outputPresentation}"
+	else -> null
+}
+
+private fun PlaybackDoviTransformProcessor.diagnosticLabel() = when (this) {
+	PlaybackDoviTransformProcessor.LIBDOVI -> "libdovi"
+	PlaybackDoviTransformProcessor.FAST_HDR_BASE -> "Fast HDR"
+}
+
+internal fun formatConversionReason(
+	serverReason: String?,
+	hardwareDoviDecoderFailed: Boolean,
+	isTranscoding: Boolean,
+): String? = if (hardwareDoviDecoderFailed && isTranscoding) {
+	listOfNotNull("Hardware HDR/DV decoder failed", serverReason).joinToString("; ")
+} else {
+	serverReason
 }
 
 private data class PlaybackInfoSection(
