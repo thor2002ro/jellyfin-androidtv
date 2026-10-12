@@ -111,6 +111,10 @@ class BackendService {
 			callListeners { onPlayStateChange(state) }
 		}
 
+		override fun onPlaybackError(error: PlaybackError) {
+			callListeners { onPlaybackError(error) }
+		}
+
 		override fun onVideoGeometryChange(geometry: VideoGeometry) {
 			if (geometry.videoAspectRatio > 0f) {
 				_backend?.setVideoOutputTransform(videoOutputTransform)

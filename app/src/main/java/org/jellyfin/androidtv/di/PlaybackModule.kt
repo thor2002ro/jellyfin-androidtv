@@ -44,9 +44,10 @@ import org.jellyfin.androidtv.util.profile.createDoviPlaybackPlan
 import org.jellyfin.androidtv.util.profile.DoviPlaybackNegotiationStore
 import org.jellyfin.androidtv.util.profile.retainsDoviDecision
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
+import org.jellyfin.androidtv.util.profile.softwareCodecsEnabledForProfile
 import org.jellyfin.playback.core.playbackManager
-import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.dovi.doviConversionSuppressed
+import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.jellyfin.jellyfinPlugin
 import org.jellyfin.playback.jellyfin.JellyfinDeviceProfileRequest
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -66,6 +67,7 @@ import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
+import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import org.jellyfin.androidtv.ui.playback.PlaybackManager as LegacyPlaybackManager
@@ -162,7 +164,9 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 	}
 
 	val userPreferences = get<UserPreferences>()
-	val backend = when (userPreferences[UserPreferences.playbackBackend]) {
+	val playbackBackend = userPreferences[UserPreferences.playbackBackend]
+	val mpvDecoder = userPreferences[UserPreferences.mpvDecoder]
+	val backend = when (playbackBackend) {
 		PlaybackBackend.EXOPLAYER -> get<ExoPlayerBackend>()
 		PlaybackBackend.LIBVLC -> get<LibVLCBackend>()
 		PlaybackBackend.MPV -> get<LibMPVBackend>()
