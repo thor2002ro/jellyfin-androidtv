@@ -119,7 +119,10 @@ private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
 		enableDebugLogging = userPreferences[UserPreferences.debuggingEnabled],
 		baseDataSourceFactory = get<HttpDataSource.Factory>(),
 	)
-	return ExoPlayerBackend(androidContext(), exoPlayerOptions)
+	return ExoPlayerBackend(
+		context = androidContext(),
+		exoPlayerOptions = exoPlayerOptions,
+	)
 }
 
 private fun Scope.createLibVLCBackend(): LibVLCBackend {
