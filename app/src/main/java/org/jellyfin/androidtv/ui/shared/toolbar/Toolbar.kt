@@ -104,7 +104,7 @@ fun ToolbarButtons(
 		modifier = modifier
 			.focusRestorer()
 			.focusGroup(),
-		horizontalArrangement = Arrangement.spacedBy(8.dp),
+		horizontalArrangement = Arrangement.spacedBy(12.dp),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
 		JellyfinTheme(

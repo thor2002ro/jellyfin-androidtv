@@ -150,7 +150,7 @@ class CardPresenter(
 	}
 }
 
-private data class BaseRowItemDisplayConfig(
+internal data class BaseRowItemDisplayConfig(
 	val image: JellyfinImage?,
 	val iconRes: Int,
 	val aspectRatio: Float,
@@ -160,7 +160,7 @@ private data class BaseRowItemDisplayConfig(
 	val imageHeightRes: Int? = null,
 )
 
-private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Boolean): BaseRowItemDisplayConfig = when (baseRowType) {
+internal fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Boolean): BaseRowItemDisplayConfig = when (baseRowType) {
 	BaseRowType.BaseItem -> {
 		val preferSeriesPoster = this is BaseItemDtoBaseRowItem && preferSeriesPoster
 		val primaryAspectRatio = baseItem?.primaryImageAspectRatio?.toFloat()
@@ -200,7 +200,7 @@ private fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: Bo
 				backgroundColor = Tokens.Color.colorBlue850,
 			)
 
-			BaseItemKind.EPISODE -> when (preferSeriesPoster) {
+			BaseItemKind.EPISODE -> when (preferSeriesPoster && imageType == ImageType.POSTER) {
 				true -> base.copy(
 					aspectRatio = ImageHelper.ASPECT_RATIO_2_3.toFloat(),
 					iconRes = R.drawable.ic_tv,

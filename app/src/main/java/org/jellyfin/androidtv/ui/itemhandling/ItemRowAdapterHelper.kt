@@ -101,6 +101,7 @@ fun <T : Any> ItemRowAdapter.setItems(
 
 	replaceAll(allItems, areItemsTheSame = ::areAdapterItemsTheSame)
 	itemsLoaded = allItems.size
+	addRowToParentIfResultsReceived()
 }
 
 internal fun areAdapterItemsTheSame(old: Any, new: Any): Boolean {
@@ -114,6 +115,20 @@ internal fun areAdapterItemsTheSame(old: Any, new: Any): Boolean {
 	return old == new
 }
 
+private fun BaseRowItem.visualSignature() = listOf(
+	baseItem?.imageTags,
+	baseItem?.imageBlurHashes,
+	baseItem?.backdropImageTags,
+	baseItem?.parentPrimaryImageItemId,
+	baseItem?.parentPrimaryImageTag,
+	baseItem?.parentThumbItemId,
+	baseItem?.parentThumbImageTag,
+	baseItem?.seriesId,
+	baseItem?.seriesPrimaryImageTag,
+	baseItem?.seriesThumbImageTag,
+	baseItem?.primaryImageAspectRatio,
+)
+
 internal fun BaseRowItem.resumeSignature() = listOf(
 	itemId,
 	showRemainingTimeBadge,
@@ -121,9 +136,45 @@ internal fun BaseRowItem.resumeSignature() = listOf(
 	baseItem?.userData?.played,
 	baseItem?.userData?.playedPercentage,
 	baseItem?.userData?.playbackPositionTicks,
+) + visualSignature()
+
+internal fun BaseRowItem.itemSignature() = listOf(
+	itemId,
+	showRemainingTimeBadge,
+	baseItem?.name,
+	baseItem?.episodeTitle,
+	baseItem?.seriesName,
+	baseItem?.seasonName,
+	baseItem?.indexNumber,
+	baseItem?.parentIndexNumber,
+	baseItem?.userData?.played,
+	baseItem?.userData?.playedPercentage,
+	baseItem?.userData?.playbackPositionTicks,
+) + visualSignature()
+
+internal fun BaseRowItem.liveTvProgramSignature() = listOf(
+	itemId,
+	baseItem?.name,
+	baseItem?.episodeTitle,
+	baseItem?.channelId,
+	baseItem?.channelName,
+	baseItem?.channelNumber,
+	baseItem?.channelPrimaryImageTag,
+	baseItem?.startDate,
+	baseItem?.endDate,
+	baseItem?.timerId,
+	baseItem?.seriesTimerId,
 )
 
 internal fun GetItemsRequest.showsRemainingTimeBadges() = filters?.contains(ItemFilter.IS_RESUMABLE) == true
+
+private fun ItemRowAdapter.replaceIfChanged(items: List<BaseRowItem>, signature: (BaseRowItem) -> List<Any?>) {
+	val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
+	if (oldItems.map { it?.let(signature) } != items.map(signature)) replaceAll(items)
+	itemsLoaded = items.size
+	totalItems = items.size
+	addRowToParentIfResultsReceived()
+}
 
 fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
@@ -140,12 +191,8 @@ fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequ
 				)
 			}
 
-			val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
-			if (oldItems.map { it?.resumeSignature() } != items.map { it.resumeSignature() }) {
-				replaceAll(items)
-			}
-			itemsLoaded = items.size
-			totalItems = items.size
+			replaceIfChanged(items, BaseRowItem::resumeSignature)
+			if (items.isEmpty()) removeRow()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -153,12 +200,20 @@ fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequ
 	}
 }
 
-fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) {
+fun ItemRowAdapter.retrieveNextUpItems(
+	api: ApiClient,
+	query: GetNextUpRequest,
+	combinedResumeQuery: GetResumeItemsRequest? = null,
+) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		var displayedItems = emptyList<BaseItemDto>()
 		runCatching {
-			val response = withContext(Dispatchers.IO) {
-				api.showApi.getNextUp(query).content
+			val (response, resumeItems) = coroutineScope {
+				val nextUp = async(Dispatchers.IO) { api.showApi.getNextUp(query).content }
+				val resume = combinedResumeQuery?.let { request ->
+					async(Dispatchers.IO) { api.libraryApi.getResumeItems(request).content.items }
+				}
+				nextUp.await() to resume?.await().orEmpty()
 			}
 
 			// Some special flavor for series, used in FullDetailsFragment
@@ -181,33 +236,28 @@ fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) 
 				}
 				displayedItems = items
 
-				setItems(
-					items = items,
-					transform = { item, _ ->
-						BaseItemDtoBaseRowItem(
-							item,
-							preferParentThumb,
-							false
-						)
-					}
-				)
+				val rowItems = items.map { item ->
+					BaseItemDtoBaseRowItem(
+						item,
+						preferParentThumb,
+						false
+					)
+				}
+				replaceIfChanged(rowItems, BaseRowItem::itemSignature)
 
 				if (items.isEmpty()) removeRow()
 			} else {
-				displayedItems = response.items
-
-				setItems(
-					items = response.items,
-					transform = { item, _ ->
-						BaseItemDtoBaseRowItem(
-							item,
-							preferParentThumb,
-							isStaticHeight
-						)
-					}
+				val rowItems = combinedContinueWatchingAndNextUpRowItems(
+					resumeItems = resumeItems,
+					nextUpItems = response.items,
+					limit = query.limit,
+					preferParentThumb = preferParentThumb,
+					staticHeight = isStaticHeight,
 				)
+				displayedItems = rowItems.mapNotNull(BaseRowItem::baseItem)
+				replaceIfChanged(rowItems, BaseRowItem::itemSignature)
 
-				if (response.items.isEmpty()) removeRow()
+				if (rowItems.isEmpty()) removeRow()
 			}
 		}.fold(
 			onSuccess = {
@@ -224,6 +274,31 @@ fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) 
 				}
 			},
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
+		)
+	}
+}
+
+internal fun combineContinueWatchingAndNextUpItems(
+	resumeItems: Collection<BaseItemDto>,
+	nextUpItems: Collection<BaseItemDto>,
+	limit: Int?,
+): List<BaseItemDto> = (resumeItems + nextUpItems)
+	.distinctBy(BaseItemDto::id)
+	.take(limit ?: Int.MAX_VALUE)
+
+internal fun combinedContinueWatchingAndNextUpRowItems(
+	resumeItems: Collection<BaseItemDto>,
+	nextUpItems: Collection<BaseItemDto>,
+	limit: Int?,
+	preferParentThumb: Boolean,
+	staticHeight: Boolean,
+): List<BaseRowItem> {
+	val resumeItemIds = resumeItems.mapTo(hashSetOf(), BaseItemDto::id)
+	return combineContinueWatchingAndNextUpItems(resumeItems, nextUpItems, limit).map { item ->
+		item.toBaseItemRowItem(
+			preferParentThumb = preferParentThumb,
+			staticHeight = staticHeight,
+			showRemainingTimeBadge = item.id in resumeItemIds,
 		)
 	}
 }
@@ -276,6 +351,7 @@ private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto
 	)
 	itemsLoaded = items.size
 	totalItems = items.size
+	addRowToParentIfResultsReceived()
 }
 
 private fun ItemRowAdapter.latestMediaRowItem(item: BaseItemDto) = BaseItemDtoBaseRowItem(
@@ -878,14 +954,18 @@ fun ItemRowAdapter.retrieveAdditionalParts(api: ApiClient, query: GetAdditionalP
 	}
 }
 
-fun ItemRowAdapter.retrieveUserViews(api: ApiClient, userViewsRepository: UserViewsRepository) {
+fun ItemRowAdapter.retrieveUserViews(
+	api: ApiClient,
+	userViewsRepository: UserViewsRepository,
+	initialViews: Collection<BaseItemDto>? = null,
+) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		runCatching {
-			val response = withContext(Dispatchers.IO) {
-				api.userViewApi.getUserViews().content
+			val items = initialViews ?: withContext(Dispatchers.IO) {
+				api.userViewApi.getUserViews().content.items
 			}
 
-			val filteredItems = userViewsRepository.withSpecialViews(response.items)
+			val filteredItems = userViewsRepository.withSpecialViews(items)
 
 			setItems(
 				items = filteredItems,
@@ -1026,21 +1106,18 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 				programs.map { program -> program.withChannelImage(channels[program.channelId]) }
 			}
 
-			setItems(
-				items = items,
-				transform = { item, _ ->
-					BaseItemDtoBaseRowItem(
-						item,
-						false,
-						isStaticHeight,
-						selectAction,
-					)
-				}
-			)
+			val rowItems = items.map { item ->
+				BaseItemDtoBaseRowItem(
+					item,
+					false,
+					isStaticHeight,
+					selectAction,
+				)
+			}
+			replaceIfChanged(rowItems, BaseRowItem::liveTvProgramSignature)
 			prefetchLiveTvTracks(api, items)
 
 			if (items.isEmpty()) removeRow()
-			else addRowToParentIfResultsReceived()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -1200,7 +1277,6 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 			prefetchLiveTvTracks(api, items)
 
 			if (itemsLoaded == 0) removeRow()
-			else addRowToParentIfResultsReceived()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }

@@ -9,7 +9,7 @@ import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
-import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
@@ -22,16 +22,18 @@ class HomeFragmentBrowseRowDefRow(
 	private val browseRowDef: BrowseRowDef,
 	private val channelCardLongClick: ((item: Any?, view: View) -> Boolean)? = null,
 ) : HomeFragmentRow, KoinComponent {
-	private val userPreferences by inject<UserPreferences>()
+	private val userSettingPreferences by inject<UserSettingPreferences>()
 
 	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
 		val header = HeaderItem(browseRowDef.headerText)
-		val preferParentThumb = userPreferences[UserPreferences.seriesThumbnailsEnabled]
+		val preferParentThumb = userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled]
 
 		// Some of these members are probably never used and could be removed
 		val rowAdapter = when (browseRowDef.queryType) {
-			QueryType.NextUp -> ItemRowAdapter(context, browseRowDef.nextUpQuery, preferParentThumb, cardPresenter, rowsAdapter)
-			QueryType.LatestItems -> ItemRowAdapter(context, browseRowDef.latestItemsQuery, userPreferences[UserPreferences.seriesThumbnailsEnabled], cardPresenter, rowsAdapter)
+			QueryType.NextUp -> ItemRowAdapter(context, browseRowDef.nextUpQuery, preferParentThumb, cardPresenter, rowsAdapter).apply {
+				combinedResumeQuery = browseRowDef.supplementalResumeQuery
+			}
+			QueryType.LatestItems -> ItemRowAdapter(context, browseRowDef.latestItemsQuery, preferParentThumb, cardPresenter, rowsAdapter)
 			QueryType.Views -> ItemRowAdapter(context, GetUserViewsRequest, cardPresenter, rowsAdapter)
 			QueryType.SimilarSeries -> ItemRowAdapter(context, browseRowDef.similarQuery, QueryType.SimilarSeries, cardPresenter, rowsAdapter)
 			QueryType.SimilarMovies -> ItemRowAdapter(context, browseRowDef.similarQuery, QueryType.SimilarMovies, cardPresenter, rowsAdapter)
@@ -44,15 +46,21 @@ class HomeFragmentBrowseRowDefRow(
 				browseRowDef.liveTvProgramSelectAction,
 			)
 			QueryType.LiveTvRecording -> ItemRowAdapter(context, browseRowDef.recordingQuery, browseRowDef.chunkSize, cardPresenter, rowsAdapter)
-			QueryType.Resume -> createResumeHomeRowAdapter(context, browseRowDef, cardPresenter, rowsAdapter)
+			QueryType.Resume -> createResumeHomeRowAdapter(
+				context = context,
+				browseRowDef = browseRowDef,
+				cardPresenter = cardPresenter,
+				rowsAdapter = rowsAdapter,
+				preferParentThumb = browseRowDef.preferParentThumb && preferParentThumb,
+			)
 			else -> ItemRowAdapter(context, browseRowDef.query, browseRowDef.chunkSize, browseRowDef.preferParentThumb, browseRowDef.isStaticHeight, cardPresenter, rowsAdapter, browseRowDef.queryType)
 		}
 
 		rowAdapter.setReRetrieveTriggers(browseRowDef.changeTriggers)
 		val row = ListRow(header, rowAdapter)
-		rowAdapter.setRow(row)
-		rowAdapter.Retrieve()
+		rowAdapter.setRow(row, rowsAdapter.size().toDouble())
 		rowsAdapter.add(row)
+		rowAdapter.Retrieve()
 	}
 }
 
@@ -61,11 +69,12 @@ internal fun createResumeHomeRowAdapter(
 	browseRowDef: BrowseRowDef,
 	cardPresenter: CardPresenter,
 	rowsAdapter: MutableObjectAdapter<Row>,
+	preferParentThumb: Boolean = browseRowDef.preferParentThumb,
 ) = ItemRowAdapter(
 	context,
 	browseRowDef.resumeQuery,
 	browseRowDef.chunkSize,
-	browseRowDef.preferParentThumb,
+	preferParentThumb,
 	browseRowDef.isStaticHeight,
 	cardPresenter,
 	rowsAdapter,
