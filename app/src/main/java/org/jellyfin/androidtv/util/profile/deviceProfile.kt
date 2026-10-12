@@ -501,11 +501,24 @@ internal fun createDeviceProfile(
 		}
 	} - forceEnabledHdr + forceDisabledHdr
 
-	val unsupportedRangeTypesHevc = getUnsupportedHevcVideoRangeWorkarounds(
+	val baselineUnsupportedRangeTypesHevc = getUnsupportedHevcVideoRangeWorkarounds(
 		mediaTest = mediaTest,
 		forceEnabledHdr = forceEnabledHdr,
 		forceDisabledHdr = forceDisabledHdr,
 	).keys
+	val unsupportedRangeTypesHevc = when {
+		doviPlaybackPlan?.codec != DoviVideoCodec.HEVC -> baselineUnsupportedRangeTypesHevc
+		doviPlaybackPlan.decision.route == DoviRoute.ServerFallback ->
+			baselineUnsupportedRangeTypesHevc + doviPlaybackPlan.sourceRangeType
+		else -> when (doviPlaybackPlan.decision.route) {
+		DoviRoute.Native,
+		is DoviRoute.SourceBase,
+		is DoviRoute.Transform,
+		-> baselineUnsupportedRangeTypesHevc -
+			doviPlaybackPlan.advertisedHevcRangeTypes + forceDisabledHdr
+		DoviRoute.ServerFallback -> error("Handled above")
+		}
+	}
 
 	// Note: The codec profiles use a workaround to create correct behavior
 	// The notEquals condition will always fail the ConditionProcessor test in the server so we use applyConditions to only have the codec
