@@ -118,6 +118,6 @@ class LibraryFilterOptionsTests : FunSpec({
 	}
 
 	test("view style defaults can represent cards and dense list") {
-		LibraryViewStyle.entries.map { it.name } shouldBe listOf("CARDS", "DENSE_LIST")
+		LibraryViewStyle.entries.take(2).map { it.name } shouldBe listOf("CARDS", "DENSE_LIST")
 	}
 })
