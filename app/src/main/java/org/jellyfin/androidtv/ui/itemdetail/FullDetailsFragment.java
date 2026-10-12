@@ -558,9 +558,9 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 }
 
                 //Chapters
-                if (mBaseItem.getChapters() != null && !mBaseItem.getChapters().isEmpty()) {
-                    List<ChapterItemInfo> chapters = BaseItemExtensionsKt.buildChapterItems(mBaseItem);
-                    ItemRowAdapter chapterAdapter = new ItemRowAdapter(requireContext(), chapters, new CardPresenter(true, 120), adapter);
+                List<ChapterItemInfo> movieChapters = BaseItemExtensionsKt.buildChapterItems(mBaseItem);
+                if (!movieChapters.isEmpty()) {
+                    ItemRowAdapter chapterAdapter = new ItemRowAdapter(requireContext(), movieChapters, new CardPresenter(true, 120), adapter);
                     addItemRow(adapter, chapterAdapter, 2, getString(R.string.lbl_chapters));
                 }
 
@@ -650,9 +650,9 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 }
 
                 //Chapters
-                if (mBaseItem.getChapters() != null && !mBaseItem.getChapters().isEmpty()) {
-                    List<ChapterItemInfo> chapters = BaseItemExtensionsKt.buildChapterItems(mBaseItem);
-                    ItemRowAdapter chapterAdapter = new ItemRowAdapter(requireContext(), chapters, new CardPresenter(true, 120), adapter);
+                List<ChapterItemInfo> episodeChapters = BaseItemExtensionsKt.buildChapterItems(mBaseItem);
+                if (!episodeChapters.isEmpty()) {
+                    ItemRowAdapter chapterAdapter = new ItemRowAdapter(requireContext(), episodeChapters, new CardPresenter(true, 120), adapter);
                     addItemRow(adapter, chapterAdapter, 1, getString(R.string.lbl_chapters));
                 }
 
