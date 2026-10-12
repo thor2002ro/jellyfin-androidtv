@@ -266,6 +266,7 @@
     <string name="lbl_guide_option_number">Channel number</string>
     <string name="lbl_resume_preroll">Resume pre-roll</string>
     <string name="lbl_subtitle_text_color">Text color</string>
+    <string name="lbl_subtitle_hdr_text_color">HDR text color</string>
     <string name="lbl_subtitle_background_color">Background color</string>
     <string name="lbl_subtitle_text_stroke_color">Edge color</string>
     <string name="lbl_resume_from">Resume from %1$s</string>
