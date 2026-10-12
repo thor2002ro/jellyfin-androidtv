@@ -1,3 +1,8 @@
+		.filter { versionDirectory ->
+			val version = versionDirectory.name
+			versionDirectory.resolve("mpv-android-lib-$version.aar").isFile ||
+				!moduleDirectory.endsWith("mpv-android-lib")
+		}
 pluginManagement {
 	repositories {
 		gradlePluginPortal()
