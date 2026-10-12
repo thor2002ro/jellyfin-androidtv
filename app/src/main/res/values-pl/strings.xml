@@ -103,7 +103,6 @@
     <string name="msg_error_live_stream">Błąd przesyłania TV. Ponawianie…</string>
     <string name="pref_live_tv_cat">Telewizja</string>
     <string name="lbl_live_tv_guide">Przewodnik TV</string>
-    <string name="lbl_no_recordings">Brak dostępnych nagrań</string>
     <string name="msg_unable_load_subs">Nie można wczytać napisów</string>
     <string name="msg_subtitles_loading">Wczytuję napisy…</string>
     <string name="lbl_filters">Filtry TV</string>
@@ -382,7 +381,6 @@
     <string name="pref_accounts">Konta</string>
     <string name="sort_accounts_by">Sortuj konta według</string>
     <string name="pref_customization">Dostosowywanie</string>
-    <string name="server_issue_ssl_handshake">Uzgodnienie SSL nieudane</string>
     <string name="server_issue_timeout">Przekroczono limit czasu połączenia</string>
     <string name="server_issue_outdated_version">Serwer używa nieobsługiwanej wersji %1$s. Zaktualizuj do %2$s lub nowszej</string>
     <string name="server_issue_unsupported_version">Serwer używa wersji %1$s, która nie jest obsługiwana</string>

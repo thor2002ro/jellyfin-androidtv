@@ -201,7 +201,6 @@
     <string name="pref_live_tv_cat">Živá TV</string>
     <string name="lbl_recorded_tv">TV nahrávky</string>
     <string name="lbl_live_tv_guide">Programový sprievodca</string>
-    <string name="lbl_no_recordings">Žiadne dostupné nahrávky</string>
     <string name="msg_burn_sub_warning">Vypaľovanie titulkov do obrazu. Môže to chvíľu trvať…</string>
     <string name="lbl_starting_with">začať s tými, ktorých meno začína s</string>
     <string name="desc_debug">Poskytnúť extra informácie pre debugovanie</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">Zobrazí čierne pozadie za titulkami</string>
     <string name="pref_subtitles_background_title">Zobraziť pozadie</string>
     <string name="pref_next_up_timeout_disabled">∞</string>
-    <string name="server_issue_ssl_handshake">Spojenie SSL zlyhalo</string>
     <string name="server_issue_timeout">Čas pre pripojenie vypršal</string>
     <string name="server_issue_outdated_version">Verzia serveru %1$s už nie je podporovaná. Aktualizujte server na verziu %2$s alebo novšiu</string>
     <string name="server_issue_unsupported_version">Server používa verziu %1$s, ktorá nie je podporovaná</string>
