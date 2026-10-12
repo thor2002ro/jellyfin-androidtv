@@ -104,9 +104,19 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var refreshRateSwitchingBehavior = enumPreference("refresh_rate_switching_behavior", RefreshRateSwitchingBehavior.DISABLED)
 
 		/**
-		 * Whether ExoPlayer should prefer FFmpeg renderers to core ones.
+		 * Whether ExoPlayer should prefer FFmpeg audio renderers to core ones.
 		 */
-		var preferExoPlayerFfmpeg = booleanPreference("exoplayer_prefer_ffmpeg", defaultValue = false)
+		var preferExoPlayerFfmpeg = booleanPreference("exoplayer_prefer_ffmpeg", defaultValue = true)
+
+		/**
+		 * Whether ExoPlayer should prefer FFmpeg video renderers to core ones.
+		 */
+		var preferExoPlayerFfmpegVideo = booleanPreference("exoplayer_prefer_ffmpeg_video", defaultValue = false)
+
+		/**
+		 * Enable trickplay thumbnails while seeking.
+		 */
+		var trickPlayEnabled = booleanPreference("pref_enable_trickplay", true)
 
 		/**
 		 * User defined AVC level override. AUTO uses device-reported capabilities.
