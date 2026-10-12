@@ -24,6 +24,8 @@ data class VideoDecoderOption(
 interface PlayerBackend {
 	val reportsBufferedPosition: Boolean
 		get() = true
+	val supportsInteractiveScrubbing: Boolean
+		get() = false
 
 	// Testing
 	fun supportsStream(stream: MediaStream): PlaySupportReport
@@ -77,7 +79,7 @@ interface PlayerBackend {
 	fun pause()
 	fun stop()
 
-	fun seekTo(position: Duration)
+	fun seekTo(position: Duration): Boolean
 	fun setScrubbing(scrubbing: Boolean)
 
 	fun setSpeed(speed: Float)
