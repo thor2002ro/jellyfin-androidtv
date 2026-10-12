@@ -163,7 +163,7 @@ val appModule = module {
 	single { TranscodingStatusRepository(get()) }
 	single { InteractionTrackerViewModel(get(), get(), get()) }
 
-	single<UserRepository> { UserRepositoryImpl() }
+	single<UserRepository> { UserRepositoryImpl(get()) }
 	single<UserViewsRepository> { UserViewsRepositoryImpl(get(), androidContext(), get()) }
 	single<NotificationsRepository> { NotificationsRepositoryImpl(get(), get()) }
 	single<ItemMutationRepository> { ItemMutationRepositoryImpl(get(), get()) }
