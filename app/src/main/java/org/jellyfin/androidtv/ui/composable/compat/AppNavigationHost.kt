@@ -50,7 +50,7 @@ fun AppNavigationHost(
 		val now = SystemClock.elapsedRealtime()
 		if (now <= backToExitDeadline) {
 			backToExitDeadline = 0L
-			activity?.finishAfterTransition()
+			activity?.finishAndRemoveTask()
 			return@BackHandler
 		}
 
@@ -62,8 +62,8 @@ fun AppNavigationHost(
 		)
 	}
 
-	LaunchedEffect(canGoBack) {
-		if (canGoBack) backToExitDeadline = 0L
+	LaunchedEffect(canGoBack, windowInfo.isWindowFocused) {
+		if (canGoBack || !windowInfo.isWindowFocused) backToExitDeadline = 0L
 	}
 
 	AndroidView(

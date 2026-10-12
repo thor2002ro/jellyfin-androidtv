@@ -37,6 +37,20 @@ import java.util.UUID
 
 @Suppress("TooManyFunctions")
 object Destinations {
+	private val playbackFragments = setOf(
+		AudioNowPlayingFragment::class,
+		CustomPlaybackOverlayFragment::class,
+		LiveTvGuidePlayerFragment::class,
+		NextUpFragment::class,
+		PhotoPlayerFragment::class,
+		StillWatchingFragment::class,
+		VideoPlayerFragment::class,
+	)
+
+	fun isPlayback(destination: Destination.Fragment) = destination.fragment in playbackFragments
+	fun isAudioPlayback(destination: Destination.Fragment) = destination.fragment == AudioNowPlayingFragment::class
+	fun isLegacyVideoPlayback(destination: Destination.Fragment) = destination.fragment == CustomPlaybackOverlayFragment::class
+
 	// General
 	val home = fragmentDestination<HomeFragment>()
 	fun search(query: String? = null) = fragmentDestination<SearchFragment> {
