@@ -15,18 +15,6 @@ import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.koin.android.ext.android.inject
 import java.util.UUID
 
-fun BaseItemDto.copyWithTimerId(
-	timerId: String?,
-) = copy(
-	timerId = timerId,
-)
-
-fun BaseItemDto.copyWithSeriesTimerId(
-	seriesTimerId: String?,
-) = copy(
-	seriesTimerId = seriesTimerId,
-)
-
 fun LiveProgramDetailPopup.cancelTimer(
 	timerId: String,
 	callback: () -> Unit,
