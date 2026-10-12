@@ -77,6 +77,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		private set
 
 	private var filters: FilterOptions? = null
+	@Suppress("DEPRECATION")
 	private var retrieveFinishedListener: EmptyResponse? = null
 	private var retrieveFinishedRunnable: Runnable? = null
 	private var reRetrieveTriggers: Array<ChangeTriggerType>? = emptyArray()
@@ -750,6 +751,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		if (exception == null) retrieveFinishedRunnable?.run()
 	}
 
+	@Suppress("DEPRECATION")
 	fun setRetrieveFinishedListener(response: EmptyResponse?) {
 		retrieveFinishedListener = response
 	}
