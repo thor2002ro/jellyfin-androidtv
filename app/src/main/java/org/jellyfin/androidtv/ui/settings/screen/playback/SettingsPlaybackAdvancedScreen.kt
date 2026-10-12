@@ -200,14 +200,53 @@ fun SettingsPlaybackAdvancedScreen() {
 		}
 
 		item {
-			var refreshRateSwitchingBehavior by rememberPreference(userPreferences, UserPreferences.refreshRateSwitchingBehavior)
+			var enabled by rememberPreference(userPreferences, UserPreferences.refreshRateSwitchingEnabled)
 
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_refresh_switching)) },
-				captionContent = { Text(stringResource(refreshRateSwitchingBehavior.nameRes)) },
-				onClick = { router.push(Routes.PLAYBACK_REFRESH_RATE_SWITCHING_BEHAVIOR) },
-				modifier = Modifier.focusKey(Routes.PLAYBACK_REFRESH_RATE_SWITCHING_BEHAVIOR)
+				captionContent = { Text(stringResource(R.string.pref_refresh_switching_description)) },
+				trailingContent = { Checkbox(checked = enabled) },
+				onClick = { enabled = !enabled },
+				modifier = Modifier.focusKey("refresh_rate_switching")
 			)
+		}
+
+		item {
+			var enabled by rememberPreference(userPreferences, UserPreferences.resolutionSwitchingEnabled)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_resolution_switching)) },
+				captionContent = { Text(stringResource(R.string.pref_resolution_switching_description)) },
+				trailingContent = { Checkbox(checked = enabled) },
+				onClick = { enabled = !enabled },
+				modifier = Modifier.focusKey("resolution_switching")
+			)
+		}
+
+		item {
+			var delaySeconds by rememberPreference(userPreferences, UserPreferences.displayChangeDelaySeconds)
+			val interactionSource = remember { MutableInteractionSource() }
+
+			ListControl(
+				headingContent = { Text(stringResource(R.string.pref_display_change_delay)) },
+				captionContent = { Text(stringResource(R.string.pref_display_change_delay_description)) },
+				interactionSource = interactionSource,
+				modifier = Modifier.focusKey("display_change_delay")
+			) {
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					RangeControl(
+						modifier = Modifier.height(4.dp).weight(1f),
+						interactionSource = interactionSource,
+						min = 0f,
+						max = 5f,
+						stepForward = 1f,
+						markers = listOf(UserPreferences.displayChangeDelaySeconds.defaultValue.toFloat()),
+						value = delaySeconds.coerceIn(0, 5).toFloat(),
+						onValueChange = { delaySeconds = it.roundToInt() }
+					)
+					Spacer(Modifier.width(Tokens.Space.spaceSm))
+					Text(if (delaySeconds == 0) stringResource(R.string.pref_display_change_no_delay) else "${delaySeconds}s")
+				}
+			}
 		}
 
 		item {
