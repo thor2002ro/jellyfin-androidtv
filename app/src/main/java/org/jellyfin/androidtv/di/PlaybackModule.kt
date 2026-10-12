@@ -218,6 +218,11 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				doviPlaybackPlan = doviPlan,
 				softwareCodecsEnabled = profileSoftwareCodecsEnabled,
 				mediaTest = doviMediaTest,
+				enableFfmpegAudio = get<PlaybackManager>().backend is ExoPlayerBackend,
+				enableFfmpegVideo = get<PlaybackManager>().backend is ExoPlayerBackend && (
+					userPreferences[UserPreferences.preferExoPlayerFfmpegVideo] ||
+						(queueEntry.baseItem?.isLiveTv() == true && userPreferences[UserPreferences.preferExoPlayerFfmpegVideoForLiveTv])
+					),
 			)
 		}
 		JellyfinDeviceProfileRequest(profile, token)
