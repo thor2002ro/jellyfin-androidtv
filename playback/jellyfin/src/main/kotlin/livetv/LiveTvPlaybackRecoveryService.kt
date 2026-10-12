@@ -74,23 +74,34 @@ class LiveTvPlaybackRecoveryService(
 					if (manager.queue.entry.value?.doviRecoveryOwnership == null) startStalledBufferRecovery()
 				}
 
+				PlayState.PLAYING -> {
 					if (manager.queue.entry.value?.doviRecoveryOwnership == null) {
 						doviTransformationErrorEntry = null
 					}
-				PlayState.PLAYING,
+					manager.queue.entry.value?.let { entry ->
+						resetLiveTvRecoveryAttempts(entry, liveTvPlaybackPolicy)
+					}
+					lastPlaybackError = null
+					cancelPlaybackErrorRecovery()
+					cancelStalledBufferRecovery()
+				}
+
 				PlayState.PAUSED -> {
+					if (manager.queue.entry.value?.doviRecoveryOwnership == null) {
+						doviTransformationErrorEntry = null
+					}
 					lastPlaybackError = null
 					cancelPlaybackErrorRecovery()
 					cancelStalledBufferRecovery()
 				}
 
 				PlayState.STOPPED -> {
-					if (manager.queue.entry.value?.doviRecoveryOwnership == null) {
-						doviTransformationErrorEntry = null
-					}
-					lastPlaybackError = null
-					cancelPlaybackErrorRecovery()
 					cancelStalledBufferRecovery()
+					if (lastPlaybackError != null) {
+						startPlaybackErrorRecovery()
+					} else {
+						cancelPlaybackErrorRecovery()
+					}
 				}
 			}
 		}.launchIn(coroutineScope)
@@ -100,6 +111,8 @@ class LiveTvPlaybackRecoveryService(
 		val currentEntry = manager.queue.entry.value
 		if (currentEntry?.doviRecoveryOwnership != null || doviTransformationErrorEntry === currentEntry) return
 		if (playbackErrorRecoveryJob?.isActive == true) return
+		streamEndRecoveryJob?.cancel()
+		streamEndRecoveryJob = null
 
 		playbackErrorRecoveryJob = coroutineScope.launch(Dispatchers.Main) {
 			try {
@@ -160,6 +173,7 @@ class LiveTvPlaybackRecoveryService(
 
 	private fun startStreamEndRecovery() {
 		if (streamEndRecoveryJob?.isActive == true) return
+		if (lastPlaybackError != null) return
 
 		val entry = manager.queue.entry.value ?: return
 		if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
@@ -231,7 +245,13 @@ class LiveTvPlaybackRecoveryService(
 						lastBuffer = positionInfo.buffer
 					}
 
-					delay(stalledBufferRecoveryDelay(bufferedRecoveryAttempts))
+					val recoveryPosition = state.positionInfo
+					val recoveryInterval = if (recoveryPosition.active == Duration.ZERO && recoveryPosition.buffer == Duration.ZERO) {
+						LIVE_TV_STARTUP_RECOVERY_INTERVAL
+					} else {
+						STALLED_BUFFER_RECOVERY_INTERVAL
+					}
+					delay(recoveryInterval)
 
 					val delayedEntry = manager.queue.entry.value
 					val delayedStreamIdentifier = delayedEntry?.mediaStream?.identifier
@@ -270,32 +290,32 @@ class LiveTvPlaybackRecoveryService(
 						continue
 					}
 
-					if (bufferedRecoveryAttempts >= MAX_STALLED_BUFFER_RECOVERY_ATTEMPTS) {
-						Timber.w(
-							"Live TV stalled-buffer recovery exhausted after %s attempts at position %s with buffer %s",
-							bufferedRecoveryAttempts,
-							positionInfo.active,
-							positionInfo.buffer,
+					val stalledDuration = recoveryInterval
+					bufferedRecoveryAttempts += 1
+					if (!shouldReloadBufferedLiveTvStall(bufferedRecoveryAttempts, BUFFERED_STALL_RECOVERY_ATTEMPTS_BEFORE_RELOAD)) {
+						Timber.i(
+							"Live TV buffering stalled for $stalledDuration at position ${positionInfo.active} " +
+								"with buffer ${positionInfo.buffer}; waiting before stream reload attempt " +
+								"$bufferedRecoveryAttempts/$BUFFERED_STALL_RECOVERY_ATTEMPTS_BEFORE_RELOAD",
 						)
-						return@launch
+						continue
 					}
 
-					val stalledDuration = stalledBufferRecoveryDelay(bufferedRecoveryAttempts)
 					val liveStreamTargetOffset = liveTvPlaybackPolicy.increaseLiveStreamTargetOffset(delayedEntry)
-					bufferedRecoveryAttempts += 1
 					val startMessage = "Live TV buffering stalled for $stalledDuration at position ${positionInfo.active} " +
 						"with buffer ${positionInfo.buffer}; target offset $liveStreamTargetOffset; reloading current stream attempt " +
-						"$bufferedRecoveryAttempts/$MAX_STALLED_BUFFER_RECOVERY_ATTEMPTS"
+						"$bufferedRecoveryAttempts"
 					val reloaded = reloadCurrentLiveTvStream(
 						startMessage = startMessage,
 						successMessage = "Reloaded Live TV queue entry after stalled buffering",
 						failureMessage = "Unable to reload Live TV queue entry after stalled buffering",
 					)
-					if (!reloaded) return@launch
+					if (!reloaded) continue
 
 					val reloadedPositionInfo = state.positionInfo
 					lastPosition = reloadedPositionInfo.active
 					lastBuffer = reloadedPositionInfo.buffer
+					bufferedRecoveryAttempts = 0
 				}
 			} finally {
 				if (stalledBufferRecoveryJob === coroutineContext[Job]) {
@@ -358,13 +378,27 @@ class LiveTvPlaybackRecoveryService(
 		playbackErrorRecoveryJob = null
 	}
 
-	private fun stalledBufferRecoveryDelay(recoveryAttempts: Int) =
-		STALLED_BUFFER_RECOVERY_INTERVAL * (recoveryAttempts + 1)
-
 	private companion object {
 		private const val MAX_FORCE_TRANSCODING_RECOVERY_ATTEMPTS = 1
-		private const val MAX_STALLED_BUFFER_RECOVERY_ATTEMPTS = 3
-		private val PLAYBACK_ERROR_RETRY_INTERVAL = 5.seconds
-		private val STALLED_BUFFER_RECOVERY_INTERVAL = 15.seconds
+		private const val BUFFERED_STALL_RECOVERY_ATTEMPTS_BEFORE_RELOAD = 3
+		private val PLAYBACK_ERROR_RETRY_INTERVAL = 3.seconds
+		// Allow server-generated HLS to start before treating an empty buffer as a stalled connection.
+		private val LIVE_TV_STARTUP_RECOVERY_INTERVAL = 30.seconds
+		private val STALLED_BUFFER_RECOVERY_INTERVAL = 3.seconds
 	}
+}
+
+internal fun shouldReloadBufferedLiveTvStall(
+	bufferedRecoveryAttempts: Int,
+	attemptsBeforeReload: Int,
+) = bufferedRecoveryAttempts >= attemptsBeforeReload
+
+internal fun resetLiveTvRecoveryAttempts(
+	entry: QueueEntry,
+	liveTvPlaybackPolicy: LiveTvPlaybackPolicy,
+) {
+	if (!liveTvPlaybackPolicy.isLiveTv(entry)) return
+
+	entry.liveStreamTargetOffset = LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
+	entry.forceTranscodingRecoveryAttempts = null
 }
