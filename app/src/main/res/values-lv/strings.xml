@@ -419,7 +419,6 @@
     <string name="server_issue_invalid_product">Servera programmatūra nav saderīga</string>
     <string name="subtitle_error">Nevar atlasīt subtitrus</string>
     <string name="server_connection_failed">Nevar izveidot savienojumu ar serveri</string>
-    <string name="no_network_permissions">Jellyfin darbības nodrošināšanai ir nepieciešamas tīkla atļaujas</string>
     <string name="home_section_library">Mana multivide</string>
     <string name="server_connecting">Savienojās ar %1$s</string>
     <string name="lbl_remove_users">Tiks noņemti arī visi saistītie konti</string>

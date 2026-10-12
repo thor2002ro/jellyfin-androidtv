@@ -124,7 +124,6 @@
     <string name="lbl_episode_number">E%1$d</string>
     <string name="lbl_season_number">S%1$d</string>
     <string name="loading">Ŝarĝas…</string>
-    <string name="no_network_permissions">Jellyfin bezonas retajn permesojn por funkcii</string>
     <string name="user_picker_disable_summary">Ĉiam montri la ensalutan ekranon</string>
     <string name="lbl_use_series_thumbnails_description">Uzi seriajn avizojn kiam montri epizodojn</string>
     <string name="discovered_servers_empty">Neniuj serviloj troviĝis en loka reto.</string>

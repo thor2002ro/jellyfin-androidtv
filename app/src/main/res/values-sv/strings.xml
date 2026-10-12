@@ -337,7 +337,6 @@
     <string name="lbl_next_up_minimal">Utan miniatyrbild</string>
     <string name="lbl_next_up_extended">Med miniatyrbild</string>
     <string name="lbl_episode_range">E%1$d–%2$d</string>
-    <string name="no_network_permissions">Jellyfin kräver nätverksprivilegier för att fungera</string>
     <string name="pref_theme_muted_purple">Dämpad lila</string>
     <string name="lbl_fit">Normal</string>
     <string name="lbl_stretch">Sträck ut</string>
