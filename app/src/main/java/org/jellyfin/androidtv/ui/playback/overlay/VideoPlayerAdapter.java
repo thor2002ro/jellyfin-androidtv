@@ -8,6 +8,7 @@ import androidx.media3.common.util.UnstableApi;
 import org.jellyfin.androidtv.auth.repository.UserRepository;
 import org.jellyfin.androidtv.ui.playback.CustomPlaybackOverlayFragment;
 import org.jellyfin.androidtv.ui.playback.PlaybackController;
+import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetFormatsKt;
 import org.jellyfin.androidtv.ui.playback.VideoManagerHelperKt;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.StreamHelper;

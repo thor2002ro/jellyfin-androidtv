@@ -53,6 +53,8 @@ import org.jellyfin.playback.core.model.DEFAULT_SUBTITLE_TIMING_SPEED
 import org.jellyfin.playback.core.resetSubtitleTiming
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
+import org.jellyfin.playback.media3.exoplayer.mapping.getFfmpegSubtitleMimeType
+import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId

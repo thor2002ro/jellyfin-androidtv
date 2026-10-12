@@ -41,6 +41,8 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.util.EventLogger;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ExtractorsFactory;
+import androidx.media3.extractor.text.DefaultSubtitleParserFactory;
+import androidx.media3.extractor.text.SubtitleParser;
 import androidx.media3.extractor.ts.TsExtractor;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
@@ -51,6 +53,9 @@ import org.jellyfin.androidtv.data.compat.StreamInfo;
 import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.constant.BufferLength;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
+import org.jellyfin.playback.media3.exoplayer.ExternalSubtitleMediaSourceFactory;
+import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetRenderersFactory;
+import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetState;
 import org.jellyfin.sdk.api.client.ApiClient;
 import org.jellyfin.sdk.model.api.MediaStream;
 import org.jellyfin.sdk.model.api.MediaStreamType;
@@ -73,6 +78,10 @@ import timber.log.Timber;
 
 @OptIn(markerClass = UnstableApi.class)
 public class VideoManager {
+    private static final int LIVE_TV_DEFAULT_BUFFER_MS = 3_000;
+    private static final int LIVE_TV_LARGE_BUFFER_MS = 5_000;
+    private static final int LIVE_TV_EXTRA_LARGE_BUFFER_MS = 10_000;
+
     private ZoomMode mZoomMode;
     private Activity mActivity;
     private Equalizer mEqualizer;
@@ -83,6 +92,7 @@ public class VideoManager {
     public ExoPlayer mExoPlayer;
     private PlayerView mExoPlayerView;
     private Handler mHandler = new Handler();
+    private final SubtitleTimingOffsetState subtitleTimingOffsetState = new SubtitleTimingOffsetState();
 
     private long mMetaDuration = -1;
     private long lastExoPlayerPosition = -1;
@@ -92,6 +102,10 @@ public class VideoManager {
 
     private final UserPreferences userPreferences = KoinJavaComponent.get(UserPreferences.class);
     private final HttpDataSource.Factory exoPlayerHttpDataSourceFactory = KoinJavaComponent.get(HttpDataSource.Factory.class);
+    private String subtitleExtractorDebug;
+    private String subtitleRenderDebug;
+    private String subtitleParserDebug;
+    private String subtitlePathDebug;
 
     public VideoManager(@NonNull Activity activity, @NonNull View view, @NonNull PlaybackOverlayFragmentHelper helper) {
         mActivity = activity;
@@ -99,7 +113,22 @@ public class VideoManager {
         nightModeEnabled = userPreferences.get(UserPreferences.Companion.getAudioNightMode());
 
         boolean assDirectPlay = userPreferences.get(UserPreferences.Companion.getAssDirectPlay());
-        AssHandler assHandler = assDirectPlay ? new AssHandler(AssRenderType.OVERLAY_OPEN_GL, new AssHandlerConfig()) : null;
+        AssRenderType assRenderType = assDirectPlay ? userPreferences.get(UserPreferences.Companion.getLibassRenderType()).getAssRenderType() : null;
+        boolean parseSubtitlesDuringExtraction = userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction());
+        subtitleExtractorDebug = assDirectPlay ? "AssMatroskaExtractor (MKV)" : "Media3 default";
+        subtitleRenderDebug = subtitleRenderDebug(assRenderType);
+        subtitleParserDebug = assDirectPlay && assRenderType != AssRenderType.CUES ? "AssSubtitleParserFactory" : "DefaultSubtitleParserFactory";
+        subtitlePathDebug = assDirectPlay
+                ? "libass renderer; extraction parser off"
+                : parseSubtitlesDuringExtraction ? "extraction parser" : "renderer parser";
+        AssHandler assHandler = assDirectPlay ? new AssHandler(
+                assRenderType,
+                new AssHandlerConfig(
+                        userPreferences.get(UserPreferences.Companion.getLibassGlyphSize()).getGlyphs(),
+                        userPreferences.get(UserPreferences.Companion.getLibassCacheSize()).getMegabytes(),
+                        userPreferences.get(UserPreferences.Companion.getLibassMaxRenderPixels()).getPixels()
+                )
+        ) : null;
 
         mExoPlayer = configureExoplayerBuilder(activity, assHandler).build();
 
@@ -135,6 +164,9 @@ public class VideoManager {
 
         if (assHandler != null) {
             assHandler.init(mExoPlayer);
+        }
+
+        if (assHandler != null && isLibassOverlayRenderer(assRenderType)) {
             mExoPlayerView.getSubtitleView().addView(new AssSubtitleView(mActivity, assHandler));
         }
 
@@ -209,6 +241,16 @@ public class VideoManager {
         return DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON;
     }
 
+    private static boolean isLibassOverlayRenderer(@Nullable AssRenderType renderType) {
+        return renderType == AssRenderType.OVERLAY_OPEN_GL || renderType == AssRenderType.OVERLAY_CANVAS;
+    }
+
+    private static String subtitleRenderDebug(@Nullable AssRenderType renderType) {
+        if (renderType == AssRenderType.OVERLAY_OPEN_GL) return "libass OpenGL overlay";
+        if (renderType == AssRenderType.OVERLAY_CANVAS) return "libass Canvas overlay";
+        return "Media3 cues";
+    }
+
     /**
      * Configures Exoplayer for video playback. Initially we try with core decoders, but allow
      * ExoPlayer to silently fallback to software renderers.
@@ -218,35 +260,50 @@ public class VideoManager {
      */
     private ExoPlayer.Builder configureExoplayerBuilder(Context context, AssHandler assHandler) {
         ExoPlayer.Builder exoPlayerBuilder = new ExoPlayer.Builder(context);
-        DefaultRenderersFactory defaultRendererFactory = new DefaultRenderersFactory(context);
-        defaultRendererFactory.setEnableDecoderFallback(true);
-        defaultRendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
 
-        DefaultTrackSelector trackSelector = new DefaultTrackSelector(context);
-        trackSelector.setParameters(trackSelector.buildUponParameters()
-                .setAudioOffloadPreferences(new TrackSelectionParameters.AudioOffloadPreferences.Builder()
-                        .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-                        .build()
-                )
-                .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
-                .build()
+        DefaultDataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(
+                context,
+                exoPlayerHttpDataSourceFactory
         );
-        exoPlayerBuilder.setTrackSelector(trackSelector);
+        DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory();
+        extractorsFactory.setTsExtractorTimestampSearchBytes(
+                3 * TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES
+        );
 
-        DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory().setTsExtractorTimestampSearchBytes(TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * 3);
-        extractorsFactory.setConstantBitrateSeekingEnabled(true);
-        extractorsFactory.setConstantBitrateSeekingAlwaysEnabled(true);
-        DefaultDataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context, exoPlayerHttpDataSourceFactory);
         if (assHandler != null) {
             AssSubtitleParserFactory assSubtitleParserFactory = new AssSubtitleParserFactory(assHandler);
+            SubtitleParser.Factory subtitleParserFactory = assHandler.getRenderType() == AssRenderType.CUES
+                    ? new DefaultSubtitleParserFactory()
+                    : assSubtitleParserFactory;
+            SubtitleTimingOffsetRenderersFactory rendererFactory = new SubtitleTimingOffsetRenderersFactory(
+                    context,
+                    subtitleTimingOffsetState,
+                    subtitleParserFactory
+            );
+            rendererFactory.setEnableDecoderFallback(true);
+            rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
+
             ExtractorsFactory assExtractorsFactory = AssPlayerKt.withAssMkvSupport(extractorsFactory, assSubtitleParserFactory, assHandler);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, assExtractorsFactory);
-            mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory);
-            exoPlayerBuilder.setMediaSourceFactory(mediaSourceFactory);
-            exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, defaultRendererFactory));
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(false);
+            mediaSourceFactory.setSubtitleParserFactory(subtitleParserFactory);
+            exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
+            exoPlayerBuilder.setRenderersFactory(new AssRenderersFactory(assHandler, rendererFactory));
         } else {
-            exoPlayerBuilder.setRenderersFactory(defaultRendererFactory);
-            exoPlayerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory));
+            DefaultSubtitleParserFactory defaultSubtitleParserFactory = new DefaultSubtitleParserFactory();
+            SubtitleTimingOffsetRenderersFactory rendererFactory = new SubtitleTimingOffsetRenderersFactory(
+                    context,
+                    subtitleTimingOffsetState,
+                    defaultSubtitleParserFactory
+            );
+            rendererFactory.setEnableDecoderFallback(true);
+            rendererFactory.setExtensionRendererMode(determineExoPlayerExtensionRendererMode());
+
+            exoPlayerBuilder.setRenderersFactory(rendererFactory);
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory);
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
+            mediaSourceFactory.setSubtitleParserFactory(defaultSubtitleParserFactory);
+            exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
         }
 
         BufferLength bufferLength = userPreferences.get(UserPreferences.Companion.getBufferLength());
@@ -329,6 +386,13 @@ public class VideoManager {
         return mExoPlayer.isPlaying();
     }
 
+    public long getLiveTvBufferMs() {
+        BufferLength bufferLength = userPreferences.get(UserPreferences.Companion.getBufferLength());
+        if (bufferLength == BufferLength.EXTRA_LARGE) return LIVE_TV_EXTRA_LARGE_BUFFER_MS;
+        if (bufferLength == BufferLength.LARGE) return LIVE_TV_LARGE_BUFFER_MS;
+        return LIVE_TV_DEFAULT_BUFFER_MS;
+    }
+
     public void start() {
         if (mExoPlayer == null) {
             Timber.e("mExoPlayer should not be null!!");
@@ -386,7 +450,7 @@ public class VideoManager {
         return flags;
     }
 
-    public void setMediaStreamInfo(ApiClient api, StreamInfo streamInfo) {
+    public void setMediaStreamInfo(ApiClient api, StreamInfo streamInfo, boolean isLiveTv) {
         String path = streamInfo.getMediaUrl();
         if (path == null) {
             Timber.w("Video path is null cannot continue");
@@ -414,10 +478,17 @@ public class VideoManager {
                 }
             }
 
-            MediaItem mediaItem = new MediaItem.Builder()
+            MediaItem.Builder mediaItemBuilder = new MediaItem.Builder()
                     .setUri(Uri.parse(path))
-                    .setSubtitleConfigurations(subtitleConfigurations)
-                    .build();
+                    .setSubtitleConfigurations(subtitleConfigurations);
+
+            if (isLiveTv) {
+                mediaItemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                        .setTargetOffsetMs(getLiveTvBufferMs())
+                        .build());
+            }
+
+            MediaItem mediaItem = mediaItemBuilder.build();
 
             mExoPlayer.setMediaItem(mediaItem);
             mExoPlayer.prepare();
@@ -598,6 +669,35 @@ public class VideoManager {
         Timber.d("Setting playback speed: %f", speed);
 
         mExoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
+    }
+
+    public long getSubtitleTimingOffsetUs() {
+        return subtitleTimingOffsetState.getOffsetUs();
+    }
+
+    public String getSubtitleExtractorDebug() {
+        return subtitleExtractorDebug;
+    }
+
+    public String getSubtitleRenderDebug() {
+        return subtitleRenderDebug;
+    }
+
+    public String getSubtitleParserDebug() {
+        return subtitleParserDebug;
+    }
+
+    public String getSubtitlePathDebug() {
+        return subtitlePathDebug;
+    }
+
+
+    public void adjustSubtitleTimingOffsetUs(long deltaUs) {
+        subtitleTimingOffsetState.adjustOffsetUs(deltaUs);
+    }
+
+    public void resetSubtitleTimingOffset() {
+        subtitleTimingOffsetState.setOffsetUs(0L);
     }
 
     public void destroy() {
