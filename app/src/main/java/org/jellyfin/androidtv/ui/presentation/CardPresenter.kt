@@ -71,6 +71,7 @@ class CardPresenter(
 	val staticHeight: Int,
 	val uniformAspect: Boolean,
 	private val onLongClick: ((item: Any?, view: View) -> Boolean)? = null,
+	val showFavoriteIndicator: Boolean = true,
 ) : Presenter() {
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int) : this(showInfo, imageType, staticHeight, false)
@@ -130,6 +131,7 @@ class CardPresenter(
 					imageType = imageType,
 					staticHeight = staticHeight,
 					uniformAspect = uniformAspect,
+					showFavoriteIndicator = showFavoriteIndicator,
 				)
 			}
 		}
@@ -311,6 +313,13 @@ internal fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: B
 	)
 }
 
+internal fun BaseRowItem.browseCardAspectRatio(imageType: ImageType, uniformAspect: Boolean): Float {
+	val displayConfig = getDisplayConfig(imageType, uniformAspect)
+	return displayConfig.aspectRatio.takeIf { it >= 0.1f }
+		?: displayConfig.image?.aspectRatio?.takeIf { it >= 0.1f }
+		?: 1f
+}
+
 internal fun resolveBrowseGridSpacing(base: Int, option: LibraryCardSpacing): Int = option.apply(base)
 
 internal fun shouldShowBrowseCardInfo(style: LibraryViewStyle, showCardTitles: Boolean): Boolean =
@@ -318,14 +327,17 @@ internal fun shouldShowBrowseCardInfo(style: LibraryViewStyle, showCardTitles: B
 
 @Composable
 @Stable
-private fun CardViewHolderContent(
+internal fun CardViewHolderContent(
 	item: BaseRowItem?,
 	focused: Boolean,
 	showInfo: Boolean,
 	imageType: ImageType,
 	staticHeight: Int,
 	uniformAspect: Boolean,
+	showFavoriteIndicator: Boolean = true,
 	showBrowserTitle: Boolean = false,
+	modifier: Modifier = Modifier,
+	fillAvailableWidth: Boolean = false,
 ) {
 	val context = LocalContext.current
 	val localDensity = LocalDensity.current
@@ -337,8 +349,7 @@ private fun CardViewHolderContent(
 	if (item == null || displayConfig == null) return
 
 	val image = displayConfig.image
-	val aspectRatio = displayConfig.aspectRatio.takeIf { it >= 0.1f }
-		?: image?.aspectRatio?.takeIf { it >= 0.1f } ?: 1f
+	val aspectRatio = item.browseCardAspectRatio(imageType, uniformAspect)
 
 	val size = when (item.staticHeight) {
 		true -> DpSize(staticHeight.dp * aspectRatio, staticHeight.dp)
@@ -347,6 +358,14 @@ private fun CardViewHolderContent(
 	}
 
 	val usePreview = liveTvText == null && (showBrowserTitle || (displayConfig.overrideShowInfo ?: showInfo))
+
+	val cardModifier = if (fillAvailableWidth) {
+		modifier
+			.fillMaxWidth()
+			.height(size.height)
+	} else {
+		modifier.size(size)
+	}
 
 	val card = @Composable {
 		ItemCard(
@@ -393,6 +412,7 @@ private fun CardViewHolderContent(
 						item = baseItem,
 						streamBadgeItem = (item as? BaseItemDtoBaseRowItem)?.streamBadgeItem ?: baseItem,
 						showRemainingTimeBadge = item.showRemainingTimeBadge,
+						showFavoriteIndicator = showFavoriteIndicator,
 						footer = {
 							if (liveTvText != null) {
 								LiveTvCardFooter(liveTvText, focused)
@@ -423,8 +443,7 @@ private fun CardViewHolderContent(
 					)
 				}
 			},
-			modifier = Modifier
-				.size(size)
+			modifier = cardModifier
 		)
 	}
 
