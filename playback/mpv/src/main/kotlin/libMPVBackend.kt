@@ -9,6 +9,12 @@ import android.view.View
 import android.view.ViewGroup
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.MPVNode
+import io.github.thor2002ro.libdovi.DoviBridge
+import io.github.thor2002ro.libdovi.DoviException
+import io.github.thor2002ro.libdovi.DoviMpvSession
+import io.github.thor2002ro.libdovi.DoviStatus
+import io.github.thor2002ro.libdovi.DoviTransformObservation
+import io.github.thor2002ro.libdovi.DoviTransformRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,6 +27,8 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
+import org.jellyfin.playback.core.backend.PlaybackErrorOrigin
+import org.jellyfin.playback.core.backend.activate
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
@@ -54,6 +62,8 @@ import org.jellyfin.playback.core.timedevent.TimedEventTracker
 import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
+import org.jellyfin.playback.dovi.doviDecision
+import org.jellyfin.playback.dovi.toPlaybackDoviTransformStats
 import timber.log.Timber
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -82,6 +92,77 @@ internal fun shouldReadLibMPVStatProperty(lastMissNanos: Long?, nowNanos: Long, 
 	lastMissNanos == null || nowNanos - lastMissNanos >= retryNanos
 
 internal fun libMPVCommandSucceeded(result: MPVNode?): Boolean = result != null
+
+internal fun doviMpvPlaybackErrorCode(status: DoviStatus): String? =
+	status.takeUnless { it == DoviStatus.OK }?.let { "DOVI_TRANSFORMATION_FAILED_${it.name}" }
+
+internal class DoviMpvRequestSession(
+	private val isAvailable: () -> Boolean,
+	private val publishRequest: (DoviTransformRequest?) -> DoviMpvSession,
+	private val resetError: (DoviMpvSession) -> Unit,
+	private val consumeError: (DoviMpvSession) -> DoviStatus,
+	private val getTransformObservation: (DoviMpvSession) -> DoviTransformObservation?,
+) {
+	private var activeSession: DoviMpvSession? = null
+	private var activeObservation: DoviTransformObservation? = null
+
+	fun prepare(request: DoviTransformRequest?) {
+		activeSession = null
+		activeObservation = null
+		try {
+			if (!isAvailable()) {
+				check(request == null) { "Dolby Vision transformation bridge is unavailable" }
+				return
+			}
+			val session = publishRequest(request)
+			resetError(session)
+			if (request != null) activeSession = session
+		} catch (error: Exception) {
+			clear()
+			throw error
+		}
+	}
+
+	fun transformObservation(): DoviTransformObservation? {
+		activeObservation?.let { return it }
+		return activeSession?.let(getTransformObservation)?.also { activeObservation = it }
+	}
+
+	fun consumeErrorCodeAndClear(): String? = try {
+		activeSession?.let(consumeError)?.let(::doviMpvPlaybackErrorCode)
+	} catch (error: DoviException) {
+		doviMpvPlaybackErrorCode(error.status)
+	} catch (_: Exception) {
+		doviMpvPlaybackErrorCode(DoviStatus.INTERNAL_ERROR)
+	} finally {
+		clear()
+	}
+
+	fun clear() {
+		activeSession = null
+		activeObservation = null
+		runCatching {
+			if (isAvailable()) publishRequest(null)
+		}
+	}
+}
+
+internal enum class DoviMpvEndAction { IGNORE, REDIRECT, FINISH }
+
+internal fun doviMpvEndAction(
+	eventEntryId: Long?,
+	activeEntryId: Long?,
+	loadRequested: Boolean,
+	reason: String,
+	hasCurrentStream: Boolean,
+	hasTerminalState: Boolean,
+): DoviMpvEndAction = when {
+	eventEntryId != null && activeEntryId != null && eventEntryId != activeEntryId -> DoviMpvEndAction.IGNORE
+	loadRequested -> DoviMpvEndAction.IGNORE
+	reason == "stop" && hasCurrentStream && !hasTerminalState -> DoviMpvEndAction.IGNORE
+	reason == "redirect" -> DoviMpvEndAction.REDIRECT
+	else -> DoviMpvEndAction.FINISH
+}
 
 private data class LibMPVTrack(
 	val id: Int,
@@ -114,6 +195,13 @@ class LibMPVBackend(
 	var videoDecoder = videoDecoderProvider?.invoke() ?: LibMPVVideoDecoder.AUTOMATIC
 		private set
 	private var forcedVideoDecoder: LibMPVVideoDecoder? = null
+	private val doviRequestSession = DoviMpvRequestSession(
+		isAvailable = DoviBridge::isAvailable,
+		publishRequest = DoviBridge::setMpvRequest,
+		resetError = DoviBridge::resetMpvError,
+		consumeError = DoviBridge::consumeMpvError,
+		getTransformObservation = DoviBridge::getMpvTransformObservation,
+	)
 	private val effectiveVideoDecoder: LibMPVVideoDecoder
 		get() = effectiveLibMPVVideoDecoder(
 			configured = videoDecoder,
@@ -207,6 +295,7 @@ class LibMPVBackend(
 	private val scrubbing = LibMPVScrubState()
 	private var rebufferWaitSeconds: Double? = null
 	private var terminalState: PlayState? = PlayState.STOPPED
+	private var playbackErrorOrigin: PlaybackErrorOrigin? = null
 	private var lastReportedState: PlayState? = null
 	private var shieldFallback: LibMPVShieldFallback? = null
 	private val nvidiaFallbackResync = LibMPVNvidiaFallbackResyncState()
@@ -572,11 +661,14 @@ class LibMPVBackend(
 	}
 
 	private fun setMedia(stream: PlayableMediaStream) {
+		doviRequestSession.clear()
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		stopNativeSubtitleOverlay()
 		clearVideoGeometry()
 		val forceRecreate = currentStream?.queueEntry !== stream.queueEntry
 		currentStream = stream
+		playbackErrorOrigin = stream.errorOrigin
+		playbackErrorOrigin?.activate()
 		ensureInstanceOptions(forceRecreate)
 		scrubbing.reset()
 		endReported = false
@@ -610,6 +702,16 @@ class LibMPVBackend(
 		applySubtitleTiming()
 		applyPlaybackSpeed()
 		updateNativeSubtitleOverlayMode()
+		try {
+			doviRequestSession.prepare(stream.queueEntry.doviDecision?.request)
+		} catch (error: Exception) {
+			val status = (error as? DoviException)?.status ?: DoviStatus.INTERNAL_ERROR
+			handlePlaybackError(
+				"Unable to activate MPV Dolby Vision transformation",
+				requireNotNull(doviMpvPlaybackErrorCode(status)),
+			)
+			return
+		}
 
 		val startOption = stream.queueEntry.startPosition.mpvStartOption()
 		val loaded = if (startOption == null) {
@@ -618,6 +720,7 @@ class LibMPVBackend(
 			runCommand("loadfile", stream.url, "replace", "-1", startOption)
 		}
 		if (!loaded) {
+			doviRequestSession.clear()
 			handlePlaybackError("Unable to issue MPV loadfile command")
 			return
 		}
@@ -685,6 +788,7 @@ class LibMPVBackend(
 	}
 
 	override fun stop() {
+		doviRequestSession.clear()
 		handler.removeCallbacks(tick)
 		clearVideoGeometry()
 		scrubbing.reset()
@@ -729,6 +833,7 @@ class LibMPVBackend(
 	override fun release() {
 		synchronized(playerLock) {
 			if (released) return
+			doviRequestSession.clear()
 			cancelNvidiaFallbackResync(restorePlayback = false)
 			cleanup()
 			playerObserver?.let(player::removeObserver)
@@ -1164,6 +1269,7 @@ class LibMPVBackend(
 			subtitleParser = string("current-tracks/sub/codec"),
 			subtitlePath = string("current-tracks/sub/external-filename"),
 			backendDetails = backendDetails,
+			doviTransform = doviRequestSession.transformObservation()?.toPlaybackDoviTransformStats(),
 		)
 		return stats
 	}
@@ -1275,13 +1381,34 @@ class LibMPVBackend(
 
 	private fun handleEndFile(data: MPVNode) {
 		val eventEntryId = data["playlist_entry_id"]?.asInt()
-		if (eventEntryId != null && activePlaylistEntryId != null && eventEntryId != activePlaylistEntryId) return
-
 		val reason = data["reason"]?.asString() ?: "unknown"
 		// loadfile replace first unloads the old entry. Ignore that old end-file event;
 		// a failed replacement emits start-file before its own end-file(error).
-		if (loadRequested) return
-		if (reason == "stop" && currentStream != null && terminalState == null) return
+		when (doviMpvEndAction(
+			eventEntryId = eventEntryId,
+			activeEntryId = activePlaylistEntryId,
+			loadRequested = loadRequested,
+			reason = reason,
+			hasCurrentStream = currentStream != null,
+			hasTerminalState = terminalState != null,
+		)) {
+			DoviMpvEndAction.IGNORE -> return
+			DoviMpvEndAction.REDIRECT -> {
+				fileLoaded = false
+				playbackRestarted = false
+				pausedForCache = false
+				seeking = false
+				terminalState = null
+				publishPlayState(force = true)
+				return
+			}
+			DoviMpvEndAction.FINISH -> Unit
+		}
+		val doviErrorCode = doviRequestSession.consumeErrorCodeAndClear()
+		if (doviErrorCode != null) {
+			handlePlaybackError("MPV Dolby Vision conversion failed", doviErrorCode)
+			return
+		}
 
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		fileLoaded = false
@@ -1304,10 +1431,6 @@ class LibMPVBackend(
 				terminalState = PlayState.STOPPED
 				publishPlayState(force = true)
 			}
-			"redirect" -> {
-				terminalState = null
-				publishPlayState(force = true)
-			}
 			"error" -> {
 				val fileError = data["file_error"]?.asString() ?: "unknown MPV file error"
 				handlePlaybackError(fileError)
@@ -1316,7 +1439,8 @@ class LibMPVBackend(
 		}
 	}
 
-	private fun handlePlaybackError(message: String) {
+	private fun handlePlaybackError(message: String, codeName: String = "MPV_ERROR") {
+		doviRequestSession.clear()
 		Timber.e("MPV playback error: %s", message)
 		handler.removeCallbacks(tick)
 		scrubbing.reset()
@@ -1326,7 +1450,7 @@ class LibMPVBackend(
 		playbackRestarted = false
 		shieldFallback = null
 		terminalState = PlayState.ERROR
-		listener?.onPlaybackError(PlaybackError("MPV_ERROR"))
+		listener?.onPlaybackError(PlaybackError(codeName, origin = playbackErrorOrigin))
 		publishPlayState(force = true)
 	}
 
