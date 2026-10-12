@@ -25,6 +25,7 @@ internal class MediaStreamService(
 	private companion object {
 		private const val TIMED_EVENT_PRELOAD = "MediaStreamServicePreloadNext"
 	}
+	private var latestReloadRequest: Any? = null
 
 	override suspend fun onInitialize() {
 		manager.queue.entry.onEach { entry ->
@@ -108,9 +109,21 @@ internal class MediaStreamService(
 		position: Duration? = null,
 		playWhenReady: Boolean = true,
 	): Boolean {
-		val entry = manager.queue.entry.value ?: return false
+		val queue = requireNotNull(manager.getService<QueueService>())
+		val entry = queue.entry.value ?: return false
+		val entryRevision = queue.entryRevision
+		val originalStream = entry.mediaStream
+		val backend = manager.backend
+		val request = Any().also { latestReloadRequest = it }
 		val newStream = entry.resolveMediaStream(startPosition = position) ?: return false
-		val backend = requireNotNull(manager.backend)
+		// Resolution suspends for the server: playback may have stopped, changed, or been reloaded meanwhile.
+		if (
+			latestReloadRequest !== request ||
+			queue.entryRevision != entryRevision ||
+			queue.entry.value !== entry ||
+			entry.mediaStream !== originalStream ||
+			manager.backend !== backend
+		) return false
 
 		manager.queue.entries.value.forEach { queuedEntry ->
 			if (queuedEntry === entry) return@forEach
