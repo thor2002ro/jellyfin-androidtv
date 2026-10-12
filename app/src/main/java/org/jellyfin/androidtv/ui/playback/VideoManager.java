@@ -106,7 +106,6 @@ public class VideoManager {
     private String subtitleExtractorDebug;
     private String subtitleRenderDebug;
     private String subtitleParserDebug;
-    private String subtitlePathDebug;
     private final boolean parseSubtitlesDuringExtraction;
     private final AssHandler assHandler;
 
@@ -122,9 +121,6 @@ public class VideoManager {
         subtitleExtractorDebug = assDirectPlay ? "AssMatroskaExtractor (MKV)" : "Media3 default";
         subtitleRenderDebug = subtitleRenderDebug(assRenderType);
         subtitleParserDebug = assDirectPlay && assRenderType != AssRenderType.CUES ? "AssSubtitleParserFactory" : "DefaultSubtitleParserFactory";
-        subtitlePathDebug = assDirectPlay
-                ? "libass renderer; extraction parser off"
-                : parseSubtitlesDuringExtraction ? "extraction parser" : "renderer parser";
         assHandler = assDirectPlay ? new AssHandler(
                 assRenderType,
                 new AssHandlerConfig(
@@ -693,11 +689,6 @@ public class VideoManager {
     public String getSubtitleParserDebug() {
         return subtitleParserDebug;
     }
-
-    public String getSubtitlePathDebug() {
-        return subtitlePathDebug;
-    }
-
 
     public void adjustSubtitleTimingOffsetUs(long deltaUs) {
         subtitleTimingOffsetState.adjustOffsetUs(deltaUs);
