@@ -10,12 +10,13 @@ plugins {
 
 val thorApplicationId = "org.jellyfin.androidtv.thor"
 val appVersionName = project.getVersionName()
-fun readVersionName(propertiesFile: File): String {
-	val properties = Properties()
+fun readProperties(propertiesFile: File) = Properties().apply {
 	propertiesFile.inputStream().use {
-		properties.load(it)
+		load(it)
 	}
-	return requireNotNull(properties.getProperty("VERSION_NAME")) {
+}
+fun readVersionName(propertiesFile: File): String {
+	return requireNotNull(readProperties(propertiesFile).getProperty("VERSION_NAME")) {
 		"VERSION_NAME not found in $propertiesFile"
 	}
 }
@@ -28,13 +29,9 @@ require(libdoviVersions.size == 1) {
 	"libdovi upstream revisions differ between ABI artifacts: $libdoviVersions"
 }
 val libdoviVersion = libdoviVersions.single().take(12)
-val libassVersion = run {
-	val header = rootProject.file("dependencies/libass-android/lib_ass/src/main/cpp/include/ass/ass.h").readText()
-	val (major, minor, patch) = requireNotNull(Regex("""(?m)^#define\s+LIBASS_VERSION\s+0x([0-9])([0-9]{2})([0-9]{2})[0-9A-Fa-f]{3}\s*$""").find(header)) {
-		"LIBASS_VERSION not found in vendored libass header"
-	}.destructured
-
-	"$major.${minor.toInt()}.${patch.toInt()}"
+val libassProviderFile = rootProject.file("dependencies/libass-android/OUTPUT/libass-provider.properties")
+val libassVersion = requireNotNull(readProperties(libassProviderFile).getProperty("libass_version")) {
+	"libass_version not found in $libassProviderFile"
 }
 
 android {
@@ -207,7 +204,7 @@ dependencies {
 	implementation(libs.androidx.media3.datasource.okhttp)
 	implementation(libs.androidx.media3.exoplayer.hls)
 	implementation(libs.androidx.media3.ui)
-	implementation(files(rootProject.extra["customMedia3FfmpegDecoderAarFile"] as File))
+	implementation(libs.androidx.media3.decoder.ffmpeg)
 	implementation(libs.libass.media3)
 
 	// Markdown

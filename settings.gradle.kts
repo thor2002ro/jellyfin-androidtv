@@ -1,8 +1,22 @@
+import java.lang.module.ModuleDescriptor
+import java.util.Properties
+
+fun latestLocalMavenVersion(moduleDirectory: String): String {
+	val directory = file(moduleDirectory)
+	val artifact = directory.name
+	return directory.listFiles()
+		.orEmpty()
+		.filter(File::isDirectory)
 		.filter { versionDirectory ->
 			val version = versionDirectory.name
-			versionDirectory.resolve("mpv-android-lib-$version.aar").isFile ||
-				!moduleDirectory.endsWith("mpv-android-lib")
+			versionDirectory.resolve("$artifact-$version.aar").isFile &&
+				versionDirectory.resolve("$artifact-$version.pom").isFile
 		}
+		.map(File::getName)
+		.maxWithOrNull(compareBy(ModuleDescriptor.Version::parse))
+		?: error("No locally built artifact found in $directory")
+}
+
 pluginManagement {
 	repositories {
 		gradlePluginPortal()
@@ -48,13 +62,80 @@ include(":playback:mpv")
 include(":preference")
 
 dependencyResolutionManagement {
+	defaultLibrariesExtensionName = "baseLibs"
+	versionCatalogs {
+		create("libs") {
+			from(files("gradle/libs.versions.toml"))
+
+			val media3Version = latestLocalMavenVersion(
+				"dependencies/jellyfin-androidx-media/OUTPUT/maven/androidx/media3/media3-exoplayer"
+			)
+			version("androidx-media3-local", media3Version)
+			library("androidx-media3-datasource-okhttp", "androidx.media3", "media3-datasource-okhttp")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-decoder-ffmpeg", "androidx.media3", "media3-decoder-ffmpeg")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-exoplayer", "androidx.media3", "media3-exoplayer")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-exoplayer-hls", "androidx.media3", "media3-exoplayer-hls")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-session", "androidx.media3", "media3-session")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-ui", "androidx.media3", "media3-ui")
+				.versionRef("androidx-media3-local")
+
+			val libassProperties = Properties().apply {
+				file("dependencies/libass-android/gradle.properties").inputStream().use(::load)
+			}
+			version("libass-android-local", libassProperties.getProperty("VERSION_NAME"))
+			library("libass-media3", "io.github.peerless2012", "ass-media")
+				.versionRef("libass-android-local")
+			val libassProviderProperties = Properties().apply {
+				file("dependencies/libass-android/OUTPUT/libass-provider.properties").inputStream().use(::load)
+			}
+			library(
+				"libass-provider",
+				libassProviderProperties.getProperty("group"),
+				libassProviderProperties.getProperty("artifact")
+			).version(libassProviderProperties.getProperty("version"))
+
+			val mpvVersion = latestLocalMavenVersion(
+				"dependencies/mpv-android-lib/OUTPUT/maven/io/github/abdallahmehiz/mpv-android-lib"
+			)
+			version("mpv-android-lib-local", mpvVersion)
+			library("mpv-android-lib", "io.github.abdallahmehiz", "mpv-android-lib")
+				.versionRef("mpv-android-lib-local")
+			library("mpv-ffmpeg-provider", "io.github.abdallahmehiz", "mpv-ffmpeg-android")
+				.version(latestLocalMavenVersion(
+					"dependencies/mpv-android-lib/OUTPUT/maven/io/github/abdallahmehiz/mpv-ffmpeg-android"
+				))
+		}
+	}
+
 	repositories {
+		exclusiveContent {
+			forRepository {
+				maven(rootDir.resolve("dependencies/jellyfin-androidx-media/OUTPUT/maven"))
+			}
+			filter {
+				includeGroup("androidx.media3")
+			}
+		}
+		exclusiveContent {
+			forRepository {
+				maven(rootDir.resolve("dependencies/libass-android/OUTPUT/maven"))
+			}
+			filter {
+				includeModule("io.github.peerless2012", "libass-android-provider")
+			}
+		}
 		exclusiveContent {
 			forRepository {
 				maven(rootDir.resolve("dependencies/mpv-android-lib/OUTPUT/maven"))
 			}
 			filter {
 				includeModule("io.github.abdallahmehiz", "mpv-android-lib")
+				includeModule("io.github.abdallahmehiz", "mpv-ffmpeg-android")
 			}
 		}
 		mavenCentral()
