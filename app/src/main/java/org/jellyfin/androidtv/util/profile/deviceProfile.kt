@@ -171,6 +171,7 @@ internal fun createDeviceProfile(
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
+		preferFmp4HlsContainer = userPreferences[UserPreferences.preferFmp4HlsContainer],
 	)
 }
 
@@ -197,6 +198,7 @@ internal fun createDeviceProfile(
 	enableFfmpegAudio: Boolean = false,
 	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
+	preferFmp4HlsContainer: Boolean = true,
 ) = buildDeviceProfile {
 	val canMixAudioLocally = enableFfmpegAudio || enableMpvAudio
 	val supportsOpus = mediaTest.supportsOpus() || enableMpvAudio ||
@@ -280,23 +282,29 @@ internal fun createDeviceProfile(
 
 	/// Transcoding profiles
 	// Video
-	val hlsVideoCodecs = listOfNotNull(
+	val hlsMpegTsVideoCodecs = listOfNotNull(
 		if (supportsHevc) Codec.Video.HEVC else null,
 		Codec.Video.H264
 	).toTypedArray()
+	// Server 12 also uses this list to match video stream-copy candidates. Keep the practical encoder
+	// codecs first, then append codecs that this device can decode from fMP4 segments.
+	val hlsFmp4VideoCodecs = hlsMpegTsVideoCodecs + listOfNotNull(
+		if (supportsAV1) Codec.Video.AV1 else null,
+		if (supportsVP9) Codec.Video.VP9 else null,
+	)
 
 	val videoTranscodeProfiles = listOf(
 		Triple(
-			Codec.Container.TS,
-			hlsVideoCodecs,
-			hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
-		),
-		Triple(
 			Codec.Container.MP4,
-			hlsVideoCodecs,
+			hlsFmp4VideoCodecs,
 			hlsFmp4AudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
 		),
-	)
+		Triple(
+			Codec.Container.TS,
+			hlsMpegTsVideoCodecs,
+			hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
+		),
+	).let { profiles -> if (preferFmp4HlsContainer) profiles else profiles.asReversed() }
 	// Separate fallback profiles let the server select conversion without removing stream-copy codecs.
 	val fallbackVideoTranscodeProfiles = if (transcodeMultichannelAudio) videoTranscodeProfiles.mapNotNull { (container, video, audio) ->
 		val fallbackAudio = surroundTranscodeAudioCodecs.filter(audio::contains).toTypedArray()

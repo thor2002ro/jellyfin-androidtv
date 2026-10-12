@@ -209,6 +209,8 @@
     <string name="dovi_profile_7_description">Dual-layer with Enhancement Layer</string>
     <string name="dovi_compatibility_title">Dolby Vision compatibility</string>
     <string name="dovi_compatibility_description">Choose metadata-only compatibility for built-in player playback</string>
+    <string name="preference_prefer_fmp4_hls_container">Prefer fMP4-HLS Media Container</string>
+    <string name="preference_prefer_fmp4_hls_container_description">Prefer fMP4 over MPEG-TS for HLS playback when supported by your device and server.</string>
     <string name="dovi_compatibility_auto">Auto</string>
     <string name="dovi_compatibility_fast_hdr">Fast HDR</string>
     <string name="dovi_compatibility_fast_hdr_description">Uses the HDR10 or HDR10+ base layer for faster Dolby Vision playback. Works only with ExoPlayer.</string>

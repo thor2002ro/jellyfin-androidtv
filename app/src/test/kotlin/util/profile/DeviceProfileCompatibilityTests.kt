@@ -109,6 +109,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns false
 			every { preferences[UserPreferences.maxBitrate] } returns "100"
 			every { preferences[UserPreferences.maxResolution] } returns PlaybackResolution.NATIVE
+			every { preferences[UserPreferences.preferFmp4HlsContainer] } returns true
 			every { preferences[UserPreferences.assDirectPlay] } returns true
 			every { preferences[UserPreferences.pgsDirectPlay] } returns true
 			every { preferences[UserPreferences.userAVCLevel] } returns UserPreferences.userAVCLevel.defaultValue
@@ -375,7 +376,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 
 		profile.transcodingProfiles
 			.filter { it.type == DlnaProfileType.VIDEO }
-			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.TS, Codec.Container.MP4)
+			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.MP4, Codec.Container.TS)
 		profile.videoTranscodeProfiles(Codec.Container.MP4).first().run {
 			audioCodec.declarations().first() shouldBe Codec.Audio.DTS
 			maxAudioChannels shouldBe null
@@ -446,14 +447,42 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		audioTranscode.audioCodec shouldBe Codec.Audio.AAC
 	}
 
-	test("video transcoding profiles only advertise practical encoder codecs") {
+	test("video streaming prefers fMP4 and keeps MPEG-TS fallback") {
+		deviceProfile().transcodingProfiles
+			.filter { it.type == DlnaProfileType.VIDEO }
+			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.TS)
+	}
+
+	test("video streaming prefers MPEG-TS when fMP4 preference is disabled") {
+		deviceProfile(preferFmp4HlsContainer = false).transcodingProfiles
+			.filter { it.type == DlnaProfileType.VIDEO }
+			.map { it.container } shouldBe listOf(Codec.Container.TS, Codec.Container.MP4)
+	}
+
+	test("MPEG-TS video profile only advertises practical encoder codecs") {
 		val supportedProfile = deviceProfile(
 			supportsAv1 = true,
 			supportedVideoMimes = setOf(MimeTypes.VIDEO_VP9),
 		)
 
 		supportedProfile.videoTranscodeProfile(Codec.Container.TS).videoCodec.declarations() shouldBe listOf("h264")
-		supportedProfile.videoTranscodeProfile(Codec.Container.MP4).videoCodec.declarations() shouldBe listOf("h264")
+	}
+
+	test("fMP4 video profile advertises decoder-supported AV1 and VP9 for stream copy") {
+		val supportedProfile = deviceProfile(
+			supportsAv1 = true,
+			supportedVideoMimes = setOf(MimeTypes.VIDEO_VP9),
+		)
+
+		supportedProfile.videoTranscodeProfile(Codec.Container.MP4).videoCodec.declarations() shouldBe listOf(
+			"h264",
+			"av1",
+			"vp9",
+		)
+	}
+
+	test("fMP4 video profile omits AV1 and VP9 without device decoders") {
+		deviceProfile().videoTranscodeProfile(Codec.Container.MP4).videoCodec.declarations() shouldBe listOf("h264")
 	}
 
 	test("AV1 uses the Server 12 Main profile name and decoder bit depth") {
@@ -787,6 +816,7 @@ private fun deviceProfile(
 	enableFfmpegAudio: Boolean = true,
 	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
+	preferFmp4HlsContainer: Boolean = true,
 	transcodeToPassthrough: Boolean = false,
 	supportsDtsHdPassthrough: Boolean = true,
 	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
@@ -872,6 +902,7 @@ private fun deviceProfile(
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
+		preferFmp4HlsContainer = preferFmp4HlsContainer,
 	)
 }
 

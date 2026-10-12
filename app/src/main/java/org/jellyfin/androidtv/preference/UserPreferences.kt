@@ -142,6 +142,9 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 */
 		var bufferLength = enumPreference("buffer_length", BufferLength.AUTO)
 
+		/** Prefer fragmented MP4 over MPEG-TS for HLS server output. */
+		var preferFmp4HlsContainer = booleanPreference("prefer_fmp4_hls_container", true)
+
 		/* Playback - Audio related */
 		/**
 		 * Preferred behavior for audio streaming.
