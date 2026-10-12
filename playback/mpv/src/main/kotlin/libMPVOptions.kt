@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import `is`.xyz.mpv.MPVNode
+import org.jellyfin.playback.core.surroundVolumeBoost
 import java.util.Locale
 
 /** Video decoder modes exposed by both the Jellyfin player controls and MPV settings. */
@@ -81,6 +82,7 @@ data class LibMPVPlaybackOptions(
 	val audioTrackPcmFloat: Boolean = true,
 	val audioPitchCorrection: Boolean = true,
 	val replayGain: String = "no",
+	val surroundVolumeBoost: Int = 6,
 	val decoderThreads: Int = 0,
 	val skipLoopFilter: String = "default",
 	val subtitleAssOverride: String = "no",
@@ -127,6 +129,21 @@ data class LibMPVPlaybackOptions(
 	companion object {
 		val DEFAULT = LibMPVPlaybackOptions()
 	}
+}
+
+internal fun mpvSurroundBoostFilter(
+	gainDb: Int,
+	sourceChannels: Int?,
+	outputFormat: String?,
+): String? {
+	val gain = surroundVolumeBoost(
+		gainDb,
+		sourceChannels,
+		!outputFormat.isNullOrBlank() && !outputFormat.startsWith("spdif", ignoreCase = true),
+	)
+	return if (gain > 0) {
+		"@jellyfin-surround-boost:lavfi=[volume=${gain}dB,alimiter=limit=0.95:level=false:latency=true]"
+	} else null
 }
 
 fun isLibMPVVulkanSupported(context: Context): Boolean =
