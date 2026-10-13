@@ -88,6 +88,18 @@ class LiveTvGuideOverlayTests : FunSpec({
 			.filter { it.includesGuideTime }.map { it.program?.name } shouldContainExactly listOf("B")
 	}
 
+	test("cached guide blocks can update selection without rebuilding geometry") {
+		val start = LocalDateTime.of(2026, 9, 11, 18, 0)
+		val programs = listOf(
+			liveTvProgram("A", start, start.plusMinutes(10)),
+			liveTvProgram("B", start.plusMinutes(10), start.plusMinutes(30)),
+		)
+		val blocks = programs.programBlocks(listOf(start), selectedTime = null)
+
+		blocks.filter { it.includes(start.plusMinutes(10)) }
+			.map { it.program?.name } shouldContainExactly listOf("B")
+	}
+
 	test("current time line follows the visible guide window") {
 		val start = LocalDateTime.of(2026, 7, 10, 12, 0)
 

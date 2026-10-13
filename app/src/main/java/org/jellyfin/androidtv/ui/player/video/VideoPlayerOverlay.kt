@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -140,6 +141,7 @@ fun VideoPlayerOverlay(
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
 	val currentOnRemoteKeyEventHandlerChanged by rememberUpdatedState(onRemoteKeyEventHandlerChanged)
+	val initialControlsFocusRequester = remember { FocusRequester() }
 	val nextUpBehavior = userPreferences[UserPreferences.nextUpBehavior]
 	val trickPlayEnabled = userPreferences[UserPreferences.trickPlayEnabled]
 	val nextUpPositionInfo by rememberPlayerPositionInfo(
@@ -416,6 +418,16 @@ fun VideoPlayerOverlay(
 		dpadSeek(forward)
 	}
 
+	fun openLiveTvGuide() {
+		val liveTvItem = currentLiveTvItem ?: return
+		clearCenterLongPress()
+		liveTvGuideItem = liveTvItem
+		showLiveTvGuide = true
+		showPlaybackInfo = false
+		seekOverlayVisible = false
+		visibilityState.hide()
+	}
+
 	SideEffect {
 		onRemoteKeyEventHandlerChanged handler@{ keyCode, event ->
 			val keyEvent = event ?: return@handler false
@@ -512,18 +524,6 @@ fun VideoPlayerOverlay(
 				return@handler true
 			}
 
-			if (!showLiveTvGuide && keyEvent.isDpadUpKey() && currentLiveTvItem != null && visibilityState.visible) {
-				if (keyEvent.action == KeyEvent.ACTION_DOWN && keyEvent.repeatCount == 0) {
-					clearCenterLongPress()
-					liveTvGuideItem = currentLiveTvItem
-					showLiveTvGuide = true
-					showPlaybackInfo = false
-					seekOverlayVisible = false
-					visibilityState.hide()
-				}
-				return@handler true
-			}
-
 			if (keyEvent.isCenterKey() && !visibilityState.visible) {
 				when (keyEvent.action) {
 					KeyEvent.ACTION_DOWN -> {
@@ -583,6 +583,8 @@ fun VideoPlayerOverlay(
 	Box(modifier = modifier) {
 		PlayerOverlayLayout(
 			visibilityState = visibilityState,
+			inputEnabled = !showLiveTvGuide,
+			initialControlsFocusRequester = initialControlsFocusRequester,
 			header = {
 				Column {
 					VideoPlayerHeader(
@@ -599,6 +601,7 @@ fun VideoPlayerOverlay(
 			controls = {
 				VideoPlayerControls(
 					playbackManager = playbackManager,
+					initialFocusRequester = initialControlsFocusRequester,
 					item = item,
 					mediaSourceId = entry?.mediaSourceId,
 					trickPlayEnabled = trickPlayEnabled,
@@ -609,6 +612,7 @@ fun VideoPlayerOverlay(
 					onZoomModeSelected = onZoomModeSelected,
 					onPlaybackInfoClick = { showPlaybackInfo = !showPlaybackInfo },
 					onStopClick = onClosePlayer,
+					onLiveTvGuideClick = ::openLiveTvGuide,
 					liveTvProgramTimeline = liveTvProgramTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
 				)
@@ -813,8 +817,6 @@ private fun KeyEvent.isForwardSeekKey() = when (keyCode) {
 
 	else -> false
 }
-
-private fun KeyEvent.isDpadUpKey() = keyCode == KeyEvent.KEYCODE_DPAD_UP
 
 private class KeyEventHandlerHolder {
 	var handler: ((KeyEvent) -> Boolean)? = null
