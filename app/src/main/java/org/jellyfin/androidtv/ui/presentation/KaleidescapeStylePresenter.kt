@@ -280,6 +280,13 @@ private class KaleidescapeStyleDetails(context: Context) : LinearLayout(context)
 		ellipsize = TextUtils.TruncateAt.END
 	}
 	private val info = KaleidescapeStyleMetadata(context)
+	private val genres = TextView(context).apply {
+		setTextColor(Color.WHITE)
+		textSize = 14f
+		includeFontPadding = false
+		maxLines = 2
+		ellipsize = TextUtils.TruncateAt.END
+	}
 	private val overview = TextView(context).apply {
 		setTextColor(Color.WHITE)
 		textSize = 14f
@@ -308,6 +315,9 @@ private class KaleidescapeStyleDetails(context: Context) : LinearLayout(context)
 		addView(title, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
 			bottomMargin = (FOOTER_BOTTOM_MARGIN_DP * resources.displayMetrics.density).toInt()
 		})
+		addView(genres, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
+			bottomMargin = (FOOTER_BOTTOM_MARGIN_DP * resources.displayMetrics.density).toInt()
+		})
 		addView(description, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
 		addView(info, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
 			topMargin = (FOOTER_BOTTOM_MARGIN_DP * resources.displayMetrics.density).toInt()
@@ -318,12 +328,16 @@ private class KaleidescapeStyleDetails(context: Context) : LinearLayout(context)
 
 	fun bind(item: BaseRowItem, contentScale: Float) {
 		title.textSize = 20f * contentScale
+		genres.textSize = 14f * contentScale
 		overview.textSize = 14f * contentScale
 		val spacing = (FOOTER_BOTTOM_MARGIN_DP * resources.displayMetrics.density * contentScale).toInt()
 		(title.layoutParams as LayoutParams).bottomMargin = spacing
+		(genres.layoutParams as LayoutParams).bottomMargin = spacing
 		(info.layoutParams as LayoutParams).topMargin = spacing
 		info.contentScale = contentScale
 		title.text = item.getName(context)
+		genres.text = item.baseItem?.genres?.joinToString(" / ").orEmpty()
+		genres.visibility = if (genres.text.isBlank()) View.GONE else View.VISIBLE
 		// The compact footer uses the year, leaving room for ratings without wrapping badges.
 		info.item = item.baseItem?.let { baseItem ->
 			baseItem.copy(premiereDate = null, productionYear = baseItem.productionYear ?: baseItem.premiereDate?.year)
