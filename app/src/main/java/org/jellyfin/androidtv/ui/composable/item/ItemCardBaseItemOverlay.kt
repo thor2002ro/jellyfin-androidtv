@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.composable.item
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.R
@@ -67,57 +69,61 @@ fun ItemCardBaseItemOverlay(
 	showRemainingTimeBadge: Boolean = false,
 	showFavoriteIndicator: Boolean = true,
 	footer: (@Composable () -> Unit)? = null,
-) = Box(
+) = BoxWithConstraints(
 	modifier = Modifier
 		.fillMaxSize()
-		.padding(Tokens.Space.spaceXs)
 ) {
-	val progress = rememberItemCardProgressInfo(item)
+	val badgeSize = (minOf(maxWidth, maxHeight) * 0.09f).coerceAtMost(9.dp)
+	Box(Modifier.fillMaxSize().padding(badgeSize * 0.5f)) {
+		val progress = rememberItemCardProgressInfo(item)
 
-	StateIndicator(
-		item = item,
-		showFavoriteIndicator = showFavoriteIndicator,
-		modifier = Modifier.align(Alignment.TopStart),
-	)
-
-	TopEndIndicator(
-		item = item,
-		progress = progress?.progress,
-		duration = progress?.duration,
-		showRemainingTimeBadge = showRemainingTimeBadge,
-		modifier = Modifier.align(Alignment.TopEnd),
-	)
-
-	Column(
-		modifier = Modifier
-			.align(Alignment.BottomCenter)
-			.fillMaxWidth(),
-		verticalArrangement = Arrangement.spacedBy(Tokens.Space.spaceXs)
-	) {
-		Row(
-			modifier = Modifier.fillMaxWidth(),
-			verticalAlignment = Alignment.Bottom,
-		) {
-			Box(
-				modifier = Modifier.weight(1f),
-				contentAlignment = Alignment.BottomStart,
-			) {
-				VideoStreamBadges(item = streamBadgeItem)
-			}
-
-			Box(
-				modifier = Modifier.weight(1f),
-				contentAlignment = Alignment.BottomEnd,
-			) {
-				MediaStreamBadges(item = streamBadgeItem)
-			}
-		}
-
-		ProgressIndicator(
-			progress = progress?.progress,
+		StateIndicator(
+			item = item,
+			badgeSize = badgeSize,
+			showFavoriteIndicator = showFavoriteIndicator,
+			modifier = Modifier.align(Alignment.TopStart),
 		)
 
-		if (footer != null) footer()
+		TopEndIndicator(
+			item = item,
+			badgeSize = badgeSize,
+			progress = progress?.progress,
+			duration = progress?.duration,
+			showRemainingTimeBadge = showRemainingTimeBadge,
+			modifier = Modifier.align(Alignment.TopEnd),
+		)
+
+		Column(
+			modifier = Modifier
+				.align(Alignment.BottomCenter)
+				.fillMaxWidth(),
+			verticalArrangement = Arrangement.spacedBy(badgeSize * 0.5f)
+		) {
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				verticalAlignment = Alignment.Bottom,
+			) {
+				Box(
+					modifier = Modifier.weight(1f),
+					contentAlignment = Alignment.BottomStart,
+				) {
+					VideoStreamBadges(item = streamBadgeItem, badgeSize = badgeSize)
+				}
+
+				Box(
+					modifier = Modifier.weight(1f),
+					contentAlignment = Alignment.BottomEnd,
+				) {
+					MediaStreamBadges(item = streamBadgeItem, badgeSize = badgeSize)
+				}
+			}
+
+			ProgressIndicator(
+				progress = progress?.progress,
+			)
+
+			if (footer != null) footer()
+		}
 	}
 }
 
@@ -125,6 +131,7 @@ fun ItemCardBaseItemOverlay(
 @Stable
 private fun TopEndIndicator(
 	item: BaseItemDto,
+	badgeSize: Dp,
 	progress: Float?,
 	duration: Duration?,
 	showRemainingTimeBadge: Boolean,
@@ -134,12 +141,14 @@ private fun TopEndIndicator(
 	if (remainingTimeText != null) {
 		MediaStreamBadge(
 			icon = R.drawable.ic_time,
+			badgeSize = badgeSize,
 			text = remainingTimeText,
 			modifier = modifier,
 		)
 	} else {
 		WatchIndicator(
 			item = item,
+			badgeSize = badgeSize,
 			modifier = modifier,
 		)
 	}
@@ -149,6 +158,7 @@ private fun TopEndIndicator(
 @Stable
 private fun StateIndicator(
 	item: BaseItemDto,
+	badgeSize: Dp,
 	showFavoriteIndicator: Boolean,
 	modifier: Modifier = Modifier,
 ) {
@@ -162,7 +172,7 @@ private fun StateIndicator(
 
 	Column(
 		modifier = modifier,
-		verticalArrangement = Arrangement.spacedBy(Tokens.Space.spaceXs)
+		verticalArrangement = Arrangement.spacedBy(badgeSize * 0.5f)
 	) {
 		if (recordingIcon != null) {
 			Icon(
@@ -170,7 +180,7 @@ private fun StateIndicator(
 				contentDescription = null,
 				tint = if (recordingItem?.timerId != null) Tokens.Color.colorRed600 else Tokens.Color.colorGrey100,
 				modifier = modifier
-					.size(24.dp)
+					.size(badgeSize * 2f)
 			)
 		}
 
@@ -180,7 +190,7 @@ private fun StateIndicator(
 				contentDescription = null,
 				tint = Tokens.Color.colorRed500,
 				modifier = modifier
-					.size(24.dp)
+					.size(badgeSize * 2f)
 			)
 		}
 	}
@@ -196,6 +206,7 @@ private fun BaseItemDto.recordingStateItem() = when (type) {
 @Stable
 private fun WatchIndicator(
 	item: BaseItemDto,
+	badgeSize: Dp,
 	modifier: Modifier = Modifier,
 ) {
 	val userPreferences = koinInject<UserPreferences>()
@@ -210,12 +221,13 @@ private fun WatchIndicator(
 	if (isPlayed) {
 		Badge(
 			modifier = modifier
-				.size(24.dp),
+				.size(badgeSize * 2f),
+			contentPadding = badgeSize * 0.3f,
 		) {
 			Icon(
 				imageVector = ImageVector.vectorResource(R.drawable.ic_watch),
 				contentDescription = null,
-				modifier = Modifier.size(12.dp)
+				modifier = Modifier.size(badgeSize)
 			)
 		}
 	} else if (unplayedItems != null) {
@@ -223,10 +235,13 @@ private fun WatchIndicator(
 
 		Badge(
 			modifier = modifier
-				.sizeIn(minWidth = 24.dp, minHeight = 24.dp),
+				.sizeIn(minWidth = badgeSize * 2f, minHeight = badgeSize * 2f),
+			contentPadding = badgeSize * 0.3f,
 		) {
 			Text(
 				text = unplayedItems.toString(),
+				fontSize = badgeSize.value.sp,
+				lineHeight = (badgeSize.value * 1.2f).sp,
 			)
 		}
 	}
@@ -239,6 +254,7 @@ private val progressMediaTypes = setOf(MediaType.VIDEO, MediaType.BOOK)
 @Stable
 private fun MediaStreamBadges(
 	item: BaseItemDto,
+	badgeSize: Dp,
 	modifier: Modifier = Modifier,
 ) {
 	val liveTvBadges = item.liveTvTrackBadges()
@@ -264,11 +280,12 @@ private fun MediaStreamBadges(
 	Column(
 		modifier = modifier,
 		horizontalAlignment = Alignment.End,
-		verticalArrangement = Arrangement.spacedBy(1.dp),
+		verticalArrangement = Arrangement.spacedBy(badgeSize * 0.15f),
 	) {
 		badges.audio?.let { text ->
 			MediaStreamBadge(
 				icon = R.drawable.ic_badge_speaker,
+				badgeSize = badgeSize,
 				text = text,
 			)
 		}
@@ -276,6 +293,7 @@ private fun MediaStreamBadges(
 		badges.subtitle?.let { text ->
 			MediaStreamBadge(
 				icon = R.drawable.ic_badge_subtitles,
+				badgeSize = badgeSize,
 				text = text,
 			)
 		}
@@ -286,6 +304,7 @@ private fun MediaStreamBadges(
 @Stable
 private fun VideoStreamBadges(
 	item: BaseItemDto,
+	badgeSize: Dp,
 	modifier: Modifier = Modifier,
 ) {
 	val badges = remember(item.type, item.mediaSources) { item.videoBadges() } ?: return
@@ -293,11 +312,12 @@ private fun VideoStreamBadges(
 	Column(
 		modifier = modifier,
 		horizontalAlignment = Alignment.Start,
-		verticalArrangement = Arrangement.spacedBy(1.dp),
+		verticalArrangement = Arrangement.spacedBy(badgeSize * 0.15f),
 	) {
 		badges.resolution?.let { text ->
 			MediaStreamBadge(
 				icon = R.drawable.ic_select_quality,
+				badgeSize = badgeSize,
 				text = text,
 			)
 		}
@@ -305,6 +325,7 @@ private fun VideoStreamBadges(
 		badges.codec?.let { text ->
 			MediaStreamBadge(
 				icon = R.drawable.ic_movie,
+				badgeSize = badgeSize,
 				text = text,
 			)
 		}
@@ -314,27 +335,29 @@ private fun VideoStreamBadges(
 @Composable
 private fun MediaStreamBadge(
 	icon: Int,
+	badgeSize: Dp,
 	text: String,
 	modifier: Modifier = Modifier,
 ) {
 	Row(
 		modifier = modifier
 			.background(Tokens.Color.colorBluegrey900.copy(alpha = 0.72f), JellyfinTheme.shapes.extraSmall)
-			.padding(horizontal = 2.dp, vertical = 1.dp)
-			.widthIn(min = 18.dp),
-		horizontalArrangement = Arrangement.spacedBy(1.dp),
+			.padding(horizontal = badgeSize * 0.3f, vertical = badgeSize * 0.15f)
+			.widthIn(min = badgeSize * 2.5f),
+		horizontalArrangement = Arrangement.spacedBy(badgeSize * 0.15f),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
 		Icon(
 			imageVector = ImageVector.vectorResource(icon),
 			contentDescription = null,
 			tint = Tokens.Color.colorWhite,
-			modifier = Modifier.size(7.dp),
+			modifier = Modifier.size(badgeSize),
 		)
 		Text(
 			text = text,
 			color = Tokens.Color.colorWhite,
-			fontSize = 7.sp,
+			fontSize = badgeSize.value.sp,
+			lineHeight = (badgeSize.value * 1.2f).sp,
 			maxLines = 1,
 			overflow = TextOverflow.Ellipsis,
 		)
