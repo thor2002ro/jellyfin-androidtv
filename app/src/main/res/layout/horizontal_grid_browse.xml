@@ -10,7 +10,7 @@
         android:layout_height="match_parent"
         android:layout_below="@+id/infoRow"
         android:layout_alignParentStart="true"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:layout_marginBottom="0dp" />
 
     <TextView
@@ -20,7 +20,7 @@
         android:layout_alignParentStart="true"
         android:layout_alignParentTop="true"
         android:layout_marginStart="50sp"
-        android:layout_marginTop="20sp"
+        android:layout_marginTop="8dp"
         android:layout_marginEnd="10sp"
         android:layout_toStartOf="@+id/npBug"
         android:ellipsize="end"
@@ -28,13 +28,28 @@
         android:maxLines="1"
         android:textSize="32sp" />
 
+    <TextView
+        android:id="@+id/genres"
+        android:layout_width="match_parent"
+        android:layout_height="16sp"
+        android:layout_below="@+id/title"
+        android:layout_alignStart="@+id/title"
+        android:layout_toStartOf="@+id/toolBar"
+        android:layout_marginEnd="8dp"
+        android:gravity="center_vertical"
+        android:includeFontPadding="false"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-light" />
+
     <LinearLayout
         android:orientation="horizontal"
         android:layout_width="wrap_content"
         android:layout_height="20sp"
-        android:layout_below="@+id/title"
+        android:layout_below="@+id/genres"
         android:layout_alignStart="@+id/title"
-        android:layout_marginTop="5sp"
+        android:layout_marginTop="2dp"
         android:id="@+id/infoRow"
         android:layout_toStartOf="@+id/clock"/>
 
@@ -44,8 +59,8 @@
         android:layout_height="wrap_content"
         android:layout_below="@+id/title"
         android:layout_alignParentEnd="true"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="40dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
         android:alpha=".75"
         android:dividerPadding="4dp"
         android:gravity="bottom|end"
@@ -70,11 +85,10 @@
     <org.jellyfin.androidtv.ui.AlphaPickerView
         android:id="@+id/alphaPickerHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="35dp"
+        android:layout_height="24dp"
         android:layout_alignParentBottom="true"
-        android:layout_toEndOf="@+id/statusText"
+        android:layout_alignStart="@+id/title"
         android:layout_toStartOf="@+id/counter"
-        android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp" />
 
     <org.jellyfin.androidtv.ui.AlphaPickerView
@@ -116,7 +130,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:id="@+id/clock"
-        android:layout_alignTop="@+id/title"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="8dp"
         android:layout_marginEnd="40sp"
         android:layout_marginStart="8sp"
         android:layout_alignParentEnd="true" />
