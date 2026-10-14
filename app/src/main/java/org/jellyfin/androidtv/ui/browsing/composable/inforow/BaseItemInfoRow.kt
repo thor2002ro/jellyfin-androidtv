@@ -5,15 +5,21 @@ import android.util.AttributeSet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
@@ -251,6 +257,7 @@ fun BaseItemInfoRow(
 	item: BaseItemDto,
 	mediaSource: MediaSourceInfo?,
 	includeRuntime: Boolean,
+	includeProgramTime: Boolean = true,
 ) {
 	val userPreferences = koinInject<UserPreferences>()
 
@@ -298,8 +305,11 @@ fun BaseItemInfoRow(
 
 			BaseItemKind.PROGRAM -> {
 				val context = LocalContext.current
-				InfoRowItem(contentDescription = null) {
-					Text(item.getProgramSubText(context))
+				val subText = item.getProgramSubText(context, includeTime = includeProgramTime)
+				if (subText.isNotBlank()) {
+					InfoRowItem(contentDescription = null) {
+						Text(subText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+					}
 				}
 
 				if (item.isNew()) {
@@ -394,6 +404,8 @@ class BaseItemInfoRowView @JvmOverloads constructor(
 	private val _item = MutableStateFlow<BaseItemDto?>(null)
 	private val _mediaSource = MutableStateFlow<MediaSourceInfo?>(null)
 	private val _includeRuntime = MutableStateFlow(false)
+	var contentScale by mutableStateOf(1f)
+	var includeProgramTime by mutableStateOf(true)
 
 	var item: BaseItemDto?
 		get() = _item.value
@@ -424,6 +436,9 @@ class BaseItemInfoRowView @JvmOverloads constructor(
 		val mediaSource by _mediaSource.collectAsState()
 		val includeRuntime by _includeRuntime.collectAsState()
 
-		item?.let { BaseItemInfoRow(it, mediaSource, includeRuntime) }
+		val density = LocalDensity.current
+		CompositionLocalProvider(LocalDensity provides Density(density.density * contentScale, density.fontScale)) {
+			item?.let { BaseItemInfoRow(it, mediaSource, includeRuntime, includeProgramTime) }
+		}
 	}
 }

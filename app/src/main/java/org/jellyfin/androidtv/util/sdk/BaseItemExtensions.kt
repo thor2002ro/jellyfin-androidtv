@@ -94,7 +94,7 @@ fun BaseItemDto.trackSelectionIds() = liveTvChannelId()
 
 fun BaseItemDto.isNew() = isSeries == true && isNews != true && isRepeat != true
 
-fun BaseItemDto.getProgramSubText(context: Context) = buildString {
+fun BaseItemDto.getProgramSubText(context: Context, includeTime: Boolean = true) = buildString {
 	// Add the channel name if set
 	channelName?.let { append(channelName, " - ") }
 
@@ -111,18 +111,20 @@ fun BaseItemDto.getProgramSubText(context: Context) = buildString {
 	// Add the episode title if set
 	episodeTitle?.let { append(episodeTitle, " ") }
 
-	// If the start time is on a different day, add the date
-	if (startDate?.dayOfYear != LocalDateTime.now().dayOfYear)
-		append(TimeUtils.getFriendlyDate(context, startDate), " ")
+	if (includeTime) {
+		// If the start time is on a different day, add the date
+		if (startDate?.dayOfYear != LocalDateTime.now().dayOfYear)
+			append(TimeUtils.getFriendlyDate(context, startDate), " ")
 
-	// Add the start and end time
-	append(
-		context.getString(
-			R.string.lbl_time_range,
-			context.getTimeFormatter().format(startDate),
-			context.getTimeFormatter().format(endDate),
+		// Add the start and end time
+		append(
+			context.getString(
+				R.string.lbl_time_range,
+				context.getTimeFormatter().format(startDate),
+				context.getTimeFormatter().format(endDate),
+			)
 		)
-	)
+	}
 }
 
 fun BaseItemDto.getFirstPerson(searchedType: PersonKind) = people?.firstOrNull { it.type == searchedType }
