@@ -299,7 +299,10 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private fun trackHomeRows() {
 		repeat(adapter.size()) { i ->
 			val rowAdapter = (adapter[i] as? ListRow)?.adapter as? ItemRowAdapter
-			if (rowAdapter != null) homeRowAdapters.add(rowAdapter)
+			if (rowAdapter != null) {
+				homeRowAdapters.add(rowAdapter)
+				rowAdapter.startLiveTvProgramUpdates(viewLifecycleOwner)
+			}
 		}
 	}
 
