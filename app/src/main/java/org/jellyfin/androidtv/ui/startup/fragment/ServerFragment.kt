@@ -39,6 +39,7 @@ import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.databinding.FragmentServerBinding
 import org.jellyfin.androidtv.ui.card.UserCardView
 import org.jellyfin.androidtv.ui.startup.StartupViewModel
+import org.jellyfin.androidtv.ui.startup.StartupActivity
 import org.jellyfin.androidtv.util.ListAdapter
 import org.jellyfin.androidtv.util.MarkdownRenderer
 import org.jellyfin.androidtv.util.createBundle
@@ -73,8 +74,13 @@ class ServerFragment : Fragment() {
 
 		val userAdapter = UserAdapter(requireContext(), server, startupViewModel)
 		userAdapter.onAddUserPressed = { openAddUser(server) }
-		userAdapter.onItemPressed = { user ->
+		userAdapter.onItemPressed = { user, card ->
+			val startupActivity = requireActivity() as StartupActivity
+			startupActivity.profileLoginOrigin = card.loginTransitionOrigin()
 			startupViewModel.authenticate(server, user).onEach { state ->
+				if (state != AuthenticatingState && state != AuthenticatedState && state != RequireSignInState) {
+					startupActivity.profileLoginOrigin = null
+				}
 				when (state) {
 					// Ignored states
 					AuthenticatingState -> Unit
@@ -178,6 +184,7 @@ class ServerFragment : Fragment() {
 		}
 
 		binding.serverButton.setOnClickListener {
+			(requireActivity() as StartupActivity).profileLoginOrigin = null
 			navigateFragment<SelectServerFragment>(keepToolbar = true)
 		}
 
@@ -190,6 +197,7 @@ class ServerFragment : Fragment() {
 	}
 
 	private fun openAddUser(server: Server) {
+		(requireActivity() as StartupActivity).profileLoginOrigin = null
 		navigateFragment<UserLoginFragment>(createBundle {
 			putString(UserLoginFragment.ARG_SERVER_ID, server.id.toString())
 		})
@@ -284,7 +292,7 @@ class ServerFragment : Fragment() {
 		private val server: Server,
 		private val startupViewModel: StartupViewModel,
 	) : ListAdapter<User?, UserAdapter.ViewHolder>() {
-		var onItemPressed: (User) -> Unit = {}
+		var onItemPressed: (User, UserCardView) -> Unit = { _, _ -> }
 		var onAddUserPressed: () -> Unit = {}
 
 		override fun areItemsTheSame(old: User?, new: User?): Boolean = old?.id == new?.id
@@ -331,7 +339,7 @@ class ServerFragment : Fragment() {
 			}
 
 			holder.cardView.setOnClickListener {
-				onItemPressed(item)
+				onItemPressed(item, holder.cardView)
 			}
 		}
 

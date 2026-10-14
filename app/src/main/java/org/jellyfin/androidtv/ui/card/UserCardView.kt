@@ -37,11 +37,15 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
@@ -49,6 +53,7 @@ import org.jellyfin.androidtv.ui.base.LocalTextStyle
 import org.jellyfin.androidtv.ui.base.ProfilePicture
 import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
+import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginOrigin
 import org.jellyfin.androidtv.util.MenuBuilder
 import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.popupMenu
@@ -88,7 +93,7 @@ fun UserCard(
 				.aspectRatio(1f)
 				.clip(shape)
 				.background(JellyfinTheme.colorScheme.surface, shape)
-				.border(if (focused) 3.dp else 1.dp, color.first, shape)
+				.border(if (focused) UserCardView.FOCUS_BORDER_WIDTH else 1.dp, color.first, shape)
 		) {
 			image()
 		}
@@ -123,11 +128,13 @@ class UserCardView @JvmOverloads constructor(
 	companion object {
 		// Smaller avatars leave room for focus enlargement without shrinking the names underneath.
 		internal val AVATAR_SIZE = 83.dp
+		internal val FOCUS_BORDER_WIDTH = 3.dp
 		internal val HORIZONTAL_PADDING = 10.dp
 		internal val VERTICAL_PADDING = 12.dp
 		internal val NAME_SPACING = 12.dp
 		internal val NAME_LINE_HEIGHT = 20.sp
-		private val USER_ICON_PADDING = 16.dp
+		internal val NAME_FONT_SIZE = 16.sp
+		internal val USER_ICON_PADDING = 16.dp
 		private val ADD_ACCOUNT_ICON_PADDING = 23.dp
 		// Include the card's side padding so the grid and Compose agree on each column's width.
 		internal val CARD_WIDTH = AVATAR_SIZE + HORIZONTAL_PADDING * 2
@@ -137,6 +144,17 @@ class UserCardView @JvmOverloads constructor(
 	var image by mutableStateOf<String?>(null)
 	var imageIcon by mutableStateOf<Int?>(null)
 	private var focused by mutableStateOf(false)
+	private var avatarCoordinates: LayoutCoordinates? = null
+	private var nameCoordinates: LayoutCoordinates? = null
+
+	internal fun loginTransitionOrigin(): ProfileLoginOrigin? {
+		val avatar = avatarCoordinates?.takeIf { it.isAttached }?.boundsInWindow() ?: return null
+		val label = nameCoordinates?.takeIf { it.isAttached }?.boundsInWindow() ?: return null
+		val density = Density(context)
+		val scale = avatar.width / with(density) { AVATAR_SIZE.toPx() }
+		return ProfileLoginOrigin(avatar, label, name.orEmpty(), image, with(density) { NAME_FONT_SIZE.toPx() } * scale)
+			.takeIf { it.isUsable }
+	}
 
 	init {
 		isFocusable = true
@@ -186,14 +204,15 @@ class UserCardView @JvmOverloads constructor(
 				) else ProfilePicture(
 					url = image,
 					iconPadding = PaddingValues(USER_ICON_PADDING),
-					modifier = Modifier.fillMaxSize()
+					modifier = Modifier.fillMaxSize().onGloballyPositioned { avatarCoordinates = it }
 				)
 			},
 			name = {
 				Text(
 					text = name.orEmpty(),
+					modifier = Modifier.onGloballyPositioned { nameCoordinates = it },
 					maxLines = 1,
-					fontSize = 16.sp,
+					fontSize = NAME_FONT_SIZE,
 					fontWeight = FontWeight.Medium,
 					lineHeight = NAME_LINE_HEIGHT,
 				)

@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui.startup
 
 import android.app.SearchManager
+import android.app.ActivityOptions
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.isVisible
@@ -40,6 +41,7 @@ import org.jellyfin.androidtv.ui.startup.fragment.SelectServerFragment
 import org.jellyfin.androidtv.ui.startup.fragment.ServerFragment
 import org.jellyfin.androidtv.ui.startup.fragment.SplashFragment
 import org.jellyfin.androidtv.ui.startup.fragment.StartupToolbarFragment
+import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginOrigin
 import org.jellyfin.androidtv.updater.startAppUpdateCheck
 import org.jellyfin.androidtv.util.applyTheme
 import org.jellyfin.androidtv.util.createBundle
@@ -71,6 +73,7 @@ class StartupActivity : FragmentActivity() {
 	private val notificationsRepository: NotificationsRepository by inject()
 
 	private lateinit var binding: ActivityStartupBinding
+	internal var profileLoginOrigin: ProfileLoginOrigin? = null
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		applyTheme()
@@ -102,9 +105,12 @@ class StartupActivity : FragmentActivity() {
 			if (session != null) {
 				Timber.i("Found a session in the session repository, waiting for the currentUser in the application class.")
 
-				showSplash()
+				// Keep the chosen profile visible while its user data loads instead of flashing the logo.
+				if (profileLoginOrigin == null) showSplash()
 
 				val currentUser = userRepository.currentUser.first { it != null }
+				// Quick Connect can approve a different account; only move the profile that actually signed in.
+				if (profileLoginOrigin?.name != currentUser?.name) profileLoginOrigin = null
 				Timber.i("CurrentUser changed to ${currentUser?.id} while waiting for startup.")
 
 				lifecycleScope.launch {
@@ -169,10 +175,15 @@ class StartupActivity : FragmentActivity() {
 		}
 
 		val intent = Intent(this, MainActivity::class.java)
+		val profileOrigin = profileLoginOrigin.takeIf { navigationRepository.currentDestination.value == Destinations.home }
+		profileOrigin?.writeTo(intent)
 		// Clear navigation history
 		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_TASK_ON_HOME)
 		Timber.i("Opening next activity $intent")
-		startActivity(intent)
+		if (profileOrigin != null) {
+			// The profile overlay owns this handoff, so a second window animation would move it twice.
+			startActivity(intent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle())
+		} else startActivity(intent)
 		finishAfterTransition()
 	}
 
