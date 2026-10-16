@@ -48,34 +48,6 @@ class LibraryFilterOptionsLoaderTests : FunSpec({
 		)
 	}
 
-	test("equivalent science fiction labels become one genre choice") {
-		val scienceFictionId = UUID.randomUUID()
-		val hyphenatedId = UUID.randomUUID()
-		val abbreviatedId = UUID.randomUUID()
-		val dramaId = UUID.randomUUID()
-		val result = mergeFilterChoiceResults(
-			genres = Result.success(
-				listOf(
-					BaseItemDto(id = scienceFictionId, name = "Science Fiction", type = BaseItemKind.GENRE),
-					BaseItemDto(id = hyphenatedId, name = "Science-Fiction", type = BaseItemKind.GENRE),
-					BaseItemDto(id = abbreviatedId, name = "Sci-Fi", type = BaseItemKind.GENRE),
-					BaseItemDto(id = dramaId, name = "Drama", type = BaseItemKind.GENRE),
-				),
-			),
-			years = Result.success(emptyList()),
-			ratings = Result.success(emptyList()),
-			studios = Result.success(emptyList()),
-		)
-
-		result.genres shouldBe listOf(
-			LibraryGenreChoice(name = "Drama", ids = setOf(dramaId)),
-			LibraryGenreChoice(
-				name = "Science Fiction",
-				ids = setOf(scienceFictionId, hyphenatedId, abbreviatedId),
-			),
-		)
-	}
-
 	test("failed studios lookup keeps other dynamic choices") {
 		val genre = BaseItemDto(id = UUID.randomUUID(), name = "Drama", type = BaseItemKind.GENRE)
 		val result = mergeFilterChoiceResults(

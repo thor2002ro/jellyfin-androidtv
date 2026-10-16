@@ -58,8 +58,10 @@ fun BrowseGridFragment.addFilters(
 		}
 
 		LaunchedEffect(isVisible, parentId, includeTypes) {
-			if (!isVisible) return@LaunchedEffect
 			val applied = initialFilters()
+			if (!isVisible && applied.genreIds.isEmpty() && applied.officialRatings.isEmpty() && applied.studioIds.isEmpty()) {
+				return@LaunchedEffect
+			}
 			state = LibraryFilterDialogState(
 				applied = applied,
 				draft = applied,
@@ -70,6 +72,7 @@ fun BrowseGridFragment.addFilters(
 			if (cachedChoices == null || cachedChoices?.unavailableSections?.isNotEmpty() == true) {
 				val loadedChoices = loadLibraryFilterChoices(api, parentId, includeTypes, cachedChoices)
 				cachedChoices = loadedChoices
+				setFilterChoices(loadedChoices)
 				state = state.copy(
 					choices = loadedChoices,
 					loading = false,

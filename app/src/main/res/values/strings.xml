@@ -815,4 +815,7 @@
     <string name="pref_surround_volume_boost">Surround volume boost</string>
     <string name="pref_surround_volume_boost_summary">Boost locally decoded surround audio, including stereo downmix. Higher levels may distort loud passages.</string>
     <string name="pref_surround_volume_boost_off">Off</string>
+    <string name="library_genres_load_error">Unable to load genres. Check your server connection.</string>
+    <string name="library_genres_retry">Try again</string>
+    <string name="library_genre_count_unavailable">Item count unavailable</string>
 </resources>
