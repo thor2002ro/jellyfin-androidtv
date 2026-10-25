@@ -21,9 +21,11 @@ import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.PlaybackBackend
+import org.jellyfin.androidtv.ui.InteractionTrackerViewModel
 import org.jellyfin.androidtv.ui.base.BaseScreen
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.Destinations
+import org.jellyfin.androidtv.ui.navigation.Destination
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
@@ -35,6 +37,8 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.androidtv.util.PlaybackDisplayMode
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.PlaybackOrder
+import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.isLiveTv
@@ -69,6 +73,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
 	private val dataRefreshService by inject<DataRefreshService>()
+	private val interactionTracker by inject<InteractionTrackerViewModel>()
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
 	private var closingPlayer = false
 	private var hasSeenVideoQueueEntry = false
@@ -139,6 +144,8 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		Timber.i("Created a queue with ${queueSupplier.items.size} items")
 		videoQueueManager.setCurrentMediaPosition(startIndex)
 		playbackManager.getService<QueueService>()?.setEntryChangePredicate(entryChangePredicate)
+		playbackManager.state.setPlaybackOrder(PlaybackOrder.DEFAULT)
+		playbackManager.state.setRepeatMode(RepeatMode.NONE)
 		playbackManager.queue.clear()
 		playbackManager.queue.addSupplier(queueSupplier, startIndex = startIndex)
 
@@ -147,8 +154,11 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 				if (mediaStream.queueEntry !== playbackManager.queue.entry.value) return
 				if (mediaStream.queueEntry.isLiveTv) return
 				notifyPlaybackChanged(mediaStream.queueEntry.baseItem)
-				if (handingOffPlayer) return
-				if (showNextUpIfAvailable(mediaStream)) return
+				if (handingOffPlayer || closingPlayer || showingPostPlaybackPrompt) return
+				if (mediaStream.queueEntry.baseItem?.type == BaseItemKind.EPISODE) {
+					interactionTracker.onEpisodeWatched()
+				}
+				if (showPostPlaybackPromptIfAvailable(mediaStream)) return
 
 				if (!playbackManager.queue.hasNext(usePlaybackOrder = true, useRepeatMode = true)) {
 					Timber.i("Video queue ended, closing player")
@@ -161,6 +171,9 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		}.also(playbackManager::addBackendEventListener)
 		lifecycleScope.launch {
 			repeatOnLifecycle(Lifecycle.State.STARTED) {
+				playbackManager.state.playState.onEach { playState ->
+					interactionTracker.notifyPlaybackState(playState == PlayState.PLAYING)
+				}.launchIn(this)
 				playbackManager.queue.entry
 					.onEach { entry ->
 						if (entry == null) {
@@ -173,9 +186,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 						} else {
 							hasSeenVideoQueueEntry = entry.isLiveTv != true
 							closeWhenVideoQueueEnds = false
-							if (!entry.isLiveTv) {
-								syncLegacyVideoQueuePosition(entry)
-							}
+							onQueueEntryChanged(entry)
 						}
 					}
 					.launchIn(this)
@@ -287,15 +298,16 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		closePlayer()
 	}
 
-	private fun showNextUpIfAvailable(mediaStream: PlayableMediaStream): Boolean {
+	internal fun selectPostPlaybackPrompt(itemType: BaseItemKind?, nextItemId: UUID): Destination.Fragment? = when {
+		itemType == BaseItemKind.TRAILER -> null
+		interactionTracker.getShowStillWatching() -> Destinations.stillWatching(nextItemId)
+		userPreferences[UserPreferences.nextUpBehavior] != NextUpBehavior.DISABLED -> Destinations.nextUp(nextItemId)
+		else -> null
+	}
+
+	private fun showPostPlaybackPromptIfAvailable(mediaStream: PlayableMediaStream): Boolean {
 		if (showingPostPlaybackPrompt) return true
 		if (closingPlayer) return false
-		when (userPreferences[UserPreferences.nextUpBehavior]) {
-			NextUpBehavior.DISABLED -> return false
-			NextUpBehavior.MINIMAL,
-			NextUpBehavior.EXTENDED -> Unit
-		}
-		if (mediaStream.queueEntry.baseItem?.type == BaseItemKind.TRAILER) return false
 
 		val currentIndex = playbackManager.queue.indexOf(mediaStream.queueEntry)
 			?: playbackManager.queue.entryIndex.value
@@ -303,8 +315,9 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 		val nextIndex = currentIndex + 1
 		val nextItem = videoQueueManager.getCurrentVideoQueue().getOrNull(nextIndex) ?: return false
+		val destination = selectPostPlaybackPrompt(mediaStream.queueEntry.baseItem?.type, nextItem.id) ?: return false
 
-		Timber.i("Showing Next Up for item ${nextItem.id} after queue index $currentIndex")
+		Timber.i("Showing post-playback prompt for item ${nextItem.id} after queue index $currentIndex")
 		videoQueueManager.setCurrentMediaPosition(nextIndex)
 		showingPostPlaybackPrompt = true
 		closeWhenVideoQueueEnds = false
@@ -312,7 +325,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
-		navigationRepository.navigate(Destinations.nextUp(nextItem.id), replace = true)
+		navigationRepository.navigate(destination, replace = true)
 
 		return true
 	}
@@ -347,7 +360,9 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		false
 	}
 
-	private fun syncLegacyVideoQueuePosition(entry: QueueEntry) {
+	internal fun onQueueEntryChanged(entry: QueueEntry) {
+		entry.baseItem?.let(interactionTracker::notifyStart)
+		if (entry.isLiveTv) return
 		val queueIndex = playbackManager.queue.indexOf(entry)
 			?: playbackManager.queue.entryIndex.value
 		if (queueIndex >= 0) {
@@ -357,6 +372,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 	override fun onPause() {
 		super.onPause()
+		interactionTracker.notifyPlaybackState(false)
 
 		if (closingPlayer && shouldReturnToLiveTvGuide()) return
 		playbackManager.state.pause()
