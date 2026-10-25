@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui.presentation
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -48,11 +49,13 @@ class ActionButtonPresenter private constructor(
 	private class ActionButtonView(
 		context: Context,
 		private val size: ActionButtonSize,
-		widthDp: Int,
-		heightDp: Int,
+		private val widthDp: Int,
+		private val heightDp: Int,
 	) : FrameLayout(context) {
-		private val cardWidth = dp(widthDp)
-		private val cardHeight = dp(heightDp)
+		private val cardWidth get() = dp(widthDp)
+		private val cardHeight get() = dp(heightDp)
+		private var densityDpi = 0
+		private var fontScale = 0f
 		private val iconPlate = FrameLayout(context)
 		private val icon = ImageView(context)
 		private val label = TextView(context)
@@ -62,40 +65,29 @@ class ActionButtonPresenter private constructor(
 			isFocusable = true
 			isFocusableInTouchMode = true
 			descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-			background = ContextCompat.getDrawable(context, R.drawable.channel_card_background)
-			minimumWidth = cardWidth
-			minimumHeight = cardHeight
-			layoutParams = ViewGroup.LayoutParams(cardWidth, cardHeight)
-			setPadding(dp(if (size.horizontal) 8 else 11), dp(if (size.horizontal) 6 else 9), dp(if (size.horizontal) 8 else 11), dp(if (size.horizontal) 6 else 9))
-
 			iconPlate.background = GradientDrawable().apply {
 				shape = GradientDrawable.RECTANGLE
-				cornerRadius = dp(8).toFloat()
 				setColor(0x24000000)
 			}
 			addView(iconPlate, LayoutParams(
-				dp(if (size.horizontal) 27 else 35),
-				dp(if (size.horizontal) 27 else 35),
+				0, 0,
 				if (size.horizontal) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.TOP or Gravity.START,
 			))
 
 			icon.scaleType = ImageView.ScaleType.CENTER_INSIDE
 			icon.alpha = 0.92f
-			iconPlate.addView(icon, LayoutParams(dp(if (size.horizontal) 17 else 21), dp(if (size.horizontal) 17 else 21), Gravity.CENTER))
+			iconPlate.addView(icon, LayoutParams(0, 0, Gravity.CENTER))
 
 			label.ellipsize = TextUtils.TruncateAt.END
 			label.includeFontPadding = false
 			label.maxLines = if (size.horizontal) 1 else 2
 			label.setTextColor(Color.WHITE)
-			label.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (size.horizontal) 12f else 11f)
 			label.setTypeface(Typeface.DEFAULT, Typeface.BOLD)
 			addView(label, LayoutParams(
 				LayoutParams.MATCH_PARENT,
 				LayoutParams.WRAP_CONTENT,
 				if (size.horizontal) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.BOTTOM or Gravity.START,
-			).apply {
-				bottomMargin = dp(if (size.horizontal) 0 else 8)
-			})
+			))
 
 			accent.background = GradientDrawable(
 				GradientDrawable.Orientation.LEFT_RIGHT,
@@ -103,15 +95,51 @@ class ActionButtonPresenter private constructor(
 					ContextCompat.getColor(context, R.color.jellyfin_blue),
 					ContextCompat.getColor(context, R.color.jellyfin_purple),
 				),
-			).apply {
-				cornerRadii = floatArrayOf(
-					0f, 0f,
-					0f, 0f,
-					dp(8).toFloat(), dp(8).toFloat(),
-					dp(8).toFloat(), dp(8).toFloat(),
-				)
+			)
+			addView(accent, LayoutParams(LayoutParams.MATCH_PARENT, 0, Gravity.BOTTOM))
+			updateDimensions()
+		}
+
+		override fun onConfigurationChanged(newConfig: Configuration) {
+			super.onConfigurationChanged(newConfig)
+			updateDimensions()
+		}
+
+		override fun onAttachedToWindow() {
+			super.onAttachedToWindow()
+			updateDimensions()
+		}
+
+		private fun updateDimensions() {
+			val config = resources.configuration
+			if (densityDpi == config.densityDpi && fontScale == config.fontScale) return
+			densityDpi = config.densityDpi
+			fontScale = config.fontScale
+			background = ContextCompat.getDrawable(context, R.drawable.channel_card_background)
+			minimumWidth = cardWidth
+			minimumHeight = cardHeight
+			layoutParams = (layoutParams ?: ViewGroup.LayoutParams(cardWidth, cardHeight)).apply {
+				width = cardWidth
+				height = cardHeight
 			}
-			addView(accent, LayoutParams(LayoutParams.MATCH_PARENT, dp(2), Gravity.BOTTOM))
+			setPadding(dp(if (size.horizontal) 8 else 11), dp(if (size.horizontal) 6 else 9), dp(if (size.horizontal) 8 else 11), dp(if (size.horizontal) 6 else 9))
+			(iconPlate.background as GradientDrawable).cornerRadius = dp(8).toFloat()
+			iconPlate.layoutParams = iconPlate.layoutParams.apply {
+				width = dp(if (size.horizontal) 27 else 35)
+				height = width
+			}
+			icon.layoutParams = icon.layoutParams.apply {
+				width = dp(if (size.horizontal) 17 else 21)
+				height = width
+			}
+			label.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (size.horizontal) 12f else 11f)
+			label.layoutParams = (label.layoutParams as LayoutParams).apply {
+				marginStart = dp(size.labelStartMarginDp(iconPlate.visibility == View.VISIBLE))
+				bottomMargin = dp(if (size.horizontal) 0 else 8)
+			}
+			val radius = dp(8).toFloat()
+			(accent.background as GradientDrawable).cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, radius, radius, radius, radius)
+			accent.layoutParams = accent.layoutParams.apply { height = dp(2) }
 		}
 
 		override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {

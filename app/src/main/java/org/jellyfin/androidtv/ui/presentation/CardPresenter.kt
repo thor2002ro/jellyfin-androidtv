@@ -84,6 +84,7 @@ class CardPresenter(
 
 	override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
 		val view = ComposeView(parent.context).apply {
+			syncConfigurationOnAttach()
 			setParentCompositionContext(parent.findViewTreeCompositionContext())
 			setViewTreeLifecycleOwner(parent.findViewTreeLifecycleOwner())
 			setViewTreeSavedStateRegistryOwner(parent.findViewTreeSavedStateRegistryOwner())

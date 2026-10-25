@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.home
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
@@ -56,6 +57,7 @@ import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter
+import org.jellyfin.androidtv.ui.presentation.recreatePresentation
 import org.jellyfin.androidtv.util.KeyProcessor
 import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.playback.core.PlaybackManager
@@ -98,6 +100,18 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var currentItem: BaseRowItem? = null
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
+	private var homeRowsLoaded = false
+	private var rowsDensityDpi = 0
+	private var rowsFontScale = 0f
+	private val refreshRowMeasurements = Runnable {
+		val grid = verticalGridView ?: return@Runnable
+		val config = resources.configuration
+		if (rowsDensityDpi != config.densityDpi || rowsFontScale != config.fontScale) {
+			rowsDensityDpi = config.densityDpi
+			rowsFontScale = config.fontScale
+			grid.recreatePresentation()
+		}
+	}
 	private var backgroundUpdateJob: Job? = null
 	private var homeRowsDebounceJob: Job? = null
 	private var homeRowsRefreshJob: Job? = null
@@ -117,44 +131,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		super.onCreate(savedInstanceState)
 
 		adapter = MutableObjectAdapter<Row>(PositionableListRowPresenter())
-
-		lifecycleScope.launch(Dispatchers.IO) {
-			val currentUser = withTimeout(30.seconds) {
-				userRepository.currentUser.filterNotNull().first()
-			}
-
-			// Start out with default sections
-			val homesections = userSettingPreferences.activeHomesections
-
-			// Check for coroutine cancellation
-			if (!isActive) return@launch
-
-			val liveTvEnabled = currentUser.policy?.enableLiveTvAccess == true
-			val rows = createHomeRows(
-				homesections = homesections,
-				liveTvEnabled = liveTvEnabled,
-				includeRecentlyReleased = userSettingPreferences[UserSettingPreferences.homeRecentlyReleased],
-				combineContinueWatchingAndNextUp = userSettingPreferences[UserSettingPreferences.homeCombineContinueWatchingNextUp],
-			)
-
-			// Add sections to layout
-			withContext(Dispatchers.Main) {
-				val cardPresenter = createHomeCardPresenter(
-					useWideCards = userSettingPreferences[UserSettingPreferences.homeWideCards],
-				)
-
-				// Add rows in order
-				notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-				nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-				for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-				trackHomeRows()
-				(activity as? MainActivity)?.profileLoginAnimation?.homeRowsReady = true
-
-				if (currentUser.policy?.enableLiveTvAccess == true) {
-					TvManager.preloadChannels(this@HomeRowsFragment)
-				}
-			}
-		}
 
 		onItemViewClickedListener = CompositeClickedListener().apply {
 			registerListener(ItemViewClickedListener())
@@ -195,6 +171,51 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
+		rowsDensityDpi = resources.configuration.densityDpi
+		rowsFontScale = resources.configuration.fontScale
+		if (!homeRowsLoaded) {
+			viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+				val currentUser = withTimeout(30.seconds) {
+					userRepository.currentUser.filterNotNull().first()
+				}
+
+				// Start out with default sections
+				val homesections = userSettingPreferences.activeHomesections
+
+				// Check for coroutine cancellation
+				if (!isActive) return@launch
+
+				val liveTvEnabled = currentUser.policy?.enableLiveTvAccess == true
+				val rows = createHomeRows(
+					homesections = homesections,
+					liveTvEnabled = liveTvEnabled,
+					includeRecentlyReleased = userSettingPreferences[UserSettingPreferences.homeRecentlyReleased],
+					combineContinueWatchingAndNextUp = userSettingPreferences[UserSettingPreferences.homeCombineContinueWatchingNextUp],
+				)
+
+				// Add sections to layout
+				withContext(Dispatchers.Main) {
+					val cardPresenter = createHomeCardPresenter(
+						useWideCards = userSettingPreferences[UserSettingPreferences.homeWideCards],
+					)
+
+					// Add rows in order
+					notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
+					nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
+					for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
+					homeRowsLoaded = true
+					startHomeRowUpdates()
+					(activity as? MainActivity)?.profileLoginAnimation?.homeRowsReady = true
+
+					if (currentUser.policy?.enableLiveTvAccess == true) {
+						TvManager.preloadChannels(this@HomeRowsFragment)
+					}
+				}
+			}
+		} else {
+			startHomeRowUpdates()
+		}
+
 		val mainActivity = activity as? MainActivity ?: return
 		if (mainActivity.profileLoginAnimation == null) return
 		val grid = verticalGridView ?: return
@@ -206,6 +227,15 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			} finally {
 				grid.suppressLayout(false)
 			}
+		}
+	}
+
+	override fun onConfigurationChanged(newConfig: Configuration) {
+		super.onConfigurationChanged(newConfig)
+		// Keep the loaded rows and their update jobs; only native view measurements are stale.
+		verticalGridView?.let { grid ->
+			grid.removeCallbacks(refreshRowMeasurements)
+			grid.post(refreshRowMeasurements)
 		}
 	}
 
@@ -311,7 +341,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	private fun retrieveHomeRows() {
-		trackHomeRows()
+		startHomeRowUpdates()
 		homeRowAdapters.toList().forEach(ItemRowAdapter::Retrieve)
 	}
 
@@ -320,9 +350,14 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			val rowAdapter = (adapter[i] as? ListRow)?.adapter as? ItemRowAdapter
 			if (rowAdapter != null) {
 				homeRowAdapters.add(rowAdapter)
-				rowAdapter.startLiveTvProgramUpdates(viewLifecycleOwner)
 			}
 		}
+	}
+
+	private fun startHomeRowUpdates() {
+		trackHomeRows()
+		val owner = viewLifecycleOwner
+		homeRowAdapters.forEach { it.startLiveTvProgramUpdates(owner) }
 	}
 
 	private fun scheduleHomeRowsRefresh(delayMs: Long = HOME_ROWS_REFRESH_DELAY_MS) {
@@ -351,6 +386,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	override fun onDestroyView() {
+		verticalGridView?.removeCallbacks(refreshRowMeasurements)
 		trackHomeRows()
 		homeRowAdapters.forEach(ItemRowAdapter::cancelRetrieval)
 		backgroundUpdateJob?.cancel()

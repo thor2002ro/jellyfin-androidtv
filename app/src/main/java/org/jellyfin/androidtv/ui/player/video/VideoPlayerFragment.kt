@@ -191,7 +191,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		playbackManager.state.pause()
 	}
 
-	override fun onDestroy() {
+	private fun restoreDisplayMode() {
 		// The manager is shared. An older fragment must not remove a newer screen's
 		// callback or restore its window preference after that screen takes ownership.
 		if (playbackManager.options.beforePlayItem === displayModePreparation) {
@@ -204,6 +204,10 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 				}
 			}
 		}
+	}
+
+	override fun onDestroy() {
+		restoreDisplayMode()
 		displayModePreparation = null
 		playbackManager.getService<QueueService>()?.clearEntryChangePredicate(entryChangePredicate)
 		mediaStreamEndListener?.let(playbackManager::removeBackendEventListener)
@@ -364,8 +368,15 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		playbackManager.state.unpause()
 	}
 
+	override fun onStart() {
+		super.onStart()
+		playbackManager.options.beforePlayItem = displayModePreparation
+	}
+
 	override fun onStop() {
 		super.onStop()
+		// Exit animations can delay destruction until after the browsing screen resumes.
+		restoreDisplayMode()
 
 		if (closingPlayer && shouldReturnToLiveTvGuide()) return
 		notifyPlaybackChanged()
