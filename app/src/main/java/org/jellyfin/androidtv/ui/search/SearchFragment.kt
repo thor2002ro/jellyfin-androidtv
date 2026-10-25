@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,12 +24,18 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.Fragment
 import androidx.fragment.compose.AndroidFragment
 import androidx.fragment.compose.content
 import androidx.leanback.app.RowsSupportFragment
+import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.ui.base.JellyfinTheme
+import org.jellyfin.androidtv.ui.base.Text
+import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.search.composable.SearchTextInput
 import org.jellyfin.androidtv.ui.search.composable.SearchVoiceInput
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
@@ -49,10 +56,12 @@ class SearchFragment : Fragment() {
 		savedInstanceState: Bundle?
 	) = content {
 		val viewModel = koinViewModel<SearchViewModel>()
+		val hasSearchError by viewModel.hasSearchErrorFlow.collectAsState()
 		val searchFragmentDelegate = koinInject<SearchFragmentDelegate> { parametersOf(requireContext()) }
 		var query by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
 		val textInputFocusRequester = remember { FocusRequester() }
 		val resultFocusRequester = remember { FocusRequester() }
+		val focusManager = LocalFocusManager.current
 		val speechRecognizerAvailability = rememberSpeechRecognizerAvailability()
 		DisposableEffect(viewModel, searchFragmentDelegate) {
 			onDispose {
@@ -114,6 +123,26 @@ class SearchFragment : Fragment() {
 						.weight(1f)
 						.focusRequester(textInputFocusRequester),
 				)
+			}
+
+			if (hasSearchError) {
+				Row(
+					modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp),
+					horizontalArrangement = Arrangement.spacedBy(16.dp),
+					verticalAlignment = Alignment.CenterVertically,
+				) {
+					Text(stringResource(R.string.server_issue_unable_to_connect), color = JellyfinTheme.colorScheme.onBackground)
+					Button(onClick = {
+						if (viewModel.searchResultsFlow.value.any { it.items.isNotEmpty() }) {
+							resultFocusRequester.requestFocus()
+						} else {
+							focusManager.clearFocus()
+						}
+						viewModel.searchImmediately(query.text)
+					}) {
+						Text(stringResource(R.string.library_genres_retry))
+					}
+				}
 			}
 
 			// The leanback code has its own awful focus handling that doesn't work properly with Compose view inteop to workaround this
