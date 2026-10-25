@@ -114,6 +114,7 @@ class SessionRepositoryImpl(
 	override fun destroyCurrentSession() {
 		Timber.i("Destroying current session")
 
+		userApiClient.applySession(null)
 		clearStreamBadgeCaches()
 		userRepository.setCurrentUser(null)
 		serverRepository.setCurrentServer(null)
