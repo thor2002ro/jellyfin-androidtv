@@ -74,10 +74,13 @@ class ServerFragment : Fragment() {
 
 		val userAdapter = UserAdapter(requireContext(), server, startupViewModel)
 		userAdapter.onAddUserPressed = { openAddUser(server) }
-		userAdapter.onItemPressed = { user, card ->
+		userAdapter.onItemPressed = profileSelection@ { user, card ->
+			if (card.loading) return@profileSelection
+			card.loading = true
 			val startupActivity = requireActivity() as StartupActivity
 			startupActivity.profileLoginOrigin = card.loginTransitionOrigin()
 			startupViewModel.authenticate(server, user).onEach { state ->
+				card.loading = state == AuthenticatingState || state == AuthenticatedState
 				if (state != AuthenticatingState && state != AuthenticatedState && state != RequireSignInState) {
 					startupActivity.profileLoginOrigin = null
 				}
@@ -296,6 +299,11 @@ class ServerFragment : Fragment() {
 		var onAddUserPressed: () -> Unit = {}
 
 		override fun areItemsTheSame(old: User?, new: User?): Boolean = old?.id == new?.id
+
+		override fun onViewRecycled(holder: ViewHolder) {
+			holder.cardView.loading = false
+			super.onViewRecycled(holder)
+		}
 
 		override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
 			val cardView = UserCardView(context).apply {

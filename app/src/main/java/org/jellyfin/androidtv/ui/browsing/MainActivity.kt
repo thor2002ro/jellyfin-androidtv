@@ -6,6 +6,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
@@ -13,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
@@ -91,9 +93,15 @@ class MainActivity : FragmentActivity() {
 					interactionTracker = { interactionTrackerViewModel.notifyInteraction(false, userInitiated = true) }
 				) {
 					val destination by navigationRepository.currentDestination.collectAsState()
-					if (destination.fragment != Destinations.home.fragment || profileLoginAnimation != null) AppBackground()
-					Box(Modifier.fillMaxSize().graphicsLayer { alpha = profileLoginAnimation?.progress ?: 1f }) {
+					if (destination.fragment != Destinations.home.fragment) AppBackground()
+					Box(Modifier.fillMaxSize()) {
 						AppNavigationHost(navigationRepository = navigationRepository)
+					}
+					profileLoginAnimation?.let { animation ->
+						// Draw Home behind the cover so its first render does not consume the movement animation.
+						Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - animation.homeRevealProgress }.background(Color.Black)) {
+							AppBackground()
+						}
 					}
 					InAppScreensaver()
 					MainActivitySettings()

@@ -6,13 +6,17 @@ import android.view.KeyEvent
 import android.view.View
 import androidx.compose.runtime.snapshotFlow
 import androidx.core.view.doOnLayout
+import androidx.core.view.doOnPreDraw
 import androidx.leanback.app.RowsSupportFragment
+import androidx.leanback.widget.ItemBridgeAdapter
 import androidx.leanback.widget.ListRow
+import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.Row
 import androidx.leanback.widget.RowPresenter
+import androidx.leanback.widget.VerticalGridView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -59,6 +63,7 @@ import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter
 import org.jellyfin.androidtv.ui.presentation.recreatePresentation
+import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginAnimation
 import org.jellyfin.androidtv.util.KeyProcessor
 import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.playback.core.PlaybackManager
@@ -181,6 +186,18 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
+		val profileAnimation = (activity as? MainActivity)?.profileLoginAnimation
+		if (profileAnimation != null) verticalGridView?.let { grid ->
+			// Keep requests running, but leave card layout until the profile finishes moving.
+			grid.suppressLayout(true)
+			viewLifecycleOwner.lifecycleScope.launch {
+				try {
+					snapshotFlow { profileAnimation.progress >= 1f }.first { it }
+				} finally {
+					grid.suppressLayout(false)
+				}
+			}
+		}
 		rowsDensityDpi = resources.configuration.densityDpi
 		rowsFontScale = resources.configuration.fontScale
 		if (!homeRowsLoaded) {
@@ -215,7 +232,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 					for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 					homeRowsLoaded = true
 					startHomeRowUpdates()
-					(activity as? MainActivity)?.profileLoginAnimation?.homeRowsReady = true
+					(activity as? MainActivity)?.profileLoginAnimation?.let { animation ->
+						verticalGridView?.prepareProfileTransition(animation)
+					}
 
 					if (currentUser.policy?.enableLiveTvAccess == true) {
 						TvManager.preloadChannels(this@HomeRowsFragment)
@@ -224,19 +243,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			}
 		} else {
 			startHomeRowUpdates()
-		}
-
-		val mainActivity = activity as? MainActivity ?: return
-		if (mainActivity.profileLoginAnimation == null) return
-		val grid = verticalGridView ?: return
-		// Requests and adapters can update now; expensive card layout waits for the profile to land.
-		grid.suppressLayout(true)
-		viewLifecycleOwner.lifecycleScope.launch {
-			try {
-				snapshotFlow { mainActivity.profileLoginAnimation == null }.first { it }
-			} finally {
-				grid.suppressLayout(false)
-			}
 		}
 	}
 
@@ -483,6 +489,20 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				updateBackground(item)
 			}
 		}
+	}
+}
+
+internal fun VerticalGridView.prepareProfileTransition(animation: ProfileLoginAnimation) {
+	doOnPreDraw {
+		val holder = getChildAt(0)?.let { getChildViewHolder(it) } as? ItemBridgeAdapter.ViewHolder
+		val row = holder?.let {
+			(it.presenter as? RowPresenter)?.getRowViewHolder(it.viewHolder)
+		} as? ListRowPresenter.ViewHolder
+		// Empty row headers can lay out before their cards arrive.
+		if ((row?.gridView?.childCount ?: 0) > 0) {
+			// Let this frame finish drawing the cards before revealing Home.
+			post { animation.homeRowsReady = true }
+		} else prepareProfileTransition(animation)
 	}
 }
 
