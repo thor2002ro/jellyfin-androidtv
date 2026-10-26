@@ -32,8 +32,8 @@
     <color name="card_focus_gradient_start">@color/jellyfin_blue</color>
     <color name="card_focus_gradient_center">@color/lb_basic_card_info_bg_color</color>
     <color name="card_focus_gradient_end">@color/jellyfin_purple</color>
-    <color name="card_focus_stroke">@color/jellyfin_blue</color>
-    <color name="card_focus_sheen">#66FFFFFF</color>
+    <color name="card_focus_stroke">#8DEAFF</color>
+    <color name="card_focus_sheen">#38FFFFFF</color>
     <color name="card_neutral_gradient_start">@color/grey_light</color>
     <color name="card_neutral_gradient_center">@color/lb_basic_card_info_bg_color</color>
     <color name="card_neutral_gradient_end">@color/grey</color>

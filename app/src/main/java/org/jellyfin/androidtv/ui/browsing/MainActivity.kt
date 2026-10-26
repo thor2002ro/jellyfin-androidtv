@@ -8,6 +8,7 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -89,7 +90,8 @@ class MainActivity : FragmentActivity() {
 				ProvideLocalInteractionTracker(
 					interactionTracker = { interactionTrackerViewModel.notifyInteraction(false, userInitiated = true) }
 				) {
-					AppBackground()
+					val destination by navigationRepository.currentDestination.collectAsState()
+					if (destination.fragment != Destinations.home.fragment || profileLoginAnimation != null) AppBackground()
 					Box(Modifier.fillMaxSize().graphicsLayer { alpha = profileLoginAnimation?.progress ?: 1f }) {
 						AppNavigationHost(navigationRepository = navigationRepository)
 					}

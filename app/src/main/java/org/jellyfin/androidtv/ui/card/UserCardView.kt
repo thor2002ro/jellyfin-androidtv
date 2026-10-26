@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.KeyEvent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,11 +43,14 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.integerResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
+import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.LocalTextStyle
@@ -80,7 +84,9 @@ fun UserCard(
 		focused -> accentColor to JellyfinTheme.colorScheme.onInputFocused
 		else -> JellyfinTheme.colorScheme.button to JellyfinTheme.colorScheme.onInput
 	}
-	val scale by animateFloatAsState(if (focused) 1.2f else 1f, label = "UserCardFocusScale")
+	val focusScale = LocalResources.current.getFraction(R.fraction.card_scale_focus, 1, 1)
+	val focusDuration = integerResource(R.integer.card_scale_duration)
+	val scale by animateFloatAsState(if (focused) focusScale else 1f, tween(focusDuration), label = "UserCardFocusScale")
 
 	Column(
 		modifier = modifier

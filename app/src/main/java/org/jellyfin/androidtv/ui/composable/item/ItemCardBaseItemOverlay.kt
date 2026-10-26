@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -102,7 +103,17 @@ fun ItemCardBaseItemOverlay(
 			.fillMaxSize()
 			.drawBehind {
 				val fraction = progress.progress.value ?: return@drawBehind
-				if (fraction > 0f) drawRect(progressColor, size = Size(size.width * fraction, size.height))
+				if (fraction > 0f) {
+					val progressWidth = size.width * fraction
+					drawRect(
+						brush = Brush.horizontalGradient(
+							colors = listOf(progressColor, progressColor.copy(alpha = 0f)),
+							startX = (progressWidth - 24.dp.toPx()).coerceAtLeast(0f),
+							endX = progressWidth,
+						),
+						size = Size(progressWidth, size.height),
+					)
+				}
 			}
 			.padding(badgeSize * 0.5f)
 	) {

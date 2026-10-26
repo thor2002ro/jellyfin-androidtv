@@ -101,6 +101,7 @@ private fun MainToolbar(
 	)
 
 	Toolbar(
+		compact = activeButton == MainToolbarActiveButton.Home,
 		modifier = Modifier
 			.focusRestorer(focusRequester)
 			.focusGroup(),

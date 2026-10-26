@@ -5,9 +5,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -16,10 +20,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.compose.AndroidFragment
 import androidx.fragment.compose.content
@@ -35,7 +49,10 @@ import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
+import org.jellyfin.androidtv.ui.background.AppBackground
+import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.browsing.MainActivity
+import org.jellyfin.androidtv.ui.composable.modifier.fadingEdges
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbarActiveButton
 import org.koin.android.ext.android.inject
@@ -65,34 +82,72 @@ class HomeFragment : Fragment() {
 				}
 		}
 
-		Column {
-			MainToolbar(MainToolbarActiveButton.Home)
+		val rowsLayer = rememberGraphicsLayer()
+		var headerHeight by remember { mutableIntStateOf(0) }
+		val headerHeightDp = with(LocalDensity.current) { headerHeight.toDp() }
+		Box(Modifier.fillMaxSize()) {
+			Box(
+				Modifier.fillMaxSize().drawWithContent {
+					rowsLayer.record { this@drawWithContent.drawContent() }
+					drawLayer(rowsLayer)
+				}
+			) {
+				AppBackground()
 
-			// The leanback code has its own awful focus handling that doesn't work properly with Compose view inteop to workaround this
-			// issue we add custom behavior that only allows focus exit when the current selected row is the first one. Additionally when
-			// we do switch the focus, we reset the leanback state so it won't cause weird behavior when focus is regained
-			key(homeRowsGeneration) {
-				var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
-				AndroidFragment<HomeRowsFragment>(
-					modifier = Modifier
-						.focusGroup()
-						.focusRequester(rowsFocusRequester)
-						.focusProperties {
-							onExit = {
-								val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
-								if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {
-									cancelFocusChange()
-								} else {
-									rowsSupportFragment?.selectedPosition = 0
-									rowsSupportFragment?.verticalGridView?.clearFocus()
+				// The leanback code has its own awful focus handling that doesn't work properly with Compose view inteop to workaround this
+				// issue we add custom behavior that only allows focus exit when the current selected row is the first one. Additionally when
+				// we do switch the focus, we reset the leanback state so it won't cause weird behavior when focus is regained
+				key(homeRowsGeneration) {
+					var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
+					LaunchedEffect(rowsSupportFragment, headerHeight) {
+						rowsSupportFragment?.verticalGridView?.apply {
+							// Reserve focus space without clipping rows as they scroll behind the header.
+							clipToPadding = false
+							updatePadding(top = headerHeight)
+						}
+					}
+					AndroidFragment<HomeRowsFragment>(
+						modifier = Modifier
+							.focusGroup()
+							.focusRequester(rowsFocusRequester)
+							.focusProperties {
+								onExit = {
+									val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
+									if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {
+										cancelFocusChange()
+									} else {
+										rowsSupportFragment?.selectedPosition = 0
+										rowsSupportFragment?.verticalGridView?.clearFocus()
+									}
 								}
 							}
+							.fillMaxSize(),
+						onUpdate = { fragment ->
+							rowsSupportFragment = fragment
 						}
-						.fillMaxSize(),
-					onUpdate = { fragment ->
-						rowsSupportFragment = fragment
-					}
+					)
+				}
+			}
+
+			Box(
+				Modifier.fillMaxWidth()
+					.height(headerHeightDp + 12.dp)
+					.fadingEdges(bottom = 40.dp)
+			) {
+				Spacer(
+					Modifier.matchParentSize()
+						.blur(16.dp)
+						.drawWithContent { drawLayer(rowsLayer) }
 				)
+				Spacer(
+					Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
+						JellyfinTheme.colorScheme.scrim.copy(alpha = 0.12f),
+						Color.Transparent,
+					)))
+				)
+			}
+			Box(Modifier.onSizeChanged { headerHeight = it.height }) {
+				MainToolbar(MainToolbarActiveButton.Home)
 			}
 		}
 	}
