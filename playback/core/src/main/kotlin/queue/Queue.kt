@@ -23,6 +23,9 @@ interface Queue {
 	 */
 	val entry: StateFlow<QueueEntry?>
 
+	/** Changes when the selection is cleared or replaced, including selecting the same entry again. */
+	val entryRevision: Long
+
 	/**
 	 * The currently loaded queue entries in their original order. This contains at least the currently playing entry and previous
 	 * (unremoved) entries. Any upcoming entries are only added when they are at least peaked into using [peekNext] first.
