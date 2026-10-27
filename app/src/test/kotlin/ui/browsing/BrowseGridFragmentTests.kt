@@ -25,6 +25,15 @@ import org.jellyfin.sdk.model.api.SortOrder
 import java.util.UUID
 
 class BrowseGridFragmentTests : FunSpec({
+	test("only horizontal cards use the separate library backdrop") {
+		BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.CARDS, GridDirection.HORIZONTAL) shouldBe true
+		BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.CARDS, GridDirection.VERTICAL) shouldBe false
+		for (direction in GridDirection.entries) {
+			BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.DENSE_LIST, direction) shouldBe false
+			BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.KALEIDESCAPE_STYLE, direction) shouldBe false
+		}
+	}
+
 	test("vertical counter rotates within its bottom right corner and resets for horizontal view") {
 		val counter = mockk<View>(relaxed = true)
 		every { counter.width } returns 120
@@ -146,13 +155,13 @@ class BrowseGridFragmentTests : FunSpec({
 		BrowseGridFragment.shouldApplyLibraryFilters(current, FilterOptions()) shouldBe true
 	}
 
-	test("vertical browse keeps the alphabet rail compact while horizontal stays edge aligned") {
-		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.VERTICAL) shouldBe 14
+	test("vertical browse leaves room for the alphabet rail while horizontal stays edge aligned") {
+		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.VERTICAL) shouldBe 20
 		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.HORIZONTAL) shouldBe 0
 	}
 
-	test("vertical browse keeps the customization rail compact") {
-		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.VERTICAL) shouldBe 18
+	test("vertical browse leaves room for the customization rail") {
+		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.VERTICAL) shouldBe 26
 		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.HORIZONTAL) shouldBe 0
 	}
 

@@ -5,10 +5,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,16 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -50,11 +42,11 @@ import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.ui.background.AppBackground
-import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.composable.modifier.fadingEdges
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbarActiveButton
+import org.jellyfin.androidtv.ui.shared.toolbar.HeaderBackdropLayout
 import org.koin.android.ext.android.inject
 
 class HomeFragment : Fragment() {
@@ -82,15 +74,11 @@ class HomeFragment : Fragment() {
 				}
 		}
 
-		val rowsLayer = rememberGraphicsLayer()
 		var headerHeight by remember { mutableIntStateOf(0) }
 		val headerHeightDp = with(LocalDensity.current) { headerHeight.toDp() }
 		Box(Modifier.fillMaxSize()) {
-			Box(
-				Modifier.fillMaxSize().drawWithContent {
-					rowsLayer.record { this@drawWithContent.drawContent() }
-					drawLayer(rowsLayer)
-				}
+			HeaderBackdropLayout(
+				Modifier.fillMaxWidth().height(headerHeightDp + 12.dp).fadingEdges(bottom = 40.dp)
 			) {
 				AppBackground()
 
@@ -129,23 +117,6 @@ class HomeFragment : Fragment() {
 				}
 			}
 
-			Box(
-				Modifier.fillMaxWidth()
-					.height(headerHeightDp + 12.dp)
-					.fadingEdges(bottom = 40.dp)
-			) {
-				Spacer(
-					Modifier.matchParentSize()
-						.blur(16.dp)
-						.drawWithContent { drawLayer(rowsLayer) }
-				)
-				Spacer(
-					Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
-						JellyfinTheme.colorScheme.scrim.copy(alpha = 0.12f),
-						Color.Transparent,
-					)))
-				)
-			}
 			Box(Modifier.onSizeChanged { headerHeight = it.height }) {
 				MainToolbar(MainToolbarActiveButton.Home)
 			}

@@ -108,9 +108,11 @@ class ComposeBrowseListPresenter : Presenter() {
 	)
 
 	private data class ListConfig(
-		val horizontalPadding: Int = 16,
+		val paddingStart: Int = 16,
+		val paddingEnd: Int = 16,
 		val verticalPadding: Int = 12,
 		val itemSpacing: Int = 6,
+		val headerHeight: Int = 0,
 	)
 
 	private val state = BrowseListPresenterState()
@@ -178,8 +180,8 @@ class ComposeBrowseListPresenter : Presenter() {
 		snapshot.value = AdapterSnapshot(revision = ++revision)
 	}
 
-	fun configure(horizontalPadding: Int, verticalPadding: Int, itemSpacing: Int) {
-		config.value = ListConfig(horizontalPadding, verticalPadding, itemSpacing)
+	fun configure(paddingStart: Int, paddingEnd: Int, verticalPadding: Int, itemSpacing: Int, headerHeight: Int) {
+		config.value = ListConfig(paddingStart, paddingEnd, verticalPadding, itemSpacing, headerHeight)
 	}
 
 	fun getPosition(): Int = state.position
@@ -261,82 +263,86 @@ class ComposeBrowseListPresenter : Presenter() {
 			if (generation == focusGeneration) runCatching { requireNotNull(requester).requestFocus() }
 		}
 
-		LazyColumn(
-			state = listState,
-			modifier = Modifier
-				.fillMaxSize()
-				.focusGroup()
-				.focusRestorer(restoreFocusRequester),
-			contentPadding = PaddingValues(
-				horizontal = configValue.horizontalPadding.dp,
-				vertical = configValue.verticalPadding.dp,
-			),
-			verticalArrangement = Arrangement.spacedBy(configValue.itemSpacing.dp),
-		) {
-			itemsIndexed(
-				items = snapshotValue.items,
-				key = { index, item -> browseListItemKey(item, index) },
-				contentType = { _, item -> (item as? BaseRowItem)?.baseRowType },
-			) { index, entry ->
-				val rowItem = entry as? BaseRowItem ?: return@itemsIndexed
-				val key = browseListItemKey(entry, index)
-				val requester = remember(key) { FocusRequester() }
-				DisposableEffect(key, requester) {
-					focusRequesters[key] = requester
-					onDispose {
-						if (focusRequesters[key] === requester) focusRequesters.remove(key)
-					}
-				}
-				var focused by remember(key) { mutableStateOf(false) }
-				LaunchedEffect(focused, snapshotValue.revision, entry) {
-					if (focused) select(holder, index, entry)
-				}
-				val scale by animateFloatAsState(
-					targetValue = if (focused) 1.02f else 1f,
-					animationSpec = spring(),
-					label = "browse_list_focus",
-				)
-				BrowseListRowContent(
-					item = rowItem,
-					focused = focused,
-					onClick = { click(holder, index, entry) },
-					modifier = Modifier
-						.restoreFocusRequesterWhen(focused, restoreFocusRequester)
-						.focusRequester(requester)
-						.scale(scale)
-						.onPreviewKeyEvent { event ->
-							val nativeEvent = event.nativeKeyEvent
-							if (
-								shouldForwardBrowseListKey(index, nativeEvent.keyCode) &&
-								keyListener?.onKey(holder.listView, nativeEvent.keyCode, nativeEvent) == true
-							) {
-								return@onPreviewKeyEvent true
-							}
-							val direction = when (event.key) {
-								Key.DirectionUp -> BrowseGridFocusDirection.UP
-								Key.DirectionDown -> BrowseGridFocusDirection.DOWN
-								Key.DirectionLeft -> BrowseGridFocusDirection.LEFT
-								Key.DirectionRight -> BrowseGridFocusDirection.RIGHT
-								else -> null
-							}
-							val directional = direction != null
-							if (directional && event.type == KeyEventType.KeyDown && directionalKeyGuard.tryAccept(event.nativeKeyEvent.eventTime)) {
-								directionalKeyListener?.run()
-							}
-							val missingTarget = when (direction) {
-								BrowseGridFocusDirection.UP -> index == 0
-								BrowseGridFocusDirection.DOWN -> index == snapshotValue.items.lastIndex
-								else -> false
-							}
-							event.type == KeyEventType.KeyDown &&
-								direction != null &&
-								missingTarget &&
-								shouldConsumeMissingBrowseListTarget(direction)
+		BrowseHeaderLayout(configValue.headerHeight) {
+			LazyColumn(
+				state = listState,
+				modifier = Modifier
+					.fillMaxSize()
+					.focusGroup()
+					.focusRestorer(restoreFocusRequester),
+				contentPadding = PaddingValues(
+					start = configValue.paddingStart.dp,
+					end = configValue.paddingEnd.dp,
+					top = configValue.headerHeight.dp + configValue.verticalPadding.dp,
+					bottom = configValue.verticalPadding.dp,
+				),
+				verticalArrangement = Arrangement.spacedBy(configValue.itemSpacing.dp),
+			) {
+				itemsIndexed(
+					items = snapshotValue.items,
+					key = { index, item -> browseListItemKey(item, index) },
+					contentType = { _, item -> (item as? BaseRowItem)?.baseRowType },
+				) { index, entry ->
+					val rowItem = entry as? BaseRowItem ?: return@itemsIndexed
+					val key = browseListItemKey(entry, index)
+					val requester = remember(key) { FocusRequester() }
+					DisposableEffect(key, requester) {
+						focusRequesters[key] = requester
+						onDispose {
+							if (focusRequesters[key] === requester) focusRequesters.remove(key)
 						}
-						.onFocusChanged { state ->
-							focused = state.hasFocus
-						},
-				)
+					}
+					var focused by remember(key) { mutableStateOf(false) }
+					LaunchedEffect(focused, snapshotValue.revision, entry) {
+						if (focused) select(holder, index, entry)
+					}
+					val scale by animateFloatAsState(
+						targetValue = if (focused) 1.02f else 1f,
+						animationSpec = spring(),
+						label = "browse_list_focus",
+					)
+					BrowseListRowContent(
+						item = rowItem,
+						focused = focused,
+						onClick = { click(holder, index, entry) },
+						modifier = Modifier
+							.restoreFocusRequesterWhen(focused, restoreFocusRequester)
+							.focusRequester(requester)
+							.scale(scale)
+							.onPreviewKeyEvent { event ->
+								val nativeEvent = event.nativeKeyEvent
+								if (
+									shouldForwardBrowseListKey(index, nativeEvent.keyCode) &&
+									keyListener?.onKey(holder.listView, nativeEvent.keyCode, nativeEvent) == true
+								) {
+									return@onPreviewKeyEvent true
+								}
+								val direction = when (event.key) {
+									Key.DirectionUp -> BrowseGridFocusDirection.UP
+									Key.DirectionDown -> BrowseGridFocusDirection.DOWN
+									Key.DirectionLeft -> BrowseGridFocusDirection.LEFT
+									Key.DirectionRight -> BrowseGridFocusDirection.RIGHT
+									else -> null
+								}
+								val directional = direction != null
+								if (directional && event.type == KeyEventType.KeyDown && directionalKeyGuard.tryAccept(event.nativeKeyEvent.eventTime)) {
+									directionalKeyListener?.run()
+								}
+								val missingTarget = when (direction) {
+									BrowseGridFocusDirection.UP -> index == 0
+									BrowseGridFocusDirection.DOWN -> index == snapshotValue.items.lastIndex
+									else -> false
+								}
+								event.type == KeyEventType.KeyDown &&
+									direction != null &&
+									missingTarget &&
+									shouldConsumeMissingBrowseListTarget(direction)
+							}
+							.onFocusChanged { state ->
+								focused = state.hasFocus
+							},
+					)
+				}
 			}
 		}
 	}
