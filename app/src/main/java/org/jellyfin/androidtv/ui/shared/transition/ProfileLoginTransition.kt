@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.shared.transition
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -38,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jellyfin.androidtv.ui.base.CircularProgressIndicator
@@ -50,7 +48,6 @@ import org.jellyfin.androidtv.util.Utils
 import kotlin.math.roundToInt
 
 private const val EXTRA_PROFILE_LOGIN = "profile_login_transition"
-private const val PROFILE_LOADING_DURATION_MS = 2_000L
 private const val ANIMATION_DURATION_MS = 700
 private const val HOME_REVEAL_DURATION_MS = 200
 // Fall back to Home if its toolbar or rows cannot finish preparing.
@@ -62,11 +59,7 @@ internal data class ProfileLoginOrigin(
 	val name: String,
 	val imageUrl: String?,
 	val nameFontSizePx: Float,
-	val selectedAtMillis: Long = 0L,
 ) {
-	internal fun remainingLoadingMillis(nowMillis: Long): Long =
-		(PROFILE_LOADING_DURATION_MS - (nowMillis - selectedAtMillis)).coerceIn(0L, PROFILE_LOADING_DURATION_MS)
-
 	val isUsable: Boolean get() = avatarBounds.isUsable && nameBounds.isUsable &&
 		name.isNotBlank() && nameFontSizePx.isFinite() && nameFontSizePx > 0f
 
@@ -78,7 +71,6 @@ internal data class ProfileLoginOrigin(
 			putString("name", name)
 			putString("image", imageUrl)
 			putFloat("font_size", nameFontSizePx)
-			putLong("selected_at", selectedAtMillis)
 		})
 	}
 
@@ -91,7 +83,6 @@ internal data class ProfileLoginOrigin(
 				name = data.getString("name") ?: return null,
 				imageUrl = data.getString("image"),
 				nameFontSizePx = data.getFloat("font_size"),
-				selectedAtMillis = data.getLong("selected_at"),
 			).takeIf { it.isUsable }
 		}
 	}
@@ -133,7 +124,6 @@ internal fun ProfileLoginOverlay(animation: ProfileLoginAnimation, onFinished: (
 		try {
 			val ready = withTimeoutOrNull(HOME_READY_TIMEOUT_MS) { snapshotFlow { animation.isReady }.first { it } }
 			if (ready == true) {
-				delay(origin.remainingLoadingMillis(SystemClock.elapsedRealtime()))
 				loading = false
 				Animatable(0f).animateTo(1f, tween(ANIMATION_DURATION_MS, easing = FastOutSlowInEasing)) {
 					animation.progress = value

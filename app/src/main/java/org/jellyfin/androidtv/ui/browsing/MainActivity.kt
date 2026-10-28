@@ -100,7 +100,7 @@ class MainActivity : FragmentActivity() {
 						AppNavigationHost(navigationRepository = navigationRepository)
 					}
 					profileLoginAnimation?.let { animation ->
-						// Draw Home behind the cover so its first render does not consume the movement animation.
+						// Keep Home covered until its first cards have drawn.
 						Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - animation.homeRevealProgress }.background(Color.Black)) {
 							AppBackground()
 						}

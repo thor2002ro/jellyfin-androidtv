@@ -4,7 +4,6 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
-import androidx.compose.runtime.snapshotFlow
 import androidx.core.view.doOnLayout
 import androidx.core.view.doOnPreDraw
 import androidx.leanback.app.RowsSupportFragment
@@ -54,7 +53,6 @@ import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.itemhandling.refreshItem
 import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
-import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.AudioEventListener
@@ -81,7 +79,7 @@ import kotlin.time.Duration.Companion.seconds
 class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyListener {
 	private val api by inject<ApiClient>()
 	private val backgroundService by inject<BackgroundService>()
-	private val playbackManager by inject<PlaybackManager>()
+	private val playbackManager by inject<Lazy<PlaybackManager>>()
 	private val mediaManager by inject<MediaManager>()
 	private val notificationsRepository by inject<NotificationsRepository>()
 	private val userRepository by inject<UserRepository>()
@@ -186,18 +184,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
-		val profileAnimation = (activity as? MainActivity)?.profileLoginAnimation
-		if (profileAnimation != null) verticalGridView?.let { grid ->
-			// Keep requests running, but leave card layout until the profile finishes moving.
-			grid.suppressLayout(true)
-			viewLifecycleOwner.lifecycleScope.launch {
-				try {
-					snapshotFlow { profileAnimation.progress >= 1f }.first { it }
-				} finally {
-					grid.suppressLayout(false)
-				}
-			}
-		}
 		rowsDensityDpi = resources.configuration.densityDpi
 		rowsFontScale = resources.configuration.fontScale
 		if (!homeRowsLoaded) {
@@ -206,39 +192,51 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 					userRepository.currentUser.filterNotNull().first()
 				}
 
-				// Start out with default sections
-				val homesections = userSettingPreferences.activeHomesections
-
-				// Check for coroutine cancellation
 				if (!isActive) return@launch
-
-				val liveTvEnabled = currentUser.policy?.enableLiveTvAccess == true
-				val rows = createHomeRows(
-					homesections = homesections,
-					liveTvEnabled = liveTvEnabled,
-					includeRecentlyReleased = userSettingPreferences[UserSettingPreferences.homeRecentlyReleased],
+				val layout = createHomeSectionLayout(
+					sections = userSettingPreferences.activeHomesections,
 					combineContinueWatchingAndNextUp = userSettingPreferences[UserSettingPreferences.homeCombineContinueWatchingNextUp],
 				)
-
-				// Add sections to layout
-				withContext(Dispatchers.Main) {
-					val cardPresenter = createHomeCardPresenter(
-						useWideCards = userSettingPreferences[UserSettingPreferences.homeWideCards],
-					)
-
-					// Add rows in order
-					notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-					nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-					for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-					homeRowsLoaded = true
-					startHomeRowUpdates()
+				val liveTvEnabled = currentUser.policy?.enableLiveTvAccess == true
+				val includeRecentlyReleased = userSettingPreferences[UserSettingPreferences.homeRecentlyReleased]
+				val cardPresenter = withContext(Dispatchers.Main) {
+					val rowsAdapter = adapter as MutableObjectAdapter<Row>
+					// A destroyed view may have left an incomplete initial load.
+					rowsAdapter.clear()
+					homeRowAdapters.clear()
+					val cardPresenter = createHomeCardPresenter(userSettingPreferences[UserSettingPreferences.homeWideCards])
+					notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, rowsAdapter)
+					nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, rowsAdapter)
 					(activity as? MainActivity)?.profileLoginAnimation?.let { animation ->
 						verticalGridView?.prepareProfileTransition(animation)
 					}
+					cardPresenter
+				}
 
-					if (currentUser.policy?.enableLiveTvAccess == true) {
-						TvManager.preloadChannels(this@HomeRowsFragment)
+				val userViews = loadHomeSections(
+					sections = layout.sections,
+					includeRecentlyReleased = includeRecentlyReleased,
+					loader = { userViewsRepository.views.first() },
+				) { section, views ->
+					withContext(Dispatchers.Main) {
+						val rows = createHomeRows(section, views, liveTvEnabled, layout.combineContinueWatchingAndNextUp)
+						rows.forEachIndexed { index, row ->
+							val order = layout.sections.indexOf(section) + index.toDouble() / (rows.size + 1)
+							row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>, order)
+						}
+						startHomeRowUpdates()
 					}
+				}
+				withContext(Dispatchers.Main) {
+					homeUserViewsFailed = userViews == null
+					if (includeRecentlyReleased && userViews != null) {
+						helper.loadRecentlyReleased(userViews).addToRowsAdapter(
+							requireContext(), cardPresenter,
+							adapter as MutableObjectAdapter<Row>, layout.sections.size.toDouble(),
+						)
+					}
+					homeRowsLoaded = true
+					startHomeRowUpdates()
 				}
 			}
 		} else {
@@ -255,42 +253,26 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 	}
 
-	private suspend fun createHomeRows(
-		homesections: Collection<HomeSectionType>,
+	private fun createHomeRows(
+		section: HomeSectionType,
+		userViews: Collection<BaseItemDto>,
 		liveTvEnabled: Boolean,
-		includeRecentlyReleased: Boolean,
 		combineContinueWatchingAndNextUp: Boolean,
-	) = buildList {
-		val layout = createHomeSectionLayout(
-			sections = homesections,
-			combineContinueWatchingAndNextUp = combineContinueWatchingAndNextUp,
-		)
-		val userViews = loadHomeUserViews(
-			required = layout.sections.any(::homeSectionUsesUserViews) || includeRecentlyReleased,
-		) {
-			userViewsRepository.views.first()
-		}
-		homeUserViewsFailed = userViews == null
-
-		for (section in layout.sections) when (section) {
-			HomeSectionType.LATEST_MEDIA -> userViews?.let { add(helper.loadRecentlyAdded(it)) }
-			HomeSectionType.LIBRARY_TILES_SMALL -> userViews?.let { add(HomeFragmentViewsRow(small = false, initialViews = it)) }
-			HomeSectionType.LIBRARY_BUTTONS -> userViews?.let { add(HomeFragmentViewsRow(small = true, initialViews = it)) }
-			HomeSectionType.RESUME -> add(helper.loadResumeVideo(layout.combineContinueWatchingAndNextUp))
+	): List<HomeFragmentRow> = buildList {
+		when (section) {
+			HomeSectionType.LATEST_MEDIA -> add(helper.loadRecentlyAdded(userViews))
+			HomeSectionType.LIBRARY_TILES_SMALL -> add(HomeFragmentViewsRow(small = false, initialViews = userViews))
+			HomeSectionType.LIBRARY_BUTTONS -> add(HomeFragmentViewsRow(small = true, initialViews = userViews))
+			HomeSectionType.RESUME -> add(helper.loadResumeVideo(combineContinueWatchingAndNextUp))
 			HomeSectionType.RESUME_AUDIO -> add(helper.loadResumeAudio())
 			HomeSectionType.RESUME_BOOK -> Unit // Kept for compatibility with values stored by other Jellyfin clients.
-			HomeSectionType.ACTIVE_RECORDINGS -> add(helper.loadLatestLiveTvRecordings())
+			HomeSectionType.ACTIVE_RECORDINGS -> if (liveTvEnabled) add(helper.loadLatestLiveTvRecordings())
 			HomeSectionType.NEXT_UP -> add(helper.loadNextUp())
 			HomeSectionType.LIVE_TV -> if (liveTvEnabled) {
 				add(HomeFragmentLiveTVRow(requireActivity(), userRepository))
 				add(helper.loadOnNow(liveTvActions::onLongClick))
 			}
-
 			HomeSectionType.NONE -> Unit
-		}
-
-		if (includeRecentlyReleased && userViews != null) {
-			add(helper.loadRecentlyReleased(userViews))
 		}
 	}
 
@@ -546,4 +528,18 @@ internal suspend fun loadHomeUserViews(
 		Timber.w(err, "Unable to load User Views; skipping dependent Home rows")
 		null
 	}
+}
+
+internal suspend fun loadHomeSections(
+	sections: Collection<HomeSectionType>,
+	includeRecentlyReleased: Boolean,
+	loader: suspend () -> Collection<BaseItemDto>,
+	onSection: suspend (HomeSectionType, Collection<BaseItemDto>) -> Unit,
+): Collection<BaseItemDto>? {
+	for (section in sections.filterNot(::homeSectionUsesUserViews)) onSection(section, emptyList())
+	val views = loadHomeUserViews(sections.any(::homeSectionUsesUserViews) || includeRecentlyReleased, loader)
+	if (views != null) {
+		for (section in sections.filter(::homeSectionUsesUserViews)) onSection(section, views)
+	}
+	return views
 }
