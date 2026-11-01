@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.navigation
 import androidx.compose.runtime.mutableStateListOf
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.shouldBe
 
 class RouterTests : FunSpec({
 	test("back preserves the root route") {
@@ -15,5 +16,15 @@ class RouterTests : FunSpec({
 		router.back()
 
 		backStack shouldContainExactly listOf(root)
+	}
+
+	test("push preserves initial focus hints") {
+		val backStack = mutableStateListOf(RouteContext("/"))
+		val router = Router(mapOf("/target" to {}), backStack)
+
+		router.push("/target", initialFocusKey = "setting", initialFocusIndex = 12)
+
+		backStack.last().initialFocusKey shouldBe "setting"
+		backStack.last().initialFocusIndex shouldBe 12
 	}
 })
