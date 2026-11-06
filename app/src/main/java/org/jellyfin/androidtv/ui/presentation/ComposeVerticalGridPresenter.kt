@@ -3,7 +3,7 @@ package org.jellyfin.androidtv.ui.presentation
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -16,24 +16,23 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -46,8 +45,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.leanback.widget.ObjectAdapter
-import androidx.leanback.widget.OnItemViewClickedListener
-import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.Presenter
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -60,7 +57,7 @@ import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import kotlin.math.min
 
-class ComposeVerticalGridPresenter : Presenter() {
+class ComposeVerticalGridPresenter : BrowseCardGridPresenter() {
 	class ViewHolder(val gridView: ComposeView) : Presenter.ViewHolder(gridView)
 
 	private data class AdapterSnapshot(
@@ -68,32 +65,15 @@ class ComposeVerticalGridPresenter : Presenter() {
 		val revision: Int = 0,
 	)
 
-	private data class GridConfig(
-		val imageType: ImageType = ImageType.POSTER,
-		val cardHeight: Int = 100,
-		val columns: Int = 1,
-		val horizontalSpacing: Int = 0,
-		val verticalSpacing: Int = 0,
-		val showCardTitles: Boolean = false,
-		val paddingLeft: Int = 0,
-	)
-
 	private val snapshot = MutableStateFlow(AdapterSnapshot())
-	private val config = MutableStateFlow(GridConfig())
+	private val config = MutableStateFlow(gridConfig)
 	private val focusRequestGeneration = MutableStateFlow(0)
 	private var adapter: ObjectAdapter? = null
 	private var boundViewHolder: ViewHolder? = null
-	private var selectedPosition = -1
-	private val selectionNotifications = GridSelectionNotificationTracker()
 	private val adapterSyncGate = GridAdapterSyncGate()
 	private var revision = 0
 	private var focusGeneration = 0
 	private var focusMovePending = false
-	private var selectedListener: OnItemViewSelectedListener? = null
-	private var clickedListener: OnItemViewClickedListener? = null
-	private var directionalKeyListener: Runnable? = null
-	private var keyListener: View.OnKeyListener? = null
-	private val directionalKeyGuard = BrowseGridDirectionalKeyGuard()
 
 	private val adapterObserver = object : ObjectAdapter.DataObserver() {
 		override fun onChanged() = scheduleAdapterSync()
@@ -126,7 +106,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 			adapterSyncGate.cancel()
 			adapter?.unregisterObserver(adapterObserver)
 			adapter = objectAdapter
-			selectionNotifications.reset()
+			resetSelectionNotifications()
 			objectAdapter.registerObserver(adapterObserver)
 		}
 		boundViewHolder = holder as ViewHolder
@@ -142,48 +122,12 @@ class ComposeVerticalGridPresenter : Presenter() {
 		snapshot.value = AdapterSnapshot(revision = ++revision)
 	}
 
-	fun configure(
-		imageType: ImageType,
-		cardHeight: Int,
-		columns: Int,
-		horizontalSpacing: Int,
-		verticalSpacing: Int,
-		showCardTitles: Boolean,
-		paddingLeft: Int,
-	) {
-		config.value = GridConfig(
-			imageType = imageType,
-			cardHeight = cardHeight,
-			columns = columns.coerceAtLeast(1),
-			horizontalSpacing = horizontalSpacing,
-			verticalSpacing = verticalSpacing,
-			showCardTitles = showCardTitles,
-			paddingLeft = paddingLeft,
-		)
+	override fun onGridConfigChanged(config: GridConfig) {
+		this.config.value = config
 	}
 
-	fun getPosition(): Int = selectedPosition
-
-	fun setPosition(position: Int) {
-		if (position < 0) return
-		selectedPosition = position
+	override fun onPositionRequested(position: Int) {
 		focusRequestGeneration.value = ++focusGeneration
-	}
-
-	fun setOnItemViewSelectedListener(listener: OnItemViewSelectedListener?) {
-		selectedListener = listener
-	}
-
-	fun setOnItemViewClickedListener(listener: OnItemViewClickedListener?) {
-		clickedListener = listener
-	}
-
-	fun setOnDirectionalKeyListener(listener: Runnable?) {
-		directionalKeyListener = listener
-	}
-
-	fun setOnKeyListener(listener: View.OnKeyListener?) {
-		keyListener = listener
 	}
 
 	private fun scheduleAdapterSync() {
@@ -200,19 +144,16 @@ class ComposeVerticalGridPresenter : Presenter() {
 		val items = List(currentAdapter.size()) { index -> requireNotNull(currentAdapter[index]) }
 		snapshot.value = AdapterSnapshot(items, ++revision)
 		if (wasEmpty && items.isNotEmpty()) {
-			setPosition(selectedPosition.coerceAtLeast(0))
+			setPosition(getPosition().coerceAtLeast(0))
 		}
 	}
 
 	private fun select(holder: ViewHolder, position: Int, item: Any) {
-		selectedPosition = position
-		if (!selectionNotifications.shouldNotify(position, item)) return
-		selectedListener?.onItemSelected(holder, item, null, null)
+		notifyItemSelected(holder, position, item)
 	}
 
 	private fun click(holder: ViewHolder, position: Int, item: Any) {
-		selectedPosition = position
-		clickedListener?.onItemClicked(holder, item, null, null)
+		notifyItemClicked(holder, position, item)
 	}
 
 	@OptIn(ExperimentalFoundationApi::class)
@@ -221,25 +162,17 @@ class ComposeVerticalGridPresenter : Presenter() {
 		val snapshotValue by snapshot.collectAsState()
 		val configValue by config.collectAsState()
 		val requestGeneration by focusRequestGeneration.collectAsState()
-		val packedItems = remember(snapshotValue.revision, configValue.columns, configValue.imageType) {
-			packBrowseGridItems(snapshotValue.items, configValue.columns, configValue.imageType)
+		val packedItems = remember(snapshotValue.revision, configValue.spanCount, configValue.imageType) {
+			packBrowseGridItems(snapshotValue.items, configValue.spanCount, configValue.imageType)
 		}
-		val cacheWindow = remember {
-			LazyLayoutCacheWindow(
-				aheadFraction = 2f,
-				behindFraction = 0.5f,
-			)
-		}
-		val initialVisualPosition = remember(packedItems, selectedPosition) {
-			findBrowseGridInitialVisualPosition(packedItems, selectedPosition)
+		val initialVisualPosition = remember(packedItems, getPosition()) {
+			findBrowseGridInitialVisualPosition(packedItems, getPosition())
 		}
 		val gridState = rememberLazyGridState(
-			cacheWindow = cacheWindow,
 			initialFirstVisibleItemIndex = initialVisualPosition,
 		)
 		val restoreFocusRequester = remember { FocusRequester() }
 		val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
-		var focusedPosition by remember { mutableIntStateOf(selectedPosition.coerceAtLeast(0)) }
 
 		LaunchedEffect(requestGeneration, packedItems.size) {
 			if (packedItems.isEmpty()) {
@@ -248,8 +181,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 			}
 			val generation = focusGeneration
 			try {
-				val visualPosition = findBrowseGridInitialVisualPosition(packedItems, selectedPosition)
-				focusedPosition = packedItems[visualPosition].adapterPosition
+				val visualPosition = findBrowseGridInitialVisualPosition(packedItems, getPosition())
 				val key = packedItems[visualPosition].key
 				val existingRequester = focusRequesters[key]
 				if (generation != focusGeneration) return@LaunchedEffect
@@ -266,20 +198,20 @@ class ComposeVerticalGridPresenter : Presenter() {
 		}
 
 		BoxWithConstraints {
-			val verticalPadding = 16f
+			val verticalPadding = configValue.verticalPadding.toFloat()
 			val viewportHeight = calculateBrowseGridViewportHeight(
 				maxHeight = maxHeight.value,
 			)
 
 			LazyVerticalGrid(
-				columns = GridCells.Fixed(configValue.columns),
+				columns = GridCells.Fixed(configValue.spanCount),
 				state = gridState,
 				modifier = Modifier
 					.height(viewportHeight.dp)
 					.focusGroup()
 					.focusRestorer(restoreFocusRequester),
 				contentPadding = PaddingValues(
-					horizontal = configValue.paddingLeft.dp,
+					horizontal = configValue.paddingStart.dp,
 					vertical = verticalPadding.dp,
 				),
 				horizontalArrangement = Arrangement.spacedBy(configValue.horizontalSpacing.dp),
@@ -300,20 +232,14 @@ class ComposeVerticalGridPresenter : Presenter() {
 							}
 						}
 						var focused by remember(entry.key) { mutableStateOf(false) }
-						LaunchedEffect(focused, snapshotValue.revision, entry.item) {
+						LaunchedEffect(focused, entry.item) {
 							if (focused) select(holder, entry.adapterPosition, entry.item)
 						}
-						val scale by animateFloatAsState(
+						val scale = animateFloatAsState(
 							targetValue = if (focused) 1.15f else 1f,
-							animationSpec = spring(),
+							animationSpec = tween(durationMillis = 120),
 							label = "browse_card_focus",
 						)
-
-						val focusModifier = if (entry.adapterPosition == focusedPosition) {
-							Modifier.focusRequester(restoreFocusRequester)
-						} else {
-							Modifier
-						}
 
 						CardViewHolderContent(
 							item = rowItem,
@@ -324,7 +250,8 @@ class ComposeVerticalGridPresenter : Presenter() {
 							staticHeight = configValue.cardHeight,
 							uniformAspect = true,
 							fillAvailableWidth = true,
-							modifier = focusModifier
+							modifier = Modifier
+								.restoreFocusRequesterWhen(focused, restoreFocusRequester)
 								.focusRequester(requester)
 								.onPreviewKeyEvent { event ->
 									val direction = when (event.key) {
@@ -341,7 +268,7 @@ class ComposeVerticalGridPresenter : Presenter() {
 									val nativeEvent = event.nativeKeyEvent
 									if (
 										shouldForwardVerticalGridKey(target, direction) &&
-										keyListener?.onKey(holder.gridView, nativeEvent.keyCode, nativeEvent) == true
+										forwardKey(holder.gridView, nativeEvent.keyCode, nativeEvent)
 									) {
 										return@onPreviewKeyEvent true
 									}
@@ -350,9 +277,8 @@ class ComposeVerticalGridPresenter : Presenter() {
 									}
 									if (
 										event.type == KeyEventType.KeyDown &&
-										directionalKeyGuard.tryAccept(event.nativeKeyEvent.eventTime)
+										notifyDirectionalKey(event.nativeKeyEvent.eventTime)
 									) {
-										directionalKeyListener?.run()
 										val targetVisualPosition = packedItems.indexOfFirst { it.adapterPosition == target }
 										val targetEntry = packedItems.getOrNull(targetVisualPosition)
 										requestBrowseGridFocus(
@@ -371,14 +297,17 @@ class ComposeVerticalGridPresenter : Presenter() {
 								.onFocusChanged { state ->
 									focused = state.isFocused
 									if (state.isFocused) {
-										focusedPosition = entry.adapterPosition
 										select(holder, entry.adapterPosition, entry.item)
 									}
 								}
 								.semantics(mergeDescendants = true) {}
 								.clickable { click(holder, entry.adapterPosition, entry.item) }
 								.zIndex(if (focused) 1f else 0f)
-								.scale(scale),
+								.graphicsLayer {
+									compositingStrategy = CompositingStrategy.Offscreen
+									scaleX = scale.value
+									scaleY = scale.value
+								},
 						)
 					}
 			}
