@@ -77,22 +77,22 @@ fun StillWatchingScreen(
 		viewModel.setItemId(itemId)
 	}
 
-	val item by viewModel.item.collectAsState()
-	if (item == null) return
-
-	LaunchedEffect(item?.baseItem) {
-		backgroundService.setBackground(item?.baseItem)
-	}
-
 	LaunchedEffect(state) {
 		when (state) {
 			// Open next item
 			StillWatchingState.STILL_WATCHING -> playbackLauncher.launchCurrentVideoQueue(context)
 			// Close activity
-			StillWatchingState.CLOSE -> navigationRepository.goBack()
+			StillWatchingState.CLOSE, StillWatchingState.NO_DATA -> navigationRepository.goBack()
 			// Unknown state
 			else -> Unit
 		}
+	}
+
+	val item by viewModel.item.collectAsState()
+	if (item == null) return
+
+	LaunchedEffect(item?.baseItem) {
+		backgroundService.setBackground(item?.baseItem)
 	}
 
 	val focusRequester = remember { FocusRequester() }

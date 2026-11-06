@@ -69,27 +69,32 @@ class PlaybackLauncher(
 		} else {
 			val items = if (shuffle) items.shuffled() else items
 
-			videoQueueManager.setCurrentVideoQueue(items.toList())
+			videoQueueManager.setCurrentVideoQueue(items)
 			videoQueueManager.setCurrentMediaPosition(itemsPosition)
+			launchVideo(context, position, replace)
+		}
+	}
 
-			when (getVideoPlayerSelection(items, itemsPosition)?.player) {
-				VideoPlayer.EXTERNAL -> {
-					context.startActivity(ActivityDestinations.externalPlayer(context, position?.milliseconds ?: Duration.ZERO))
-					if (!replace || !navigationRepository.goBack()) navigationRepository.goNowhere(true)
-				}
-
-				VideoPlayer.NEW -> {
-					val destination = Destinations.videoPlayerNew(position)
-					navigationRepository.navigate(destination, replace = replace)
-				}
-
-				VideoPlayer.LEGACY -> {
-					val destination = Destinations.videoPlayer(position)
-					navigationRepository.navigate(destination, replace = replace)
-				}
-
-				null -> Unit
+	private fun launchVideo(context: Context, position: Int?, replace: Boolean) {
+		val items = videoQueueManager.getCurrentVideoQueue()
+		val itemsPosition = videoQueueManager.getCurrentMediaPosition()
+		when (getVideoPlayerSelection(items, itemsPosition)?.player) {
+			VideoPlayer.EXTERNAL -> {
+				context.startActivity(ActivityDestinations.externalPlayer(context, position?.milliseconds ?: Duration.ZERO))
+				if (!replace || !navigationRepository.goBack()) navigationRepository.goNowhere(true)
 			}
+
+			VideoPlayer.NEW -> {
+				val destination = Destinations.videoPlayerNew(position)
+				navigationRepository.navigate(destination, replace = replace)
+			}
+
+			VideoPlayer.LEGACY -> {
+				val destination = Destinations.videoPlayer(position)
+				navigationRepository.navigate(destination, replace = replace)
+			}
+
+			null -> Unit
 		}
 	}
 
@@ -119,13 +124,5 @@ class PlaybackLauncher(
 	fun launchCurrentVideoQueue(
 		context: Context,
 		replace: Boolean = true,
-	) {
-		launch(
-			context = context,
-			items = videoQueueManager.getCurrentVideoQueue(),
-			position = 0,
-			replace = replace,
-			itemsPosition = videoQueueManager.getCurrentMediaPosition(),
-		)
-	}
+	) = launchVideo(context, position = 0, replace = replace)
 }
