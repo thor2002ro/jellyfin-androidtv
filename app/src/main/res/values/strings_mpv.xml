@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+	<string name="preference_mpv_convert_audio_to_ac3">Convert unsupported surround to Dolby Digital</string>
+	<string name="preference_mpv_convert_audio_to_ac3_description">When Audio output is set to “%1$s” and Dolby Digital passthrough is available and enabled, converts unsupported surround audio on this device to Dolby Digital at 640 kbps, up to 5.1 channels, instead of requesting server audio conversion. Keeps supported passthrough and stereo unchanged. Inactive with stereo downmix or Cinema Spatial. Turn off to use server audio conversion.</string>
 	<string name="playback_backend_mpv_name">libMPV</string>
 	<string name="playback_backend_mpv_description">Internal libMPV player with MediaCodec and software decoding, universal Jellyfin controls, and configurable native options.</string>
 	<string name="preference_mpv_options">libMPV options</string>
