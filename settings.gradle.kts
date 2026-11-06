@@ -43,6 +43,10 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "jellyfin-androidtv"
 
+extra["splitAarRoots"] = file("dependencies").listFiles().orEmpty()
+	.filter(File::isDirectory).map { it.resolve("OUTPUT") } + file("OUTPUT")
+apply(from = file("dependencies/mpv-android-lib/gradle/restore-split-aars.settings.gradle.kts"))
+
 file("local.properties").takeIf { it.isFile }?.inputStream()?.use {
 	java.util.Properties().apply { load(it) }.getProperty("sdk.dir")?.let { sdkDir ->
 		System.setProperty("android.home", sdkDir)
