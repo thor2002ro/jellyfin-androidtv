@@ -19,15 +19,40 @@ import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.itemhandling.GridButtonBaseRowItem
 import org.jellyfin.androidtv.util.Utils
 
-class LiveTvActionButtonPresenter @JvmOverloads constructor(
-	private val width: Int = 184,
-	private val height: Int = 112,
+enum class ActionButtonSize(
+	val widthDp: Int,
+	val heightDp: Int,
+) {
+	SINGLE(126, 39),
+	DOUBLE(126, 78),
+}
+
+internal val ActionButtonSize.horizontal get() = this == ActionButtonSize.SINGLE
+
+internal fun ActionButtonSize.labelStartMarginDp(hasIcon: Boolean) = if (horizontal && hasIcon) 35 else 0
+
+class ActionButtonPresenter private constructor(
+	private val size: ActionButtonSize,
+	private val widthDp: Int,
+	private val heightDp: Int,
 ) : Presenter() {
-	private class LiveTvActionButtonView(
+	init {
+		require(widthDp > 0 && heightDp > 0) { "Action button dimensions must be positive" }
+	}
+
+	@JvmOverloads
+	constructor(size: ActionButtonSize = ActionButtonSize.DOUBLE) : this(size, size.widthDp, size.heightDp)
+
+	constructor(widthDp: Int, heightDp: Int) : this(ActionButtonSize.DOUBLE, widthDp, heightDp)
+
+	private class ActionButtonView(
 		context: Context,
-		private val cardWidth: Int,
-		private val cardHeight: Int,
+		private val size: ActionButtonSize,
+		widthDp: Int,
+		heightDp: Int,
 	) : FrameLayout(context) {
+		private val cardWidth = dp(widthDp)
+		private val cardHeight = dp(heightDp)
 		private val iconPlate = FrameLayout(context)
 		private val icon = ImageView(context)
 		private val label = TextView(context)
@@ -41,31 +66,35 @@ class LiveTvActionButtonPresenter @JvmOverloads constructor(
 			minimumWidth = cardWidth
 			minimumHeight = cardHeight
 			layoutParams = ViewGroup.LayoutParams(cardWidth, cardHeight)
-			setPadding(dp(14), dp(12), dp(14), dp(12))
+			setPadding(dp(if (size.horizontal) 8 else 11), dp(if (size.horizontal) 6 else 9), dp(if (size.horizontal) 8 else 11), dp(if (size.horizontal) 6 else 9))
 
 			iconPlate.background = GradientDrawable().apply {
 				shape = GradientDrawable.RECTANGLE
-				cornerRadius = dp(10).toFloat()
+				cornerRadius = dp(8).toFloat()
 				setColor(0x24000000)
 			}
-			addView(iconPlate, LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.START))
+			addView(iconPlate, LayoutParams(
+				dp(if (size.horizontal) 27 else 35),
+				dp(if (size.horizontal) 27 else 35),
+				if (size.horizontal) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.TOP or Gravity.START,
+			))
 
 			icon.scaleType = ImageView.ScaleType.CENTER_INSIDE
 			icon.alpha = 0.92f
-			iconPlate.addView(icon, LayoutParams(dp(28), dp(28), Gravity.CENTER))
+			iconPlate.addView(icon, LayoutParams(dp(if (size.horizontal) 17 else 21), dp(if (size.horizontal) 17 else 21), Gravity.CENTER))
 
 			label.ellipsize = TextUtils.TruncateAt.END
 			label.includeFontPadding = false
-			label.maxLines = 2
+			label.maxLines = if (size.horizontal) 1 else 2
 			label.setTextColor(Color.WHITE)
-			label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+			label.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (size.horizontal) 12f else 11f)
 			label.setTypeface(Typeface.DEFAULT, Typeface.BOLD)
 			addView(label, LayoutParams(
 				LayoutParams.MATCH_PARENT,
 				LayoutParams.WRAP_CONTENT,
-				Gravity.BOTTOM or Gravity.START,
+				if (size.horizontal) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.BOTTOM or Gravity.START,
 			).apply {
-				bottomMargin = dp(10)
+				bottomMargin = dp(if (size.horizontal) 0 else 8)
 			})
 
 			accent.background = GradientDrawable(
@@ -78,11 +107,11 @@ class LiveTvActionButtonPresenter @JvmOverloads constructor(
 				cornerRadii = floatArrayOf(
 					0f, 0f,
 					0f, 0f,
-					dp(4).toFloat(), dp(4).toFloat(),
-					dp(4).toFloat(), dp(4).toFloat(),
+					dp(8).toFloat(), dp(8).toFloat(),
+					dp(8).toFloat(), dp(8).toFloat(),
 				)
 			}
-			addView(accent, LayoutParams(LayoutParams.MATCH_PARENT, dp(3), Gravity.BOTTOM))
+			addView(accent, LayoutParams(LayoutParams.MATCH_PARENT, dp(2), Gravity.BOTTOM))
 		}
 
 		override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -93,12 +122,18 @@ class LiveTvActionButtonPresenter @JvmOverloads constructor(
 		}
 
 		fun bind(value: GridButton) {
+			val hasIcon = value.imageRes != null
 			contentDescription = value.text
 			label.text = value.text
-			if (value.imageRes == null) {
+			iconPlate.visibility = if (hasIcon) View.VISIBLE else View.GONE
+			if (!hasIcon) {
 				icon.setImageDrawable(null)
 			} else {
-				icon.setImageResource(value.imageRes)
+				icon.setImageResource(requireNotNull(value.imageRes))
+			}
+			(label.layoutParams as LayoutParams).apply {
+				marginStart = dp(size.labelStartMarginDp(hasIcon))
+				label.layoutParams = this
 			}
 		}
 
@@ -106,17 +141,13 @@ class LiveTvActionButtonPresenter @JvmOverloads constructor(
 	}
 
 	private class ViewHolder(
-		private val buttonView: LiveTvActionButtonView,
+		private val buttonView: ActionButtonView,
 	) : Presenter.ViewHolder(buttonView) {
 		fun bind(value: GridButton) = buttonView.bind(value)
 	}
 
 	override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
-		val view = LiveTvActionButtonView(
-			parent.context,
-			Utils.convertDpToPixel(parent.context, width),
-			Utils.convertDpToPixel(parent.context, height),
-		)
+		val view = ActionButtonView(parent.context, size, widthDp, heightDp)
 
 		return ViewHolder(view)
 	}
