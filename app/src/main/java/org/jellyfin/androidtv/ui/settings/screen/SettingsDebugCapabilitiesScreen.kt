@@ -10,9 +10,14 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
@@ -22,8 +27,10 @@ import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.base.Badge
+import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
+import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListControl
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
@@ -46,6 +53,7 @@ fun SettingsDebugCapabilitiesScreen() {
 	val groups = remember(context, softwareCodecsEnabled) {
 		buildCapabilityGroups(context, softwareCodecsEnabled)
 	}
+	var rawExpanded by rememberSaveable { mutableStateOf(false) }
 
 	SettingsColumn {
 		item {
@@ -72,17 +80,40 @@ fun SettingsDebugCapabilitiesScreen() {
 		}
 
 		groups.forEach { group ->
-			capabilityGroup(group)
+			capabilityGroup(
+				group = group,
+				expanded = if (group.collapsible) rawExpanded else true,
+				onToggle = if (group.collapsible) ({ rawExpanded = !rawExpanded }) else null,
+			)
 		}
 	}
 }
 
-private fun LazyListScope.capabilityGroup(group: CapabilityGroup) {
+private fun LazyListScope.capabilityGroup(
+	group: CapabilityGroup,
+	expanded: Boolean = true,
+	onToggle: (() -> Unit)? = null,
+) {
 	item {
-		ListSection(
-			headingContent = { Text(group.title, fontSize = 16.sp, maxLines = 1) },
-			captionContent = group.caption?.let { caption -> ({ CompactCapabilityText(caption, 11) }) },
-		)
+		if (onToggle == null) {
+			ListSection(
+				headingContent = { Text(group.title, fontSize = 16.sp, maxLines = 1) },
+				captionContent = group.caption?.let { caption -> ({ CompactCapabilityText(caption, 11) }) },
+			)
+		} else {
+			ListButton(
+				onClick = onToggle,
+				headingContent = { Text(group.title, fontSize = 16.sp, maxLines = 1) },
+				captionContent = group.caption?.let { caption -> ({ CompactCapabilityText(caption, 11) }) },
+				trailingContent = { ExpandIcon(expanded) },
+			)
+		}
+	}
+
+	if (!expanded) return
+
+	group.children.forEach { child ->
+		capabilityGroup(child)
 	}
 
 	items(group.items) { item ->
@@ -101,6 +132,15 @@ private fun CompactCapabilityText(text: String, size: Int) = Text(
 	maxLines = 1,
 	overflow = TextOverflow.Ellipsis,
 )
+
+@Composable
+private fun ExpandIcon(expanded: Boolean) {
+	Icon(
+		painter = painterResource(R.drawable.ic_arrow_up),
+		contentDescription = null,
+		modifier = Modifier.rotate(if (expanded) 0f else 180f),
+	)
+}
 
 @Composable
 private fun FocusableListControl(
@@ -163,11 +203,46 @@ private fun buildRawAndroidDecoderCapabilities(): CapabilityGroup {
 	return CapabilityGroup(
 		title = "RAW",
 		caption = "All decoders reported by Android MediaCodec",
-		items = decoders.map { codec ->
-			val type = if (codec.isSoftwareDecoder) "sw" else "hw"
-			CapabilityItem("$type › ${codec.name}", detail = codec.supportedTypes.sorted().joinToString())
-		},
+		children = listOf(
+			rawDecoderGroup("Video", decoders, "video/"),
+			rawDecoderGroup("Audio", decoders, "audio/"),
+			rawOtherDecoderGroup(decoders),
+		).filter { group -> group.items.isNotEmpty() },
+		collapsible = true,
 	)
+}
+
+private fun rawDecoderGroup(
+	title: String,
+	decoders: List<MediaCodecInfo>,
+	typePrefix: String,
+) = CapabilityGroup(
+	title = title,
+	items = decoders.mapNotNull { codec ->
+		codec.supportedTypes
+			.filter { type -> type.startsWith(typePrefix) }
+			.sorted()
+			.takeIf { types -> types.isNotEmpty() }
+			?.let { types -> rawDecoderItem(codec, types) }
+	},
+)
+
+private fun rawOtherDecoderGroup(decoders: List<MediaCodecInfo>) = CapabilityGroup(
+	title = "Other",
+	items = decoders.mapNotNull { codec ->
+		codec.supportedTypes
+			.sorted()
+			.takeIf { types -> types.none { type -> type.startsWith("video/") || type.startsWith("audio/") } }
+			?.let { types -> rawDecoderItem(codec, types) }
+	},
+)
+
+private fun rawDecoderItem(
+	codec: MediaCodecInfo,
+	types: List<String>,
+): CapabilityItem {
+	val type = if (codec.isSoftwareDecoder) "sw" else "hw"
+	return CapabilityItem("$type: ${codec.name}", detail = types.joinToString())
 }
 
 private val MediaCodecInfo.isSoftwareDecoder: Boolean
@@ -332,8 +407,10 @@ private fun maxResolutionDetail(
 
 private data class CapabilityGroup(
 	val title: String,
-	val caption: String?,
-	val items: List<CapabilityItem>,
+	val caption: String? = null,
+	val items: List<CapabilityItem> = emptyList(),
+	val children: List<CapabilityGroup> = emptyList(),
+	val collapsible: Boolean = false,
 )
 
 private data class CapabilityItem(
