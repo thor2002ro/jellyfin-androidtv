@@ -14,7 +14,7 @@ import org.jellyfin.playback.core.PlaybackManager
 
 class HomeFragmentNowPlayingRow(
 	private val lifecycleScope: LifecycleCoroutineScope,
-	private val playbackManager: PlaybackManager,
+	private val playbackManager: Lazy<PlaybackManager>,
 	private val mediaManager: MediaManager,
 ) : HomeFragmentRow {
 	private var row: ListRow? = null
@@ -22,7 +22,8 @@ class HomeFragmentNowPlayingRow(
 	override fun addToRowsAdapter(
 		context: Context,
 		cardPresenter: CardPresenter,
-		rowsAdapter: MutableObjectAdapter<Row>
+		rowsAdapter: MutableObjectAdapter<Row>,
+		rowOrder: Double,
 	) {
 		update(context, rowsAdapter)
 	}
@@ -32,7 +33,7 @@ class HomeFragmentNowPlayingRow(
 			// Ensure row exists
 			if (row == null) row = ListRow(
 				HeaderItem(context.getString(R.string.lbl_now_playing)),
-				AudioQueueBaseRowAdapter(playbackManager, lifecycleScope)
+				AudioQueueBaseRowAdapter(playbackManager.value, lifecycleScope)
 			)
 			// Add row if it wasn't added already
 			if (!rowsAdapter.contains(row!!)) rowsAdapter.add(0, row!!)

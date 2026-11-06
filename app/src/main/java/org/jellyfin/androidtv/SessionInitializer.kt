@@ -13,20 +13,24 @@ import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.TrackSelectionManager
 import org.jellyfin.androidtv.util.TrackSelectionStore
+import org.jellyfin.playback.core.font.SubtitleFontProvider
 
 @Suppress("unused")
 class SessionInitializer : Initializer<Unit> {
 	override fun create(context: Context) {
-		TrackSelectionManager.initialize(TrackSelectionStore(context))
-		LiveTvTrackCache.initialize(context)
-		SeriesStreamBadgeCache.initialize(context)
-
 		val koin = AppInitializer.getInstance(context)
 			.initializeComponent(KoinInitializer::class.java)
 			.koin
 
-		// Restore system session
 		ProcessLifecycleOwner.get().lifecycleScope.launch(Dispatchers.IO) {
+			SubtitleFontProvider.initialize(context)
+		}
+
+		// Hydrate saved caches before session restoration can clear data for a different user.
+		ProcessLifecycleOwner.get().lifecycleScope.launch(Dispatchers.IO) {
+			TrackSelectionManager.initialize(TrackSelectionStore(context))
+			LiveTvTrackCache.initialize(context)
+			SeriesStreamBadgeCache.initialize(context)
 			koin.get<SessionRepository>().restoreSession(destroyOnly = false)
 		}
 	}

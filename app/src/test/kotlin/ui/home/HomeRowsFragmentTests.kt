@@ -7,6 +7,7 @@ import androidx.leanback.widget.VerticalGridView
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.Row
+import androidx.lifecycle.LifecycleCoroutineScope
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -16,9 +17,24 @@ import io.mockk.unmockkObject
 import io.mockk.verify
 import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
+import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import org.jellyfin.playback.core.PlaybackManager
 
 class HomeRowsFragmentTests : FunSpec({
+	test("hidden Now Playing row does not construct an unused playback manager") {
+		var creations = 0
+		val playbackManager = lazy<PlaybackManager> { creations++; error("unused playback manager") }
+		val mediaManager = mockk<MediaManager> {
+			every { hasAudioQueueItems() } returns false
+		}
+
+		HomeFragmentNowPlayingRow(mockk<LifecycleCoroutineScope>(), playbackManager, mediaManager)
+			.update(mockk(), mockk())
+
+		creations shouldBe 0
+	}
+
 	test("density refreshes coalesce without discarding loaded Home rows") {
 		val fragment = HomeRowsFragment()
 		mockkObject(fragment)
