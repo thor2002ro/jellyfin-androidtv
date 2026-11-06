@@ -17,6 +17,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -68,6 +69,8 @@ import org.jellyfin.androidtv.ui.presentation.ComposeVerticalGridPresenter;
 import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter;
 import org.jellyfin.androidtv.ui.presentation.KaleidescapeStylePresenter;
 import org.jellyfin.androidtv.ui.itemhandling.BaseItemDtoBaseRowItem;
+import org.jellyfin.androidtv.ui.navigation.Destinations;
+import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
 import org.jellyfin.androidtv.util.CoroutineUtils;
 import org.jellyfin.androidtv.util.ImageHelper;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
@@ -103,6 +106,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final static int CHUNK_SIZE_MINIMUM = 80;
 
     private String mainTitle;
+    private FilterOptions mTemporaryFilters;
+    private LibraryFilterChoices mFilterChoices = new LibraryFilterChoices();
     private FragmentActivity mActivity;
     private BaseRowItem mCurrentItem;
     private CompositeClickedListener mClickedListener = new CompositeClickedListener();
@@ -146,6 +151,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final Lazy<KeyProcessor> keyProcessor = inject(KeyProcessor.class);
     private final Lazy<ApiClient> api = inject(ApiClient.class);
     private final Lazy<DataRefreshService> dataRefreshService = inject(DataRefreshService.class);
+    private final Lazy<NavigationRepository> navigationRepository = inject(NavigationRepository.class);
     private final Lazy<ImageLoader> imageLoader = inject(ImageLoader.class);
 
     private int mCardsScreenEst = 0;
@@ -190,6 +196,11 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mFolder = Json.Default.decodeFromString(BaseItemDto.Companion.serializer(), getArguments().getString(Extras.Folder));
         mParentId = mFolder.getId();
         mainTitle = mFolder.getName();
+        String presetFilters = getArguments().getString(Extras.Filters);
+        if (presetFilters != null) {
+            mTemporaryFilters = FilterOptions.decode(savedInstanceState != null
+                    ? savedInstanceState.getString(Extras.Filters, presetFilters) : presetFilters);
+        }
         mCardFocusScale = getResources().getFraction(R.fraction.card_scale_focus, 1, 1);
 
         sortOptions = new HashMap<>();
@@ -529,6 +540,12 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (mTemporaryFilters != null) outState.putString(Extras.Filters, mTemporaryFilters.encode());
+    }
+
+    @Override
     public void onDestroyView() {
         cancelImagePrefetches();
         if (mAdapter != null) mAdapter.cancelRetrieval();
@@ -843,13 +860,18 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         return new SortOption(getString(R.string.lbl_bracket_unknown), ItemSortBy.SORT_NAME, SortOrder.ASCENDING);
     }
 
+    public void setFilterChoices(LibraryFilterChoices choices) {
+        mFilterChoices = choices;
+        setStatusText(mainTitle);
+    }
+
     public void setStatusText(String folderName) {
         String text = getString(R.string.lbl_showing) + " ";
         FilterOptions filters = mAdapter.getFilters();
         if (filters == null || filters.isEmpty()) {
             text += getString(R.string.lbl_all_items);
         } else {
-            text += getString(R.string.library_filter_active_count, filters.getActiveCount());
+            text += LibraryFilterSummaryKt.summary(filters, requireContext(), mFilterChoices);
         }
 
         if (mAdapter.getStartLetter() != null) {
@@ -1262,7 +1284,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         }
         mDirty = false;
 
-        FilterOptions filters = FilterOptions.fromStored(
+        FilterOptions filters = mTemporaryFilters != null ? mTemporaryFilters : FilterOptions.fromStored(
                 libraryPreferences.get(LibraryPreferences.Companion.getFilters()),
                 libraryPreferences.get(LibraryPreferences.Companion.getFilterFavoritesOnly()),
                 libraryPreferences.get(LibraryPreferences.Companion.getFilterUnwatchedOnly())
@@ -1272,7 +1294,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             @Override
             public void onResponse() {
                 if (!isActive()) return;
-                setStatusText(mFolder.getName());
+                setStatusText(mainTitle);
                 if (mCurrentItem == null) { // don't mess-up pos via loadMoreItemsIfNeeded
                     setItem(null);
                     updateCounter(mAdapter.getTotalItems() > 0 ? 1 : 0);
@@ -1297,7 +1319,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                         if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED))
                             return;
 
-                        binding.title.setText(mFolder.getName());
+                        binding.title.setText(mainTitle);
                     }, 500);
                 } else if (mGridView != null) {
                     mGridView.setFocusable(true);
@@ -1326,7 +1348,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mAdapter.Retrieve();
         } else {
             applyPendingSelectedPosition();
-            setStatusText(mFolder.getName());
+            setStatusText(mainTitle);
             updateCounter(mSelectedPosition + 1);
             keepGridFocused();
         }
@@ -1339,10 +1361,14 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private ViewGroup mActiveToolBar;
 
     private void updateDisplayPrefs() {
+        // Shortcut filters belong to this browser visit, so leave the library's saved filters alone.
+        if (mTemporaryFilters != null) mTemporaryFilters = mAdapter.getFilters();
         CoroutineUtils.runOnLifecycle(getLifecycle(), (coroutineScope, continuation) -> {
-            libraryPreferences.set(LibraryPreferences.Companion.getFilterFavoritesOnly(), mAdapter.getFilters().isFavoriteOnly());
-            libraryPreferences.set(LibraryPreferences.Companion.getFilterUnwatchedOnly(), mAdapter.getFilters().isUnwatchedOnly());
-            libraryPreferences.set(LibraryPreferences.Companion.getFilters(), mAdapter.getFilters().encode());
+            if (mTemporaryFilters == null) {
+                libraryPreferences.set(LibraryPreferences.Companion.getFilterFavoritesOnly(), mAdapter.getFilters().isFavoriteOnly());
+                libraryPreferences.set(LibraryPreferences.Companion.getFilterUnwatchedOnly(), mAdapter.getFilters().isUnwatchedOnly());
+                libraryPreferences.set(LibraryPreferences.Companion.getFilters(), mAdapter.getFilters().encode());
+            }
             libraryPreferences.set(LibraryPreferences.Companion.getSortBy(), mAdapter.getSortBy());
             libraryPreferences.set(LibraryPreferences.Companion.getSortOrder(), mAdapter.getSortOrder());
             return libraryPreferences.commit(continuation);
@@ -1355,6 +1381,26 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
         int size = Utils.convertDpToPixel(requireContext(), 26);
         int padding = Utils.convertDpToPixel(requireContext(), 3);
+
+        if (mTemporaryFilters == null && (mFolder.getCollectionType() == CollectionType.MOVIES || mFolder.getCollectionType() == CollectionType.TVSHOWS)) {
+            Button genresButton = new Button(requireContext(), null, 0, R.style.Button_Default);
+            genresButton.setText(R.string.lbl_genres);
+            genresButton.setAllCaps(false);
+            genresButton.setTextSize(14);
+            genresButton.setSingleLine(true);
+            genresButton.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_masks, 0, 0, 0);
+            genresButton.setCompoundDrawableTintList(genresButton.getTextColors());
+            int horizontalPadding = Utils.convertDpToPixel(requireContext(), 8);
+            genresButton.setPadding(horizontalPadding, 0, horizontalPadding, 0);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, size);
+            params.setMarginEnd(horizontalPadding);
+            genresButton.setLayoutParams(params);
+            genresButton.setOnClickListener(v -> navigationRepository.getValue().navigate(Destinations.INSTANCE.libraryByGenres(
+                    mFolder, (mFolder.getCollectionType() == CollectionType.TVSHOWS ? BaseItemKind.SERIES : BaseItemKind.MOVIE).getSerialName()
+            )));
+            binding.toolBar.setVisibility(View.VISIBLE);
+            binding.toolBar.addView(genresButton);
+        }
 
         mSortButton = new ImageButton(requireContext(), null, 0, R.style.Button_Icon);
         mSortButton.setImageResource(R.drawable.ic_sort);
