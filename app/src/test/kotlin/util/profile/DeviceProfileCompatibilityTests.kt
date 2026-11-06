@@ -11,6 +11,9 @@ import io.mockk.mockk
 import io.mockk.mockkConstructor
 import io.mockk.unmockkConstructor
 import org.jellyfin.androidtv.constant.Codec
+import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
 import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.DlnaProfileType
 import org.jellyfin.sdk.model.api.MediaStreamProtocol
@@ -19,6 +22,39 @@ import org.jellyfin.sdk.model.api.ProfileConditionValue
 
 class DeviceProfileCompatibilityTests : FunSpec({
 	afterTest { unmockkConstructor(Size::class) }
+
+	test("server profile honors forced codec families without detected support or local decoders") {
+		val codecsByFormat = mapOf(
+			BitstreamAudioFormat.AC3 to setOf(Codec.Audio.AC3),
+			BitstreamAudioFormat.EAC3 to setOf(Codec.Audio.EAC3),
+			BitstreamAudioFormat.DTS to setOf(Codec.Audio.DCA, Codec.Audio.DTS),
+			BitstreamAudioFormat.TRUEHD to setOf(Codec.Audio.MLP, Codec.Audio.TRUEHD),
+		)
+		for ((format, codecs) in codecsByFormat) for (mode in BitstreamAudioMode.entries) {
+			val preferences = mockk<UserPreferences>()
+			for (entry in BitstreamAudioFormat.entries) {
+				every { preferences[entry.preference] } returns if (entry == format) mode else BitstreamAudioMode.AUTO
+			}
+			val resolved = preferences.profilePassthroughAudioCodecs(emptySet())
+			resolved shouldBe if (mode == BitstreamAudioMode.ENABLE) codecs else emptySet()
+			val announced = deviceProfile(passthroughAudioCodecs = resolved).announcedAudioCodecs()
+			for (codec in codecs) (codec in announced) shouldBe (mode == BitstreamAudioMode.ENABLE)
+			val downmixed = deviceProfile(downMixAudio = true, passthroughAudioCodecs = resolved).announcedAudioCodecs()
+			for (codec in codecs) (codec in downmixed) shouldBe false
+		}
+	}
+
+	test("forced EAC3 respects disabled AC3 and detected codec aliases survive auto mode") {
+		val preferences = mockk<UserPreferences>()
+		for (entry in BitstreamAudioFormat.entries) {
+			every { preferences[entry.preference] } returns BitstreamAudioMode.AUTO
+		}
+		preferences.profilePassthroughAudioCodecs(setOf(MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_DTS_HD)) shouldBe
+			setOf(Codec.Audio.EAC3, Codec.Audio.DCA, Codec.Audio.DTS)
+		every { preferences[UserPreferences.bitstreamAc3] } returns BitstreamAudioMode.DISABLE
+		every { preferences[UserPreferences.bitstreamEac3] } returns BitstreamAudioMode.ENABLE
+		preferences.profilePassthroughAudioCodecs(emptySet()) shouldBe emptySet()
+	}
 
 	test("audio direct play is limited to containers Media3 can demux") {
 		val profile = deviceProfile()
@@ -59,7 +95,6 @@ class DeviceProfileCompatibilityTests : FunSpec({
 				Codec.Audio.FLAC,
 				Codec.Audio.OPUS,
 				Codec.Audio.DTS,
-				Codec.Audio.TRUEHD,
 			)
 	}
 
