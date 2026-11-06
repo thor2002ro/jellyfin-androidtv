@@ -115,6 +115,7 @@ import org.jellyfin.playback.media3.exoplayer.support.getPlaySupportReport
 import org.jellyfin.playback.media3.exoplayer.support.toFormats
 import org.jellyfin.playback.exoplayer.dovi.DoviExtractorsFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviHlsExtractorFactory
+import org.jellyfin.playback.exoplayer.dovi.DoviHlsPlaylistParserFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviMediaSourceFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviSampleTransformationException
 import org.jellyfin.playback.exoplayer.dovi.DoviTransformContext
@@ -995,6 +996,7 @@ class ExoPlayerBackend(
 						)
 						.setSubtitleParserFactory(subtitleParserFactory)
 						.apply {
+							if (doviContext != null) setPlaylistParserFactory(DoviHlsPlaylistParserFactory())
 							@Suppress("DEPRECATION")
 							experimentalParseSubtitlesDuringExtraction(
 								exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass

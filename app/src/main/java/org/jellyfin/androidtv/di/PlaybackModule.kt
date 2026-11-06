@@ -221,7 +221,7 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 				mediaTest = doviMediaTest,
 			)
 		}
-		JellyfinDeviceProfileRequest(profile, token)
+		JellyfinDeviceProfileRequest(profile, token, protectsDoviHlsVideoCopy = backend is ExoPlayerBackend)
 	}
 	val videoQueueManager = get<VideoQueueManager>()
 	install(jellyfinPlugin(
