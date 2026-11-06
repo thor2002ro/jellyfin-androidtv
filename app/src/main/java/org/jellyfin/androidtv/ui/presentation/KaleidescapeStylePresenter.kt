@@ -95,7 +95,7 @@ class KaleidescapeStylePresenter : HorizontalGridPresenter() {
 					listOf(binding.rowsFragment, binding.toolBar, binding.alphaPickerHorizontal, binding.counter, binding.statusText).map {
 						it to RelativeLayout.LayoutParams(it.layoutParams as RelativeLayout.LayoutParams)
 					},
-					listOf(binding.title, binding.infoRow, binding.clock, binding.npBug, binding.statusText, binding.counter)
+					listOf(binding.title, binding.genres, binding.infoRow, binding.clock, binding.npBug, binding.statusText, binding.counter)
 						.map { it to it.visibility },
 					root.background,
 				))
@@ -103,7 +103,7 @@ class KaleidescapeStylePresenter : HorizontalGridPresenter() {
 			val density = root.resources.displayMetrics.density
 			root.setBackgroundColor(DETAILS_BACKGROUND_COLOR)
 			fun dp(value: Int) = (value * density).toInt()
-			listOf(binding.title, binding.infoRow, binding.clock, binding.npBug)
+			listOf(binding.title, binding.genres, binding.infoRow, binding.clock, binding.npBug)
 				.forEach { it.visibility = View.GONE }
 			binding.statusText.visibility = View.VISIBLE
 			binding.statusText.layoutParams = RelativeLayout.LayoutParams(binding.statusText.layoutParams as RelativeLayout.LayoutParams).apply {
