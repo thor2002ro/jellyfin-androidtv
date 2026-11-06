@@ -307,6 +307,7 @@ internal class DoviExtractorOutput(
 		transformer = transformer,
 		dispatcher = sampleDispatcher,
 		onTransformObserved = { observation -> context()?.onTransformObserved?.invoke(observation) },
+		onProcessorChanged = { processor -> context()?.onProcessorChanged?.invoke(processor) },
 	)
 
 	override fun seekMap(seekMap: SeekMap) = delegate.seekMap(seekMap)
