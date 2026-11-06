@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.matches
+import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.plugin.PlayerService
@@ -70,12 +71,16 @@ class NetworkPlaybackRecoveryService(
 			var bufferingEntry: QueueEntry? = null
 			var consecutiveBufferingChecks = 0
 			var playedEntry: QueueEntry? = null
+			var lastPositionInfo = state.positionInfo
 
 			while (true) {
 				delay(NETWORK_RECOVERY_CHECK_INTERVAL)
 
 				val entry = manager.queue.entry.value
 				val playState = state.playState.value
+				val positionInfo = state.positionInfo
+				val bufferingProgressed = hasBufferingProgress(lastPositionInfo, positionInfo)
+				lastPositionInfo = positionInfo
 				if (playState == PlayState.PLAYING) playedEntry = entry
 				if (
 					entry !== errorRecoveryAttemptedEntry ||
@@ -127,7 +132,7 @@ class NetworkPlaybackRecoveryService(
 						bufferingEntry = entry
 						consecutiveBufferingChecks = 0
 					}
-					consecutiveBufferingChecks++
+					consecutiveBufferingChecks = if (bufferingProgressed) 0 else consecutiveBufferingChecks + 1
 					if (
 						shouldRecoverStalledBuffer(
 							consecutiveChecks = consecutiveBufferingChecks,
@@ -202,20 +207,22 @@ class NetworkPlaybackRecoveryService(
 				continue
 			}
 
-			val positionBeforeGrace = state.positionInfo.active
+			val positionBeforeGrace = state.positionInfo
 			delay(PLAYBACK_RECOVERY_RETRY_INTERVAL)
 			if (!isCurrentRecoverableEntry(entry)) return
 			if (!isNetworkAvailable()) continue
 
 			val playState = state.playState.value
-			val positionAfterGrace = state.positionInfo.active
-			if (hasPlaybackRecovered(playState, positionBeforeGrace, positionAfterGrace)) {
-				Timber.i("Playback recovered without reloading")
+			val positionAfterGrace = state.positionInfo
+			if (hasPlaybackRecovered(playState, positionBeforeGrace.active, positionAfterGrace.active) ||
+				playState == PlayState.BUFFERING && hasBufferingProgress(positionBeforeGrace, positionAfterGrace)
+			) {
+				Timber.i("Playback or buffering progressed without reloading")
 				return
 			}
 
-			Timber.i("$reason; reloading playback at $positionAfterGrace")
-			if (manager.reloadCurrentMediaStream(position = positionAfterGrace, playWhenReady = playWhenReady)) {
+			Timber.i("$reason; reloading playback at ${positionAfterGrace.active}")
+			if (manager.reloadCurrentMediaStream(position = positionAfterGrace.active, playWhenReady = playWhenReady)) {
 				Timber.i("Reloaded playback after error")
 			} else {
 				Timber.w("Unable to reload playback after error")
@@ -276,6 +283,10 @@ internal suspend fun cancelAndJoinRecoveryJob(job: Job, currentJob: Job?): Boole
 	job.cancelAndJoin()
 	return true
 }
+
+// A changed playback position also covers seeking; buffer growth is healthy loading.
+internal fun hasBufferingProgress(before: PositionInfo, after: PositionInfo) =
+	after.active != before.active || after.buffer > before.buffer
 
 internal fun shouldRecoverStalledBuffer(consecutiveChecks: Int, requiredChecks: Int, hasPlayed: Boolean) =
 	consecutiveChecks >= if (hasPlayed) requiredChecks else requiredChecks * 2

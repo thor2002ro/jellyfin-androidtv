@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.activate
@@ -33,6 +34,15 @@ class NetworkPlaybackRecoveryServiceTests : FunSpec({
 		isRecoverablePlaybackError("ERROR_CODE_DECODING_FAILED") shouldBe false
 		isRecoverablePlaybackError("DOVI_TRANSFORMATION_FAILED_RPU_WRITE_FAILED") shouldBe false
 		isRecoverablePlaybackError("DOVI_TRANSFORMATION_FAILED_UNKNOWN") shouldBe false
+	}
+
+	test("buffer filling and position changes are not stalled buffering") {
+		val before = PositionInfo(10.seconds, 12.seconds, 100.seconds)
+		hasBufferingProgress(before, before.copy(buffer = 13.seconds)) shouldBe true
+		hasBufferingProgress(before, before.copy(active = 11.seconds)) shouldBe true
+		hasBufferingProgress(before, before.copy(active = 5.seconds, buffer = 5.seconds)) shouldBe true
+		hasBufferingProgress(before, before) shouldBe false
+		hasBufferingProgress(before, before.copy(buffer = 10.seconds)) shouldBe false
 	}
 
 	test("stalled buffering waits for the configured threshold") {
