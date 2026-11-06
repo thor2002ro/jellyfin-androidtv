@@ -10,6 +10,16 @@ import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
 
 class ItemRowAdapterHelperTests : FunSpec({
+	listOf("timerId", "seriesTimerId").forEach { field ->
+		test("live TV row refresh detects $field changes after recording actions") {
+			val program = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.LIVE_TV_PROGRAM, name = "News")
+			val recorded = if (field == "timerId") program.copy(timerId = "recording") else program.copy(seriesTimerId = "series")
+
+			BaseItemDtoBaseRowItem(recorded).liveTvProgramSignature() shouldNotBe
+				BaseItemDtoBaseRowItem(program).liveTvProgramSignature()
+		}
+	}
+
 	test("adapter diff keeps the same media item identity when content changes") {
 		val itemId = UUID.randomUUID()
 
