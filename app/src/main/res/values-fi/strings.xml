@@ -16,7 +16,6 @@
     <string name="lbl_news">Uutiset</string>
     <string name="lbl_guide_option_number">Kanavanumero</string>
     <string name="lbl_guide_option_played">Viimeksi toistettu</string>
-    <string name="lbl_premiere">Ensiesitys</string>
     <string name="lbl_series_recordings">Sarjatallenteet</string>
     <string name="lbl_save">Tallenna</string>
     <string name="msg_settings_updated">Asetukset päivitettiin</string>

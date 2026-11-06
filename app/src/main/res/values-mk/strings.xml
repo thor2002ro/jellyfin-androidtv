@@ -82,7 +82,6 @@
     <string name="pref_audio_direct">Директно</string>
     <string name="lbl_sports">Спорт</string>
     <string name="lbl_live">Во живо</string>
-    <string name="lbl_premiere">Премиера</string>
     <string name="grid_direction">Насока на приказ</string>
     <string name="lbl_album_artists">Изведувачи на албум</string>
     <string name="bitrate_mbit">%1$,.0f Мбит/с</string>

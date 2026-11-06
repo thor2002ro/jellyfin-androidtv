@@ -331,6 +331,7 @@
     <string name="grid_direction_vertical">عمودي</string>
     <string name="grid_direction">إتجاه الشبكة</string>
     <string name="lbl_premiere">العرض الأول</string>
+    <string name="grid_direction">اتجاه الشبكة</string>
     <string name="lbl_live">مباشر</string>
     <string name="lbl_sports">الرياضة</string>
     <string name="lbl_albums">الألبومات</string>
