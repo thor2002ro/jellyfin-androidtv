@@ -133,7 +133,7 @@ private fun BaseRowItem.itemSignature() = listOf(
 	baseItem?.userData?.playbackPositionTicks,
 )
 
-private fun BaseRowItem.liveTvProgramSignature() = listOf(
+internal fun BaseRowItem.liveTvProgramSignature() = listOf(
 	itemId,
 	baseItem?.name,
 	baseItem?.episodeTitle,
@@ -143,6 +143,8 @@ private fun BaseRowItem.liveTvProgramSignature() = listOf(
 	baseItem?.channelPrimaryImageTag,
 	baseItem?.startDate,
 	baseItem?.endDate,
+	baseItem?.timerId,
+	baseItem?.seriesTimerId,
 )
 
 internal fun GetItemsRequest.showsRemainingTimeBadges() = filters?.contains(ItemFilter.IS_RESUMABLE) == true
