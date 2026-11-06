@@ -22,11 +22,12 @@ object TrackSelectionResolver {
 		item: BaseItemDto,
 		mediaSource: MediaSourceInfo?,
 		videoQueueManager: VideoQueueManager,
+		requestedIndex: Int? = null,
 	): Int? {
 		val subtitleSelection = getExplicitSubtitleSelection(item, mediaSource)
 		return when {
 			subtitleSelection.hasSelection -> subtitleSelection.trackIndex
-			else -> findPreferredSubtitleStreamIndex(mediaSource, videoQueueManager)
+			else -> findPreferredSubtitleStreamIndex(mediaSource, videoQueueManager, requestedIndex)
 		}
 	}
 
@@ -144,39 +145,48 @@ object TrackSelectionResolver {
 		val audioStreams = mediaSource.mediaStreamsOfType(MediaStreamType.AUDIO)
 
 		return audioStreams.firstOrNull { stream ->
-			stream.language == language && codec != null && stream.codec == codec
+			languageCodesMatch(stream.language, language) && codec != null && stream.codec == codec
 		}?.index ?: audioStreams.firstOrNull { stream ->
-			stream.language == language
+			languageCodesMatch(stream.language, language)
 		}?.index
 	}
 
 	private fun findPreferredSubtitleStreamIndex(
 		mediaSource: MediaSourceInfo?,
 		videoQueueManager: VideoQueueManager,
+		requestedIndex: Int? = null,
 	): Int? {
-		val language = videoQueueManager.getLastPlayedSubtitleLanguageIsoCode() ?: return null
-		if (language.isEmpty()) return -1
+		val languages = videoQueueManager.getLastPlayedSubtitleLanguageIsoCodes() ?: return null
+		if (languages.firstOrNull().orEmpty().isEmpty()) return -1
 
 		val forced = videoQueueManager.getLastPlayedSubtitleForcedState()
 		val codec = videoQueueManager.getLastPlayedSubtitleCodec()
 		val title = videoQueueManager.getLastPlayedSubtitleTitle()
 		val subtitleStreams = mediaSource.mediaStreamsOfType(MediaStreamType.SUBTITLE)
 
-		return subtitleStreams.firstOrNull { stream ->
-			stream.language == language &&
-				stream.isForced == forced &&
-				codec != null &&
-				stream.codec == codec &&
-				title != null &&
-				stream.matchesTitle(title)
-		}?.index ?: subtitleStreams.firstOrNull { stream ->
-			stream.language == language &&
-				stream.isForced == forced &&
-				codec != null &&
-				stream.codec == codec
-		}?.index ?: subtitleStreams.firstOrNull { stream ->
-			stream.language == language && stream.isForced == forced
-		}?.index
+		for (language in languages) {
+			subtitleStreams.firstOrNull { stream ->
+				stream.index == requestedIndex && languageCodesMatch(stream.language, language)
+			}?.let { stream -> return stream.index }
+
+			val match = subtitleStreams.firstOrNull { stream ->
+				languageCodesMatch(stream.language, language) &&
+					stream.isForced == forced &&
+					codec != null &&
+					stream.codec == codec &&
+					title != null &&
+					stream.matchesTitle(title)
+			}?.index ?: subtitleStreams.firstOrNull { stream ->
+				languageCodesMatch(stream.language, language) &&
+					stream.isForced == forced &&
+					codec != null &&
+					stream.codec == codec
+			}?.index ?: subtitleStreams.firstOrNull { stream ->
+				languageCodesMatch(stream.language, language) && stream.isForced == forced
+			}?.index
+			if (match != null) return match
+		}
+		return null
 	}
 
 	private fun MediaSourceInfo?.findMediaStream(

@@ -3,6 +3,8 @@ package org.jellyfin.androidtv.ui.playback.overlay.action
 import org.jellyfin.androidtv.ui.playback.PlaybackController
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.getSubtitleMediaStreamCodec
+import org.jellyfin.androidtv.util.toIso2LanguageDisplayOrSelf
+import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
@@ -91,7 +93,7 @@ object StreamStatusBuilder {
 
 		appendInline(stream.codec?.uppercase())
 		stream.channels?.takeIf { it > 0 }?.let { appendInline("${it}ch") }
-		appendInline(stream.language)
+		appendInline(stream.language.toIso2LanguageDisplayOrSelf())
 		appendInline(stream.channelLayout)
 	}
 
@@ -104,7 +106,7 @@ object StreamStatusBuilder {
 			stream == null -> append("off")
 			else -> {
 				appendInline(stream.codec?.uppercase())
-				appendInline(stream.language)
+				appendInline(stream.language.toIso2LanguageDisplayOrSelf())
 				stream.deliveryMethod?.let { appendInline(it.toString()) }
 				if (stream.isExternal) appendInline("External")
 				if (stream.isForced) appendInline("Forced")
@@ -117,7 +119,8 @@ object StreamStatusBuilder {
 	}.takeIf { it.isNotBlank() }
 
 	private fun subtitleTitle(stream: MediaStream?): String? =
-		stream?.displayTitle ?: stream?.title
+		stream?.displayTitle.withoutUndeterminedLanguagePrefix()
+			?: stream?.title.withoutUndeterminedLanguagePrefix()
 
 	private fun subtitleSource(
 		stream: MediaStream?,

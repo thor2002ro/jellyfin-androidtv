@@ -28,7 +28,7 @@ class HomeFragmentLatestRow(
 			.map { item ->
 				// Create query and add it to a new row
 				val request = GetLatestMediaRequest(
-					fields = ItemRepository.browseFields,
+					fields = latestMediaFields(item.collectionType),
 					imageTypeLimit = 1,
 					parentId = item.id,
 					groupItems = true,
@@ -55,4 +55,11 @@ class HomeFragmentLatestRow(
 		// Maximum amount of items loaded for a row
 		private const val ITEM_LIMIT = 50
 	}
+}
+
+internal fun latestMediaFields(collectionType: CollectionType?) = when (collectionType) {
+	CollectionType.MOVIES,
+	CollectionType.TVSHOWS -> ItemRepository.streamBadgeFields
+
+	else -> ItemRepository.browseFields
 }
