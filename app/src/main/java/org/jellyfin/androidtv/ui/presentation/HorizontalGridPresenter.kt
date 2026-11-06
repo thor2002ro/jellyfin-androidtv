@@ -13,7 +13,7 @@ import androidx.leanback.widget.Presenter
 import androidx.recyclerview.widget.RecyclerView
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 
-class HorizontalGridPresenter : BrowseCardGridPresenter() {
+open class HorizontalGridPresenter : BrowseCardGridPresenter() {
 	class State {
 		private var boundAdapter: Any? = null
 
@@ -28,7 +28,7 @@ class HorizontalGridPresenter : BrowseCardGridPresenter() {
 		}
 	}
 
-	class ViewHolder(val gridView: HorizontalGridView) : Presenter.ViewHolder(gridView) {
+	class ViewHolder(val gridView: HorizontalGridView, root: View = gridView) : Presenter.ViewHolder(root) {
 		val itemBridgeAdapter = ItemBridgeAdapter()
 	}
 
@@ -49,12 +49,16 @@ class HorizontalGridPresenter : BrowseCardGridPresenter() {
 			setAnimateChildLayout(false)
 			setFocusDrawingOrderEnabled(true)
 		}
-		val holder = ViewHolder(grid)
+		val holder = ViewHolder(grid, createGridContainer(grid))
 		boundViewHolder = holder
 		applyConfig(holder)
 		initialize(holder)
 		return holder
 	}
+
+	protected open fun createGridContainer(grid: HorizontalGridView): View = grid
+
+	protected open fun onGridItemSelected(grid: HorizontalGridView, item: Any?) = Unit
 
 	private fun initialize(holder: ViewHolder) {
 		FocusHighlightHelper.setupBrowseItemFocusHighlight(
@@ -69,7 +73,9 @@ class HorizontalGridPresenter : BrowseCardGridPresenter() {
 				position: Int,
 				subposition: Int,
 			) {
-				val itemHolder = child as? ItemBridgeAdapter.ViewHolder ?: return
+				val itemHolder = child as? ItemBridgeAdapter.ViewHolder
+				onGridItemSelected(holder.gridView, itemHolder?.item)
+				if (itemHolder == null) return
 				val item = itemHolder.item
 				holder.gridView.tag = (item as? BaseRowItem)?.itemId
 				notifyItemSelected(itemHolder.viewHolder, position, item)
