@@ -2,21 +2,70 @@ package org.jellyfin.androidtv.ui.playback
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.playbackPlayerPreferences
 import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
+import org.jellyfin.androidtv.ui.navigation.Destination
+import org.jellyfin.androidtv.ui.player.video.VideoPlayerFragment
+import org.jellyfin.androidtv.util.createBundle
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.VideoRangeType
+import org.jellyfin.sdk.model.api.MediaType
 import java.util.UUID
 
 class PlaybackLauncherTests : FunSpec({
+	test("continuing preserves the queue and track choices while a new launch resets them") {
+		mockkStatic("org.jellyfin.androidtv.util.BundleExtensionsKt")
+		try {
+			every { createBundle(any()) } returns mockk(relaxed = true)
+			val preferences = mockk<UserPreferences>()
+			val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr = false)
+			every { preferences[playerPreferences.useExternalPlayer] } returns false
+			every { preferences[playerPreferences.playbackRewriteVideoEnabled] } returns true
+			every { preferences[playerPreferences.playbackBackend] } returns PlaybackBackend.MPV
+			val queue = VideoQueueManager()
+			val items = List(2) { BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.MOVIE, mediaType = MediaType.VIDEO) }
+			queue.setCurrentVideoQueue(items)
+			queue.setCurrentMediaPosition(1)
+			queue.setLastPlayedAudioLanguageIsoCode("fra")
+			queue.setLastPlayedAudioCodec("eac3")
+			queue.setLastPlayedSubtitleLanguageIsoCodes(listOf("deu"))
+			queue.setLastPlayedSubtitleForcedState(true)
+			val originalQueue = queue.getCurrentVideoQueue()
+			val navigation = mockk<NavigationRepository>(relaxed = true)
+			val launcher = PlaybackLauncher(mockk(relaxed = true), queue, navigation, preferences)
+
+			launcher.launchCurrentVideoQueue(mockk())
+
+			queue.getCurrentVideoQueue() shouldBeSameInstanceAs originalQueue
+			queue.getCurrentMediaPosition() shouldBe 1
+			queue.getLastPlayedAudioLanguageIsoCode() shouldBe "fr"
+			queue.getLastPlayedAudioCodec() shouldBe "eac3"
+			queue.getLastPlayedSubtitleLanguageIsoCodes() shouldBe listOf("de")
+			queue.getLastPlayedSubtitleForcedState() shouldBe true
+			verify(exactly = 1) { navigation.navigate(match { it is Destination.Fragment && it.fragment == VideoPlayerFragment::class }, true) }
+
+			launcher.launch(mockk(), items)
+
+			queue.getCurrentMediaPosition() shouldBe 0
+			queue.getLastPlayedAudioLanguageIsoCode() shouldBe null
+			queue.getLastPlayedSubtitleForcedState() shouldBe false
+		} finally {
+			unmockkStatic("org.jellyfin.androidtv.util.BundleExtensionsKt")
+		}
+	}
+
 	test("HDR player selection follows the video player by default") {
 		val userPreferences = mockk<UserPreferences>()
 		val normalPreferences = UserPreferences.playbackPlayerPreferences(hdr = false)
