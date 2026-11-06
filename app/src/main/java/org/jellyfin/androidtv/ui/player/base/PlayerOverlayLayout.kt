@@ -231,12 +231,18 @@ fun PlayerOverlayLayout(
 					)
 					.overscan()
 					.focusProperties {
-						// Hide overlay when focus is moved out by going up
 						onExit = {
+							// Up closes the overlay; horizontal exits stay trapped so held navigation
+							// cannot bounce focus through the player root and restart button feedback.
 							if (requestedFocusDirection == FocusDirection.Up) {
 								Timber.i("Hide reason: focus moved up")
 								visibilityState.hide()
-								cancelFocusChange()
+							}
+
+							when (requestedFocusDirection) {
+								FocusDirection.Left,
+								FocusDirection.Right,
+								FocusDirection.Up -> cancelFocusChange()
 							}
 						}
 					},
