@@ -8,6 +8,7 @@ import static org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenterK
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -19,6 +20,7 @@ import android.view.ViewParent;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
+import android.widget.RelativeLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -65,6 +67,7 @@ import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter;
 import org.jellyfin.androidtv.ui.presentation.ComposeVerticalGridPresenter;
 import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter;
 import org.jellyfin.androidtv.ui.presentation.KaleidescapeStylePresenter;
+import org.jellyfin.androidtv.ui.itemhandling.BaseItemDtoBaseRowItem;
 import org.jellyfin.androidtv.util.CoroutineUtils;
 import org.jellyfin.androidtv.util.ImageHelper;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
@@ -292,6 +295,14 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         binding = HorizontalGridBrowseBinding.inflate(inflater, container, false);
+        binding.counter.addOnLayoutChangeListener((counter, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            configureFooterRotation(counter, GridDirection.VERTICAL.equals(getNavigationControlsDirection()), Utils.convertDpToPixel(requireContext(), 8));
+            updateVerticalStatusBounds();
+        });
+        binding.statusText.addOnLayoutChangeListener((status, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                configureFooterRotation(status, GridDirection.VERTICAL.equals(getNavigationControlsDirection()), 0));
+        binding.getRoot().addOnLayoutChangeListener((root, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                updateVerticalStatusBounds());
         return binding.getRoot();
     }
 
@@ -317,17 +328,39 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private void configureNavigationControls() {
         GridDirection controlsDirection = getNavigationControlsDirection();
         boolean vertical = GridDirection.VERTICAL.equals(controlsDirection);
+        ViewGroup.MarginLayoutParams counterParams = (ViewGroup.MarginLayoutParams) binding.counter.getLayoutParams();
+        counterParams.bottomMargin = vertical ? Utils.convertDpToPixel(requireContext(), 24) : 0;
+        binding.counter.setLayoutParams(counterParams);
+        configureFooterRotation(binding.counter, vertical, Utils.convertDpToPixel(requireContext(), 8));
+        configureFooterRotation(binding.statusText, vertical, 0);
         binding.toolBar.setVisibility(vertical ? View.GONE : View.VISIBLE);
         binding.verticalToolBar.setVisibility(vertical ? View.VISIBLE : View.GONE);
         binding.alphaPickerVertical.setVertical(true);
         binding.alphaPickerHorizontal.setVisibility(vertical ? View.GONE : View.VISIBLE);
         binding.alphaPickerVertical.setVisibility(vertical ? View.VISIBLE : View.GONE);
         mActiveToolBar = vertical ? binding.verticalToolBar : binding.toolBar;
+        if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) {
+            RelativeLayout.LayoutParams statusParams = (RelativeLayout.LayoutParams) binding.statusText.getLayoutParams();
+            statusParams.removeRule(RelativeLayout.ALIGN_PARENT_END);
+            statusParams.bottomMargin = 0;
+            binding.statusText.setMaxWidth(Utils.convertDpToPixel(requireContext(), 360));
+        }
         KaleidescapeStylePresenter.configureHost(binding, mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE);
         updateNavigationControlsSpacing();
         DisplayMetrics display = getResources().getDisplayMetrics();
-        mGridHeight = Math.round(display.heightPixels / display.density -
-                (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE ? KaleidescapeStylePresenter.FOOTER_HEIGHT_DP : 130.6f));
+        ViewGroup.MarginLayoutParams gridParams = (ViewGroup.MarginLayoutParams) binding.rowsFragment.getLayoutParams();
+        int headerHeight = 0;
+        if (mViewStyle != LibraryViewStyle.KALEIDESCAPE_STYLE) {
+            binding.title.measure(View.MeasureSpec.makeMeasureSpec(display.widthPixels, View.MeasureSpec.AT_MOST),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            ViewGroup.MarginLayoutParams titleParams = (ViewGroup.MarginLayoutParams) binding.title.getLayoutParams();
+            ViewGroup.MarginLayoutParams infoParams = (ViewGroup.MarginLayoutParams) binding.infoRow.getLayoutParams();
+            headerHeight = titleParams.topMargin + binding.title.getMeasuredHeight() +
+                    binding.genres.getLayoutParams().height + infoParams.topMargin + infoParams.height;
+        }
+        mGridHeight = mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE ?
+                Math.round(display.heightPixels / display.density - KaleidescapeStylePresenter.FOOTER_HEIGHT_DP) :
+                pixelsToDp(display.heightPixels - headerHeight - gridParams.topMargin - gridParams.bottomMargin, display.density);
         setAutoCardGridValues();
 
         AlphaPickerView picker = vertical ? binding.alphaPickerVertical : binding.alphaPickerHorizontal;
@@ -358,25 +391,94 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private void updateNavigationControlsSpacing() {
         if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) return;
         GridDirection controlsDirection = getNavigationControlsDirection();
+        ViewGroup.MarginLayoutParams titleParams = (ViewGroup.MarginLayoutParams) binding.title.getLayoutParams();
+        titleParams.setMarginStart(GridDirection.HORIZONTAL.equals(controlsDirection) ?
+                Utils.convertDpToPixel(requireContext(), 12) : Math.round(50 * getResources().getDisplayMetrics().scaledDensity));
+        titleParams.topMargin = Utils.convertDpToPixel(requireContext(), GridDirection.HORIZONTAL.equals(controlsDirection) ? 4 : 8);
+        binding.title.setLayoutParams(titleParams);
+        int headerPaddingStart = GridDirection.HORIZONTAL.equals(controlsDirection) ? Utils.convertDpToPixel(requireContext(), 8) : 0;
+        for (View headerView : new View[]{binding.title, binding.genres, binding.infoRow}) {
+            headerView.setPaddingRelative(headerPaddingStart, headerView.getPaddingTop(), headerView.getPaddingEnd(), headerView.getPaddingBottom());
+        }
+        ViewGroup.MarginLayoutParams infoParams = (ViewGroup.MarginLayoutParams) binding.infoRow.getLayoutParams();
+        infoParams.topMargin = Utils.convertDpToPixel(requireContext(), GridDirection.HORIZONTAL.equals(controlsDirection) ? 4 : 2);
+        binding.infoRow.setLayoutParams(infoParams);
+        ViewGroup.MarginLayoutParams toolbarParams = (ViewGroup.MarginLayoutParams) binding.toolBar.getLayoutParams();
+        toolbarParams.topMargin = Utils.convertDpToPixel(requireContext(), GridDirection.HORIZONTAL.equals(controlsDirection) ? 14 : 12);
+        binding.toolBar.setLayoutParams(toolbarParams);
+        ViewGroup.MarginLayoutParams verticalToolbarParams = (ViewGroup.MarginLayoutParams) binding.verticalToolBar.getLayoutParams();
+        verticalToolbarParams.width = Utils.convertDpToPixel(requireContext(), 26);
+        verticalToolbarParams.setMarginEnd(0);
+        binding.verticalToolBar.setLayoutParams(verticalToolbarParams);
+        ViewGroup.LayoutParams verticalAlphabetParams = binding.alphaPickerVertical.getLayoutParams();
+        verticalAlphabetParams.width = Utils.convertDpToPixel(requireContext(), 18);
+        binding.alphaPickerVertical.setLayoutParams(verticalAlphabetParams);
+        ViewGroup.MarginLayoutParams counterParams = (ViewGroup.MarginLayoutParams) binding.counter.getLayoutParams();
+        counterParams.setMarginEnd(Utils.convertDpToPixel(requireContext(), GridDirection.VERTICAL.equals(controlsDirection) ? 2 : 12));
+        binding.counter.setLayoutParams(counterParams);
+        ViewGroup.LayoutParams alphabetParams = binding.alphaPickerHorizontal.getLayoutParams();
+        alphabetParams.height = Utils.convertDpToPixel(requireContext(), 18);
+        binding.alphaPickerHorizontal.setLayoutParams(alphabetParams);
+        RelativeLayout.LayoutParams statusParams = (RelativeLayout.LayoutParams) binding.statusText.getLayoutParams();
+        if (GridDirection.HORIZONTAL.equals(controlsDirection)) {
+            statusParams.removeRule(RelativeLayout.ALIGN_BASELINE);
+            statusParams.removeRule(RelativeLayout.ALIGN_PARENT_END);
+            statusParams.addRule(RelativeLayout.ALIGN_START, binding.title.getId());
+            statusParams.addRule(RelativeLayout.ABOVE, binding.alphaPickerHorizontal.getId());
+            statusParams.setMarginEnd(0);
+            statusParams.bottomMargin = 0;
+            binding.statusText.setMaxWidth(Utils.convertDpToPixel(requireContext(), 360));
+        } else {
+            statusParams.removeRule(RelativeLayout.ALIGN_BASELINE);
+            statusParams.removeRule(RelativeLayout.ALIGN_START);
+            statusParams.addRule(RelativeLayout.ALIGN_PARENT_END);
+            statusParams.addRule(RelativeLayout.ABOVE, binding.counter.getId());
+            statusParams.setMarginEnd(Utils.convertDpToPixel(requireContext(), 2));
+        }
+        binding.statusText.setLayoutParams(statusParams);
         int gridHostStartMargin = Utils.convertDpToPixel(requireContext(), getGridHostSideMarginDp(controlsDirection));
         int gridHostEndMargin = Utils.convertDpToPixel(requireContext(), getGridHostEndMarginDp(controlsDirection));
         ViewGroup.MarginLayoutParams gridParams = (ViewGroup.MarginLayoutParams) binding.rowsFragment.getLayoutParams();
         gridParams.setMarginStart(gridHostStartMargin);
         gridParams.setMarginEnd(gridHostEndMargin);
+        gridParams.topMargin = Utils.convertDpToPixel(requireContext(), 6);
         gridParams.bottomMargin = Utils.convertDpToPixel(requireContext(), getGridHostBottomMarginDp(controlsDirection));
         binding.rowsFragment.setLayoutParams(gridParams);
     }
 
+    private void updateVerticalStatusBounds() {
+        if (binding == null || !GridDirection.VERTICAL.equals(getNavigationControlsDirection())) return;
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) binding.statusText.getLayoutParams();
+        int gap = Utils.convertDpToPixel(requireContext(), 8);
+        int bottomMargin = Math.max(0, binding.counter.getWidth() - binding.counter.getHeight()) + gap;
+        if (params.bottomMargin != bottomMargin) {
+            params.bottomMargin = bottomMargin;
+            binding.statusText.setLayoutParams(params);
+        }
+        int width = getVerticalStatusWidth(binding.verticalToolBar.getBottom(), binding.counter.getBottom(), binding.counter.getWidth(), gap);
+        if (binding.statusText.getMaxWidth() != width) binding.statusText.setMaxWidth(width);
+    }
+
+    static int getVerticalStatusWidth(int toolbarBottom, int counterBottom, int counterWidth, int gap) {
+        return Math.max(0, counterBottom - counterWidth - toolbarBottom - gap * 2);
+    }
+
+    static void configureFooterRotation(View counter, boolean vertical, int rise) {
+        counter.setRotation(vertical ? 90f : 0f);
+        counter.setPivotX(counter.getWidth());
+        counter.setPivotY(0f);
+        counter.setTranslationY(vertical ? counter.getHeight() - rise : 0f);
+    }
 	static int getGridHostSideMarginDp(GridDirection direction) {
-		return GridDirection.VERTICAL.equals(direction) ? 20 : 0;
+		return GridDirection.VERTICAL.equals(direction) ? 14 : 0;
 	}
 
 	static int getGridHostEndMarginDp(GridDirection direction) {
-		return GridDirection.VERTICAL.equals(direction) ? 28 : 0;
+		return GridDirection.VERTICAL.equals(direction) ? 18 : 0;
 	}
 
 	static int getGridHostBottomMarginDp(GridDirection direction) {
-		return GridDirection.VERTICAL.equals(direction) ? 24 : 35;
+		return GridDirection.VERTICAL.equals(direction) ? 0 : 32;
 	}
 
     static int pixelsToDp(int pixels, float density) {
@@ -706,9 +808,15 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE) return;
         if (item != null) {
             binding.title.setText(item.getFullName(requireContext()));
-            InfoLayoutHelper.addInfoRow(requireContext(), item.getBaseItem(), binding.infoRow, true);
+            BaseItemDto baseItem = item.getBaseItem();
+            binding.genres.setText(baseItem != null && baseItem.getGenres() != null ?
+                    TextUtils.join(" / ", baseItem.getGenres()) : "");
+            BaseItemDto badgeItem = item instanceof BaseItemDtoBaseRowItem ?
+                    ((BaseItemDtoBaseRowItem) item).getStreamBadgeItem() : baseItem;
+            InfoLayoutHelper.addInfoRow(requireContext(), badgeItem, binding.infoRow, true);
         } else {
             binding.title.setText("");
+            binding.genres.setText("");
             binding.infoRow.removeAllViews();
         }
     }
@@ -1218,6 +1326,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             mAdapter.Retrieve();
         } else {
             applyPendingSelectedPosition();
+            setStatusText(mFolder.getName());
+            updateCounter(mSelectedPosition + 1);
             keepGridFocused();
         }
         updateAlphabetPickerVisibility();
@@ -1437,6 +1547,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                                    RowPresenter.ViewHolder rowViewHolder, Row row) {
             mHandler.removeCallbacks(mDelayedSetItem);
             mHandler.removeCallbacks(mDelayedSetBackground);
+            binding.genres.setText("");
+            binding.infoRow.removeAllViews();
             if (!(item instanceof BaseRowItem)) {
                 mCurrentItem = null;
                 binding.title.setText(mainTitle);
@@ -1445,7 +1557,6 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             } else {
                 mCurrentItem = (BaseRowItem) item;
                 binding.title.setText(mCurrentItem.getName(requireContext()));
-                binding.infoRow.removeAllViews();
                 if (mViewStyle != LibraryViewStyle.KALEIDESCAPE_STYLE) {
                     mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
                     mHandler.postDelayed(mDelayedSetBackground, BACKGROUND_UPDATE_DELAY);
