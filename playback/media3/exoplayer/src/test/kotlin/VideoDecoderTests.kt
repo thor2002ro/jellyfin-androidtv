@@ -87,6 +87,20 @@ class VideoDecoderTests : FunSpec({
 		) shouldBe VideoDecoder.SOFTWARE
 	}
 
+	test("active Dolby Vision routes use hardware video decoding only") {
+		VideoDecoder.HARDWARE.forDoviPlayback(hasDoviDecision = true) shouldBe VideoDecoder.HARDWARE
+		VideoDecoder.SOFTWARE.forDoviPlayback(hasDoviDecision = true) shouldBe VideoDecoder.HARDWARE
+		VideoDecoder.FFMPEG.forDoviPlayback(hasDoviDecision = true) shouldBe VideoDecoder.HARDWARE
+		VideoDecoder.SOFTWARE.forDoviPlayback(hasDoviDecision = false) shouldBe VideoDecoder.SOFTWARE
+	}
+
+	test("active Dolby Vision routes request server recovery before a software fallback") {
+		shouldRecoverDoviBeforeDecoderFallback(true, VideoDecoder.SOFTWARE) shouldBe true
+		shouldRecoverDoviBeforeDecoderFallback(true, VideoDecoder.FFMPEG) shouldBe true
+		shouldRecoverDoviBeforeDecoderFallback(true, VideoDecoder.HARDWARE) shouldBe false
+		shouldRecoverDoviBeforeDecoderFallback(false, VideoDecoder.SOFTWARE) shouldBe false
+	}
+
 	test("Live TV starts on target buffer or timeout") {
 		shouldStartLivePlayback(true, 5_000, 5_000, false) shouldBe true
 		shouldStartLivePlayback(true, 4_999, 5_000, false) shouldBe false

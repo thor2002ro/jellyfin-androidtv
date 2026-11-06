@@ -17,7 +17,6 @@ import io.github.thor2002ro.libdovi.DoviTransformObservation
 
 internal data class DoviTransformContext(
 	val request: DoviTransformRequest,
-	val inputPresentation: DoviPresentation,
 	val sourceBasePresentation: DoviPresentation,
 	val dvLevel: Int? = null,
 	val pairEnhancementTrack: Boolean,
