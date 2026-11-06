@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.browsing
 
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -8,6 +9,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.RelativeLayout
 import androidx.fragment.app.Fragment
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
@@ -24,6 +26,7 @@ import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.databinding.HorizontalGridBrowseBinding
 import org.jellyfin.androidtv.preference.LibraryPreferences
 import org.jellyfin.androidtv.preference.PreferencesRepository
+import org.jellyfin.androidtv.ui.browsing.composable.inforow.BaseItemInfoRowView
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
@@ -33,6 +36,7 @@ import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter
 import org.jellyfin.androidtv.util.InfoLayoutHelper
 import org.jellyfin.androidtv.util.KeyProcessor
 import org.jellyfin.androidtv.util.PlaybackHelper
+import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.androidtv.util.isPageForward
 import org.jellyfin.androidtv.util.isPageKey
 import org.jellyfin.sdk.api.client.ApiClient
@@ -88,6 +92,23 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		savedInstanceState: Bundle?
 	): View {
 		val viewBinding = HorizontalGridBrowseBinding.inflate(inflater, container, false)
+		// Keep the selected program heading compact above the grid.
+		viewBinding.title.textSize = 20f
+		viewBinding.title.typeface = Typeface.DEFAULT
+		viewBinding.title.layoutParams = (viewBinding.title.layoutParams as ViewGroup.MarginLayoutParams).apply {
+			marginStart = dp(12)
+			topMargin = dp(4)
+		}
+		listOf(viewBinding.title, viewBinding.genres, viewBinding.infoRow).forEach { header ->
+			header.setPaddingRelative(dp(8), header.paddingTop, header.paddingEnd, header.paddingBottom)
+		}
+		viewBinding.infoRow.layoutParams = (viewBinding.infoRow.layoutParams as ViewGroup.MarginLayoutParams).apply {
+			topMargin = dp(4)
+		}
+		// Reserve the footer in the layout itself, including room for the bottom row's focus zoom.
+		viewBinding.rowsFragment.layoutParams = (viewBinding.rowsFragment.layoutParams as RelativeLayout.LayoutParams).apply {
+			addRule(RelativeLayout.ABOVE, viewBinding.alphaPickerHorizontal.id)
+		}
 		binding = viewBinding
 		return viewBinding.root
 	}
@@ -268,12 +289,20 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		val viewBinding = binding ?: return@OnItemViewSelectedListener
 		if (rowItem == null) {
 			viewBinding.title.text = folder?.name ?: getString(R.string.channels)
+			viewBinding.genres.text = ""
 			viewBinding.infoRow.removeAllViews()
 			backgroundService.clearBackgrounds()
 			return@OnItemViewSelectedListener
 		}
 
 		viewBinding.title.text = rowItem.getName(requireContext())
+		val program = rowItem.detailBaseItem
+		val start = program?.startDate
+		val end = program?.endDate
+		val formatter = requireContext().getTimeFormatter()
+		viewBinding.genres.text = if (start != null && end != null) {
+			"${formatter.format(start)}–${formatter.format(end)}"
+		} else ""
 		viewBinding.infoRow.removeAllViews()
 		handler.postAtTime({
 			if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@postAtTime
@@ -282,6 +311,11 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			binding?.infoRow?.let { infoRow ->
 				infoRow.removeAllViews()
 				InfoLayoutHelper.addInfoRow(requireContext(), selectedItem.detailBaseItem, infoRow, true)
+				(infoRow.getChildAt(0) as? BaseItemInfoRowView)?.apply {
+					contentScale = 14f / 16f
+					// The program interval is already displayed directly below the title.
+					includeProgramTime = false
+				}
 			}
 		}, DELAYED_ITEM_TOKEN, SystemClock.uptimeMillis() + VIEW_SELECT_UPDATE_DELAY_MS)
 	}
@@ -429,8 +463,8 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		val rows = rowsForPosterSize(libraryPreferences?.get(LibraryPreferences.posterSize) ?: PosterSize.MED)
 		val gridWidth = viewBinding.rowsFragment.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
 		val fallbackHeight = resources.displayMetrics.heightPixels - dp(FALLBACK_VERTICAL_RESERVED_SPACE_DP)
-		val rawGridHeight = viewBinding.rowsFragment.height.takeIf { it > 0 } ?: fallbackHeight
-		val gridHeight = (rawGridHeight - dp(BOTTOM_COUNTER_CLEARANCE_DP)).coerceAtLeast(rows * dp(MIN_CARD_HEIGHT_DP))
+		val gridHeight = (viewBinding.rowsFragment.height.takeIf { it > 0 } ?: fallbackHeight)
+			.coerceAtLeast(rows * dp(MIN_CARD_HEIGHT_DP))
 		val verticalSpacing = dp(ROW_SPACING_DP)
 
 		val focusScale = resources.getFraction(R.fraction.card_scale_focus, 1, 1).toDouble()
@@ -495,7 +529,6 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		const val CHANNEL_REFRESH_DELAY_MS = 500L
 		const val VIEW_SELECT_UPDATE_DELAY_MS = 250L
 		const val FALLBACK_VERTICAL_RESERVED_SPACE_DP = 131
-		const val BOTTOM_COUNTER_CLEARANCE_DP = 32
 		const val MIN_CARD_HEIGHT_DP = 72
 		const val ROW_SPACING_DP = 6
 		const val GRID_HORIZONTAL_PADDING_DP = 44
