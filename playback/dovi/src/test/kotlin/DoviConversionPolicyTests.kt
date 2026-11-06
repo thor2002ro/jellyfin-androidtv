@@ -5,6 +5,7 @@ import io.github.thor2002ro.libdovi.DoviFraming
 import io.github.thor2002ro.libdovi.DoviInspection
 import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviTransformObservation
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import io.github.thor2002ro.libdovi.DoviRepair
 import io.github.thor2002ro.libdovi.DoviTarget
 import io.kotest.core.spec.style.FunSpec
@@ -175,6 +176,93 @@ class DoviConversionPolicyTests : FunSpec({
 			).route shouldBe DoviRoute.SourceBase(
 				io.github.thor2002ro.libdovi.DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
 			)
+		}
+	}
+
+	test("Auto selects fast HDR base fallback only for Media3 Profile 8.1 PQ bases") {
+		listOf(
+			DoviPresentation.HDR10 to DoviDeviceCapabilities(supportsHdr10 = true),
+			DoviPresentation.HDR10_PLUS to DoviDeviceCapabilities(supportsHdr10Plus = true),
+		).forEach { (base, device) ->
+			val decision = decide(
+				source = DoviSource(DoviPresentation.PROFILE_8_1, base),
+				device = device,
+			)
+
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe
+				DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+		}
+	}
+
+	test("Fast HDR forces an eligible Media3 Profile 8.1 source base") {
+		val decision = decide(
+			mode = DoviCompatibilityMode.FAST_HDR,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+			device = DoviDeviceCapabilities(supportsProfile8 = true, supportsHdr10 = true),
+		)
+
+		(decision.route as DoviRoute.SourceBase).strategy shouldBe
+			DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+	}
+
+	test("Fast HDR behaves exactly like Auto with MPV") {
+		listOf(
+			DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10) to
+				DoviDeviceCapabilities(supportsProfile8 = true, supportsHdr10 = true),
+			DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS) to
+				DoviDeviceCapabilities(supportsHdr10Plus = true),
+			DoviSource(DoviPresentation.PROFILE_7_FEL, DoviPresentation.HDR10) to profile8Device,
+		).forEach { (source, device) ->
+			decide(
+				mode = DoviCompatibilityMode.FAST_HDR,
+				backend = DoviPlaybackBackend.MPV,
+				source = source,
+				device = device,
+			) shouldBe decide(
+				mode = DoviCompatibilityMode.AUTO,
+				backend = DoviPlaybackBackend.MPV,
+				source = source,
+				device = device,
+			)
+		}
+	}
+
+	test("Auto keeps non-eligible source-base conversions on libdovi") {
+		val profile7 = decide(
+			source = DoviSource(DoviPresentation.PROFILE_7_FEL, DoviPresentation.HDR10),
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		)
+		val hlg = decide(
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HLG),
+			device = DoviDeviceCapabilities(supportsHlg = true),
+		)
+		val mpv = decide(
+			backend = DoviPlaybackBackend.MPV,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS),
+			device = DoviDeviceCapabilities(supportsHdr10Plus = true),
+		)
+
+		listOf(profile7, hlg, mpv).forEach { decision ->
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviTransformStrategy.LIBDOVI
+		}
+	}
+
+	test("Always and Compatibility keep source-base conversions on libdovi") {
+		val always = decide(
+			mode = DoviCompatibilityMode.ALWAYS,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		)
+		val compatibility = decide(
+			mode = DoviCompatibilityMode.COMPATIBILITY,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS),
+			device = DoviDeviceCapabilities(supportsHdr10Plus = true),
+			workarounds = DoviWorkarounds(repairActiveArea = true),
+			capabilities = allNativeCapabilities - DoviCapability.REPAIR_ZERO_ACTIVE_AREA,
+		)
+
+		listOf(always, compatibility).forEach { decision ->
+			(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviTransformStrategy.LIBDOVI
 		}
 	}
 

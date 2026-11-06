@@ -18,6 +18,8 @@ import androidx.media3.exoplayer.hls.HlsMediaChunkExtractor
 import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviStatus
 import io.github.thor2002ro.libdovi.DoviTarget
+import io.github.thor2002ro.libdovi.DoviTransformSessionState
+import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import java.util.TreeMap
 
 private data class Mp4TrackIdentity(val trackId: Int, val baseTrackId: Int)
@@ -300,6 +302,8 @@ internal class DoviExtractorOutput(
 		request = { context()?.request },
 		sourceBasePresentation = { context()?.sourceBasePresentation ?: DoviPresentation.UNKNOWN },
 		dvLevel = { context()?.dvLevel },
+		transformStrategy = { context()?.transformStrategy ?: DoviTransformStrategy.LIBDOVI },
+		transformState = context()?.transformState ?: DoviTransformSessionState(),
 		transformer = transformer,
 		dispatcher = sampleDispatcher,
 		onTransformObserved = { observation -> context()?.onTransformObserved?.invoke(observation) },
