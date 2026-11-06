@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.home
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import androidx.core.view.doOnLayout
 import androidx.leanback.app.RowsSupportFragment
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.OnItemViewClickedListener
@@ -234,6 +235,18 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onResume() {
 		super.onResume()
+
+		// Returning from Android Home can leave the Leanback view at 0x0 inside
+		// an already-sized Compose container. Request a native layout after resume
+		// so the retained rows are measured again without recreating or reloading them.
+		view?.post {
+			view?.let { rowsView ->
+				rowsView.requestLayout()
+				rowsView.doOnLayout {
+					Timber.i("Home rows layout after resume: %dx%d rows=%d", it.width, it.height, adapter.size())
+				}
+			}
+		}
 
 		//React to deletion
 		val deletedItem = currentItem
