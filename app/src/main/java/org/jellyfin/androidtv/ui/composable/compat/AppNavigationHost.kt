@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.browsing.DestinationFragmentView
+import org.jellyfin.androidtv.ui.navigation.Destination
 import org.jellyfin.androidtv.ui.navigation.NavigationAction
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
@@ -37,7 +38,9 @@ fun AppNavigationHost(
 	modifier: Modifier = Modifier,
 	navigationRepository: NavigationRepository = koinInject(),
 ) {
-	val factory = remember { AppNavigationHostViewFactory() }
+	val factory = remember(navigationRepository) {
+		AppNavigationHostViewFactory(navigationRepository::synchronizeCurrentDestination)
+	}
 	val lifecycle = LocalLifecycleOwner.current.lifecycle
 	val activity = LocalActivity.current
 	val coroutineScope = rememberCoroutineScope()
@@ -90,7 +93,9 @@ fun AppNavigationHost(
 	}
 }
 
-private class AppNavigationHostViewFactory : (Context) -> View {
+private class AppNavigationHostViewFactory(
+	private val onDestinationChanged: (Destination.Fragment) -> Unit,
+) : (Context) -> View {
 	private var _view: DestinationFragmentView? = null
 
 	val view get() = requireNotNull(_view)
@@ -98,6 +103,7 @@ private class AppNavigationHostViewFactory : (Context) -> View {
 	override operator fun invoke(
 		context: Context
 	): View = DestinationFragmentView(context).also { view ->
+		view.onDestinationChanged = onDestinationChanged
 		_view = view
 	}
 }

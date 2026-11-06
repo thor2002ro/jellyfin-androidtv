@@ -14,10 +14,12 @@ import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.ui.navigation.Destination
 import org.jellyfin.androidtv.ui.navigation.NavigationAction
 import org.jellyfin.androidtv.util.createBundle
 import timber.log.Timber
 import java.util.Stack
+import kotlin.jvm.kotlin
 
 private class HistoryEntry(
 	val name: Class<out Fragment>,
@@ -69,6 +71,7 @@ class DestinationFragmentView @JvmOverloads constructor(
 	}
 
 	private val history = Stack<HistoryEntry>()
+	var onDestinationChanged: ((Destination.Fragment) -> Unit)? = null
 
 	fun navigate(action: NavigationAction.NavigateFragment) {
 		val entry = HistoryEntry(action.destination.fragment.java, action.destination.arguments)
@@ -162,6 +165,8 @@ class DestinationFragmentView @JvmOverloads constructor(
 		} else {
 			transaction.commit()
 		}
+
+		onDestinationChanged?.invoke(Destination.Fragment(entry.name.kotlin, entry.arguments))
 	}
 
 	override fun onSaveInstanceState(): Parcelable {
