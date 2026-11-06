@@ -72,6 +72,7 @@ private fun preferences(
 	dts: Boolean = true,
 	truehd: Boolean = true,
 ) = mockk<UserPreferences> {
+	every { this@mockk[UserPreferences.audioNightMode] } returns false
 	every { this@mockk[UserPreferences.bitstreamAc3] } returns if (ac3) BitstreamAudioMode.AUTO else BitstreamAudioMode.DISABLE
 	every { this@mockk[UserPreferences.bitstreamEac3] } returns if (eac3) BitstreamAudioMode.AUTO else BitstreamAudioMode.DISABLE
 	every { this@mockk[UserPreferences.bitstreamDts] } returns if (dts) BitstreamAudioMode.AUTO else BitstreamAudioMode.DISABLE

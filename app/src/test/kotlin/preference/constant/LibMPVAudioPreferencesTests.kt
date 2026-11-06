@@ -239,6 +239,7 @@ private fun preferences(
 	audioPreset: LibMPVAudioPresetOption = LibMPVAudioPresetOption.OFF,
 	convertAudioToAc3: Boolean = false,
 ) = mockk<UserPreferences> {
+	every { this@mockk[UserPreferences.audioNightMode] } returns false
 	every { this@mockk[UserPreferences.surroundVolumeBoost] } returns UserPreferences.surroundVolumeBoost.defaultValue
 	every { this@mockk[UserPreferences.mpvConvertAudioToAc3] } returns convertAudioToAc3
 	every { this@mockk[UserPreferences.audioBehaviour] } returns audioBehavior
