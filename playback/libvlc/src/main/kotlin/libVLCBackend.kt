@@ -399,14 +399,15 @@ class LibVLCBackend(
 		released = true
 	}
 
-	override fun seekTo(position: Duration) {
+	override fun seekTo(position: Duration): Boolean {
 		val previous = getPositionInfo()
 		if (player.setTime(position.inWholeMilliseconds) < 0) {
 			Timber.w("libVLC rejected seek to %d ms", position.inWholeMilliseconds)
-			return
+			return false
 		}
 		timedEvents.advance(previous.active, position, previous.duration, natural = false)
 		lastTickPosition = position
+		return true
 	}
 
 	override fun setScrubbing(scrubbing: Boolean) = Unit
