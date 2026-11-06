@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.playback;
 
 import static org.koin.java.KoinJavaComponent.get;
 import static org.koin.java.KoinJavaComponent.inject;
+import static org.jellyfin.androidtv.preference.ExoPlayerUserPreferencesKt.getPreferExoPlayerFfmpeg;
 
 import android.app.AlertDialog;
 import android.content.DialogInterface;
@@ -645,7 +646,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         DeviceProfile internalProfile = DeviceProfileKt.createDeviceProfile(
                 mFragment.getContext(),
                 userPreferences.getValue(),
-                get(ServerVersion.class)
+                get(ServerVersion.class),
+                true,
+                userPreferences.getValue().get(getPreferExoPlayerFfmpeg(UserPreferences.Companion))
         );
         internalOptions.setProfile(internalProfile);
         return internalOptions;
