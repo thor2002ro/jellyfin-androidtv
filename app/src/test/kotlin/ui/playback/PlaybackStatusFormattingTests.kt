@@ -19,6 +19,7 @@ class PlaybackStatusFormattingTests : FunSpec({
 		1_500_000.formatBitrate() shouldBe "1.5 Mbps"
 		"h264".formatCodec() shouldBe "H264"
 		"Text/X-SSA".isAssSubtitleCodec() shouldBe true
+		"subrip".isAssSubtitleCodec() shouldBe false
 		MediaConversionMethod.Remux.displayName() shouldBe "Direct stream"
 	}
 })
