@@ -116,7 +116,7 @@ import org.jellyfin.playback.media3.exoplayer.support.getPlaySupportReport
 import org.jellyfin.playback.media3.exoplayer.support.toFormats
 import org.jellyfin.playback.exoplayer.dovi.DoviExtractorsFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviHlsExtractorFactory
-import org.jellyfin.playback.exoplayer.dovi.DoviHlsPlaylistParserFactory
+import org.jellyfin.playback.exoplayer.dovi.HlsVideoCopyPlaylistParserFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviMediaSourceFactory
 import org.jellyfin.playback.exoplayer.dovi.DoviSampleTransformationException
 import org.jellyfin.playback.exoplayer.dovi.DoviTransformContext
@@ -1215,14 +1215,24 @@ class ExoPlayerBackend(
 						DoviExtractorsFactory(baseExtractors, doviContext),
 					).configureSubtitles(subtitleParserFactory)
 				},
-				hlsFactory = { doviContext ->
+				hlsFactory = { doviContext, mediaItem ->
+					val tag = mediaItem.playbackMediaItemTag
+					val requiresDoviVideoCopy = doviContext != null ||
+						tag?.queueEntry?.doviDecision?.requiresHardwareVideoDecoder == true
+					val protectsVideoCopy = requiresDoviVideoCopy ||
+						tag?.queueEntry?.mediaStream?.conversionMethod == MediaConversionMethod.Remux
 					HlsMediaSource.Factory(dataSourceFactory)
 						.setExtractorFactory(
-							DoviHlsExtractorFactory(DefaultHlsExtractorFactory(), doviContext)
+							DoviHlsExtractorFactory(
+								DefaultHlsExtractorFactory(),
+								doviContext,
+							)
 						)
 						.setSubtitleParserFactory(subtitleParserFactory)
 						.apply {
-							if (doviContext != null) setPlaylistParserFactory(DoviHlsPlaylistParserFactory())
+							if (protectsVideoCopy) {
+								setPlaylistParserFactory(HlsVideoCopyPlaylistParserFactory(required = requiresDoviVideoCopy))
+							}
 							@Suppress("DEPRECATION")
 							experimentalParseSubtitlesDuringExtraction(
 								exoPlayerOptions.parseSubtitlesDuringExtraction && !exoPlayerOptions.enableLibass
@@ -2128,6 +2138,7 @@ class ExoPlayerBackend(
 			videoHdrMode = videoInputFormat.hdrMode(),
 			audioDecoderName = audioDecoderName,
 			audioDecoderType = audioDecoderType,
+			audioCodec = audioInputFormat?.sampleMimeType,
 			audioPassthroughSupported = audioPassthroughSupported,
 			bufferedBytes = bufferDetails,
 			subtitleExtractor = subtitleExtractorDebug(),
