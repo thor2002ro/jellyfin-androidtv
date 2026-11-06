@@ -235,10 +235,11 @@ object TranscodingStatusFormatter {
 		.joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 }
 
-internal fun MediaConversionMethod.displayName() = when (this) {
+internal fun MediaConversionMethod.displayName(isVideoDirect: Boolean? = null) = when (this) {
 	MediaConversionMethod.None -> "Direct play"
 	MediaConversionMethod.Remux -> "Direct stream"
-	MediaConversionMethod.Transcode -> "Transcoding"
+	// Audio conversion still uses the server's Transcode path when video is copied.
+	MediaConversionMethod.Transcode -> if (isVideoDirect == true) "Direct stream" else "Transcoding"
 }
 
 internal fun Int.formatBitrate(): String = when {
