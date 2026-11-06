@@ -31,7 +31,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -246,13 +245,11 @@ class ComposeBrowseListPresenter : Presenter() {
 		val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
 		val restoreFocusRequester = remember { FocusRequester() }
 		val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
-		var focusedPosition by remember { mutableIntStateOf(state.position.coerceAtLeast(0)) }
 
 		LaunchedEffect(requestGeneration, snapshotValue.items.size) {
 			if (snapshotValue.items.isEmpty()) return@LaunchedEffect
 			val generation = focusGeneration
 			val position = findBrowseListInitialIndex(snapshotValue.items.size, state.position)
-			focusedPosition = position
 			val key = browseListItemKey(snapshotValue.items[position], position)
 			val existingRequester = focusRequesters[key]
 			if (existingRequester != null && runCatching { existingRequester.requestFocus() }.getOrDefault(false)) {
@@ -298,17 +295,12 @@ class ComposeBrowseListPresenter : Presenter() {
 					animationSpec = spring(),
 					label = "browse_list_focus",
 				)
-				val focusModifier = if (index == focusedPosition) {
-					Modifier.focusRequester(restoreFocusRequester)
-				} else {
-					Modifier
-				}
-
 				BrowseListRowContent(
 					item = rowItem,
 					focused = focused,
 					onClick = { click(holder, index, entry) },
-					modifier = focusModifier
+					modifier = Modifier
+						.restoreFocusRequesterWhen(focused, restoreFocusRequester)
 						.focusRequester(requester)
 						.scale(scale)
 						.onPreviewKeyEvent { event ->
@@ -342,7 +334,6 @@ class ComposeBrowseListPresenter : Presenter() {
 						}
 						.onFocusChanged { state ->
 							focused = state.hasFocus
-							if (state.hasFocus) focusedPosition = index
 						},
 				)
 			}

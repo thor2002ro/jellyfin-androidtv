@@ -149,7 +149,6 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		if (gridView != null) return
 		val metrics = calculateGridMetrics()
 		val presenter = HorizontalGridPresenter().apply {
-			setNumberOfRows(metrics.rows)
 			setOnItemViewClickedListener(onItemClicked)
 			setOnItemViewSelectedListener(onItemSelected)
 			setOnItemLongClickedListener(liveTvActions::onLongClick)
@@ -157,14 +156,13 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 			configure(
 				imageType = ImageType.THUMB,
 				cardHeight = pxToDp(metrics.cardHeightPx),
-				rows = metrics.rows,
+				spanCount = metrics.rows,
 				horizontalSpacing = pxToDp(metrics.horizontalSpacingPx),
 				verticalSpacing = pxToDp(metrics.verticalSpacingPx),
+				showCardTitles = false,
 				paddingStart = pxToDp(metrics.horizontalPaddingPx),
 				paddingEnd = pxToDp(metrics.horizontalPaddingPx),
 				verticalPadding = pxToDp(metrics.verticalPaddingPx),
-				showInfo = false,
-				uniformAspect = true,
 			)
 		}
 
