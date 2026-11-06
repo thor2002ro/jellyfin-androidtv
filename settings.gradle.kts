@@ -1,3 +1,16 @@
+import java.lang.module.ModuleDescriptor
+import java.util.Properties
+
+fun latestLocalMavenVersion(moduleDirectory: String): String {
+	val directory = file(moduleDirectory)
+	return directory.listFiles()
+		.orEmpty()
+		.filter(File::isDirectory)
+		.map(File::getName)
+		.maxWithOrNull(compareBy(ModuleDescriptor.Version::parse))
+		?: error("No locally built artifact found in $directory")
+}
+
 pluginManagement {
 	repositories {
 		gradlePluginPortal()
@@ -44,6 +57,42 @@ include(":preference")
 include(":updater")
 
 dependencyResolutionManagement {
+	defaultLibrariesExtensionName = "baseLibs"
+	versionCatalogs {
+		create("libs") {
+			from(files("gradle/libs.versions.toml"))
+
+			val media3Version = latestLocalMavenVersion(
+				"dependencies/jellyfin-androidx-media/OUTPUT/maven/androidx/media3/media3-exoplayer"
+			)
+			version("androidx-media3-local", media3Version)
+			library("androidx-media3-datasource-okhttp", "androidx.media3", "media3-datasource-okhttp")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-exoplayer", "androidx.media3", "media3-exoplayer")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-exoplayer-hls", "androidx.media3", "media3-exoplayer-hls")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-session", "androidx.media3", "media3-session")
+				.versionRef("androidx-media3-local")
+			library("androidx-media3-ui", "androidx.media3", "media3-ui")
+				.versionRef("androidx-media3-local")
+
+			val libassProperties = Properties().apply {
+				file("dependencies/libass-android/gradle.properties").inputStream().use(::load)
+			}
+			version("libass-android-local", libassProperties.getProperty("VERSION_NAME"))
+			library("libass-media3", "io.github.peerless2012", "ass-media")
+				.versionRef("libass-android-local")
+
+			val mpvVersion = latestLocalMavenVersion(
+				"dependencies/mpv-android-lib/OUTPUT/maven/io/github/abdallahmehiz/mpv-android-lib"
+			)
+			version("mpv-android-lib-local", mpvVersion)
+			library("mpv-android-lib", "io.github.abdallahmehiz", "mpv-android-lib")
+				.versionRef("mpv-android-lib-local")
+		}
+	}
+
 	repositories {
 		exclusiveContent {
 			forRepository {
