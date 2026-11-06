@@ -11,12 +11,16 @@ import androidx.core.net.toUri
 import coil3.ImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import coil3.request.error
+import kotlinx.coroutines.runBlocking
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.util.AndroidVersion
 import org.koin.android.ext.android.inject
+import timber.log.Timber
 import java.io.IOException
+import java.io.OutputStream
 
 class ImageProvider : ContentProvider() {
 	private val imageLoader by inject<ImageLoader>()
@@ -32,24 +36,34 @@ class ImageProvider : ContentProvider() {
 	override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
 		val src = requireNotNull(uri.getQueryParameter("src")).toUri()
 
-		val (read, write) = ParcelFileDescriptor.createPipe()
-		val outputStream = ParcelFileDescriptor.AutoCloseOutputStream(write)
+		return openPipeHelper(uri, "image/webp", null, src) { write, _, _, _, source ->
+			try {
+				writeImage(requireNotNull(source), ParcelFileDescriptor.AutoCloseOutputStream(write))
+			} catch (_: IOException) {
+				// The consumer can close its pipe before the image has finished writing.
+			} catch (exception: Exception) {
+				Timber.w(exception, "Unable to write Android TV artwork")
+			}
+		}
+	}
 
-		imageLoader.enqueue(ImageRequest.Builder(context!!).apply {
-			data(src)
-			error(R.drawable.placeholder_icon)
-			target(
-				onSuccess = { image -> writeDrawable(image.asDrawable(context!!.resources), outputStream) },
-				onError = { image -> writeDrawable(requireNotNull(image?.asDrawable(context!!.resources)), outputStream) }
-			)
-		}.build())
-
-		return read
+	internal fun writeImage(source: Uri, outputStream: OutputStream) {
+		outputStream.use {
+			val result = runBlocking {
+				imageLoader.execute(ImageRequest.Builder(context!!).apply {
+					data(source)
+					size(MAX_IMAGE_SIZE, MAX_IMAGE_SIZE)
+					allowHardware(false)
+					error(R.drawable.placeholder_icon)
+				}.build())
+			}
+			result.image?.let { image -> writeDrawable(image.asDrawable(context!!.resources), outputStream) }
+		}
 	}
 
 	private fun writeDrawable(
 		drawable: Drawable,
-		outputStream: ParcelFileDescriptor.AutoCloseOutputStream
+		outputStream: OutputStream
 	) {
 		@Suppress("DEPRECATION")
 		val format = when {
@@ -57,16 +71,11 @@ class ImageProvider : ContentProvider() {
 			else -> Bitmap.CompressFormat.WEBP
 		}
 
-		try {
-			outputStream.use {
-				drawable.toBitmap().compress(format, COMPRESSION_QUALITY, outputStream)
-			}
-		} catch (_: IOException) {
-			// Ignore IOException as this is commonly thrown when the load request is cancelled
-		}
+		drawable.toBitmap().compress(format, COMPRESSION_QUALITY, outputStream)
 	}
 
 	companion object {
+		internal const val MAX_IMAGE_SIZE = 512
 		private const val COMPRESSION_QUALITY = 95
 
 		/**
