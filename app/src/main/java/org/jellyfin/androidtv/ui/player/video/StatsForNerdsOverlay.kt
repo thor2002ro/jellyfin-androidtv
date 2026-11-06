@@ -37,6 +37,8 @@ import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusFormatter
 import org.jellyfin.androidtv.ui.playback.TranscodingStatusRepository
 import org.jellyfin.androidtv.ui.playback.appendInline
+import org.jellyfin.androidtv.ui.playback.baseCodecName
+import org.jellyfin.androidtv.ui.playback.codecDisplayName
 import org.jellyfin.androidtv.ui.playback.displayName
 import org.jellyfin.androidtv.ui.playback.formatCodec
 import org.jellyfin.androidtv.ui.playback.isAssSubtitleCodec
@@ -427,7 +429,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Dolby Vision", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
 					row("Audio decoder", frameStats.audioDecoderLabel())
 					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec))
-					row("Audio passthrough", frameStats.audioPassthroughSupported.formatPassthroughSupport())
+					row("Passthrough supported", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
 					row("Audio language", audioLanguage(selectedAudio))
 					row("Bitrate", streamBitrate(videoTrack, audioTrack, frameStats, transcodingInfo))
@@ -568,8 +570,8 @@ private object NewPlayerStreamStatusBuilder {
 		val target = transcodingInfo?.videoCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.withKnownPath(conversionMethod)
-			transcodingInfo.isVideoDirect && source != null -> "$source (remux)"
+			transcodingInfo == null -> streamingCodecLabel(track?.codec, null, conversionMethod)
+			transcodingInfo.isVideoDirect && source != null -> "$source (direct)"
 			source != null && target != null -> "$source -> $target (transcoding)"
 			target != null -> "-> $target (transcoding)"
 			else -> source
@@ -583,12 +585,13 @@ private object NewPlayerStreamStatusBuilder {
 		conversionMethod: MediaConversionMethod,
 		fallbackCodec: String?,
 	): String? {
-		val source = (selectedTrack?.codec ?: track?.codec ?: fallbackCodec).formatCodec()
+		val sourceCodec = track?.codec ?: selectedTrack?.codec
+		val source = sourceCodec.formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.withKnownPath(conversionMethod)
-			transcodingInfo.isAudioDirect && source != null -> "$source (remux)"
+			transcodingInfo == null -> streamingCodecLabel(sourceCodec, fallbackCodec, conversionMethod)
+			transcodingInfo.isAudioDirect && source != null -> "$source (direct)"
 			source != null && target != null -> "$source -> $target (transcoding)"
 			target != null -> "-> $target (transcoding)"
 			else -> source
@@ -686,9 +689,16 @@ private object NewPlayerStreamStatusBuilder {
 		val stream = this as? PlayableMediaStream ?: return container.format.uppercase()
 		val uri = Uri.parse(stream.url)
 		val path = uri.path.orEmpty().lowercase()
-		val segmentContainer = runCatching { uri.getQueryParameter("segmentContainer") }.getOrNull()
+		val segmentContainer = runCatching {
+			uri.queryParameterNames
+				.firstOrNull { name -> name.equals("segmentContainer", ignoreCase = true) }
+				?.let(uri::getQueryParameter)
+				?.lowercase()
+		}.getOrNull()
 
 		return when {
+			segmentContainer == "mp4" || segmentContainer == "fmp4" -> "HLS-fMP4"
+			segmentContainer == "ts" || segmentContainer == "mpegts" -> "HLS-TS"
 			path.endsWith(".m3u8") || path.contains("/hls/") || segmentContainer != null -> "HLS"
 			else -> container.format.uppercase()
 		}
@@ -733,17 +743,6 @@ private object NewPlayerStreamStatusBuilder {
 		.filter(String::isNotBlank)
 		.joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 
-	private fun MediaConversionMethod.codecPathLabel() = when (this) {
-		MediaConversionMethod.None -> "direct"
-		MediaConversionMethod.Remux -> "remux"
-		MediaConversionMethod.Transcode -> "transcoding"
-	}
-
-	private fun String.withKnownPath(conversionMethod: MediaConversionMethod) = when (conversionMethod) {
-		MediaConversionMethod.Transcode -> this
-		else -> "$this (${conversionMethod.codecPathLabel()})"
-	}
-
 	private fun resolution(width: Int?, height: Int?) = when {
 		width != null && height != null && width > 0 && height > 0 -> "${width}x$height"
 		else -> null
@@ -781,6 +780,23 @@ private object NewPlayerStreamStatusBuilder {
 
 	private fun Duration.formatSignedSeconds(): String = "%+.3fs".format(inWholeMilliseconds / 1000.0)
 
+}
+
+internal fun streamingCodecLabel(
+	sourceCodec: String?,
+	playbackCodec: String?,
+	conversionMethod: MediaConversionMethod,
+): String? {
+	val source = sourceCodec.codecDisplayName()
+	val playback = playbackCodec.codecDisplayName()
+	if (conversionMethod == MediaConversionMethod.Remux && source != null && playback != null && source.baseCodecName() != playback.baseCodecName()) {
+		return "$source -> $playback (transcoding)"
+	}
+	val codec = (if (source != null && source == playback?.baseCodecName()) playback else source ?: playback) ?: return null
+	return when (conversionMethod) {
+		MediaConversionMethod.None, MediaConversionMethod.Remux -> "$codec (direct)"
+		MediaConversionMethod.Transcode -> codec
+	}
 }
 
 internal fun streamingHdrMode(
