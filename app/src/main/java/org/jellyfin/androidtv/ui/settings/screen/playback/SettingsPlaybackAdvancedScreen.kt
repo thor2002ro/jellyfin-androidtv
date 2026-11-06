@@ -122,6 +122,7 @@ fun SettingsPlaybackAdvancedScreen() {
 			ListControl(
 				headingContent = { Text(stringResource(R.string.skip_back_length)) },
 				interactionSource = interactionSource,
+				modifier = Modifier.focusKey("skip_back_length"),
 			) {
 				Row(
 					verticalAlignment = Alignment.CenterVertically,
@@ -158,7 +159,8 @@ fun SettingsPlaybackAdvancedScreen() {
 				headingContent = { Text(stringResource(R.string.lbl_seek_confirmation)) },
 				captionContent = { Text(stringResource(R.string.sum_seek_confirmation)) },
 				trailingContent = { Checkbox(checked = seekConfirmationRequired) },
-				onClick = { seekConfirmationRequired = !seekConfirmationRequired }
+				onClick = { seekConfirmationRequired = !seekConfirmationRequired },
+				modifier = Modifier.focusKey("seek_confirmation"),
 			)
 		}
 
