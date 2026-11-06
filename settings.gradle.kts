@@ -3,13 +3,14 @@ import java.util.Properties
 
 fun latestLocalMavenVersion(moduleDirectory: String): String {
 	val directory = file(moduleDirectory)
+	val artifact = directory.name
 	return directory.listFiles()
 		.orEmpty()
 		.filter(File::isDirectory)
 		.filter { versionDirectory ->
 			val version = versionDirectory.name
-			versionDirectory.resolve("mpv-android-lib-$version.aar").isFile ||
-				!moduleDirectory.endsWith("mpv-android-lib")
+			versionDirectory.resolve("$artifact-$version.aar").isFile &&
+				versionDirectory.resolve("$artifact-$version.pom").isFile
 		}
 		.map(File::getName)
 		.maxWithOrNull(compareBy(ModuleDescriptor.Version::parse))
@@ -112,6 +113,10 @@ dependencyResolutionManagement {
 			version("mpv-android-lib-local", mpvVersion)
 			library("mpv-android-lib", "io.github.abdallahmehiz", "mpv-android-lib")
 				.versionRef("mpv-android-lib-local")
+			library("mpv-ffmpeg-provider", "io.github.abdallahmehiz", "mpv-ffmpeg-android")
+				.version(latestLocalMavenVersion(
+					"dependencies/mpv-android-lib/OUTPUT/maven/io/github/abdallahmehiz/mpv-ffmpeg-android"
+				))
 		}
 	}
 
@@ -130,6 +135,7 @@ dependencyResolutionManagement {
 			}
 			filter {
 				includeModule("io.github.abdallahmehiz", "mpv-android-lib")
+				includeModule("io.github.abdallahmehiz", "mpv-ffmpeg-android")
 			}
 		}
 		mavenCentral()
