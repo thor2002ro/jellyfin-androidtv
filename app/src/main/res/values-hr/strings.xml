@@ -330,7 +330,6 @@
     <string name="welcome_content">Za početak se povežite s poslužiteljem.</string>
     <string name="welcome_title">Dobro došli u Jellyfin!</string>
     <string name="press_to_close">Pritisni za zatvaranje</string>
-    <string name="no_network_permissions">Jellyfin zahtijeva mrežna dopuštenja za rad</string>
     <string name="pref_theme_muted_purple">Prigušena ljubičasta</string>
     <string name="user_picker_disable_summary">Uvijek prikaži ekran za prijavu</string>
     <string name="user_picker_disable_title">Onemogući</string>
