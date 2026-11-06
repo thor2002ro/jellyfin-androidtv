@@ -1,0 +1,17 @@
+// Run: gradlew.bat -I tests/shared-ffmpeg-provider.init.gradle :app:verifySharedFfmpegProvider
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('verifySharedFfmpegProvider') {
+        doLast {
+            def providers = app.configurations.debugCompileClasspath.resolvedConfiguration.resolvedArtifacts.findAll {
+                it.moduleVersion.id.group == 'io.github.abdallahmehiz' && it.name == 'mpv-ffmpeg-android'
+            }
+            assert providers.size() == 1 : "Expected one shared FFmpeg provider, got $providers"
+            def provider = providers.first()
+            def local = new File(gradle.rootProject.projectDir,
+                "dependencies/mpv-android-lib/OUTPUT/maven/io/github/abdallahmehiz/mpv-ffmpeg-android/${provider.moduleVersion.id.version}/${provider.file.name}")
+            assert local.isFile() : "Resolved provider is absent from the checked-out repository: $local"
+            println "Shared FFmpeg provider: ${provider.moduleVersion.id}"
+        }
+    }
+}
