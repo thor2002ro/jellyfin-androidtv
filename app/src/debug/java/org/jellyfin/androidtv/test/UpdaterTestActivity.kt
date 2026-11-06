@@ -17,20 +17,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
+import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.composable.SettingsDialog
+import org.jellyfin.androidtv.updater.AppUpdatePrompt
 import org.jellyfin.androidtv.updater.UpdatePromptContent
 import org.jellyfin.design.Tokens
 import org.jellyfin.updater.AppUpdate
@@ -58,10 +59,7 @@ class UpdaterTestActivity : ComponentActivity() {
 	}
 }
 
-enum class UpdaterTestScenario(
-	val label: String,
-	val focusTransitions: Int = 0,
-) {
+enum class UpdaterTestScenario(val label: String) {
 	STABLE_UPDATE("Stable update"),
 	PRERELEASE_UPDATE("Pre-release update"),
 	NO_UPDATE("No update"),
@@ -70,7 +68,8 @@ enum class UpdaterTestScenario(
 	DOWNLOAD_FAILED("Download failed"),
 	INSTALL_PERMISSION("Install permission"),
 	INSTALLER_OPENED("Installer opened"),
-	POPUP_STABILITY("Popup stability", focusTransitions = 20),
+	POPUP_STABILITY("Popup stability"),
+	FOCUS_CONFLICT("Focus conflict"),
 }
 
 @Composable
@@ -155,7 +154,71 @@ private fun UpdaterTestScreen(
 				inline = false,
 			)
 		}
+
+		if (scenario == UpdaterTestScenario.FOCUS_CONFLICT) {
+			UpdaterFocusConflict()
+		}
+
+		if (scenario == UpdaterTestScenario.POPUP_STABILITY) {
+			UpdaterPopupStability()
+		}
 	}
+}
+
+@Composable
+private fun UpdaterPopupStability(
+	notificationsRepository: NotificationsRepository = koinInject(),
+) {
+	val hostWindowFocused = LocalWindowInfo.current.isWindowFocused
+	var updateQueued by remember { mutableStateOf(false) }
+
+	DisposableEffect(Unit) {
+		notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+		onDispose { notificationsRepository.updateAppUpdateNotification(null, prompt = false) }
+	}
+
+	LaunchedEffect(hostWindowFocused, updateQueued) {
+		if (hostWindowFocused && !updateQueued) {
+			notificationsRepository.updateAppUpdateNotification(testUpdate(prerelease = false))
+			updateQueued = true
+		}
+	}
+
+	AppUpdatePrompt()
+}
+
+@Composable
+private fun UpdaterFocusConflict(
+	notificationsRepository: NotificationsRepository = koinInject(),
+) {
+	val hostWindowFocused = LocalWindowInfo.current.isWindowFocused
+	var updateQueued by remember { mutableStateOf(false) }
+
+	DisposableEffect(Unit) {
+		notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+		onDispose { notificationsRepository.updateAppUpdateNotification(null, prompt = false) }
+	}
+
+	LaunchedEffect(hostWindowFocused, updateQueued) {
+		if (!hostWindowFocused && !updateQueued) {
+			notificationsRepository.updateAppUpdateNotification(testUpdate(prerelease = false))
+			updateQueued = true
+		}
+	}
+
+	SettingsDialog(
+		visible = true,
+		onDismissRequest = { },
+	) {
+		Column(
+			modifier = Modifier.padding(Tokens.Space.spaceMd),
+			verticalArrangement = Arrangement.spacedBy(Tokens.Space.spaceSm),
+		) {
+			Text("FOCUS OWNER")
+			Text(if (updateQueued) "UPDATE QUEUED" else "WAITING FOR DIALOG FOCUS")
+		}
+	}
+	AppUpdatePrompt()
 }
 
 @Composable
@@ -194,29 +257,8 @@ private fun UpdaterScenarioPrompt(
 	modifier: Modifier = Modifier,
 ) {
 	val update = testUpdate(prerelease = scenario == UpdaterTestScenario.PRERELEASE_UPDATE)
-	var mountedCount by remember(scenario) { mutableIntStateOf(0) }
-	var fakeHostFocused by remember(scenario) { mutableStateOf(true) }
-	var stabilityResult by remember(scenario) { mutableStateOf<String?>(null) }
-
-	LaunchedEffect(scenario) {
-		if (scenario == UpdaterTestScenario.POPUP_STABILITY) {
-			repeat(scenario.focusTransitions) {
-				fakeHostFocused = !fakeHostFocused
-				yield()
-			}
-			stabilityResult = if (mountedCount == 1) {
-				"PASS: Update now stayed mounted through ${scenario.focusTransitions} focus transitions"
-			} else {
-				"FAIL: popup mounted $mountedCount times"
-			}
-		}
-	}
 
 	val content = @Composable {
-		DisposableEffect(Unit) {
-			mountedCount++
-			onDispose { }
-		}
 		Box(modifier = modifier) {
 			UpdatePromptContent(
 				update = update,
@@ -226,7 +268,6 @@ private fun UpdaterScenarioPrompt(
 					UpdaterTestScenario.DOWNLOAD_FAILED -> "Unable to download the update: simulated connection failure"
 					UpdaterTestScenario.INSTALL_PERMISSION -> "Allow installs from this app, then try again"
 					UpdaterTestScenario.INSTALLER_OPENED -> "Installer opened"
-					UpdaterTestScenario.POPUP_STABILITY -> stabilityResult ?: "Simulating host focus: $fakeHostFocused"
 					else -> null
 				},
 				onUpdate = { },
@@ -248,7 +289,12 @@ private fun UpdaterScenarioPrompt(
 }
 
 private val UpdaterTestScenario.hasPrompt
-	get() = this !in setOf(UpdaterTestScenario.NO_UPDATE, UpdaterTestScenario.GITHUB_ERROR)
+	get() = this !in setOf(
+		UpdaterTestScenario.NO_UPDATE,
+		UpdaterTestScenario.GITHUB_ERROR,
+		UpdaterTestScenario.POPUP_STABILITY,
+		UpdaterTestScenario.FOCUS_CONFLICT,
+	)
 
 private val UpdaterTestScenario.summary
 	get() = when (this) {
@@ -260,7 +306,8 @@ private val UpdaterTestScenario.summary
 		UpdaterTestScenario.DOWNLOAD_FAILED -> "Download error with retry action restored"
 		UpdaterTestScenario.INSTALL_PERMISSION -> "Unknown-app install permission recovery"
 		UpdaterTestScenario.INSTALLER_OPENED -> "Successful handoff to Android's installer"
-		UpdaterTestScenario.POPUP_STABILITY -> "Twenty focus transitions without unmounting Update now"
+		UpdaterTestScenario.POPUP_STABILITY -> "Production prompt remains visible after its dialog takes focus"
+		UpdaterTestScenario.FOCUS_CONFLICT -> "An available update waits until the existing dialog releases focus"
 	}
 
 private fun testUpdate(prerelease: Boolean) = AppUpdate(
