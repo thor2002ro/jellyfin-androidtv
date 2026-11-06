@@ -19,6 +19,7 @@ abstract class BrowseCardGridPresenter : Presenter() {
 		val paddingStart: Int = 0,
 		val paddingEnd: Int = 0,
 		val verticalPadding: Int = 0,
+		val headerHeight: Int = 0,
 	)
 
 	private var selectedPosition = RecyclerView.NO_POSITION
@@ -41,6 +42,7 @@ abstract class BrowseCardGridPresenter : Presenter() {
 		paddingStart: Int,
 		paddingEnd: Int,
 		verticalPadding: Int,
+		headerHeight: Int = 0,
 	) {
 		gridConfig = GridConfig(
 			imageType = imageType,
@@ -52,6 +54,7 @@ abstract class BrowseCardGridPresenter : Presenter() {
 			paddingStart = paddingStart,
 			paddingEnd = paddingEnd,
 			verticalPadding = verticalPadding,
+			headerHeight = headerHeight,
 		)
 		onGridConfigChanged(gridConfig)
 	}

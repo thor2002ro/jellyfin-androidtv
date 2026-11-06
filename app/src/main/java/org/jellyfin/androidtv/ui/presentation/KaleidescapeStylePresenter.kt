@@ -117,6 +117,8 @@ class KaleidescapeStylePresenter : HorizontalGridPresenter() {
 			}
 			binding.counter.visibility = View.VISIBLE
 			binding.counter.layoutParams = RelativeLayout.LayoutParams(binding.counter.layoutParams as RelativeLayout.LayoutParams).apply {
+				removeRule(RelativeLayout.ABOVE)
+				addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
 				bottomMargin = 0
 			}
 			binding.rowsFragment.layoutParams = RelativeLayout.LayoutParams(binding.rowsFragment.layoutParams as RelativeLayout.LayoutParams).apply {
@@ -129,14 +131,14 @@ class KaleidescapeStylePresenter : HorizontalGridPresenter() {
 			}
 			binding.toolBar.layoutParams = RelativeLayout.LayoutParams(binding.toolBar.layoutParams as RelativeLayout.LayoutParams).apply {
 				removeRule(RelativeLayout.BELOW)
-				removeRule(RelativeLayout.START_OF)
-				removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-				addRule(RelativeLayout.ALIGN_PARENT_END)
-				addRule(RelativeLayout.ABOVE, binding.counter.id)
+				removeRule(RelativeLayout.ALIGN_PARENT_END)
+				removeRule(RelativeLayout.ABOVE)
+				addRule(RelativeLayout.START_OF, binding.counter.id)
+				addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
 				width = RelativeLayout.LayoutParams.WRAP_CONTENT
 				topMargin = 0
 				bottomMargin = 0
-				marginEnd = dp(DETAILS_PADDING_DP)
+				marginEnd = dp(GRID_EDGE_PADDING_DP)
 			}
 			binding.alphaPickerHorizontal.layoutParams = RelativeLayout.LayoutParams(
 				binding.alphaPickerHorizontal.layoutParams as RelativeLayout.LayoutParams,

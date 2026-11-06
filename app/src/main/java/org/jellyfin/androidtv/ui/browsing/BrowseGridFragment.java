@@ -62,6 +62,7 @@ import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher;
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter;
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapterHelperKt;
 import org.jellyfin.androidtv.ui.presentation.BrowseCardGridPresenter;
+import org.jellyfin.androidtv.ui.presentation.BrowseHeaderLayoutKt;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
 import org.jellyfin.androidtv.ui.presentation.BrowseImageRequestSize;
 import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter;
@@ -143,6 +144,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private int mGridItemSpacingVertical = 0;
     private int mGridPaddingLeft = 0;
     private int mGridPaddingTop = 0;
+    private int mGridHeaderHeight = 0;
 
     private final Lazy<BackgroundService> backgroundService = inject(BackgroundService.class);
     private final Lazy<PreferencesRepository> preferencesRepository = inject(PreferencesRepository.class);
@@ -280,6 +282,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         return style == LibraryViewStyle.DENSE_LIST ? GridDirection.VERTICAL : cardDirection;
     }
 
+    static boolean shouldDrawBrowseBackground(LibraryViewStyle style, GridDirection direction) {
+        return style == LibraryViewStyle.CARDS && direction == GridDirection.HORIZONTAL;
+    }
+
     static int nextSelectionAfterQueryChange(int totalItems) {
         return totalItems > 0 ? 0 : -1;
     }
@@ -306,6 +312,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         binding = HorizontalGridBrowseBinding.inflate(inflater, container, false);
+        BrowseHeaderLayoutKt.configureBrowseBackground(binding.background, true);
         binding.counter.addOnLayoutChangeListener((counter, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             configureFooterRotation(counter, GridDirection.VERTICAL.equals(getNavigationControlsDirection()), Utils.convertDpToPixel(requireContext(), 8));
             updateVerticalStatusBounds();
@@ -339,6 +346,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private void configureNavigationControls() {
         GridDirection controlsDirection = getNavigationControlsDirection();
         boolean vertical = GridDirection.VERTICAL.equals(controlsDirection);
+        BrowseHeaderLayoutKt.configureBrowseBackground(binding.background, shouldDrawBrowseBackground(mViewStyle, mGridDirection));
         ViewGroup.MarginLayoutParams counterParams = (ViewGroup.MarginLayoutParams) binding.counter.getLayoutParams();
         counterParams.bottomMargin = vertical ? Utils.convertDpToPixel(requireContext(), 24) : 0;
         binding.counter.setLayoutParams(counterParams);
@@ -369,9 +377,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             headerHeight = titleParams.topMargin + binding.title.getMeasuredHeight() +
                     binding.genres.getLayoutParams().height + infoParams.topMargin + infoParams.height;
         }
+        mGridHeaderHeight = vertical ? pixelsToDp(headerHeight, display.density) + 6 : 0;
         mGridHeight = mViewStyle == LibraryViewStyle.KALEIDESCAPE_STYLE ?
                 Math.round(display.heightPixels / display.density - KaleidescapeStylePresenter.FOOTER_HEIGHT_DP) :
-                pixelsToDp(display.heightPixels - headerHeight - gridParams.topMargin - gridParams.bottomMargin, display.density);
+                pixelsToDp(display.heightPixels - headerHeight - Utils.convertDpToPixel(requireContext(), 6) - gridParams.bottomMargin, display.density);
         setAutoCardGridValues();
 
         AlphaPickerView picker = vertical ? binding.alphaPickerVertical : binding.alphaPickerHorizontal;
@@ -447,12 +456,18 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             statusParams.setMarginEnd(Utils.convertDpToPixel(requireContext(), 2));
         }
         binding.statusText.setLayoutParams(statusParams);
-        int gridHostStartMargin = Utils.convertDpToPixel(requireContext(), getGridHostSideMarginDp(controlsDirection));
-        int gridHostEndMargin = Utils.convertDpToPixel(requireContext(), getGridHostEndMarginDp(controlsDirection));
-        ViewGroup.MarginLayoutParams gridParams = (ViewGroup.MarginLayoutParams) binding.rowsFragment.getLayoutParams();
-        gridParams.setMarginStart(gridHostStartMargin);
-        gridParams.setMarginEnd(gridHostEndMargin);
-        gridParams.topMargin = Utils.convertDpToPixel(requireContext(), 6);
+        boolean vertical = GridDirection.VERTICAL.equals(controlsDirection);
+        RelativeLayout.LayoutParams gridParams = (RelativeLayout.LayoutParams) binding.rowsFragment.getLayoutParams();
+        gridParams.setMarginStart(0);
+        gridParams.setMarginEnd(0);
+        if (vertical) {
+            gridParams.removeRule(RelativeLayout.BELOW);
+            gridParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        } else {
+            gridParams.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
+            gridParams.addRule(RelativeLayout.BELOW, binding.infoRow.getId());
+        }
+        gridParams.topMargin = Utils.convertDpToPixel(requireContext(), vertical ? 0 : 6);
         gridParams.bottomMargin = Utils.convertDpToPixel(requireContext(), getGridHostBottomMarginDp(controlsDirection));
         binding.rowsFragment.setLayoutParams(gridParams);
     }
@@ -481,11 +496,11 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         counter.setTranslationY(vertical ? counter.getHeight() - rise : 0f);
     }
 	static int getGridHostSideMarginDp(GridDirection direction) {
-		return GridDirection.VERTICAL.equals(direction) ? 14 : 0;
+		return GridDirection.VERTICAL.equals(direction) ? 20 : 0;
 	}
 
 	static int getGridHostEndMarginDp(GridDirection direction) {
-		return GridDirection.VERTICAL.equals(direction) ? 18 : 0;
+		return GridDirection.VERTICAL.equals(direction) ? 26 : 0;
 	}
 
 	static int getGridHostBottomMarginDp(GridDirection direction) {
@@ -563,12 +578,18 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (mGridViewHolder instanceof ComposeBrowseListPresenter.ViewHolder) {
             ComposeBrowseListPresenter presenter = (ComposeBrowseListPresenter) mGridPresenter;
             mGridView = ((ComposeBrowseListPresenter.ViewHolder) mGridViewHolder).getListView();
-            presenter.configure(8, 12, resolveBrowseGridSpacing(6, mCardSpacing));
+            presenter.configure(8 + getGridHostSideMarginDp(GridDirection.VERTICAL),
+                    8 + getGridHostEndMarginDp(GridDirection.VERTICAL), 12,
+                    resolveBrowseGridSpacing(6, mCardSpacing), mGridHeaderHeight);
         } else if (mGridPresenter instanceof BrowseCardGridPresenter) {
             BrowseCardGridPresenter presenter = (BrowseCardGridPresenter) mGridPresenter;
             boolean horizontal = presenter instanceof HorizontalGridPresenter;
             int paddingStart = mGridPaddingLeft;
             int paddingEnd = mGridPaddingLeft;
+            if (!horizontal) {
+                paddingStart += getGridHostSideMarginDp(GridDirection.VERTICAL);
+                paddingEnd += getGridHostEndMarginDp(GridDirection.VERTICAL);
+            }
             int verticalPadding = 16;
             mGridView = horizontal ? ((HorizontalGridPresenter.ViewHolder) mGridViewHolder).getGridView() : mGridViewHolder.view;
             if (horizontal) {
@@ -592,7 +613,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                     shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles),
                     paddingStart,
                     paddingEnd,
-                    verticalPadding
+                    verticalPadding,
+                    mGridHeaderHeight
             );
         }
         if (mGridView.getId() == View.NO_ID) mGridView.setId(View.generateViewId());
