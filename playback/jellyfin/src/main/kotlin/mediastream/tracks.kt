@@ -1,19 +1,48 @@
 package org.jellyfin.playback.jellyfin.mediastream
 
+import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamContainer
+import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
+import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod
 
 fun MediaInfo.getMediaStreamContainer() = MediaStreamContainer(
-	format = requireNotNull(mediaSource.container)
+	format = mediaSource.container ?: mediaSource.transcodingContainer ?: "ts"
 )
 
 fun MediaInfo.getTracks() =
 	mediaSource.mediaStreams
 		.orEmpty()
 		.mapNotNull(MediaStream::getMediaStreamTrack)
+
+fun MediaInfo.getExternalSubtitles(api: ApiClient): List<ExternalSubtitle> =
+	mediaSource.mediaStreams
+		.orEmpty()
+		.filter { it.type == MediaStreamType.SUBTITLE && it.deliveryMethod == SubtitleDeliveryMethod.EXTERNAL }
+		.mapNotNull { stream ->
+			val deliveryUrl = stream.deliveryUrl ?: return@mapNotNull null
+			ExternalSubtitle(
+				url = api.createUrl(deliveryUrl, ignorePathParameters = true),
+				mimeType = getSubtitleMimeType(stream.codec),
+				language = stream.language,
+				title = stream.displayTitle,
+				index = stream.index,
+				isDefault = stream.isDefault,
+				isForced = stream.isForced,
+			)
+		}
+
+private fun getSubtitleMimeType(codec: String?): String = when (codec?.lowercase()) {
+	"srt", "subrip" -> "application/x-subrip"
+	"ass", "ssa" -> "text/x-ssa"
+	"vtt", "webvtt" -> "text/vtt"
+	"ttml" -> "application/ttml+xml"
+	else -> "application/x-subrip" // default to SRT
+}
 
 fun MediaStream.getMediaStreamTrack() = when (type) {
 	MediaStreamType.AUDIO -> getAudioTrack(this)
@@ -26,20 +55,40 @@ fun MediaStream.getMediaStreamTrack() = when (type) {
 	MediaStreamType.LYRIC -> null
 }
 
-private fun getAudioTrack(stream: MediaStream) = MediaStreamAudioTrack(
-	codec = requireNotNull(stream.codec),
-	bitrate = stream.bitRate ?: 0,
-	channels = stream.channels ?: 1,
-	sampleRate = stream.sampleRate ?: 0,
-)
+private fun getAudioTrack(stream: MediaStream): MediaStreamAudioTrack? {
+	val codec = stream.codec ?: return null
+	return MediaStreamAudioTrack(
+		index = stream.index,
+		codec = codec,
+		bitrate = stream.bitRate ?: 0,
+		channels = stream.channels ?: 1,
+		sampleRate = stream.sampleRate ?: 0,
+		language = stream.language,
+		title = stream.displayTitle,
+	)
+}
 
-private fun getVideoTrack(stream: MediaStream) = MediaStreamVideoTrack(
-	codec = requireNotNull(stream.codec),
-	bitrate = stream.bitRate ?: 0,
-	width = stream.width ?: 0,
-	height = stream.height ?: 0,
-	videoRange = stream.videoRangeType.name,
-)
+private fun getVideoTrack(stream: MediaStream): MediaStreamVideoTrack? {
+	val codec = stream.codec ?: return null
+	return MediaStreamVideoTrack(
+		index = stream.index,
+		codec = codec,
+		bitrate = stream.bitRate ?: 0,
+		width = stream.width ?: 0,
+		height = stream.height ?: 0,
+		videoRange = stream.videoRangeType.name,
+		realFrameRate = stream.realFrameRate,
+		isInterlaced = stream.isInterlaced,
+	)
+}
 
-// TODO Implement Subtitle track type
-private fun getSubtitleTrack(stream: MediaStream) = null
+private fun getSubtitleTrack(stream: MediaStream): MediaStreamSubtitleTrack? {
+	val codec = stream.codec ?: return null
+	return MediaStreamSubtitleTrack(
+		index = stream.index,
+		codec = codec,
+		language = stream.language,
+		title = stream.displayTitle,
+		isExternal = stream.deliveryMethod == SubtitleDeliveryMethod.EXTERNAL,
+	)
+}
