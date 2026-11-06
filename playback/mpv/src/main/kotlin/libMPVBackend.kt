@@ -87,6 +87,7 @@ class LibMPVBackend(
 	}
 
 	override val reportsBufferedPosition = true
+	override val supportsInteractiveScrubbing = true
 	override val supportsSubtitleTimingSpeed = true
 
 	var videoDecoder = videoDecoderProvider?.invoke() ?: LibMPVVideoDecoder.AUTOMATIC
@@ -164,6 +165,7 @@ class LibMPVBackend(
 	private var isPaused = true
 	private var pausedForCache = false
 	private var seeking = false
+	private val scrubbing = LibMPVScrubState()
 	private var rebufferWaitSeconds: Double? = null
 	private var terminalState: PlayState? = PlayState.STOPPED
 	private var lastReportedState: PlayState? = null
@@ -437,6 +439,7 @@ class LibMPVBackend(
 
 	private fun setMedia(stream: PlayableMediaStream) {
 		ensureInstanceOptions(currentStream?.queueEntry !== stream.queueEntry)
+		scrubbing.reset()
 		currentStream = stream
 		endReported = false
 		externalSubtitlesAdded = false
@@ -543,6 +546,7 @@ class LibMPVBackend(
 
 	override fun stop() {
 		handler.removeCallbacks(tick)
+		scrubbing.reset()
 		loadRequested = false
 		endReported = true
 		lastPositionInfo = getPositionInfo()
@@ -592,18 +596,30 @@ class LibMPVBackend(
 		}
 	}
 
-	override fun seekTo(position: Duration) {
-		val previous = getPositionInfo()
-		val targetSeconds = position.inWholeMilliseconds.coerceAtLeast(0) / 1_000.0
-		if (!runCommand("seek", targetSeconds.toLibMPVString(), "absolute+exact")) return
+	override fun seekTo(position: Duration) = performSeek(scrubbing.seek(position))
+
+	private fun performSeek(request: LibMPVSeekRequest): Boolean {
+		val previous = if (request.precision == LibMPVSeekPrecision.EXACT) getPositionInfo() else null
+		val targetSeconds = request.position.inWholeMilliseconds.coerceAtLeast(0) / 1_000.0
+		if (!runCommand("seek", targetSeconds.toLibMPVString(), request.precision.argument)) return false
 		playbackRestarted = false
 		seeking = true
 		publishPlayState()
-		timedEvents.advance(previous.active, position, previous.duration, natural = false)
-		lastTickPosition = position
+		if (previous != null) {
+			timedEvents.advance(request.origin ?: previous.active, request.position, previous.duration, natural = false)
+			lastTickPosition = request.position
+		}
+		return true
 	}
 
-	override fun setScrubbing(scrubbing: Boolean) = Unit
+	override fun setScrubbing(scrubbing: Boolean) {
+		if (scrubbing) {
+			this.scrubbing.begin(lastPositionInfo.active)
+		} else {
+			val settlingSeek = this.scrubbing.finish()
+			if (settlingSeek != null && currentStream != null && terminalState == null) performSeek(settlingSeek)
+		}
+	}
 
 	override fun setSpeed(speed: Float) {
 		playbackSpeed = speed.coerceAtLeast(0.01f)
@@ -996,6 +1012,7 @@ class LibMPVBackend(
 		if (reason == "stop" && currentStream != null && terminalState == null) return
 
 		fileLoaded = false
+		scrubbing.reset()
 		playbackRestarted = false
 		pausedForCache = false
 		seeking = false
@@ -1026,6 +1043,7 @@ class LibMPVBackend(
 	private fun handlePlaybackError(message: String) {
 		Timber.e("MPV playback error: %s", message)
 		handler.removeCallbacks(tick)
+		scrubbing.reset()
 		playbackRestarted = false
 		terminalState = PlayState.ERROR
 		listener?.onPlaybackError(PlaybackError("MPV_ERROR"))
@@ -1303,6 +1321,51 @@ internal fun mpvPositionInfo(
 }
 
 private fun Double.toLibMPVString() = String.format(Locale.US, "%.3f", this)
+
+internal enum class LibMPVSeekPrecision(val argument: String) {
+	EXACT("absolute+exact"),
+	KEYFRAME("absolute+keyframes"),
+}
+
+internal data class LibMPVSeekRequest(
+	val position: Duration,
+	val precision: LibMPVSeekPrecision,
+	val origin: Duration? = null,
+)
+
+internal class LibMPVScrubState {
+	private var previewArmed = false
+	private var pendingPosition: Duration? = null
+	private var origin: Duration? = null
+
+	fun begin(position: Duration) {
+		previewArmed = true
+		pendingPosition = null
+		if (origin == null) origin = position
+	}
+
+	fun seek(position: Duration): LibMPVSeekRequest {
+		val precision = if (previewArmed) LibMPVSeekPrecision.KEYFRAME else LibMPVSeekPrecision.EXACT
+		previewArmed = false
+		pendingPosition = if (precision == LibMPVSeekPrecision.KEYFRAME) position else null
+		return LibMPVSeekRequest(position, precision)
+	}
+
+	fun finish(): LibMPVSeekRequest? {
+		previewArmed = false
+		val position = pendingPosition
+		pendingPosition = null
+		val request = position?.let { LibMPVSeekRequest(it, LibMPVSeekPrecision.EXACT, origin) }
+		origin = null
+		return request
+	}
+
+	fun reset() {
+		previewArmed = false
+		pendingPosition = null
+		origin = null
+	}
+}
 
 internal fun mpvHdrMode(gamma: String?, dolbyVisionProfile: Int?, hasHdr10Plus: Boolean): String? = when {
 	dolbyVisionProfile != null -> "Dolby Vision (Profile $dolbyVisionProfile)"
