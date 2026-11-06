@@ -23,7 +23,6 @@ import org.jellyfin.androidtv.data.querying.GetTrailersRequest
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.GridButton
-import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment.SortOption
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.sdk.hasLanguageBadge
 import org.jellyfin.androidtv.util.sdk.hasLanguageBadgeStreams
@@ -51,6 +50,7 @@ import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.SeriesTimerInfoDto
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetAlbumArtistsRequest
 import org.jellyfin.sdk.model.api.request.GetArtistsRequest
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
@@ -1401,26 +1401,29 @@ fun ItemRowAdapter.retrievePremieres(
 
 fun setAlbumArtistsSorting(
 	request: GetAlbumArtistsRequest,
-	sortOption: SortOption,
+	sortBy: ItemSortBy,
+	sortOrder: SortOrder,
 ) = request.copy(
-	sortBy = setOf(sortOption.value, ItemSortBy.SORT_NAME),
-	sortOrder = setOf(sortOption.order)
+	sortBy = setOf(sortBy, ItemSortBy.SORT_NAME),
+	sortOrder = setOf(sortOrder)
 )
 
 fun setArtistsSorting(
 	request: GetArtistsRequest,
-	sortOption: SortOption,
+	sortBy: ItemSortBy,
+	sortOrder: SortOrder,
 ) = request.copy(
-	sortBy = setOf(sortOption.value, ItemSortBy.SORT_NAME),
-	sortOrder = setOf(sortOption.order)
+	sortBy = setOf(sortBy, ItemSortBy.SORT_NAME),
+	sortOrder = setOf(sortOrder)
 )
 
 fun setItemsSorting(
 	request: GetItemsRequest,
-	sortOption: SortOption,
+	sortBy: ItemSortBy,
+	sortOrder: SortOrder,
 ) = request.copy(
-	sortBy = setOf(sortOption.value, ItemSortBy.SORT_NAME),
-	sortOrder = setOf(sortOption.order)
+	sortBy = setOf(sortBy, ItemSortBy.SORT_NAME),
+	sortOrder = setOf(sortOrder)
 )
 
 fun setAlbumArtistsFilter(
