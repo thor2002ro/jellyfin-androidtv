@@ -5,5 +5,9 @@
             android:name="org.jellyfin.androidtv.test.PlaybackTestActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+        <activity
+            android:name="org.jellyfin.androidtv.test.UpdaterTestActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
     </application>
 </manifest>
