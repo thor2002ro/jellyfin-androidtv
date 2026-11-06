@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +35,7 @@ import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
+import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbarActiveButton
 import org.koin.android.ext.android.inject
@@ -50,7 +52,10 @@ class HomeFragment : Fragment() {
 		savedInstanceState: Bundle?
 	) = content {
 		val rowsFocusRequester = remember { FocusRequester() }
-		LaunchedEffect(rowsFocusRequester) { rowsFocusRequester.requestFocus() }
+		val profileTransitionActive = (LocalActivity.current as? MainActivity)?.profileLoginAnimation != null
+		LaunchedEffect(rowsFocusRequester, profileTransitionActive) {
+			if (!profileTransitionActive) rowsFocusRequester.requestFocus()
+		}
 		var homeRowsGeneration by remember { mutableIntStateOf(0) }
 		LaunchedEffect(customMessageRepository) {
 			customMessageRepository.message

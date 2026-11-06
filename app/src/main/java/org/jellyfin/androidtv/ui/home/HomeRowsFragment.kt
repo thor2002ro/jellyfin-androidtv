@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.home
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import androidx.compose.runtime.snapshotFlow
 import androidx.core.view.doOnLayout
 import androidx.leanback.app.RowsSupportFragment
 import androidx.leanback.widget.ListRow
@@ -41,6 +42,7 @@ import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.CompositeClickedListener
 import org.jellyfin.androidtv.ui.browsing.CompositeSelectedListener
+import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
@@ -146,6 +148,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				trackHomeRows()
+				(activity as? MainActivity)?.profileLoginAnimation?.homeRowsReady = true
 
 				if (currentUser.policy?.enableLiveTvAccess == true) {
 					TvManager.preloadChannels(this@HomeRowsFragment)
@@ -188,6 +191,22 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 		// Subscribe to Audio messages
 		mediaManager.addAudioEventListener(this)
+	}
+
+	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+		super.onViewCreated(view, savedInstanceState)
+		val mainActivity = activity as? MainActivity ?: return
+		if (mainActivity.profileLoginAnimation == null) return
+		val grid = verticalGridView ?: return
+		// Requests and adapters can update now; expensive card layout waits for the profile to land.
+		grid.suppressLayout(true)
+		viewLifecycleOwner.lifecycleScope.launch {
+			try {
+				snapshotFlow { mainActivity.profileLoginAnimation == null }.first { it }
+			} finally {
+				grid.suppressLayout(false)
+			}
+		}
 	}
 
 	private suspend fun createHomeRows(
