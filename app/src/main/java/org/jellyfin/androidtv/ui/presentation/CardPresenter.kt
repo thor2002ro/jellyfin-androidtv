@@ -72,8 +72,10 @@ class CardPresenter(
 	val uniformAspect: Boolean,
 	private val onLongClick: ((item: Any?, view: View) -> Boolean)? = null,
 	val showFavoriteIndicator: Boolean = true,
+	val showBrowserTitle: Boolean = false,
 ) : Presenter() {
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null)
+	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean, showBrowserTitle: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null, true, showBrowserTitle)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int) : this(showInfo, imageType, staticHeight, false)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, onLongClick: ((item: Any?, view: View) -> Boolean)?) : this(showInfo, imageType, staticHeight, false, onLongClick)
 	constructor(showInfo: Boolean, staticHeight: Int) : this(showInfo, ImageType.POSTER, staticHeight)
@@ -128,6 +130,7 @@ class CardPresenter(
 					item = item,
 					focused = focused,
 					showInfo = showInfo,
+					showBrowserTitle = showBrowserTitle,
 					imageType = imageType,
 					staticHeight = staticHeight,
 					uniformAspect = uniformAspect,
@@ -418,8 +421,8 @@ internal fun CardViewHolderContent(
 								LiveTvCardFooter(liveTvText, focused)
 							} else if (showInfo && title != null) {
 								val focusModifier = if (focused) Modifier.basicMarquee(
-									iterations = Int.MAX_VALUE,
-									initialDelayMillis = 0,
+									iterations = 1,
+									initialDelayMillis = 1500,
 								) else Modifier
 
 								Box(
@@ -449,8 +452,8 @@ internal fun CardViewHolderContent(
 
 	if (usePreview) {
 		val focusModifier = if (focused) Modifier.basicMarquee(
-			iterations = Int.MAX_VALUE,
-			initialDelayMillis = 0,
+			iterations = 1,
+			initialDelayMillis = 1500,
 		) else Modifier
 
 		ItemPreview(
@@ -564,8 +567,8 @@ private fun LiveTvCardFooter(
 				}
 				text.program?.let { program ->
 					val focusModifier = if (focused) Modifier.basicMarquee(
-						iterations = Int.MAX_VALUE,
-						initialDelayMillis = 0,
+						iterations = 1,
+						initialDelayMillis = 1500,
 					) else Modifier
 					Text(
 						text = program,

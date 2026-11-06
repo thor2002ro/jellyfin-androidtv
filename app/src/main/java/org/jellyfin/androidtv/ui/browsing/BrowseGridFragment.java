@@ -56,6 +56,7 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem;
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher;
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter;
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapterHelperKt;
+import org.jellyfin.androidtv.ui.presentation.BrowseCardGridPresenter;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
 import org.jellyfin.androidtv.ui.presentation.BrowseImageRequestSize;
 import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter;
@@ -121,7 +122,6 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private Presenter mGridPresenter;
     private Presenter.ViewHolder mGridViewHolder;
     private View mGridView;
-    private int mVerticalColumnCount;
     private int mSelectedPosition = -1;
     private int mGridHeight = -1;
     private int mGridWidth = -1;
@@ -145,6 +145,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final double CARD_SPACING_PCT = 1.0; // 100% expressed as relative to the padding_left/top, which depends on the mCardFocusScale and AspectRatio
     private final double CARD_SPACING_HORIZONTAL_BANNER_PCT = 0.5; // 50% allow horizontal card overlapping for banners, otherwise spacing is too large
     private final int VIEW_SELECT_UPDATE_DELAY = 250; // delay in ms until we update the top-row info for a selected item
+    private final int BACKGROUND_UPDATE_DELAY = 1500;
     private final int SELECTION_RESTORE_WINDOW_MS = 1500;
     private static final int BROWSE_CARD_TITLE_HEIGHT_DP = 26;
     private static final int OVERLAY_FOCUS_NONE = 0;
@@ -254,6 +255,10 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     static int nextSelectionAfterQueryChange(int totalItems) {
         return totalItems > 0 ? 0 : -1;
+    }
+
+    static boolean shouldRetrieveGrid(boolean adapterRebuilt, boolean queryChangePending, int itemsLoaded) {
+        return adapterRebuilt || queryChangePending || itemsLoaded <= 0;
     }
 
     static boolean shouldKeepToolbarFocusable(int itemsLoaded, boolean filtersActive) {
@@ -411,38 +416,31 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             ComposeBrowseListPresenter presenter = (ComposeBrowseListPresenter) mGridPresenter;
             mGridView = ((ComposeBrowseListPresenter.ViewHolder) mGridViewHolder).getListView();
             presenter.configure(8, 12, resolveBrowseGridSpacing(6, mCardSpacing));
-        } else if (mGridViewHolder instanceof HorizontalGridPresenter.ViewHolder) {
-            HorizontalGridPresenter presenter = (HorizontalGridPresenter) mGridPresenter;
-            View gridView = ((HorizontalGridPresenter.ViewHolder) mGridViewHolder).getGridView();
-            mGridView = gridView;
-            ViewGroup.MarginLayoutParams titleMargin = (ViewGroup.MarginLayoutParams) binding.title.getLayoutParams();
-            ViewGroup.MarginLayoutParams clockMargin = (ViewGroup.MarginLayoutParams) binding.clock.getLayoutParams();
-            float density = getResources().getDisplayMetrics().density;
+        } else if (mGridPresenter instanceof BrowseCardGridPresenter) {
+            BrowseCardGridPresenter presenter = (BrowseCardGridPresenter) mGridPresenter;
+            boolean horizontal = presenter instanceof HorizontalGridPresenter;
+            int paddingStart = mGridPaddingLeft;
+            int paddingEnd = mGridPaddingLeft;
+            int verticalPadding = 16;
+            mGridView = mGridViewHolder.view;
+            if (horizontal) {
+                ViewGroup.MarginLayoutParams titleMargin = (ViewGroup.MarginLayoutParams) binding.title.getLayoutParams();
+                ViewGroup.MarginLayoutParams clockMargin = (ViewGroup.MarginLayoutParams) binding.clock.getLayoutParams();
+                float density = getResources().getDisplayMetrics().density;
+                paddingStart = pixelsToDp(titleMargin.getMarginStart(), density);
+                paddingEnd = pixelsToDp(clockMargin.getMarginEnd(), density);
+                verticalPadding = mGridPaddingTop;
+            }
             presenter.configure(
                     mImageType,
                     mCardHeight,
-                    presenter.getNumberOfRows(),
+                    presenter.getSpanCount(),
                     mGridItemSpacingHorizontal,
                     mGridItemSpacingVertical,
                     shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles),
-                    pixelsToDp(titleMargin.getMarginStart(), density),
-                    pixelsToDp(clockMargin.getMarginEnd(), density),
-                    mGridPaddingTop,
-                    false,
-                    true
-            );
-        } else if (mGridViewHolder instanceof ComposeVerticalGridPresenter.ViewHolder) {
-            ComposeVerticalGridPresenter presenter = (ComposeVerticalGridPresenter) mGridPresenter;
-            View gridView = ((ComposeVerticalGridPresenter.ViewHolder) mGridViewHolder).getGridView();
-            mGridView = gridView;
-            presenter.configure(
-                    mImageType,
-                    mCardHeight,
-                    mVerticalColumnCount,
-                    mGridItemSpacingHorizontal,
-                    mGridItemSpacingVertical,
-                    shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles),
-                    mGridPaddingLeft
+                    paddingStart,
+                    paddingEnd,
+                    verticalPadding
             );
         }
         if (mGridView.getId() == View.NO_ID) mGridView.setId(View.generateViewId());
@@ -464,25 +462,19 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private int getGridSelectedPosition() {
-        if (mGridPresenter instanceof ComposeVerticalGridPresenter) {
-            return ((ComposeVerticalGridPresenter) mGridPresenter).getPosition();
-        }
-        if (mGridPresenter instanceof ComposeBrowseListPresenter) {
+        if (mGridPresenter instanceof BrowseCardGridPresenter) {
+            return ((BrowseCardGridPresenter) mGridPresenter).getPosition();
+        } else if (mGridPresenter instanceof ComposeBrowseListPresenter) {
             return ((ComposeBrowseListPresenter) mGridPresenter).getPosition();
-        }
-        if (mGridPresenter instanceof HorizontalGridPresenter) {
-            return ((HorizontalGridPresenter) mGridPresenter).getPosition();
         }
         return -1;
     }
 
     private void setGridSelectedPosition(int position) {
-        if (mGridPresenter instanceof ComposeVerticalGridPresenter) {
-            ((ComposeVerticalGridPresenter) mGridPresenter).setPosition(position);
+        if (mGridPresenter instanceof BrowseCardGridPresenter) {
+            ((BrowseCardGridPresenter) mGridPresenter).setPosition(position);
         } else if (mGridPresenter instanceof ComposeBrowseListPresenter) {
             ((ComposeBrowseListPresenter) mGridPresenter).setPosition(position);
-        } else if (mGridPresenter instanceof HorizontalGridPresenter) {
-            ((HorizontalGridPresenter) mGridPresenter).setPosition(position);
         }
     }
 
@@ -593,9 +585,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (gridPresenter == null) {
             throw new IllegalArgumentException("Grid presenter may not be null");
         }
-        if (!(gridPresenter instanceof ComposeVerticalGridPresenter) &&
-                !(gridPresenter instanceof ComposeBrowseListPresenter) &&
-                !(gridPresenter instanceof HorizontalGridPresenter)) {
+        if (!(gridPresenter instanceof BrowseCardGridPresenter) &&
+                !(gridPresenter instanceof ComposeBrowseListPresenter)) {
             throw new IllegalArgumentException("Unsupported grid presenter");
         }
 
@@ -606,14 +597,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             presenter.setOnItemViewClickedListener(mClickedListener);
             presenter.setOnDirectionalKeyListener(this::cancelSelectionRestore);
             presenter.setOnKeyListener(this);
-        } else if (gridPresenter instanceof ComposeVerticalGridPresenter) {
-            ComposeVerticalGridPresenter presenter = (ComposeVerticalGridPresenter) gridPresenter;
-            presenter.setOnItemViewSelectedListener(mRowSelectedListener);
-            presenter.setOnItemViewClickedListener(mClickedListener);
-            presenter.setOnDirectionalKeyListener(this::cancelSelectionRestore);
-            presenter.setOnKeyListener(this);
-        } else if (gridPresenter instanceof HorizontalGridPresenter) {
-            HorizontalGridPresenter presenter = (HorizontalGridPresenter) gridPresenter;
+        } else if (gridPresenter instanceof BrowseCardGridPresenter) {
+            BrowseCardGridPresenter presenter = (BrowseCardGridPresenter) gridPresenter;
             presenter.setOnItemViewSelectedListener(mRowSelectedListener);
             presenter.setOnItemViewClickedListener(mClickedListener);
             presenter.setOnDirectionalKeyListener(this::cancelSelectionRestore);
@@ -799,51 +784,51 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (mGridPresenter instanceof ComposeBrowseListPresenter) return;
 
         // HINT: use uneven Rows/Cols if possible, so selected middle lines up with TV middle!
+        int spanCount;
         if (mGridPresenter instanceof ComposeVerticalGridPresenter) {
-            int numCols;
             switch (posterSize) {
                 case SMALLEST:
-                    numCols = imageType.equals(ImageType.BANNER) ? 6 : imageType.equals(ImageType.THUMB) ? 11 : 15;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 6 : imageType.equals(ImageType.THUMB) ? 11 : 15;
                     break;
                 case SMALL:
-                    numCols = imageType.equals(ImageType.BANNER) ? 5 : imageType.equals(ImageType.THUMB) ? 9 : 13;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 5 : imageType.equals(ImageType.THUMB) ? 9 : 13;
                     break;
                 case MED:
-                    numCols = imageType.equals(ImageType.BANNER) ? 4 : imageType.equals(ImageType.THUMB) ? 7 : 11;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 4 : imageType.equals(ImageType.THUMB) ? 7 : 11;
                     break;
                 case LARGE:
-                    numCols = imageType.equals(ImageType.BANNER) ? 3 : imageType.equals(ImageType.THUMB) ? 5 : 7;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 3 : imageType.equals(ImageType.THUMB) ? 5 : 7;
                     break;
                 case X_LARGE:
-                    numCols = imageType.equals(ImageType.BANNER) ? 2 : imageType.equals(ImageType.THUMB) ? 3 : 5;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 2 : imageType.equals(ImageType.THUMB) ? 3 : 5;
                     break;
                 default:
                     throw new IllegalStateException("Unexpected value: " + mPosterSizeSetting);
             }
-            mVerticalColumnCount = numCols;
         } else if (mGridPresenter instanceof HorizontalGridPresenter) {
-            int numRows;
             switch (posterSize) {
                 case SMALLEST:
-                    numRows = imageType.equals(ImageType.BANNER) ? 13 : imageType.equals(ImageType.THUMB) ? 7 : 5;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 13 : imageType.equals(ImageType.THUMB) ? 7 : 5;
                     break;
                 case SMALL:
-                    numRows = imageType.equals(ImageType.BANNER) ? 11 : imageType.equals(ImageType.THUMB) ? 6 : 4;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 11 : imageType.equals(ImageType.THUMB) ? 6 : 4;
                     break;
                 case MED:
-                    numRows = imageType.equals(ImageType.BANNER) ? 9 : imageType.equals(ImageType.THUMB) ? 5 : 3;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 9 : imageType.equals(ImageType.THUMB) ? 5 : 3;
                     break;
                 case LARGE:
-                    numRows = imageType.equals(ImageType.BANNER) ? 7 : imageType.equals(ImageType.THUMB) ? 4 : 2;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 7 : imageType.equals(ImageType.THUMB) ? 4 : 2;
                     break;
                 case X_LARGE:
-                    numRows = imageType.equals(ImageType.BANNER) ? 5 : imageType.equals(ImageType.THUMB) ? 2 : 1;
+                    spanCount = imageType.equals(ImageType.BANNER) ? 5 : imageType.equals(ImageType.THUMB) ? 2 : 1;
                     break;
                 default:
                     throw new IllegalStateException("Unexpected value: " + mPosterSizeSetting);
             }
-            ((HorizontalGridPresenter) mGridPresenter).setNumberOfRows(numRows);
+        } else {
+            return;
         }
+        ((BrowseCardGridPresenter) mGridPresenter).setSpanCount(spanCount);
     }
 
     private void setAutoCardGridValues() {
@@ -872,13 +857,13 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         int numCardsScreen = 0; // number of cards visible, including cutoff's
 
         if (mGridPresenter instanceof HorizontalGridPresenter) {
-            numRows = ((HorizontalGridPresenter) mGridPresenter).getNumberOfRows();
+            numRows = ((BrowseCardGridPresenter) mGridPresenter).getSpanCount();
             if (numRows == 1) { // reduce size so minimal cards are shown
                 numRows = 0;
                 numCols = MIN_NUM_CARDS;
             }
         } else if (mGridPresenter instanceof ComposeVerticalGridPresenter) {
-            numCols = mVerticalColumnCount;
+            numCols = ((BrowseCardGridPresenter) mGridPresenter).getSpanCount();
         }
 
         if (numRows > 0) {
@@ -1051,7 +1036,13 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void buildAdapter() {
-        mCardPresenter = new CardPresenter(false, mImageType, mCardHeight, true);
+        mCardPresenter = new CardPresenter(
+                false,
+                mImageType,
+                mCardHeight,
+                true,
+                shouldShowBrowseCardInfo(mViewStyle, mShowCardTitles)
+        );
         mLastImagePrefetchPosition = -1;
         mLastImagePrefetchItemsLoaded = -1;
         mPendingSelectedPosition = -1;
@@ -1149,7 +1140,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     public void loadGrid() {
-        if (mCardPresenter == null || mAdapter == null || mDirty) {
+        boolean adapterRebuilt = mCardPresenter == null || mAdapter == null || mDirty;
+        if (adapterRebuilt) {
             buildAdapter();
         }
 
@@ -1158,7 +1150,12 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 libraryPreferences.get(LibraryPreferences.Companion.getSortOrder())
         );
         if (mSelectedPosition >= 0) mPendingSelectedPosition = mSelectedPosition;
-        mAdapter.Retrieve();
+        if (shouldRetrieveGrid(adapterRebuilt, mQueryChangePending, mAdapter.getItemsLoaded())) {
+            mAdapter.Retrieve();
+        } else {
+            applyPendingSelectedPosition();
+            keepGridFocused();
+        }
     }
 
     private ImageButton mSortButton;
@@ -1354,8 +1351,16 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         public void run() {
             if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
 
-            backgroundService.getValue().setBackground(mCurrentItem.getBaseItem());
             setItem(mCurrentItem);
+        }
+    };
+
+    private final Runnable mDelayedSetBackground = new Runnable() {
+        @Override
+        public void run() {
+            if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
+
+            backgroundService.getValue().setBackground(mCurrentItem.getBaseItem());
         }
     };
 
@@ -1364,6 +1369,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         public void onItemSelected(Presenter.ViewHolder itemViewHolder, Object item,
                                    RowPresenter.ViewHolder rowViewHolder, Row row) {
             mHandler.removeCallbacks(mDelayedSetItem);
+            mHandler.removeCallbacks(mDelayedSetBackground);
             if (!(item instanceof BaseRowItem)) {
                 mCurrentItem = null;
                 binding.title.setText(mainTitle);
@@ -1374,6 +1380,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 binding.title.setText(mCurrentItem.getName(requireContext()));
                 binding.infoRow.removeAllViews();
                 mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
+                mHandler.postDelayed(mDelayedSetBackground, BACKGROUND_UPDATE_DELAY);
 
                 int position = mAdapter.indexOf(mCurrentItem);
                 if (!determiningPosterSize)
