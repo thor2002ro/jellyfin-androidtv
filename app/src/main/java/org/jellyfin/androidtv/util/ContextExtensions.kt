@@ -5,8 +5,10 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Configuration
+import androidx.annotation.DimenRes
 import androidx.annotation.PluralsRes
 import androidx.core.content.getSystemService
+import kotlin.math.roundToInt
 
 /**
  * Get the activity hosting the current context
@@ -23,6 +25,9 @@ tailrec fun Context.getActivity(): Activity? = when (this) {
  */
 fun Context.getQuantityString(@PluralsRes id: Int, quantity: Number, vararg args: Any) =
 	resources.getQuantityString(id, quantity.toInt(), quantity, *args)
+
+internal fun Context.dimenDp(@DimenRes id: Int) =
+	(resources.getDimension(id) / resources.displayMetrics.density).roundToInt()
 
 fun Context.isTvDevice(): Boolean {
 	val uiModeManager = getSystemService<UiModeManager>()
