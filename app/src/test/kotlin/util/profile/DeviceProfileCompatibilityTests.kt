@@ -27,6 +27,7 @@ import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.preference.mpvAudioPreset
 import org.jellyfin.androidtv.preference.mpvAudioOutput
+import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioPresetOption
 import org.jellyfin.androidtv.preference.constant.LibMPVAudioOutput
 import org.jellyfin.sdk.model.ServerVersion
@@ -102,6 +103,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 			every { preferences[UserPreferences.audioBehaviour] } returns AudioBehavior.TRANSCODE_TO_PASSTHROUGH
 			every { preferences[UserPreferences.mpvAudioPreset] } returns LibMPVAudioPresetOption.OFF
 			every { preferences[UserPreferences.mpvAudioOutput] } returns LibMPVAudioOutput.AUDIOTRACK
+			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns false
 			every { preferences[UserPreferences.maxBitrate] } returns "100"
 			every { preferences[UserPreferences.maxResolution] } returns PlaybackResolution.NATIVE
 			every { preferences[UserPreferences.preferFmp4HlsContainer] } returns true
@@ -130,6 +132,25 @@ class DeviceProfileCompatibilityTests : FunSpec({
 						condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
 					}
 			} shouldBe true
+			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns true
+			val localProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+			(Codec.Audio.EAC3 in localProfile.announcedAudioCodecs()) shouldBe true
+			localProfile.codecProfiles.any { codecProfile ->
+				codecProfile.type == CodecType.VIDEO_AUDIO &&
+					Codec.Audio.EAC3 in codecProfile.codec.declarations() &&
+					codecProfile.conditions.any { condition ->
+						condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
+					}
+			} shouldBe false
+			localProfile.codecProfiles.filter { it.type == CodecType.VIDEO } shouldBe
+				profile.codecProfiles.filter { it.type == CodecType.VIDEO }
+			every { getSupportedMPVPassthroughAudioMimes(context, any()) } returns setOf(MimeTypes.AUDIO_E_AC3)
+			val gatedProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+			every { preferences[UserPreferences.mpvConvertAudioToAc3] } returns false
+			val serverProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+			gatedProfile.codecProfiles shouldBe serverProfile.codecProfiles
+			gatedProfile.transcodingProfiles shouldBe serverProfile.transcodingProfiles
+			every { getSupportedMPVPassthroughAudioMimes(context, any()) } returns setOf(MimeTypes.AUDIO_AC3)
 			for (disabledBy in listOf("preset", "downmix", "codec switches")) {
 				every { preferences[UserPreferences.mpvAudioPreset] } returns
 					if (disabledBy == "preset") LibMPVAudioPresetOption.CINEMA_SPATIAL else LibMPVAudioPresetOption.OFF
@@ -146,7 +167,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 						it.conditions.any { condition -> condition.property == ProfileConditionValue.AUDIO_CHANNELS }
 				} shouldBe false
 			}
-			verify(exactly = 1) { getSupportedMPVPassthroughAudioMimes(context, any()) }
+			verify(exactly = 4) { getSupportedMPVPassthroughAudioMimes(context, any()) }
 			verify(exactly = 0) { getSupportedPassthroughAudioMimes(context, any()) }
 		} finally {
 			unmockkStatic(::getSupportedMPVPassthroughAudioMimes)

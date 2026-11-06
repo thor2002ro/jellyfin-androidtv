@@ -6,6 +6,13 @@ import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 
 class StatsForNerdsCodecStatsTests : StringSpec({
+	"active device audio conversion shows its target and local marker" {
+		streamingCodecLabel("aac", "aac", MediaConversionMethod.None, "ac3") shouldBe "AAC -> AC3 (local)"
+		streamingCodecLabel("eac3", "aac", MediaConversionMethod.Transcode, "ac3") shouldBe "EAC3 -> AC3 (local)"
+		streamingCodecLabel(null, "flac", MediaConversionMethod.None, "ac3") shouldBe "FLAC -> AC3 (local)"
+		streamingCodecLabel("aac", "aac", MediaConversionMethod.None) shouldBe "AAC (direct)"
+	}
+
 	"copied audio codecs match their player MIME aliases" {
 		listOf(
 			"aac" to "audio/mp4a-latm",

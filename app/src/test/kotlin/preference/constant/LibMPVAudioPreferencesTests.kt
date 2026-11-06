@@ -9,6 +9,7 @@ import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPreset
+import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
 import org.jellyfin.androidtv.preference.mpvDeinterlace
@@ -31,6 +32,34 @@ import org.jellyfin.androidtv.preference.mpvVideoSync
 import org.jellyfin.playback.mpv.LibMPVAudioPreset
 
 class LibMPVAudioPreferencesTests : FunSpec({
+	test("local AC3 conversion requires both audio conversion settings") {
+		for ((behavior, enabled, expected) in listOf(
+			Triple(AudioBehavior.DIRECT_STREAM, false, false),
+			Triple(AudioBehavior.DIRECT_STREAM, true, false),
+			Triple(AudioBehavior.TRANSCODE_TO_PASSTHROUGH, false, false),
+			Triple(AudioBehavior.TRANSCODE_TO_PASSTHROUGH, true, true),
+		)) {
+			preferences(audioBehavior = behavior, convertAudioToAc3 = enabled)
+				.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3)).convertAudioToAc3 shouldBe expected
+		}
+	}
+
+	test("local AC3 conversion respects route codec downmix and preset gates") {
+		val enabled = preferences(audioBehavior = AudioBehavior.TRANSCODE_TO_PASSTHROUGH, convertAudioToAc3 = true)
+		enabled.mpvPlaybackOptions(emptySet()).convertAudioToAc3 shouldBe false
+		enabled.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_DTS)).convertAudioToAc3 shouldBe false
+		for (configuration in listOf(
+			preferences(audioBehavior = AudioBehavior.TRANSCODE_TO_PASSTHROUGH, convertAudioToAc3 = true, ac3 = false),
+			preferences(audioBehavior = AudioBehavior.DOWNMIX_TO_STEREO, convertAudioToAc3 = true),
+			preferences(audioBehavior = AudioBehavior.TRANSCODE_TO_PASSTHROUGH, convertAudioToAc3 = true,
+				audioPreset = LibMPVAudioPresetOption.CINEMA_SPATIAL),
+		)) configuration.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3)).convertAudioToAc3 shouldBe false
+		enabled.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_DTS_HD)).audioSpdif shouldBe "ac3,dts-hd"
+		preferences(audioBehavior = AudioBehavior.TRANSCODE_TO_PASSTHROUGH, convertAudioToAc3 = true,
+			audioPreset = LibMPVAudioPresetOption.STANDARD)
+			.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3)).convertAudioToAc3 shouldBe true
+	}
+
 	test("upstream AC3 mode controls MPV without bypassing route support") {
 		for (mode in BitstreamAudioMode.entries) {
 			val preferences = preferences()
@@ -198,7 +227,9 @@ private fun preferences(
 	truehd: Boolean = true,
 	audioOutput: LibMPVAudioOutput = LibMPVAudioOutput.AUTO,
 	audioPreset: LibMPVAudioPresetOption = LibMPVAudioPresetOption.OFF,
+	convertAudioToAc3: Boolean = false,
 ) = mockk<UserPreferences> {
+	every { this@mockk[UserPreferences.mpvConvertAudioToAc3] } returns convertAudioToAc3
 	every { this@mockk[UserPreferences.audioBehaviour] } returns audioBehavior
 	every { this@mockk[UserPreferences.bitstreamAc3] } returns if (ac3) BitstreamAudioMode.AUTO else BitstreamAudioMode.DISABLE
 	every { this@mockk[UserPreferences.bitstreamEac3] } returns if (eac3) BitstreamAudioMode.AUTO else BitstreamAudioMode.DISABLE

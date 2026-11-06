@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.constant.AudioBehavior
 import org.jellyfin.androidtv.preference.constant.LibMPVChoiceSetting
 import org.jellyfin.androidtv.preference.constant.LibMPVGpuApi
 import org.jellyfin.androidtv.preference.constant.LibMPVPreferenceOption
@@ -35,6 +36,7 @@ import org.jellyfin.androidtv.preference.constant.resetLibMPVPreferences
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
+import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
@@ -105,6 +107,8 @@ fun SettingsPlaybackLibMPVScreen() {
 	var nvidiaShieldWorkarounds by rememberPreference(userPreferences, UserPreferences.mpvNvidiaShieldWorkarounds)
 	val videoPreset by rememberPreference(userPreferences, UserPreferences.mpvVideoPreset)
 	val audioPreset by rememberPreference(userPreferences, UserPreferences.mpvAudioPreset)
+	val audioBehavior by rememberPreference(userPreferences, UserPreferences.audioBehaviour)
+	var convertAudioToAc3 by rememberPreference(userPreferences, UserPreferences.mpvConvertAudioToAc3)
 	var decoderThreads by rememberPreference(userPreferences, UserPreferences.mpvDecoderThreads)
 	var optionOverrides by rememberPreference(userPreferences, UserPreferences.mpvOptionOverrides)
 	val overrideCount = remember(optionOverrides) {
@@ -190,6 +194,22 @@ fun SettingsPlaybackLibMPVScreen() {
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_audio)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_PRESET, audioPreset) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_OUTPUT, audioOutput) }
+		item {
+			LibMPVBooleanButton(
+				headingRes = R.string.preference_mpv_convert_audio_to_ac3,
+				captionRes = R.string.preference_mpv_convert_audio_to_ac3_description,
+				caption = stringResource(
+					R.string.preference_mpv_convert_audio_to_ac3_description,
+					stringResource(R.string.pref_audio_surround_compat),
+				),
+				checked = convertAudioToAc3,
+				enabled = audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH,
+				onClick = {
+					convertAudioToAc3 = !convertAudioToAc3
+					backendSettings.applyPreferences()
+				},
+			)
+		}
 		item {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.preference_mpv_shared_audio)) },
@@ -324,20 +344,23 @@ private fun LibMPVBooleanButton(
 	headingRes: Int,
 	captionRes: Int,
 	checked: Boolean,
-	defaultValue: Boolean,
+	defaultValue: Boolean? = null,
+	caption: String = stringResource(captionRes),
+	enabled: Boolean = true,
 	onClick: () -> Unit,
 ) {
 	ListButton(
 		headingContent = { Text(stringResource(headingRes)) },
 		captionContent = {
 			Text(
-				"${stringResource(captionRes)} " + stringResource(
+				caption + if (defaultValue == null) "" else " " + stringResource(
 					R.string.preference_mpv_default_value,
 					stringResource(if (defaultValue) R.string.preference_mpv_value_enabled else R.string.preference_mpv_value_disabled),
 				)
 			)
 		},
 		trailingContent = { Checkbox(checked = checked) },
+		enabled = enabled,
 		onClick = onClick,
 	)
 }
