@@ -7,6 +7,20 @@ import android.media.MediaFormat
 import android.util.Size
 import org.jellyfin.androidtv.util.AndroidVersion
 import timber.log.Timber
+import java.util.Locale
+
+internal fun isSoftwareVideoCodecName(name: String): Boolean {
+	val normalized = name.lowercase(Locale.US)
+	if (normalized.startsWith("arc.")) return false
+
+	return normalized.startsWith("omx.google.") ||
+		normalized.startsWith("omx.ffmpeg.") ||
+		(normalized.startsWith("omx.sec.") && normalized.contains(".sw.")) ||
+		normalized == "omx.qcom.video.decoder.hevcswvdec" ||
+		normalized.startsWith("c2.android.") ||
+		normalized.startsWith("c2.google.") ||
+		(!normalized.startsWith("omx.") && !normalized.startsWith("c2."))
+}
 
 /**
  * Queries device codec capabilities from Android's [MediaCodecList].
@@ -16,7 +30,7 @@ class MediaCodecQuery(
 	private val softwareCodecsEnabled: Boolean,
 ) {
 	private val MediaCodecInfo.isSoftwareCodec: Boolean
-		get() = AndroidVersion.isAtLeastQ && isSoftwareOnly
+		get() = if (AndroidVersion.isAtLeastQ) isSoftwareOnly else isSoftwareVideoCodecName(name)
 
 	private fun decoderInfos(): Sequence<MediaCodecInfo> =
 		mediaCodecList.codecInfos.asSequence()

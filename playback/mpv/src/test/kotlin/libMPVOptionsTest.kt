@@ -213,6 +213,13 @@ class LibMPVOptionsTest : StringSpec({
 		) shouldBe LibMPVVideoDecoder.SOFTWARE
 	}
 
+	"Dolby Vision hardware playback overrides MPV software decoding" {
+		LibMPVVideoDecoder.SOFTWARE.forDoviPlayback(requiresHardwareVideoDecoder = true) shouldBe
+			LibMPVVideoDecoder.MEDIACODEC
+		LibMPVVideoDecoder.SOFTWARE.forDoviPlayback(requiresHardwareVideoDecoder = false) shouldBe
+			LibMPVVideoDecoder.SOFTWARE
+	}
+
 	"HDR uses direct output only when the decoder can try native MediaCodec" {
 		listOf(
 			Triple(LibMPVVideoDecoder.MEDIACODEC, "HDR10", "mediacodec_embed"),

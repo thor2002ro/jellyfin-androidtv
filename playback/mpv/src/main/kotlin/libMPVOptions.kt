@@ -27,6 +27,9 @@ internal fun effectiveLibMPVVideoDecoder(
 	else -> configured
 }
 
+internal fun LibMPVVideoDecoder.forDoviPlayback(requiresHardwareVideoDecoder: Boolean) =
+	if (requiresHardwareVideoDecoder) LibMPVVideoDecoder.MEDIACODEC else this
+
 internal fun effectiveLibMPVVideoOutput(
 	configured: String,
 	decoder: LibMPVVideoDecoder,
