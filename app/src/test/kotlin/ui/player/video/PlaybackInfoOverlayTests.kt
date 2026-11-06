@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
+import org.jellyfin.playback.core.backend.VideoDecoderOption
 import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 
 class PlaybackInfoOverlayTests : FunSpec({
@@ -54,5 +55,19 @@ class PlaybackInfoOverlayTests : FunSpec({
 			hevcEnhancementLayer = false,
 			av1Profile10 = false,
 		) shouldBe "None"
+	}
+
+	test("decoder mode diagnostics distinguish a temporary override") {
+		decoderModeDiagnostic(
+			selected = VideoDecoderOption("SOFTWARE", "Software"),
+			forced = VideoDecoderOption("SOFTWARE", "Software"),
+		) shouldBe "Software (override)"
+	}
+
+	test("decoder mode diagnostics preserve the configured backend mode") {
+		decoderModeDiagnostic(
+			selected = VideoDecoderOption("AUTOMATIC", "Auto safe"),
+			forced = null,
+		) shouldBe "Auto safe"
 	}
 })
