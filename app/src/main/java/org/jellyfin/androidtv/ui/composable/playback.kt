@@ -41,6 +41,7 @@ fun rememberPlayerPositionInfo(
 	resetKey: Any? = Unit,
 	resetToEmpty: Boolean = false,
 	updateImmediately: Boolean = true,
+	updateWhilePaused: Boolean = false,
 ): MutableState<PositionInfo> {
 	val lifecycleOwner = LocalLifecycleOwner.current
 	val playState by playbackManager.state.playState.collectAsStateWithLifecycle()
@@ -50,7 +51,7 @@ fun rememberPlayerPositionInfo(
 		mutableStateOf(if (resetToEmpty) PositionInfo.EMPTY else playbackManager.state.positionInfo)
 	}
 
-	LaunchedEffect(lifecycleOwner, playbackManager, playing, precision, resetKey, updateImmediately) {
+	LaunchedEffect(lifecycleOwner, playbackManager, playing, precision, resetKey, updateImmediately, updateWhilePaused) {
 		lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
 			val precisionMs = precision.inWholeMilliseconds
 
@@ -58,7 +59,7 @@ fun rememberPlayerPositionInfo(
 				positionInfo.value = playbackManager.state.positionInfo
 			}
 
-			while (playing) {
+			while (playing || updateWhilePaused) {
 				delay(precisionMs - (positionInfo.value.active.inWholeMilliseconds % precisionMs))
 				positionInfo.value = playbackManager.state.positionInfo
 			}

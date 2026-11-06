@@ -3,6 +3,7 @@ package org.jellyfin.playback.media3.session
 import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player.Commands
 import androidx.media3.common.SimpleBasePlayer
@@ -25,8 +26,8 @@ import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
-import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
+import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
 import timber.log.Timber
@@ -69,8 +70,8 @@ internal class MediaSessionPlayer(
 
 	override fun getState(): State = State.Builder().apply {
 		val currentEntry = manager.queue.entry.value
-		val playPauseEnabled = currentEntry?.isLiveTv != true
-		val seekEnabled = currentEntry?.isDirectPlayLiveTv != true
+		val playPauseEnabled = state.canSeek
+		val seekEnabled = state.canSeek
 
 		setAvailableCommands(Commands.Builder().apply {
 			addIf(COMMAND_PLAY_PAUSE, playPauseEnabled)
@@ -119,7 +120,12 @@ internal class MediaSessionPlayer(
 				.map {
 					MediaItemData.Builder(requireNotNull(it.metadata.mediaId)).apply {
 						setMediaItem(it.metadata.toMediaItem())
-						setDurationUs(it.metadata.duration?.inWholeMicroseconds ?: C.TIME_UNSET)
+						setDurationUs(if (it.isLiveTv) state.positionInfo.duration.inWholeMicroseconds else it.metadata.duration?.inWholeMicroseconds ?: C.TIME_UNSET)
+						setIsSeekable(state.canSeek)
+						setIsDynamic(it.isLiveTv)
+						setLiveConfiguration(it.liveStreamTargetOffset?.let { offset ->
+							MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(offset.inWholeMilliseconds).build()
+						})
 					}.build()
 				}
 			setPlaylist(playlist)
@@ -159,8 +165,8 @@ internal class MediaSessionPlayer(
 
 	override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
 		Timber.d("handleSetPlayWhenReady(playWhenReady=${playWhenReady})")
-		if (manager.queue.entry.value?.isLiveTv == true) {
-			Timber.d("Ignoring play/pause request for Live TV")
+		if (!state.canSeek) {
+			Timber.d("Ignoring play/pause request for nonseekable Live TV")
 			return Futures.immediateVoidFuture()
 		}
 		if (playWhenReady) state.unpause()
@@ -197,6 +203,10 @@ internal class MediaSessionPlayer(
 		}
 
 		// Seeking
+		if (positionMs == C.TIME_UNSET && manager.queue.entry.value?.isLiveTv == true) {
+			state.goLive()
+			return@future
+		}
 		val to = when (positionMs) {
 			C.TIME_UNSET -> Duration.ZERO
 			else -> positionMs.milliseconds

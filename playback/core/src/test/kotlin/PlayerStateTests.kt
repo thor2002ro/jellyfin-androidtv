@@ -100,6 +100,80 @@ class PlayerStateTests : FunSpec({
 		verify { backend.seekTo(30.seconds) }
 	}
 
+	test("direct play Live TV ignores pause requests") {
+		val backend = backend()
+		val entry = QueueEntry().apply {
+			liveStreamTargetOffset = 3.seconds
+			mediaStream = stream(this, MediaConversionMethod.None)
+		}
+		playerState(backend, entry).pause()
+		verify(exactly = 0) { backend.pause() }
+	}
+
+	test("nonseekable server Live TV ignores pause and seek requests") {
+		val backend = backend(PositionInfo(20.seconds, 20.seconds, 120.seconds, isSeekable = false))
+		val entry = QueueEntry().apply {
+			liveStreamTargetOffset = 3.seconds
+			mediaStream = stream(this, MediaConversionMethod.Remux)
+		}
+		val state = playerState(backend, entry)
+		state.pause()
+		state.seek(30.seconds)
+		verify(exactly = 0) { backend.pause() }
+		verify(exactly = 0) { backend.seekTo(any()) }
+	}
+
+	test("seekable server Live TV can pause resume and rewind") {
+		val backend = backend()
+		val entry = QueueEntry().apply {
+			liveStreamTargetOffset = 3.seconds
+			mediaStream = stream(this, MediaConversionMethod.Remux)
+		}
+		val state = playerState(backend, entry)
+		state.pause()
+		state.unpause()
+		state.rewind()
+		verify { backend.pause() }
+		verify { backend.play() }
+		verify { backend.seekTo(10.seconds) }
+	}
+
+	test("return to live seeks the existing backend and resumes playback") {
+		val backend = backend()
+		every { backend.seekToLiveEdge() } returns true
+		val entry = QueueEntry().apply {
+			liveStreamTargetOffset = 3.seconds
+			mediaStream = stream(this, MediaConversionMethod.Remux)
+		}
+		playerState(backend, entry).goLive()
+		verify { backend.seekToLiveEdge() }
+		verify { backend.play() }
+	}
+
+	test("return to live ignores Direct Play Live TV and VOD") {
+		listOf(true, false).forEach { live ->
+			val backend = backend()
+			val entry = QueueEntry().apply {
+				if (live) liveStreamTargetOffset = 3.seconds
+				mediaStream = stream(this, MediaConversionMethod.None)
+			}
+			playerState(backend, entry).goLive()
+			verify(exactly = 0) { backend.seekToLiveEdge() }
+			verify(exactly = 0) { backend.play() }
+		}
+	}
+
+	test("rejected return to live does not resume playback") {
+		val backend = backend()
+		every { backend.seekToLiveEdge() } returns false
+		val entry = QueueEntry().apply {
+			liveStreamTargetOffset = 3.seconds
+			mediaStream = stream(this, MediaConversionMethod.Remux)
+		}
+		playerState(backend, entry).goLive()
+		verify(exactly = 0) { backend.play() }
+	}
+
 	test("successful seek requests publish distinct target updates") {
 		val state = playerState(backend(), QueueEntry())
 
