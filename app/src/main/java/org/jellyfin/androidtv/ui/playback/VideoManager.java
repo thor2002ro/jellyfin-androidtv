@@ -51,6 +51,7 @@ import org.jellyfin.androidtv.data.compat.StreamInfo;
 import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.constant.BufferLength;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
+import org.jellyfin.androidtv.util.sdk.compat.JavaCompat;
 import org.jellyfin.playback.core.font.SubtitleFontProvider;
 import org.jellyfin.playback.media3.exoplayer.ExternalSubtitleMediaSourceFactory;
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetRenderersFactory;
@@ -59,6 +60,7 @@ import org.jellyfin.sdk.api.client.ApiClient;
 import org.jellyfin.sdk.model.api.MediaStream;
 import org.jellyfin.sdk.model.api.MediaStreamType;
 import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod;
+import org.jellyfin.sdk.model.api.VideoRangeType;
 import org.koin.java.KoinJavaComponent;
 
 import java.util.ArrayList;
@@ -77,6 +79,7 @@ import timber.log.Timber;
 
 import static org.jellyfin.androidtv.preference.ExoPlayerUserPreferencesKt.getPreferExoPlayerFfmpeg;
 import static org.jellyfin.androidtv.preference.AudioPassthroughPreferences.isAudioPassthroughEnabled;
+import static org.jellyfin.androidtv.ui.player.base.SubtitleStyleColor.selectSubtitleTextColor;
 
 @OptIn(markerClass = UnstableApi.class)
 public class VideoManager {
@@ -149,19 +152,7 @@ public class VideoManager {
 
         mExoPlayerView = view.findViewById(R.id.exoPlayerView);
         mExoPlayerView.setPlayer(mExoPlayer);
-        int strokeColor = userPreferences.get(UserPreferences.Companion.getSubtitleTextStrokeColor()).intValue();
-        int textWeight = userPreferences.get(UserPreferences.Companion.getSubtitlesTextWeight());
-        CaptionStyleCompat subtitleStyle = new CaptionStyleCompat(
-                userPreferences.get(UserPreferences.Companion.getSubtitlesTextColor()).intValue(),
-                userPreferences.get(UserPreferences.Companion.getSubtitlesBackgroundColor()).intValue(),
-                Color.TRANSPARENT,
-                Color.alpha(strokeColor) == 0 ? CaptionStyleCompat.EDGE_TYPE_NONE : CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                strokeColor,
-                SubtitleFontProvider.typeface(activity, textWeight)
-        );
-        mExoPlayerView.getSubtitleView().setFixedTextSize(TypedValue.COMPLEX_UNIT_DIP, userPreferences.get(UserPreferences.Companion.getSubtitlesTextSize()));
-        mExoPlayerView.getSubtitleView().setBottomPaddingFraction(userPreferences.get(UserPreferences.Companion.getSubtitlesOffsetPosition()));
-        mExoPlayerView.getSubtitleView().setStyle(subtitleStyle);
+        applySubtitleStyle(VideoRangeType.SDR);
 
         if (assHandler != null) {
             assHandler.init(mExoPlayer);
@@ -228,6 +219,26 @@ public class VideoManager {
                 Timber.d("Tracks changed");
             }
         });
+    }
+
+    private void applySubtitleStyle(@Nullable VideoRangeType videoRangeType) {
+        int strokeColor = userPreferences.get(UserPreferences.Companion.getSubtitleTextStrokeColor()).intValue();
+        int textWeight = userPreferences.get(UserPreferences.Companion.getSubtitlesTextWeight());
+        CaptionStyleCompat subtitleStyle = new CaptionStyleCompat(
+                selectSubtitleTextColor(
+                        userPreferences.get(UserPreferences.Companion.getSubtitlesTextColor()),
+                        userPreferences.get(UserPreferences.Companion.getSubtitlesHdrTextColor()),
+                        videoRangeType
+                ),
+                userPreferences.get(UserPreferences.Companion.getSubtitlesBackgroundColor()).intValue(),
+                Color.TRANSPARENT,
+                Color.alpha(strokeColor) == 0 ? CaptionStyleCompat.EDGE_TYPE_NONE : CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                strokeColor,
+                SubtitleFontProvider.typeface(mActivity, textWeight)
+        );
+        mExoPlayerView.getSubtitleView().setFixedTextSize(TypedValue.COMPLEX_UNIT_DIP, userPreferences.get(UserPreferences.Companion.getSubtitlesTextSize()));
+        mExoPlayerView.getSubtitleView().setBottomPaddingFraction(userPreferences.get(UserPreferences.Companion.getSubtitlesOffsetPosition()));
+        mExoPlayerView.getSubtitleView().setStyle(subtitleStyle);
     }
 
     public void subscribe(@NonNull PlaybackControllerNotifiable notifier) {
@@ -465,6 +476,9 @@ public class VideoManager {
             return;
         }
         Timber.d("Video path set to: %s", path);
+
+        MediaStream videoStream = JavaCompat.getVideoStream(streamInfo.getMediaSource());
+        applySubtitleStyle(videoStream == null ? null : videoStream.getVideoRangeType());
 
         try {
             // Add external subtitles
