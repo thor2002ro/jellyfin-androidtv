@@ -821,4 +821,16 @@
     <string name="library_genres_load_error">Unable to load genres. Check your server connection.</string>
     <string name="library_genres_retry">Try again</string>
     <string name="library_genre_count_unavailable">Item count unavailable</string>
+    <string name="backup_restore_title">Backup and restore</string>
+    <string name="backup_restore_description">Save or replace app settings, servers, and users without passwords</string>
+    <string name="backup_create">Create backup</string>
+    <string name="backup_create_description">Save app data to a JSON file</string>
+    <string name="backup_restore_restore">Restore backup</string>
+    <string name="backup_restore_description_action">Replace app data from a backup and sign in again</string>
+    <string name="backup_restore_file_failed">Could not access the backup file.</string>
+    <string name="backup_restore_warning_title">Replace all app data?</string>
+    <string name="backup_restore_warning_body">Restoring replaces this app\'s settings, servers, and users. Saved passwords are not included, so you will need to sign in again.</string>
+    <string name="backup_restore_saved">Backup saved.</string>
+    <string name="backup_restore_restored">Backup restored. Sign in to continue.</string>
+    <string name="backup_restore_rollback_failed">Restore failed and the previous app data could not be fully recovered.</string>
 </resources>

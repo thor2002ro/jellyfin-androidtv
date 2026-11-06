@@ -40,6 +40,7 @@ import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.databinding.FragmentSelectServerBinding
 import org.jellyfin.androidtv.ui.ServerButtonView
 import org.jellyfin.androidtv.ui.SpacingItemDecoration
+import org.jellyfin.androidtv.ui.backup.BackupRestoreActivity
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.startup.StartupViewModel
@@ -150,6 +151,7 @@ class SelectServerFragment : Fragment() {
 					binding.storedServers.isFocusable = servers.isNotEmpty()
 					binding.welcomeTitle.isVisible = servers.isEmpty()
 					binding.welcomeContent.isVisible = servers.isEmpty()
+					binding.restoreBackup.isVisible = servers.isEmpty()
 
 					// Make sure focus is properly set when no servers exist
 					if (servers.isEmpty()) binding.enterServerAddress.requestFocus()
@@ -200,6 +202,9 @@ class SelectServerFragment : Fragment() {
 				addToBackStack(null)
 				replace<ServerAddFragment>(R.id.content_view)
 			}
+		}
+		binding.restoreBackup.setOnClickListener {
+			startActivity(BackupRestoreActivity.createIntent(requireContext(), BackupRestoreActivity.Operation.RESTORE))
 		}
 
 		// App info

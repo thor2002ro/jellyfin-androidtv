@@ -141,6 +141,16 @@ fun SettingsMainScreen() {
 		}
 
 		item {
+			ListButton(
+				leadingContent = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null) },
+				headingContent = { Text(stringResource(R.string.backup_restore_title)) },
+				captionContent = { Text(stringResource(R.string.backup_restore_description)) },
+				onClick = { router.push(Routes.BACKUP) },
+				modifier = Modifier.focusKey(Routes.BACKUP),
+			)
+		}
+
+		item {
 			val api = koinInject<ApiClient>()
 			SettingsAsyncActionListButton(
 				headingContent = { Text(stringResource(R.string.pref_upload_logs_title)) },

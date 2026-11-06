@@ -74,6 +74,14 @@ object LiveTvTrackCache {
 		}
 	}
 
+	fun clear() {
+		inFlight.values.forEach { it.cancel() }
+		inFlight.clear()
+		lookupAttempted.clear()
+		tracks.clear()
+		store?.clear()
+	}
+
 	fun get(item: BaseItemDto): Tracks? =
 		item.liveTvChannelId()?.let(tracks::get) ?: item.tracks()
 
@@ -294,6 +302,10 @@ object LiveTvTrackCache {
 			preferences.edit()
 				.putString(channelId.toString(), json.encodeToString(channelTracks))
 				.apply()
+		}
+
+		fun clear() {
+			preferences.edit().clear().apply()
 		}
 	}
 }

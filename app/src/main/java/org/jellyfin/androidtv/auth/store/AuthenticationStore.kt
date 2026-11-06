@@ -128,6 +128,13 @@ class AuthenticationStore(context: Context) {
 
 	fun getUser(serverId: UUID, userId: UUID) = getUsers(serverId)?.get(userId)
 
+	fun replaceServers(servers: Map<UUID, AuthenticationStoreServer>): Boolean = synchronized(storeFile) {
+		if (!write(servers)) return@synchronized false
+		store.clear()
+		store.putAll(servers)
+		true
+	}
+
 	fun putServer(id: UUID, server: AuthenticationStoreServer): Boolean {
 		store[id] = server
 		return save()
