@@ -381,6 +381,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Conversion speed", TranscodingStatusFormatter.speed(transcodingInfo))
 					row("Conversion reason", conversionReason(stream, transcodingInfo, isQualityForcedTranscode))
 					row("Workaround", clientWorkaroundInfo)
+					row("Extractor flags", frameStats.extractorFlags)
 					row("Transcoding progress", TranscodingStatusFormatter.progress(transcodingInfo))
 					row("Hardware acceleration", TranscodingStatusFormatter.hardwareAcceleration(transcodingInfo))
 					row(
