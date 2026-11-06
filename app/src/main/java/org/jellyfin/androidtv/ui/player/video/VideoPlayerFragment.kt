@@ -97,6 +97,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 				userPreferences[UserPreferences.refreshRateSwitchingEnabled],
 				userPreferences[UserPreferences.resolutionSwitchingEnabled], originalMode,
 				originalPreference = originalPreference,
+				delaySeconds = userPreferences[UserPreferences.displayChangeDelaySeconds],
 				isCurrent = { isAdded && playbackManager.options.beforePlayItem === displayModePreparation },
 			)
 		}

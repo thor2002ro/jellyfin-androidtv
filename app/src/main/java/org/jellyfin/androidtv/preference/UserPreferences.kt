@@ -119,6 +119,8 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		var refreshRateSwitchingEnabled = booleanPreference("refresh_rate_switching_enabled", false)
 		/** Match the output resolution independently of refresh-rate switching. */
 		var resolutionSwitchingEnabled = booleanPreference("resolution_switching_enabled", false)
+		/** Wait after an output mode change before starting playback, in seconds. */
+		var displayChangeDelaySeconds = intPreference("display_change_delay_seconds", 2)
 
 		/**
 		 * Enable trickplay thumbnails while seeking.

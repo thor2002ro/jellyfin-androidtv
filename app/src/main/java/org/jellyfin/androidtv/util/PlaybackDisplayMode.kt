@@ -8,6 +8,7 @@ import android.os.Looper
 import androidx.core.content.getSystemService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -51,6 +52,10 @@ private fun matchesRate(rate: Float, currentRate: Float, sourceRate: Float?): Bo
 /** One window-level policy for all player backends. */
 object PlaybackDisplayMode {
 	@JvmStatic
+	fun delayMillisForModeChange(currentModeId: Int, requestedModeId: Int, delaySeconds: Int): Long =
+		if (currentModeId == requestedModeId) 0L else delaySeconds.coerceIn(0, 5) * 1_000L
+
+	@JvmStatic
 	fun frameRateForDisplay(frameRate: Float?, isInterlaced: Boolean?): Float? =
 		if (isInterlaced == true) frameRate?.times(2) else frameRate
 
@@ -86,6 +91,7 @@ object PlaybackDisplayMode {
 	 * This prevents display switching from overlapping MPV decoder startup, where
 	 * Dolby Vision output may be affected by the transition. Mode activation does
 	 * not prove DV support or confirm that the TV has finished its HDMI handshake.
+	 * A configurable settling delay follows confirmation when the mode changes.
 	 *
 	 * False rejects startup on timeout or when the screen is no longer current.
 	 * Coroutine cancellation propagates after listener cleanup.
@@ -94,12 +100,14 @@ object PlaybackDisplayMode {
 		activity: Activity, width: Int?, height: Int?, frameRate: Float?,
 		switchRefreshRate: Boolean, switchResolution: Boolean, originalMode: Display.Mode,
 		originalPreference: Int = 0,
+		delaySeconds: Int = 2,
 		isCurrent: () -> Boolean = { true },
 	): Boolean = withContext(Dispatchers.Main.immediate) {
 		// Window writes and display callbacks share the main thread. Suspending below
 		// leaves that thread free to receive the event that completes the wait.
 		if (activity.isFinishing || activity.isDestroyed || !isCurrent()) return@withContext false
 		val display = activity.windowManager.defaultDisplay
+		val currentModeId = display.mode.modeId
 		if (!switchRefreshRate && !switchResolution && display.mode.modeId == originalMode.modeId &&
 			activity.window.attributes.preferredDisplayModeId == originalPreference
 		) return@withContext true
@@ -132,8 +140,7 @@ object PlaybackDisplayMode {
 			// An already-active mode may produce no display event. Read it after the
 			// request too, covering both that case and a change that completed immediately.
 			if (display.mode.modeId == requestedId) ready.complete(Unit)
-			// This is an upper bound, not a fixed startup delay. Successful switches
-			// proceed as soon as the mode is active; ignored requests cannot hang playback.
+			// Bound the mode confirmation wait separately from the TV settling delay.
 			switched = withTimeoutOrNull(5_000L) {
 				ready.await()
 				true
@@ -141,7 +148,8 @@ object PlaybackDisplayMode {
 			if (!switched) {
 				Timber.w("Display mode %d did not become active; skipping playback startup", requestedId)
 			}
-			switched
+			if (switched) delay(delayMillisForModeChange(currentModeId, requestedId, delaySeconds))
+			switched && !activity.isFinishing && !activity.isDestroyed && isCurrent()
 		} finally {
 			displayManager.unregisterDisplayListener(listener)
 			// Roll back only while this screen still owns this request. A newer screen
