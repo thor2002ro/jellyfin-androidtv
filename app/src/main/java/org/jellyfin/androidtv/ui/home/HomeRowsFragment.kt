@@ -536,10 +536,19 @@ internal suspend fun loadHomeSections(
 	loader: suspend () -> Collection<BaseItemDto>,
 	onSection: suspend (HomeSectionType, Collection<BaseItemDto>) -> Unit,
 ): Collection<BaseItemDto>? {
-	for (section in sections.filterNot(::homeSectionUsesUserViews)) onSection(section, emptyList())
-	val views = loadHomeUserViews(sections.any(::homeSectionUsesUserViews) || includeRecentlyReleased, loader)
-	if (views != null) {
-		for (section in sections.filter(::homeSectionUsesUserViews)) onSection(section, views)
+	var views: Collection<BaseItemDto>? = null
+	var viewsLoaded = false
+	for (section in sections) {
+		if (homeSectionUsesUserViews(section)) {
+			if (!viewsLoaded) {
+				views = loadHomeUserViews(required = true, loader)
+				viewsLoaded = true
+			}
+			views?.let { onSection(section, it) }
+		} else {
+			onSection(section, emptyList())
+		}
 	}
+	if (!viewsLoaded) views = loadHomeUserViews(includeRecentlyReleased, loader)
 	return views
 }

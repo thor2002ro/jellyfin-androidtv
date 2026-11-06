@@ -11,7 +11,7 @@ import org.jellyfin.androidtv.constant.HomeSectionType
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 
 class HomeUserViewsFailureTests : FunSpec({
-	test("independent sections start before a single shared User Views request") {
+	test("the configured first section is published before later independent sections") {
 		runBlocking {
 			val events = mutableListOf<String>()
 			loadHomeSections(
@@ -19,7 +19,7 @@ class HomeUserViewsFailureTests : FunSpec({
 				includeRecentlyReleased = true,
 				loader = { events.add("views"); emptyList() },
 			) { section, _ -> events.add(section.name) }
-			events shouldBe listOf("RESUME", "NEXT_UP", "views", "LIBRARY_BUTTONS", "LATEST_MEDIA")
+			events shouldBe listOf("views", "LIBRARY_BUTTONS", "RESUME", "LATEST_MEDIA", "NEXT_UP")
 		}
 	}
 
@@ -35,7 +35,7 @@ class HomeUserViewsFailureTests : FunSpec({
 		}
 	}
 
-	test("cancelling library discovery never appends dependent sections") {
+	test("cancelling library discovery stops section publication") {
 		val sections = mutableListOf<HomeSectionType>()
 		shouldThrow<CancellationException> {
 			runBlocking {
@@ -46,7 +46,7 @@ class HomeUserViewsFailureTests : FunSpec({
 				) { section, _ -> sections.add(section) }
 			}
 		}
-		sections shouldBe listOf(HomeSectionType.RESUME)
+		sections.shouldBeEmpty()
 	}
 
 	test("a failed User Views request does not abort independent Home rows") {
