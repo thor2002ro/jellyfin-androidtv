@@ -21,11 +21,11 @@ import org.videolan.libvlc.interfaces.IMedia
 import kotlin.time.Duration.Companion.seconds
 
 class TimedEventTrackerTests : StringSpec({
-	"buffer fill updates do not report rebuffering while libVLC is still playing" {
-		bufferingPlayState(99f, playbackActive = false, playerIsPlaying = false) shouldBe null
-		bufferingPlayState(99f, playbackActive = true, playerIsPlaying = true) shouldBe null
-		bufferingPlayState(99f, playbackActive = true, playerIsPlaying = false) shouldBe PlayState.BUFFERING
-		bufferingPlayState(100f, playbackActive = true, playerIsPlaying = false) shouldBe PlayState.PLAYING
+	"buffer fill updates report buffering until the native buffer and video output are ready" {
+		bufferingPlayState(99f, playbackActive = false) shouldBe null
+		bufferingPlayState(99f, playbackActive = true) shouldBe PlayState.BUFFERING
+		bufferingPlayState(100f, playbackActive = true, waitingForVideo = true) shouldBe PlayState.BUFFERING
+		bufferingPlayState(100f, playbackActive = true) shouldBe PlayState.PLAYING
 	}
 
 	"buffer size estimate uses demux bytes per second and configured duration" {
@@ -34,12 +34,12 @@ class TimedEventTrackerTests : StringSpec({
 
 	"libVLC descriptions follow media track IDs with unmatched slaves appended" {
 		orderedLibVLCTrackIds(
-			mediaTrackIds = listOf("audio/7", "audio/3"),
-			descriptionTrackIds = listOf("", "audio/3", "audio/7", "audio/9"),
-		) shouldBe listOf("audio/7", "audio/3", "audio/9")
+			mediaTrackIds = listOf(7, 3),
+			descriptionTrackIds = listOf(-1, 3, 7, 9),
+		) shouldBe listOf(7, 3, 9)
 	}
 
-	"libVLC 4 track metadata takes precedence over server metadata" {
+	"libVLC track metadata takes precedence over server metadata" {
 		val source = MediaStreamAudioTrack(
 			index = 7,
 			codec = "aac",
@@ -50,11 +50,11 @@ class TimedEventTrackerTests : StringSpec({
 			title = "Server English",
 		)
 		val track = IMedia.AudioTrack(
-			"audio/0", "VLC English", true, "mp4a", null, 0, 0, 0,
+			"mp4a", null, 0, 0, 0, 0,
 			128_000, "eng", null, 2, 48_000,
 		)
 
-		libVLCPlayerTrack(0, TrackType.AUDIO, track, source) shouldBe PlayerTrack(
+		libVLCPlayerTrack(0, TrackType.AUDIO, 0, "VLC English", track, 0, source) shouldBe PlayerTrack(
 			index = 0,
 			type = TrackType.AUDIO,
 			label = "VLC English",
@@ -86,6 +86,15 @@ class TimedEventTrackerTests : StringSpec({
 			bitrate = 20_000_000,
 			options = LibVLCPlaybackOptions(),
 		).contains(":network-caching=5000") shouldBe true
+		libVLCMediaOptions(
+			isLiveTv = true,
+			normalBufferDuration = null,
+			liveTvBufferDuration = null,
+			maxBufferBytes = null,
+			bitrate = 0,
+			options = LibVLCPlaybackOptions(),
+			subtitlesDisabled = true,
+		).contains(":sub-language=none") shouldBe true
 		libVLCMediaOptions(
 			isLiveTv = false,
 			normalBufferDuration = 120.seconds,
