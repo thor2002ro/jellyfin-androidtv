@@ -628,15 +628,18 @@ class LibMPVBackend(
 					continue
 				}
 				val node = runCatching {
-					target.commandNode(
-						"subtitle-overlay-raw",
-						previousChangeId.toString(),
-						overlay.width.toString(),
-						overlay.height.toString(),
-					)
+					readLibMPVSubtitleOverlay(playerLock, { isActive && generation == playerGeneration && nativeSubtitleModeActive }) {
+						target.commandNode(
+							"subtitle-overlay-raw",
+							previousChangeId.toString(),
+							overlay.width.toString(),
+							overlay.height.toString(),
+						)
+					}
 				}.onFailure { error ->
 					Timber.e(error, "Unable to read MPV subtitle overlay")
 				}.getOrNull()
+				if (!isActive || generation != playerGeneration || !nativeSubtitleModeActive) break
 				val update = parseLibMPVSubtitleOverlay(node, previousChangeId)
 				if (update == null) {
 					Timber.e("MPV subtitle overlay command returned invalid data")
