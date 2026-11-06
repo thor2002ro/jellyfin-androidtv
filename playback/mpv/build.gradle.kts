@@ -27,6 +27,8 @@ android {
 
 dependencies {
 	implementation(projects.playback.core)
+	implementation(projects.playback.dovi)
+	implementation(libs.libdovi.android)
 	implementation(libs.androidx.core)
 	implementation(libs.kotlinx.coroutines)
 	api(libs.mpv.android.lib)
