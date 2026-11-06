@@ -5,6 +5,13 @@ import io.kotest.matchers.shouldBe
 import org.jellyfin.updater.AppUpdate
 
 class AppUpdatePromptTests : FunSpec({
+	test("installer opens only for a resumed host outside playback") {
+		appUpdateInstallAllowed(isPlayback = false, hostResumed = true, hostAvailable = true) shouldBe true
+		appUpdateInstallAllowed(isPlayback = true, hostResumed = true, hostAvailable = true) shouldBe false
+		appUpdateInstallAllowed(isPlayback = false, hostResumed = false, hostAvailable = true) shouldBe false
+		appUpdateInstallAllowed(isPlayback = false, hostResumed = true, hostAvailable = false) shouldBe false
+	}
+
 	test("update popup remains eligible when its dialog takes window focus") {
 		val update = testUpdate()
 

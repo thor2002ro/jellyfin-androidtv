@@ -235,7 +235,7 @@ private fun ScenarioSummary(scenario: UpdaterTestScenario, modifier: Modifier = 
 		when (scenario) {
 			UpdaterTestScenario.NO_UPDATE -> TestStatus("PASS", "No compatible update found")
 			UpdaterTestScenario.GITHUB_ERROR -> TestStatus("RECOVERABLE ERROR", "GitHub update check failed (HTTP 503). Please retry later.")
-			UpdaterTestScenario.INSTALLER_OPENED -> TestStatus("PASS", "Installer opened; production would dismiss the prompt")
+			UpdaterTestScenario.INSTALLER_OPENED -> TestStatus("PASS", "Installer opened; the verified APK remains ready for retry")
 			else -> TestStatus("READY", "Select the scenario to open its production-style prompt")
 		}
 	}
@@ -262,6 +262,7 @@ private fun UpdaterScenarioPrompt(
 		Box(modifier = modifier) {
 			UpdatePromptContent(
 				update = update,
+				readyToInstall = scenario in setOf(UpdaterTestScenario.INSTALL_PERMISSION, UpdaterTestScenario.INSTALLER_OPENED),
 				downloading = scenario == UpdaterTestScenario.DOWNLOADING,
 				downloadProgress = if (scenario == UpdaterTestScenario.DOWNLOADING) 42 else null,
 				message = when (scenario) {
