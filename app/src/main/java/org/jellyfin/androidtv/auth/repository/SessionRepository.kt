@@ -18,10 +18,10 @@ import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.LAST_USER
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.SPECIFIC_USER
 import org.jellyfin.androidtv.ui.itemhandling.DirectStreamBadgeCache
 import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
+import org.jellyfin.androidtv.util.sdk.clientLogUrl
 import org.jellyfin.androidtv.util.sdk.forUser
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
-import org.jellyfin.sdk.api.client.extensions.clientLogApi
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
@@ -166,7 +166,7 @@ class SessionRepositoryImpl(
 			}
 
 			// Update crash reporting URL
-			val crashReportUrl = userApiClient.clientLogApi.logFileUrl()
+			val crashReportUrl = userApiClient.clientLogUrl()
 			telemetryPreferences[TelemetryPreferences.crashReportUrl] = crashReportUrl
 			telemetryPreferences[TelemetryPreferences.crashReportToken] = session.accessToken
 

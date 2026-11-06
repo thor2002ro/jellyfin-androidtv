@@ -620,6 +620,7 @@ private fun stream(
 	type = type,
 	index = index,
 	isExternal = false,
+	isOriginal = true,
 	isTextSubtitleStream = type == MediaStreamType.SUBTITLE,
 	supportsExternalStream = false,
 )

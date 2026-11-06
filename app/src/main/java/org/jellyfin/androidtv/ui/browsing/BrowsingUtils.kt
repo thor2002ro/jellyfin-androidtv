@@ -9,7 +9,7 @@ import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.ui.livetv.liveTvChannelFields
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
-import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
@@ -41,7 +41,7 @@ object BrowsingUtils {
 	) {
 		lifecycle.lifecycleScope.launch(Dispatchers.IO) {
 			try {
-				val result by api.itemsApi.getItems(
+				val result by api.libraryApi.getItems(
 					parentId = library.id,
 					includeItemTypes = setOf(type),
 					recursive = true,
@@ -72,7 +72,7 @@ object BrowsingUtils {
 	) {
 		lifecycle.lifecycleScope.launch(Dispatchers.IO) {
 			try {
-				val result by api.itemsApi.getItems(
+				val result by api.libraryApi.getItems(
 					parentId = library.id,
 					includeItemTypes = setOf(type),
 					recursive = true,
