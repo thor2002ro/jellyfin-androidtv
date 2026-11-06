@@ -832,6 +832,7 @@ class LibMPVBackend(
 
 		setOption("cache", if (configuration.cacheSeconds == null) "auto" else "yes")
 		setOption("cache-pause", "yes")
+		setOption("demuxer-hysteresis-bytes", "32MiB")
 		setOption("cache-pause-initial", if (configuration.initialWaitSeconds == null) "no" else "yes")
 		setCachePauseWait(configuration.initialWaitSeconds ?: configuration.rebufferWaitSeconds)
 
