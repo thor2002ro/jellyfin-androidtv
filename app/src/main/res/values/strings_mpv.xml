@@ -93,6 +93,8 @@
 	<string name="preference_mpv_decoder_software">Software</string>
 	<string name="preference_mpv_decoder_software_description">Disable hardware video decoding.</string>
 	<string name="preference_mpv_decoder_threads">Decoder threads</string>
+	<string name="preference_mpv_check_hardware_profile">Check hardware decoder profiles</string>
+	<string name="preference_mpv_check_hardware_profile_description">Check the video profiles reported by the hardware decoder. Turn off to try hardware decoding when your device incorrectly reports its capabilities. This may cause decoding errors. Default: Off.</string>
 	<string name="preference_mpv_decoder_threads_description">Set FFmpeg video decoder threads. Zero lets libMPV choose automatically. Jellyfin default: Auto.</string>
 	<string name="preference_mpv_edit_overrides">Edit expert overrides</string>
 	<string name="preference_mpv_edit_overrides_description">Paste or edit multiple unmanaged libMPV options as name=value lines. Name and separator syntax is checked before saving.</string>
