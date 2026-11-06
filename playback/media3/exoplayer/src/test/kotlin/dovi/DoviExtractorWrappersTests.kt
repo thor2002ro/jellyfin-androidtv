@@ -437,6 +437,43 @@ class DoviExtractorWrappersTests : FunSpec({
 		}.status shouldBe io.github.thor2002ro.libdovi.DoviStatus.INCONSISTENT_RPU
 	}
 
+	test("release abandons a pending layered sample and releases the underlying extractor") {
+		val extractor = RecordingExtractor()
+		val delegate = RecordingExtractorOutput()
+		val wrapper = DoviExtractor(extractor, { context(input = DoviPresentation.PROFILE_7_FEL) }, passthroughTransformer())
+		wrapper.init(delegate)
+		val base = extractor.output!!.track(1, C.TRACK_TYPE_VIDEO)
+		val dependent = extractor.output!!.track(2, C.TRACK_TYPE_VIDEO)
+		base.format(doviFormat(trackId = 10))
+		dependent.format(doviFormat(trackId = 20, baseTrackId = 10))
+		extractor.output!!.endTracks()
+		base.emit(annexBNal(type = 1, layer = 0, payload = 1), 10)
+
+		wrapper.release()
+
+		extractor.releaseCount shouldBe 1
+		delegate.recording(1).metadata shouldBe emptyList()
+	}
+
+	test("release after an incomplete layered EOF still releases the underlying extractor") {
+		val extractor = RecordingExtractor()
+		val wrapper = DoviExtractor(extractor, { context(input = DoviPresentation.PROFILE_7_FEL) }, passthroughTransformer())
+		wrapper.init(RecordingExtractorOutput())
+		val base = extractor.output!!.track(1, C.TRACK_TYPE_VIDEO)
+		val dependent = extractor.output!!.track(2, C.TRACK_TYPE_VIDEO)
+		base.format(doviFormat(trackId = 10))
+		dependent.format(doviFormat(trackId = 20, baseTrackId = 10))
+		extractor.output!!.endTracks()
+		base.emit(annexBNal(type = 1, layer = 0, payload = 1), 10)
+		shouldThrow<DoviSampleTransformationException> {
+			wrapper.read(mockk(relaxed = true), PositionHolder())
+		}.status shouldBe io.github.thor2002ro.libdovi.DoviStatus.INCONSISTENT_RPU
+
+		wrapper.release()
+
+		extractor.releaseCount shouldBe 1
+	}
+
 	test("selected MP4 relation is revalidated on Format refresh") {
 		val extractor = RecordingExtractor()
 		val wrapper = DoviExtractor(extractor, { context(input = DoviPresentation.PROFILE_7_FEL) }, passthroughTransformer())
@@ -571,11 +608,12 @@ private const val DOVI_DEPENDENCY_KEY = "com.jellyfin.androidtv.dovi.track-depen
 private class RecordingExtractor : Extractor {
 	var output: ExtractorOutput? = null
 	var seekCount = 0
+	var releaseCount = 0
 	override fun sniff(input: ExtractorInput) = true
 	override fun init(output: ExtractorOutput) { this.output = output }
 	override fun read(input: ExtractorInput, seekPosition: PositionHolder) = Extractor.RESULT_END_OF_INPUT
 	override fun seek(position: Long, timeUs: Long) { seekCount++ }
-	override fun release() = Unit
+	override fun release() { releaseCount++ }
 }
 
 private class RecordingExtractorsFactory : ExtractorsFactory {
