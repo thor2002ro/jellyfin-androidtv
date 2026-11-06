@@ -12,7 +12,6 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowType
 import org.jellyfin.androidtv.util.PlaybackHelper
-import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
@@ -91,12 +90,9 @@ class LiveTvCardActionHandler(
 			context = fragment.requireActivity(),
 			lifecycleOwner = fragment,
 			onFavoriteChanged = refreshFavorite,
-			tuneAction = object : EmptyResponse(fragment.lifecycle) {
-				override fun onResponse() {
-					if (!isActive) return
-					popupProgram.channelId?.let { channelId ->
-						playbackHelper.retrieveAndPlay(channelId, false, fragment.requireContext())
-					}
+			tuneAction = {
+				popupProgram.channelId?.let { channelId ->
+					playbackHelper.retrieveAndPlay(channelId, false, fragment.requireContext())
 				}
 			},
 		).also { popup ->

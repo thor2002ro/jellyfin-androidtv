@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.browsing
 
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.view.View
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
@@ -57,7 +58,7 @@ class BrowseRecordingsFragment : EnhancedBrowseFragment() {
 				scheduledAdapter.Retrieve()
 				val scheduleRow = ListRow(HeaderItem(getString(R.string.scheduled_in_next_24_hours)), scheduledAdapter)
 				mRowsAdapter.add(0, scheduleRow)
-				Handler().postDelayed({
+				Handler(Looper.getMainLooper()).postDelayed({
 					if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@postDelayed
 
 					mRowsFragment.setSelectedPosition(0, true)
