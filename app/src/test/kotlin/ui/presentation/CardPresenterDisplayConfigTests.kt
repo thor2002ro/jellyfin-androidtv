@@ -1,15 +1,48 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import coil3.compose.AsyncImagePainter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.ui.itemhandling.BaseItemDtoBaseRowItem
 import org.jellyfin.androidtv.util.ImageHelper
+import org.jellyfin.design.Tokens
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class CardPresenterDisplayConfigTests : FunSpec({
+	test("library name stays centered until image loading succeeds") {
+		for (type in listOf(BaseItemKind.USER_VIEW, BaseItemKind.COLLECTION_FOLDER)) {
+			val rowItem = BaseItemDtoBaseRowItem(BaseItemDto(
+				id = UUID.randomUUID(),
+				type = type,
+				imageTags = mapOf(org.jellyfin.sdk.model.api.ImageType.PRIMARY to "stale-server-tag"),
+			))
+
+			rowItem.showLibraryTextFallback(usePreview = false, imageState = AsyncImagePainter.State.Empty) shouldBe true
+			rowItem.showLibraryTextFallback(usePreview = false, imageState = AsyncImagePainter.State.Loading(null)) shouldBe true
+			rowItem.showLibraryTextFallback(usePreview = false, imageState = AsyncImagePainter.State.Error(null, mockk())) shouldBe true
+			rowItem.showLibraryTextFallback(usePreview = false, imageState = AsyncImagePainter.State.Success(mockk(), mockk())) shouldBe false
+			rowItem.getDisplayConfig(ImageType.POSTER, uniformAspect = false).backgroundColor shouldBe Tokens.Color.colorBlue800
+		}
+	}
+
+	test("missing library image keeps its centered name") {
+		val rowItem = BaseItemDtoBaseRowItem(BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.USER_VIEW))
+
+		rowItem.showLibraryTextFallback(usePreview = false, imageState = AsyncImagePainter.State.Empty) shouldBe true
+	}
+
+	test("library fallback does not duplicate preview captions or change non-library cards") {
+		val library = BaseItemDtoBaseRowItem(BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.USER_VIEW))
+		val video = BaseItemDtoBaseRowItem(BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.VIDEO))
+
+		library.showLibraryTextFallback(usePreview = true, imageState = AsyncImagePainter.State.Empty) shouldBe false
+		video.showLibraryTextFallback(usePreview = false, imageState = AsyncImagePainter.State.Empty) shouldBe false
+	}
+
 	test("display config resolves invalid aspect ratios safely") {
 		BaseRowItemDisplayConfig(
 			image = null,

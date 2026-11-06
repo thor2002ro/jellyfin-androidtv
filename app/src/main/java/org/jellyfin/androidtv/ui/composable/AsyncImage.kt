@@ -25,6 +25,7 @@ import coil3.ImageLoader
 import coil3.asImage
 import coil3.compose.AsyncImage as CoilAsyncImage
 import coil3.compose.asPainter
+import coil3.compose.AsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +74,7 @@ fun AsyncImage(
 	aspectRatio: Float = 1f,
 	blurHashResolution: Int = 32,
 	scaleType: ImageView.ScaleType? = null,
+	onState: ((AsyncImagePainter.State) -> Unit)? = null,
 ) {
 	val context = LocalContext.current
 	val imageLoader = koinInject<ImageLoader>()
@@ -103,9 +105,18 @@ fun AsyncImage(
 		placeholder = placeholderPainter,
 		error = errorPainter,
 		fallback = errorPainter,
-		onLoading = { isLoading = true },
-		onSuccess = { isLoading = false },
-		onError = { isLoading = false },
+		onLoading = {
+			isLoading = true
+			onState?.invoke(it)
+		},
+		onSuccess = {
+			isLoading = false
+			onState?.invoke(it)
+		},
+		onError = {
+			isLoading = false
+			onState?.invoke(it)
+		},
 		contentScale = scaleType.toContentScale(),
 	)
 }
