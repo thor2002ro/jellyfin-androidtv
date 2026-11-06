@@ -438,7 +438,6 @@
     <string name="lbl_quality_profile">Perfil de calidad</string>
     <string name="lbl_latest_in">Recientes en %1$s</string>
     <string name="lbl_subtitle_background_color">Color del fondo de los subtítulos</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="continue_listening">Continuar escuchando</string>
     <string name="lbl_subtitle_text_color">Color del texto de los subtítulos</string>
     <string name="lbl_subtitle_text_stroke_color">Color de contorno de los subtítulos</string>

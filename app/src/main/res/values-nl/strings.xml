@@ -488,7 +488,6 @@
     <string name="channels">Kanalen</string>
     <string name="lbl_hide_watched_checkmark">Als er resterende afleveringen zijn</string>
     <string name="lbl_runtime">Speelduur</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <plurals name="albums">
         <item quantity="one">%1$s album</item>
         <item quantity="other">%1$s albums</item>
@@ -615,7 +614,6 @@
     <string name="filters">Filters</string>
     <string name="backdrop_behavior_with_blur">Achtergrond met vervaging</string>
     <string name="backdrop_behavior_without_blur">Achtergrond zonder vervaging</string>
-    <string name="dolby_vision_with_el">Dolby Vision met EL</string>
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>

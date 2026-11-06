@@ -399,7 +399,6 @@
     <string name="pref_screensaver">スクリーンセーバー</string>
     <string name="app_notification_beta">アプリを %1$s に更新しました \nJellyfin ベータ プログラムにご参加いただき、ありがとうございます。</string>
     <string name="photos">フォト</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="dts_x">DTS:X</string>
     <plurals name="seconds">
         <item quantity="other">%1$s 秒</item>
