@@ -202,6 +202,8 @@ fun PlaybackInfoOverlay(
 			chapterUrls = chapterCacheUrls,
 		)
 	}
+	val playerMetricSections = sections.filter { it.title.endsWith(" Metrics") }
+	val playbackInfoSections = sections - playerMetricSections
 
 	Row(
 		modifier = modifier,
@@ -214,9 +216,12 @@ fun PlaybackInfoOverlay(
 				frameStats = frameStats,
 			)
 			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
+			if (playerMetricSections.isNotEmpty()) {
+				PlayerMetricsPanel(sections = playerMetricSections)
+			}
 		}
 
-		PlaybackInfoTextPanel(sections = sections)
+		PlaybackInfoTextPanel(sections = playbackInfoSections)
 	}
 }
 
@@ -248,6 +253,21 @@ private fun PlaybackThumbnailCachePanel(
 		) {
 			rows.forEach { row -> PlaybackInfoRow(row) }
 		}
+	}
+}
+
+@Composable
+private fun PlayerMetricsPanel(
+	sections: List<PlaybackInfoSection>,
+) {
+	Column(
+		modifier = Modifier
+			.width(146.dp)
+			.background(Color.Black.copy(alpha = 0.82f))
+			.padding(horizontal = 5.dp, vertical = 4.dp),
+		verticalArrangement = Arrangement.spacedBy(3.dp),
+	) {
+		sections.forEach { section -> PlaybackInfoSectionContent(section) }
 	}
 }
 
@@ -432,7 +452,7 @@ private object NewPlayerStreamStatusBuilder {
 				},
 			),
 			PlaybackInfoSection(
-				title = "libMPV Metrics",
+				title = "${frameStats.playerName ?: "Player"} Metrics",
 				rows = rows {
 					frameStats.backendDetails.forEach { (label, value) -> row(label, value) }
 				},
