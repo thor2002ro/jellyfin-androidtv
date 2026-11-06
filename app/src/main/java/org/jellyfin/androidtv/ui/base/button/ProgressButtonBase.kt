@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.res.colorResource
-import org.jellyfin.androidtv.R
+import androidx.compose.ui.platform.LocalContext
+import org.jellyfin.androidtv.util.Utils
 
 @Composable
 fun ProgressButtonBase(
@@ -24,7 +26,10 @@ fun ProgressButtonBase(
 	interactionSource: MutableInteractionSource? = null,
 	content: @Composable BoxScope.() -> Unit
 ) {
-	val progressColor = colorResource(R.color.button_default_progress_background)
+	val context = LocalContext.current
+	val progressColor = remember(context.theme) {
+		Color(Utils.getThemeColor(context, android.R.attr.colorAccent)).copy(alpha = 0.35f)
+	}
 
 	ButtonBase(
 		onClick = onClick,
