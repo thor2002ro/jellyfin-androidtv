@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.itemhandling;
 
 import android.content.Context;
 
+import org.jellyfin.androidtv.R;
 import org.jellyfin.androidtv.constant.LiveTvOption;
 import org.jellyfin.androidtv.constant.QueryType;
 import org.jellyfin.androidtv.data.model.ChapterItemInfo;
@@ -221,7 +222,7 @@ public class ItemLauncher {
             case GridButton:
                 switch (((GridButtonBaseRowItem) rowItem).getGridButton().getId()) {
                     case LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID:
-                        navigationRepository.getValue().navigate(Destinations.INSTANCE.getLiveTvChannels());
+                        navigationRepository.getValue().navigate(Destinations.INSTANCE.liveTvChannels(context.getString(R.string.channels)));
                         break;
 
                     case LiveTvOption.LIVE_TV_GUIDE_OPTION_ID:

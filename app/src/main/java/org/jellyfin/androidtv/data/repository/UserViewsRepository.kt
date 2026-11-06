@@ -7,13 +7,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
+import org.jellyfin.androidtv.constant.LiveTvOption
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.MediaType
-import java.util.UUID
 
 interface UserViewsRepository {
 	val views: Flow<Collection<BaseItemDto>>
@@ -49,18 +49,15 @@ class UserViewsRepositoryImpl(
 	override fun allowGridView(collectionType: CollectionType?) = collectionType !in disallowGridViewCollectionTypes
 
 	private fun createLiveTvView() = BaseItemDto(
-		id = LIVE_TV_VIEW_ID,
+		id = LiveTvOption.LIVE_TV_VIEW_ID,
 		type = BaseItemKind.COLLECTION_FOLDER,
 		mediaType = MediaType.UNKNOWN,
 		collectionType = CollectionType.LIVETV,
 		name = context.getString(R.string.pref_live_tv_cat),
-		displayPreferencesId = LIVE_TV_DISPLAY_PREFERENCES_ID,
+		displayPreferencesId = LiveTvOption.LIVE_TV_DISPLAY_PREFERENCES_ID,
 	)
 
 	private companion object {
-		private const val LIVE_TV_DISPLAY_PREFERENCES_ID = "livetv"
-		private val LIVE_TV_VIEW_ID = UUID.nameUUIDFromBytes("org.jellyfin.androidtv.livetv".toByteArray(Charsets.UTF_8))
-
 		private val unsupportedCollectionTypes = arrayOf(
 			CollectionType.BOOKS,
 			CollectionType.FOLDERS

@@ -646,7 +646,6 @@
     <string name="codec_level_4_0">4.0 szint</string>
     <string name="preference_enable_ass">Közvetlen ASS felirat lejátszás</string>
     <string name="preference_enable_pgs_description">Letiltás esetén átkódolást igényel</string>
-    <string name="preference_enable_ass_description">Kísérleti funkció, előfordulhat, hogy nem működik megbízhatóan</string>
     <string name="pref_software_codecs_enabled">Használjon szoftveres kodekeket</string>
     <string name="pref_software_codecs_enabled_description">Néhány szoftveralapú megvalósítás ronthatja a teljesítményt. A beállítás letiltása nagyobb valószínűséggel okoz átkódolást.</string>
     <string name="lbl_date_show_added">A műsor hozzáadásának dátuma</string>

@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -27,7 +28,9 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -56,7 +59,10 @@ fun PlayerOverlayLayout(
 	onCenterLongClick: (() -> Boolean)? = null,
 ) {
 	val focusRequester = remember { FocusRequester() }
+	val controlsFocusRequester = remember { FocusRequester() }
 	val scope = rememberCoroutineScope()
+	val windowInfo = LocalWindowInfo.current
+	var controlsHaveFocus by remember { mutableStateOf(false) }
 	var centerShortcutArmed by remember { mutableStateOf(false) }
 	var centerLongPressHandled by remember { mutableStateOf(false) }
 	var centerLongPressJob by remember { mutableStateOf<Job?>(null) }
@@ -129,8 +135,13 @@ fun PlayerOverlayLayout(
 				}
 			}
 	) {
-		LaunchedEffect(visibilityState.visible) {
-			if (!visibilityState.visible) focusRequester.requestFocus()
+		LaunchedEffect(visibilityState.visible, windowInfo.isWindowFocused, controls != null, controlsHaveFocus) {
+			when {
+				visibilityState.visible && windowInfo.isWindowFocused && controls != null && !controlsHaveFocus ->
+					controlsFocusRequester.requestFocus()
+
+				!visibilityState.visible -> focusRequester.requestFocus()
+			}
 		}
 
 	if (header != null) {
@@ -181,6 +192,10 @@ fun PlayerOverlayLayout(
 				modifier = Modifier
 					.fillMaxWidth()
 					.fillMaxHeight(1f / 3)
+					.focusRequester(controlsFocusRequester)
+					.focusRestorer()
+					.focusGroup()
+					.onFocusChanged { controlsHaveFocus = it.hasFocus }
 					.background(
 						brush = Brush.verticalGradient(
 							colors = listOf(

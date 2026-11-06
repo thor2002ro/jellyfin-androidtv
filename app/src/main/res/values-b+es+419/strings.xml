@@ -650,7 +650,6 @@
     <string name="codec_level_4_0">Nivel 4.0</string>
     <string name="preference_enable_ass">Reprodiccion directa de subtítulos ASS</string>
     <string name="preference_enable_pgs_description">Requiere transcodificación cuando está deshabilitado</string>
-    <string name="preference_enable_ass_description">Característica experimental, puede no funcionar propiamente</string>
     <string name="auto">Auto</string>
     <string name="hdr10_plus">HDR10+</string>
     <string name="dolby_vision_with_el">Dolby Vision con EL</string>

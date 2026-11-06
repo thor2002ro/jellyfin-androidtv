@@ -94,7 +94,7 @@ fun LiveTvGuideOverlay(
 	BackHandler(onBack = onDismiss)
 
 	LaunchedEffect(liveTvChannelNavigator) {
-		channels = liveTvChannelNavigator.getChannels().sortedByChannelName()
+		channels = liveTvChannelNavigator.getChannels()
 	}
 
 	LaunchedEffect(focusRequester, channels) {
@@ -426,11 +426,6 @@ private fun ChannelIcon(
 		}
 	}
 }
-
-private fun List<BaseItemDto>.sortedByChannelName(): List<BaseItemDto> = sortedWith(
-	compareBy<BaseItemDto, String>(String.CASE_INSENSITIVE_ORDER) { channel -> channel.name.orEmpty() }
-		.thenBy(String.CASE_INSENSITIVE_ORDER) { channel -> channel.number.orEmpty() }
-)
 
 private fun List<BaseItemDto>.currentProgramsByChannel(): Map<UUID, List<BaseItemDto>> = mapNotNull { channel ->
 	val channelId = channel.liveTvChannelId()

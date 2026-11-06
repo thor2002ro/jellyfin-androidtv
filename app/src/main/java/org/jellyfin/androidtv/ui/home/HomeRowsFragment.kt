@@ -25,6 +25,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
@@ -44,6 +45,7 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.itemhandling.refreshItem
+import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.AudioEventListener
@@ -52,6 +54,7 @@ import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter
 import org.jellyfin.androidtv.util.KeyProcessor
+import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.sockets.subscribe
@@ -76,6 +79,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val navigationRepository by inject<NavigationRepository>()
 	private val itemLauncher by inject<ItemLauncher>()
 	private val keyProcessor by inject<KeyProcessor>()
+	private val playbackHelper by inject<PlaybackHelper>()
 
 	private val helper by lazy { HomeFragmentHelper(requireContext(), userRepository, userPreferences) }
 
@@ -86,6 +90,11 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var backgroundUpdateJob: Job? = null
 	private var resumeRowsRefreshJob: Job? = null
 	private var currentBackgroundItemId: String? = null
+	private val liveTvActions by lazy {
+		LiveTvCardActionHandler(this, api, playbackHelper) { _, _ ->
+			refreshRows(force = true, delayed = false)
+		}
+	}
 
 	// Special rows
 	private val notificationsRow by lazy { NotificationsHomeFragmentRow(lifecycleScope, notificationsRepository) }
@@ -122,7 +131,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				HomeSectionType.NEXT_UP -> rows.add(helper.loadNextUp())
 				HomeSectionType.LIVE_TV -> if (currentUser.policy?.enableLiveTvAccess == true) {
 					rows.add(HomeFragmentLiveTVRow(requireActivity(), userRepository))
-					rows.add(helper.loadOnNow())
+					rows.add(helper.loadOnNow(liveTvActions::onLongClick))
 				}
 
 				HomeSectionType.NONE -> Unit
@@ -136,18 +145,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
-
-				// Wire up Live TV sibling rows so the On Now row removes the buttons row when empty
-				@Suppress("UNCHECKED_CAST")
-				val rowsAdapter = adapter as MutableObjectAdapter<Row>
-				for (i in 0 until rowsAdapter.size()) {
-					val listRow = rowsAdapter.get(i) as? ListRow ?: continue
-					val itemAdapter = listRow.adapter as? ItemRowAdapter ?: continue
-					if (itemAdapter.queryType == QueryType.LiveTvProgram && i > 0) {
-						val previousRow = rowsAdapter.get(i - 1)
-						if (previousRow != null) itemAdapter.setSiblingRow(previousRow)
-					}
-				}
 			}
 		}
 
@@ -213,6 +210,11 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		// Update audio queue
 		Timber.d("Updating audio queue in HomeFragment (onResume)")
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
+	}
+
+	override fun onPause() {
+		liveTvActions.dismiss()
+		super.onPause()
 	}
 
 	override fun onQueueStatusChanged(hasQueue: Boolean) {
@@ -300,7 +302,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		) {
 			if (item is GridButton) {
 				when (item.id) {
-					LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvChannels)
+					LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvChannels(getString(R.string.channels)))
 					LiveTvOption.LIVE_TV_GUIDE_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvGuide)
 					LiveTvOption.LIVE_TV_SCHEDULE_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvSchedule)
 					LiveTvOption.LIVE_TV_RECORDINGS_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvRecordings)

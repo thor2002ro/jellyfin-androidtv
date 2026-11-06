@@ -646,7 +646,6 @@
     <string name="codec_level_4_0">Level 4.0</string>
     <string name="preference_enable_ass">डायरेक्ट प्ले ए.एस.एस. (ASS) उपशीर्षक</string>
     <string name="preference_enable_pgs_description">अक्षम होने पर ट्रांसकोडिंग की आवश्यकता होती है</string>
-    <string name="preference_enable_ass_description">प्रायोगिक सुविधा, शायद ठीक से काम ना करे</string>
     <string name="pref_software_codecs_enabled">सॉफ्टवेयर कोडेक्स का उपयोग करें</string>
     <string name="pref_software_codecs_enabled_description">कुछ सॉफ्टवेयर-आधारित कार्यान्वयन प्रदर्शन को कम कर सकते हैं। इस विकल्प को अक्षम करने से ट्रांसकोडिंग की संभावना बढ़ जाती है।</string>
     <string name="truehd">TrueHD</string>
