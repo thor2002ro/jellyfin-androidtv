@@ -798,7 +798,7 @@ class ExoPlayerBackend(
 		audioDecoderCounters = null
 		audioInputFormat = null
 		audioPassthroughSupported = null
-		if (exoPlayerOptions.enableLibass) assHandler.resetPerformanceStats()
+		if (exoPlayerOptions.enableLibass && exoPlayerDelegate.isInitialized()) assHandler.resetPerformanceStats()
 		audioPassthroughSupportDirty = true
 		audioCapabilitiesReceiverFailed = false
 	}
@@ -1179,6 +1179,7 @@ class ExoPlayerBackend(
 	}
 
 	private val assHandler by lazy {
+		SubtitleFontProvider.initialize(context)
 		AssHandler(
 			exoPlayerOptions.libassRenderType,
 			AssHandlerConfig(
@@ -2083,9 +2084,11 @@ class ExoPlayerBackend(
 		audioPipeline.normalizationGain = null
 		clearPendingLiveStart()
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
-		exoPlayer.isScrubbingModeEnabled = false
-		exoPlayer.stop()
-		if (exoPlayerOptions.enableLibass) assHandler.reset()
+		if (exoPlayerDelegate.isInitialized()) {
+			exoPlayer.isScrubbingModeEnabled = false
+			exoPlayer.stop()
+			if (exoPlayerOptions.enableLibass) assHandler.reset()
+		}
 		clearSubtitleCues()
 		currentStream = null
 		mediaSourceTsExtractorFlags.clear()

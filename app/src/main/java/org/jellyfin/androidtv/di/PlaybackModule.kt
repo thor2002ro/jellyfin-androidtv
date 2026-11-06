@@ -101,7 +101,9 @@ val playbackModule = module {
 	single { createExoPlayerBackend() }
 	single { createLibVLCBackend() }
 	single { createLibMPVBackend() }
-	single { createPlaybackManager() }
+	// Share the deferred player so login cleanup can stop existing playback without starting a backend.
+	single { lazy { createPlaybackManager() } }
+	single { get<Lazy<PlaybackManager>>().value }
 	single { ExoPlayerBackendSettings(get(), get()) }
 	single { LibVLCBackendSettings(get(), get()) }
 	single {

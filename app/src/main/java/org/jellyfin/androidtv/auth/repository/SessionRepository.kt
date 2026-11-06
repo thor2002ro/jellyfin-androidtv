@@ -62,7 +62,7 @@ class SessionRepositoryImpl(
 	private val currentSessionMutex = Mutex()
 	private val _currentSession = MutableStateFlow<Session?>(null)
 	override val currentSession = _currentSession.asStateFlow()
-	private val _state = MutableStateFlow(SessionRepositoryState.READY)
+	private val _state = MutableStateFlow(SessionRepositoryState.RESTORING_SESSION)
 	override val state = _state.asStateFlow()
 
 	override suspend fun restoreSession(destroyOnly: Boolean): Unit = withContext(NonCancellable) {
@@ -171,7 +171,7 @@ class SessionRepositoryImpl(
 			telemetryPreferences[TelemetryPreferences.crashReportUrl] = crashReportUrl
 			telemetryPreferences[TelemetryPreferences.crashReportToken] = session.accessToken
 
-			preferencesRepository.onSessionChanged()
+			preferencesRepository.onSessionChanged(liveTvEnabled = userRepository.currentUser.value?.policy?.enableLiveTvAccess == true)
 		} else {
 			userRepository.setCurrentUser(null)
 			serverRepository.setCurrentServer(null)

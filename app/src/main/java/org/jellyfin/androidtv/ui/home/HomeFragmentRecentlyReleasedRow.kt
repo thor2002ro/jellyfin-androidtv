@@ -26,7 +26,12 @@ class HomeFragmentRecentlyReleasedRow(
 ) : HomeFragmentRow, KoinComponent {
 	private val userSettingPreferences by inject<UserSettingPreferences>()
 
-	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
+	override fun addToRowsAdapter(
+		context: Context,
+		cardPresenter: CardPresenter,
+		rowsAdapter: MutableObjectAdapter<Row>,
+		rowOrder: Double,
+	) {
 		val latestItemsExcludes = userRepository.currentUser.value?.configuration?.latestItemsExcludes.orEmpty()
 		val preferSeriesThumbnails = userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled]
 
@@ -48,8 +53,8 @@ class HomeFragmentRecentlyReleasedRow(
 					changeTriggers = arrayOf(ChangeTriggerType.LibraryUpdated),
 				)
 				HomeFragmentBrowseRowDefRow(row)
-			}.forEach { row ->
-				row.addToRowsAdapter(context, cardPresenter, rowsAdapter)
+			}.forEachIndexed { index, row ->
+				row.addToRowsAdapter(context, cardPresenter, rowsAdapter, rowOrder + index.toDouble() / (userViews.size + 1))
 			}
 	}
 

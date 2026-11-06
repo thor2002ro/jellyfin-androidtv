@@ -18,7 +18,12 @@ class HomeFragmentLatestRow(
 	private val userViews: Collection<BaseItemDto>,
 	private val itemLimit: Int,
 ) : HomeFragmentRow {
-	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
+	override fun addToRowsAdapter(
+		context: Context,
+		cardPresenter: CardPresenter,
+		rowsAdapter: MutableObjectAdapter<Row>,
+		rowOrder: Double,
+	) {
 		// Get configuration (to find excluded items)
 		val configuration = userRepository.currentUser.value?.configuration
 
@@ -38,9 +43,9 @@ class HomeFragmentLatestRow(
 
 				val title = context.getString(R.string.lbl_latest_in, item.name)
 				HomeFragmentBrowseRowDefRow(BrowseRowDef(title, request, arrayOf(ChangeTriggerType.LibraryUpdated)))
-			}.forEach { row ->
+			}.forEachIndexed { index, row ->
 				// Add row to adapter
-				row.addToRowsAdapter(context, cardPresenter, rowsAdapter)
+				row.addToRowsAdapter(context, cardPresenter, rowsAdapter, rowOrder + index.toDouble() / (userViews.size + 1))
 			}
 	}
 

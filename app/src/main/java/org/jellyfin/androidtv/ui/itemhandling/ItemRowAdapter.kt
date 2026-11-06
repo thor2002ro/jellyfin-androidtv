@@ -32,7 +32,9 @@ import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.EnhancedBrowseFragment
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import org.jellyfin.androidtv.ui.presentation.OrderedListRow
 import org.jellyfin.androidtv.ui.presentation.TextItemPresenter
+import org.jellyfin.androidtv.ui.presentation.addOrderedRow
 import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.sdk.api.client.ApiClient
@@ -659,6 +661,10 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 
 		removeEmptyPlaceholder(currentParent)
 		if (currentParent.indexOf(currentRow) != -1) return
+		if (currentRow is OrderedListRow) {
+			currentParent.addOrderedRow(currentRow)
+			return
+		}
 
 		val insertIndex = (0 until currentParent.size())
 			.firstOrNull { index ->

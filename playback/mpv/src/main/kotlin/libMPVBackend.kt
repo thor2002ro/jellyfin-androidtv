@@ -422,6 +422,7 @@ class LibMPVBackend(
 	}
 
 	private fun createPlayer(options: Map<String, String>): MPV {
+		SubtitleFontProvider.initialize(appContext)
 		presetDirectory.mkdirs()
 		BUNDLED_PRESET_SHADERS.forEach { name ->
 			appContext.assets.open("mpv-anime/shaders/$name").use { input ->

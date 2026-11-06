@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.card
 
 import android.content.Context
 import android.graphics.Rect
-import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.KeyEvent
 import androidx.compose.animation.core.animateFloatAsState
@@ -177,7 +176,6 @@ class UserCardView @JvmOverloads constructor(
 			name = name.orEmpty(),
 			imageUrl = image,
 			nameFontSizePx = with(density) { NAME_FONT_SIZE.toPx() } * scale,
-			selectedAtMillis = SystemClock.elapsedRealtime(),
 		).takeIf { it.isUsable }
 	}
 
