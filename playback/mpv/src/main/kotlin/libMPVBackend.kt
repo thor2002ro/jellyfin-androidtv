@@ -23,6 +23,7 @@ import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
+import org.jellyfin.playback.core.mediastream.totalBitrate
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.formatBufferBytes
@@ -143,7 +144,7 @@ class LibMPVBackend(
 	private var isPaused = true
 	private var pausedForCache = false
 	private var seeking = false
-	private var rebufferWaitSeconds = 1.0
+	private var rebufferWaitSeconds: Double? = null
 	private var terminalState: PlayState? = PlayState.STOPPED
 	private var lastReportedState: PlayState? = null
 	private var videoWidth = 0
@@ -443,28 +444,44 @@ class LibMPVBackend(
 
 	override fun setBufferOptions(options: PlaybackBufferOptions) {
 		bufferOptions = options
+		currentStream?.let(::applyBufferOptions)
 	}
 
 	private fun applyBufferOptions(stream: PlayableMediaStream) {
-		val configuration = bufferOptions.toLibMPVBufferConfiguration(stream.queueEntry.isLiveTv)
+		val bitrate = stream.totalBitrate()
+		val configuration = bufferOptions
+			.toLibMPVBufferConfiguration(stream.queueEntry.isLiveTv)
+			.cappedToBytes(bitrate, bufferOptions.maxBufferBytes)
 		rebufferWaitSeconds = configuration.rebufferWaitSeconds
 
 		setOption("cache", if (configuration.cacheSeconds == null) "auto" else "yes")
 		setOption("cache-pause", "yes")
 		setOption("cache-pause-initial", if (configuration.initialWaitSeconds == null) "no" else "yes")
-		setOption(
-			"cache-pause-wait",
-			(configuration.initialWaitSeconds ?: configuration.rebufferWaitSeconds).toLibMPVString(),
-		)
+		setCachePauseWait(configuration.initialWaitSeconds ?: configuration.rebufferWaitSeconds)
 
 		if (configuration.cacheSeconds == null) {
 			restoreOptionDefault("cache-secs")
 			restoreOptionDefault("demuxer-readahead-secs")
+			restoreOptionDefault("demuxer-max-bytes")
+			restoreOptionDefault("demuxer-max-back-bytes")
 		} else {
 			val cacheSeconds = configuration.cacheSeconds.toLibMPVString()
 			setOption("cache-secs", cacheSeconds)
-			setOption("demuxer-readahead-secs", cacheSeconds)
+			val maximumBytes = bufferOptions.maxBufferBytes
+			val forwardBytes = mpvCacheBytes(configuration.cacheSeconds, bitrate, maximumBytes)
+			if (forwardBytes != null && maximumBytes != null) {
+				setOption("demuxer-max-bytes", forwardBytes.toString())
+				setOption("demuxer-max-back-bytes", (maximumBytes - forwardBytes).coerceAtLeast(0).toString())
+			} else {
+				restoreOptionDefault("demuxer-max-bytes")
+				restoreOptionDefault("demuxer-max-back-bytes")
+			}
 		}
+	}
+
+	private fun setCachePauseWait(seconds: Double?) {
+		if (seconds == null) restoreOptionDefault("cache-pause-wait")
+		else setOption("cache-pause-wait", seconds.toLibMPVString())
 	}
 
 	override fun onActivated() {
@@ -862,7 +879,7 @@ class LibMPVBackend(
 				frameStatPropertyMisses.clear()
 				playbackRestarted = true
 				seeking = false
-				setOption("cache-pause-wait", rebufferWaitSeconds.toLibMPVString())
+				rebufferWaitSeconds?.let { setOption("cache-pause-wait", it.toLibMPVString()) }
 				lastTickPosition = getPositionInfo().active
 				publishPlayState(force = true)
 			}
