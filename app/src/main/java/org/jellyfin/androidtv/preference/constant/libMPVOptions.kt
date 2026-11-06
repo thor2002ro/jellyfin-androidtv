@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
+import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
@@ -338,6 +339,7 @@ internal data class LibMPVAudioPolicy(
 	val audioChannels: String,
 	val audioSpdif: String,
 	val audioPreset: LibMPVAudioPreset,
+	val convertAudioToAc3: Boolean = false,
 )
 
 @OptIn(UnstableApi::class)
@@ -385,6 +387,9 @@ internal fun UserPreferences.mpvAudioPolicy(supportedPassthroughMimes: Set<Strin
 		audioChannels = "auto",
 		audioSpdif = audioSpdif,
 		audioPreset = audioPresetOption.preset,
+		convertAudioToAc3 = this[UserPreferences.audioBehaviour] == AudioBehavior.TRANSCODE_TO_PASSTHROUGH &&
+			this[UserPreferences.mpvConvertAudioToAc3] && "ac3" in passthroughCodecs &&
+			audioPresetOption != LibMPVAudioPresetOption.CINEMA_SPATIAL,
 	)
 }
 
@@ -415,6 +420,7 @@ fun UserPreferences.mpvPlaybackOptions(
 		audioOutput = audioPolicy.audioOutput,
 		audioChannels = audioPolicy.audioChannels,
 		audioSpdif = audioPolicy.audioSpdif,
+		convertAudioToAc3 = audioPolicy.convertAudioToAc3,
 		audioPitchCorrection = this[UserPreferences.mpvAudioPitchCorrection],
 		replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
 		decoderThreads = this[UserPreferences.mpvDecoderThreads].coerceIn(0, 32),
@@ -441,6 +447,7 @@ fun UserPreferences.resetLibMPVPreferences() {
 	this[UserPreferences.mpvScaler] = LibMPVScaler.BILINEAR
 	this[UserPreferences.mpvToneMapping] = LibMPVToneMapping.AUTO
 	this[UserPreferences.mpvAudioOutput] = LibMPVAudioOutput.AUTO
+	this[UserPreferences.mpvConvertAudioToAc3] = true
 	this[UserPreferences.mpvReplayGain] = LibMPVReplayGain.DISABLED
 	this[UserPreferences.mpvLoopFilter] = LibMPVLoopFilter.DEFAULT
 	this[UserPreferences.mpvSubtitleAssOverride] = LibMPVSubtitleAssOverride.NO
