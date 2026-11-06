@@ -628,9 +628,9 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 }
 
                 if (mBaseItem.getSeasonId() != null && mBaseItem.getIndexNumber() != null) {
-                    // query index is zero-based but episode no is not
                     ItemRowAdapter nextAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createNextEpisodesRequest(mBaseItem.getSeasonId(), mBaseItem.getIndexNumber()), 0, false, true, new CardPresenter(true, 120), adapter);
-                    nextAdapter.setInitialSelectedPosition(mBaseItem.getIndexNumber());
+                    // Row positions are zero-based; episode numbers start at one.
+                    nextAdapter.setInitialSelectedPosition(Math.max(0, mBaseItem.getIndexNumber() - 1));
                     addItemRow(adapter, nextAdapter, 5, getString(R.string.lbl_next_episode));
                 }
 
