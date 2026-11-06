@@ -14,6 +14,7 @@ import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
 import io.mockk.unmockkConstructor
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
@@ -24,6 +25,10 @@ import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.androidtv.preference.playbackBackend
+import org.jellyfin.androidtv.preference.mpvAudioPreset
+import org.jellyfin.androidtv.preference.mpvAudioOutput
+import org.jellyfin.androidtv.preference.constant.LibMPVAudioPresetOption
+import org.jellyfin.androidtv.preference.constant.LibMPVAudioOutput
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.DeviceProfile
 import org.jellyfin.sdk.model.api.CodecType
@@ -95,6 +100,8 @@ class DeviceProfileCompatibilityTests : FunSpec({
 			every { preferences[UserPreferences.playbackBackend] } returns PlaybackBackend.MPV
 			every { preferences[UserPreferences.softwareCodecsEnabled] } returns false
 			every { preferences[UserPreferences.audioBehaviour] } returns AudioBehavior.TRANSCODE_TO_PASSTHROUGH
+			every { preferences[UserPreferences.mpvAudioPreset] } returns LibMPVAudioPresetOption.OFF
+			every { preferences[UserPreferences.mpvAudioOutput] } returns LibMPVAudioOutput.AUDIOTRACK
 			every { preferences[UserPreferences.maxBitrate] } returns "100"
 			every { preferences[UserPreferences.maxResolution] } returns PlaybackResolution.NATIVE
 			every { preferences[UserPreferences.assDirectPlay] } returns true
@@ -122,6 +129,24 @@ class DeviceProfileCompatibilityTests : FunSpec({
 						condition.property == ProfileConditionValue.AUDIO_CHANNELS && condition.value == "2"
 					}
 			} shouldBe true
+			for (disabledBy in listOf("preset", "downmix", "codec switches")) {
+				every { preferences[UserPreferences.mpvAudioPreset] } returns
+					if (disabledBy == "preset") LibMPVAudioPresetOption.CINEMA_SPATIAL else LibMPVAudioPresetOption.OFF
+				every { preferences[UserPreferences.audioBehaviour] } returns
+					if (disabledBy == "downmix") AudioBehavior.DOWNMIX_TO_STEREO else AudioBehavior.TRANSCODE_TO_PASSTHROUGH
+				for (format in BitstreamAudioFormat.entries) {
+					every { preferences[format.preference] } returns
+						if (disabledBy == "codec switches") BitstreamAudioMode.DISABLE else BitstreamAudioMode.ENABLE
+				}
+				val disabledProfile = createDeviceProfile(context, preferences, ServerVersion(12, 0, 0), mediaTest = mediaTest)
+				disabledProfile.transcodingProfiles.count { it.type == DlnaProfileType.VIDEO } shouldBe 2
+				disabledProfile.codecProfiles.any {
+					it.type == CodecType.VIDEO_AUDIO && !it.codec.isNullOrBlank() &&
+						it.conditions.any { condition -> condition.property == ProfileConditionValue.AUDIO_CHANNELS }
+				} shouldBe false
+			}
+			verify(exactly = 1) { getSupportedMPVPassthroughAudioMimes(context, any()) }
+			verify(exactly = 0) { getSupportedPassthroughAudioMimes(context, any()) }
 		} finally {
 			unmockkStatic(::getSupportedMPVPassthroughAudioMimes)
 			unmockkStatic(::getSupportedPassthroughAudioMimes)
