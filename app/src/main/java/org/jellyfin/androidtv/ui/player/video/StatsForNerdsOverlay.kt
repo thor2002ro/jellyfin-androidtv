@@ -55,6 +55,7 @@ import org.jellyfin.androidtv.util.profile.getHdrRangeTypesFor
 import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.jellyfin.androidtv.util.profile.getUnsupportedHevcVideoRangeWorkarounds
 import org.jellyfin.androidtv.util.sdk.formatVideoRange
+import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.sdk.primaryVideoRangeLabel
 import org.jellyfin.androidtv.util.sdk.toVideoRangeTypeOrNull
 import org.jellyfin.playback.core.PlaybackManager
@@ -105,6 +106,7 @@ fun PlaybackInfoOverlay(
 	val mediaStream by entry?.mediaStreamFlow?.collectAsState(null) ?: return
 	val stream = mediaStream ?: return
 	val item = entry?.run { baseItemFlow.collectAsState(baseItem) }?.value
+	val liveTvDirectPlayDisabled = item?.isLiveTv() == true && !userPreferences[UserPreferences.liveTvDirectPlayEnabled]
 	val itemId = item?.id ?: entry?.baseItem?.id
 	val mediaSourceId = entry?.mediaSourceId
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
@@ -179,6 +181,7 @@ fun PlaybackInfoOverlay(
 	}
 	val sections = remember(
 		stream,
+		liveTvDirectPlayDisabled,
 		selectedAudio,
 		speed,
 		playerVideoSize,
@@ -198,6 +201,7 @@ fun PlaybackInfoOverlay(
 		NewPlayerStreamStatusBuilder.build(
 			playbackManager = playbackManager,
 			stream = stream,
+			liveTvDirectPlayDisabled = liveTvDirectPlayDisabled,
 			selectedAudio = selectedAudio,
 			speed = speed,
 			playerVideoSize = playerVideoSize,
@@ -366,6 +370,7 @@ private object NewPlayerStreamStatusBuilder {
 	fun build(
 		playbackManager: PlaybackManager,
 		stream: MediaStream,
+		liveTvDirectPlayDisabled: Boolean,
 		selectedAudio: PlayerTrack?,
 		speed: Float,
 		playerVideoSize: VideoGeometry,
@@ -413,6 +418,7 @@ private object NewPlayerStreamStatusBuilder {
 				rows = rows {
 					row("Player", frameStats.playerName)
 					row("Play method", stream.conversionMethod.displayName(transcodingInfo?.isVideoDirect))
+					if (liveTvDirectPlayDisabled) row("Live TV Direct Play", "Disabled")
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
 					row("Display", displayMode?.let { "${it.physicalWidth}x${it.physicalHeight} @ ${"%.3f Hz".format(Locale.ROOT, it.refreshRate)}" })
