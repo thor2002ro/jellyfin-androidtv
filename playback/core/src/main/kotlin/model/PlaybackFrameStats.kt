@@ -26,7 +26,13 @@ data class PlaybackLibassStats(
 data class PlaybackDoviTransformStats(
 	val inputPresentation: String,
 	val outputPresentation: String,
+	val processor: PlaybackDoviTransformProcessor = PlaybackDoviTransformProcessor.LIBDOVI,
 )
+
+enum class PlaybackDoviTransformProcessor {
+	LIBDOVI,
+	FAST_HDR_BASE,
+}
 
 data class PlaybackFrameStats(
 	val droppedFrames: Int,

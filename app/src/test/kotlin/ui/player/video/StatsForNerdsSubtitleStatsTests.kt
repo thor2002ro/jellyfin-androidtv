@@ -6,6 +6,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
+import org.jellyfin.playback.core.model.PlaybackDoviTransformProcessor
 import org.jellyfin.playback.core.model.VideoGeometry
 
 class StatsForNerdsSubtitleStatsTests : StringSpec({
@@ -48,11 +49,22 @@ class StatsForNerdsSubtitleStatsTests : StringSpec({
 		libdoviConversionDiagnostic(null, null) shouldBe null
 	}
 
-	"libdovi diagnostics show an observation without planner state" {
+	"Dolby Vision diagnostics identify libdovi processing" {
 		libdoviConversionDiagnostic(
 			observed = PlaybackDoviTransformStats("DV P7 FEL", "DV P8.1"),
 			failure = null,
-		) shouldBe "DV P7 FEL → DV P8.1"
+		) shouldBe "libdovi — DV P7 FEL → DV P8.1"
+	}
+
+	"Dolby Vision diagnostics identify fast HDR processing" {
+		libdoviConversionDiagnostic(
+			observed = PlaybackDoviTransformStats(
+				inputPresentation = "DV P8.1",
+				outputPresentation = "HDR10",
+				processor = PlaybackDoviTransformProcessor.FAST_HDR_BASE,
+			),
+			failure = null,
+		) shouldBe "Fast HDR — DV P8.1 → HDR10"
 	}
 
 	"libdovi diagnostics show the first concrete failure" {
