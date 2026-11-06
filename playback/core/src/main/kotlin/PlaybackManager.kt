@@ -5,10 +5,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import org.jellyfin.playback.core.backend.BackendService
+import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.mediastream.MediaStreamService
+import org.jellyfin.playback.core.mediastream.MediaStreamReloadResult
 import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
@@ -62,6 +64,10 @@ class PlaybackManager internal constructor(
 		backendService.removeListener(listener)
 	}
 
+	fun reportPlaybackError(error: PlaybackError) {
+		backendService.reportPlaybackError(error)
+	}
+
 	fun switchBackend(backend: PlayerBackend) {
 		applyBackendOptions(backend)
 		if (backend !== backendService.backend) {
@@ -99,10 +105,15 @@ class PlaybackManager internal constructor(
 	suspend fun reloadCurrentMediaStream(
 		position: Duration? = null,
 		playWhenReady: Boolean = true,
-	): Boolean = mediaStreamService()?.reloadCurrentEntry(
+	): Boolean = reloadCurrentMediaStreamResult(position, playWhenReady) == MediaStreamReloadResult.RELOADED
+
+	suspend fun reloadCurrentMediaStreamResult(
+		position: Duration? = null,
+		playWhenReady: Boolean = true,
+	): MediaStreamReloadResult = mediaStreamService()?.reloadCurrentEntry(
 		position = position,
 		playWhenReady = playWhenReady,
-	) == true
+	) ?: MediaStreamReloadResult.SUPERSEDED
 
 	fun removeService(service: PlayerService) {
 		Timber.i("Removing service $service")
