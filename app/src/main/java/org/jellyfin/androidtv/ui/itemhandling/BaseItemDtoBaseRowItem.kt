@@ -49,10 +49,11 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 
 	override val showCardInfoOverlay
 		get() = when (baseItem?.type) {
+			BaseItemKind.USER_VIEW,
+			BaseItemKind.COLLECTION_FOLDER -> getImage(BaseRowImageType.POSTER) == null
+
 			BaseItemKind.FOLDER,
 			BaseItemKind.PHOTO_ALBUM,
-			BaseItemKind.USER_VIEW,
-			BaseItemKind.COLLECTION_FOLDER,
 			BaseItemKind.PHOTO,
 			BaseItemKind.VIDEO,
 			BaseItemKind.PERSON,

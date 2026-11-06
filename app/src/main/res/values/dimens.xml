@@ -14,8 +14,9 @@
     <dimen name="player_popup_menu_wide_max_width">294dp</dimen>
 
     <fraction name="card_scale_default">100%</fraction>
-    <fraction name="card_scale_focus">115%</fraction>
-    <dimen name="card_focus_stroke_width">1dp</dimen>
+    <fraction name="card_scale_focus">105%</fraction>
+    <dimen name="card_focus_stroke_width">2dp</dimen>
+    <dimen name="card_focus_glow">12dp</dimen>
     <dimen name="live_tv_action_tile_width">168dp</dimen>
     <dimen name="live_tv_action_tile_height">104dp</dimen>
     <dimen name="live_tv_card_height">106dp</dimen>

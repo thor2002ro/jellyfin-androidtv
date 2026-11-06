@@ -4,5 +4,6 @@
     <integer name="button_fade_duration">200</integer>
     <integer name="input_fade_duration">200</integer>
     <integer name="card_scale_duration">150</integer>
+    <integer name="card_focus_sheen_duration">520</integer>
     <integer name="card_focus_overlay_alpha_percent">30</integer>
 </resources>
