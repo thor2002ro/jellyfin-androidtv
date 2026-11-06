@@ -55,6 +55,8 @@ import kotlin.time.Duration.Companion.seconds
 fun PlayerOverlayLayout(
 	modifier: Modifier = Modifier,
 	visibilityState: PlayerOverlayVisibilityState = rememberPlayerOverlayVisibility(),
+	inputEnabled: Boolean = true,
+	initialControlsFocusRequester: FocusRequester? = null,
 	header: (@Composable () -> Unit)? = null,
 	controls: (@Composable () -> Unit)? = null,
 	onCenterClick: (() -> Boolean)? = null,
@@ -81,8 +83,10 @@ fun PlayerOverlayLayout(
 		modifier = modifier
 			.fillMaxSize()
 			.focusRequester(focusRequester)
-			.focusable()
+			.focusable(enabled = inputEnabled)
 			.onPreviewKeyEvent {
+				if (!inputEnabled) return@onPreviewKeyEvent false
+
 				val nativeEvent = it.nativeKeyEvent
 				if (nativeEvent.isCenterKey()) {
 					when (nativeEvent.action) {
@@ -138,17 +142,30 @@ fun PlayerOverlayLayout(
 				}
 			}
 	) {
-		LaunchedEffect(visibilityState.visible, windowInfo.isWindowFocused, controls != null, controlsHaveFocus) {
+		LaunchedEffect(inputEnabled, visibilityState.visible, windowInfo.isWindowFocused, controls != null, controlsHaveFocus) {
 			if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
 				return@LaunchedEffect
 			}
 
-			when {
-				visibilityState.visible && windowInfo.isWindowFocused && controls != null && !controlsHaveFocus ->
-					controlsFocusRequester.requestFocus()
+			when (
+				playerOverlayFocusTarget(
+					inputEnabled = inputEnabled,
+					controlsVisible = visibilityState.visible,
+					windowFocused = windowInfo.isWindowFocused,
+					hasControls = controls != null,
+					controlsHaveFocus = controlsHaveFocus,
+				)
+			) {
+				PlayerOverlayFocusTarget.CONTROLS -> {
+					if (initialControlsFocusRequester != null) {
+						initialControlsFocusRequester.requestFocus()
+					} else {
+						controlsFocusRequester.requestFocus()
+					}
+				}
 
-				!visibilityState.visible ->
-					focusRequester.requestFocus()
+				PlayerOverlayFocusTarget.PLAYER -> focusRequester.requestFocus()
+				PlayerOverlayFocusTarget.NONE -> Unit
 			}
 		}
 
@@ -235,6 +252,25 @@ fun PlayerOverlayLayout(
 		}
 	}
 }
+}
+
+internal enum class PlayerOverlayFocusTarget {
+	CONTROLS,
+	PLAYER,
+	NONE,
+}
+
+internal fun playerOverlayFocusTarget(
+	inputEnabled: Boolean,
+	controlsVisible: Boolean,
+	windowFocused: Boolean,
+	hasControls: Boolean,
+	controlsHaveFocus: Boolean,
+): PlayerOverlayFocusTarget = when {
+	!inputEnabled -> PlayerOverlayFocusTarget.NONE
+	controlsVisible && windowFocused && hasControls && !controlsHaveFocus -> PlayerOverlayFocusTarget.CONTROLS
+	!controlsVisible -> PlayerOverlayFocusTarget.PLAYER
+	else -> PlayerOverlayFocusTarget.NONE
 }
 
 data class PlayerOverlayVisibilityState(

@@ -151,7 +151,6 @@ fun LiveTvGuideOverlay(
 	var programDetailPopup by remember { mutableStateOf<LiveProgramDetailPopup?>(null) }
 	var openingChannelId by remember { mutableStateOf<UUID?>(null) }
 	var guideTime by remember { mutableStateOf(guideStartTime(LocalDateTime.now())) }
-	var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
 	var guideLoadedAt by remember { mutableStateOf<LocalDateTime?>(null) }
 	var guideProgramsByChannel by remember { mutableStateOf<Map<UUID, List<BaseItemDto>>?>(null) }
 	var refreshVersion by remember { mutableStateOf(0) }
@@ -234,13 +233,6 @@ fun LiveTvGuideOverlay(
 	LaunchedEffect(api) {
 		api.webSocket.subscribe<LibraryChangedMessage>().collectLatest {
 			refreshVersion++
-		}
-	}
-
-	LaunchedEffect(Unit) {
-		while (true) {
-			currentTime = LocalDateTime.now()
-			delay(5_000)
 		}
 	}
 
@@ -539,10 +531,10 @@ fun LiveTvGuideOverlay(
 						modifier = Modifier
 							.fillMaxWidth()
 							.weight(1f)
-							.currentTimeIndicator(viewportTime, currentTime, brandStart, brandEnd),
+							.currentTimeIndicator(viewportTime, brandStart, brandEnd),
 					) {
 						Column {
-							GuideTimeHeader(timeSlots, timeFormatter, guideLoadedAt, currentTime, guideTextSecondary)
+							GuideTimeHeader(timeSlots, timeFormatter, guideLoadedAt, guideTextSecondary)
 
 							LazyColumn(
 								state = listState,
@@ -551,6 +543,7 @@ fun LiveTvGuideOverlay(
 								itemsIndexed(
 									items = loadedChannels,
 									key = { _, channel -> channel.id.toString() },
+									contentType = { _, _ -> "live-tv-guide-channel" },
 								) { index, channel ->
 									val channelPrograms = guideProgramsByChannel?.get(channel.liveTvChannelId())
 
@@ -603,6 +596,9 @@ private fun LiveTvGuideChannelRow(
 	onClick: () -> Unit,
 ) {
 	val currentOnClick by rememberUpdatedState(onClick)
+	val programBlocks = remember(programs, timeSlots) {
+		programs.programBlocks(timeSlots, selectedTime = null)
+	}
 
 	Row(
 		modifier = Modifier
@@ -631,10 +627,10 @@ private fun LiveTvGuideChannelRow(
 				modifier = Modifier.weight(GuideVisibleTimeSlots.toFloat()),
 			)
 		} else {
-			programs.programBlocks(timeSlots, selectedTime).forEach { block ->
+			programBlocks.forEach { block ->
 				GuideProgramCell(
 					program = block.program,
-					selected = selected && block.includesGuideTime,
+					selected = selected && block.includes(selectedTime),
 					loading = false,
 					brandStart = brandStart,
 					brandEnd = brandEnd,
@@ -758,23 +754,33 @@ private fun GuideSummary(
 	}
 }
 
+@Composable
 private fun Modifier.currentTimeIndicator(
 	guideTime: LocalDateTime,
-	currentTime: LocalDateTime,
 	brandStart: Color,
 	brandEnd: Color,
-) = drawWithContent {
-	drawContent()
-	val fraction = currentTimeFraction(guideTime, currentTime) ?: return@drawWithContent
-	val channelWidth = GuideChannelColumnWidth.toPx()
-	val x = channelWidth + (size.width - channelWidth) * fraction
-	drawLine(
-		brush = Brush.verticalGradient(listOf(brandStart, brandEnd)),
-		start = Offset(x, 0f),
-		end = Offset(x, size.height),
-		strokeWidth = 2.dp.toPx(),
-	)
-	drawCircle(brandStart, radius = 4.dp.toPx(), center = Offset(x, 4.dp.toPx()))
+) : Modifier {
+	var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
+	LaunchedEffect(Unit) {
+		while (true) {
+			currentTime = LocalDateTime.now()
+			delay(5_000)
+		}
+	}
+
+	return drawWithContent {
+		drawContent()
+		val fraction = currentTimeFraction(guideTime, currentTime) ?: return@drawWithContent
+		val channelWidth = GuideChannelColumnWidth.toPx()
+		val x = channelWidth + (size.width - channelWidth) * fraction
+		drawLine(
+			brush = Brush.verticalGradient(listOf(brandStart, brandEnd)),
+			start = Offset(x, 0f),
+			end = Offset(x, size.height),
+			strokeWidth = 2.dp.toPx(),
+		)
+		drawCircle(brandStart, radius = 4.dp.toPx(), center = Offset(x, 4.dp.toPx()))
+	}
 }
 
 internal fun currentTimeFraction(
@@ -789,9 +795,16 @@ private fun GuideTimeHeader(
 	timeSlots: List<LocalDateTime>,
 	timeFormatter: java.time.format.DateTimeFormatter,
 	guideLoadedAt: LocalDateTime?,
-	currentTime: LocalDateTime,
 	textSecondary: Color,
 ) {
+	var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
+	LaunchedEffect(Unit) {
+		while (true) {
+			currentTime = LocalDateTime.now()
+			delay(5_000)
+		}
+	}
+
 	val timelineColor = colorResource(R.color.guide_timeline_bg)
 	val brandStart = colorResource(R.color.card_focus_gradient_start)
 	val brandEnd = colorResource(R.color.card_focus_gradient_end)
@@ -1102,7 +1115,11 @@ internal data class GuideProgramBlock(
 	val program: BaseItemDto?,
 	val slots: Float,
 	val includesGuideTime: Boolean,
-)
+	val start: LocalDateTime,
+	val end: LocalDateTime,
+) {
+	fun includes(time: LocalDateTime): Boolean = !time.isBefore(start) && time.isBefore(end)
+}
 
 internal fun Collection<BaseItemDto>?.programBlocks(
 	timeSlots: List<LocalDateTime>,
@@ -1115,6 +1132,8 @@ internal fun Collection<BaseItemDto>?.programBlocks(
 		program = program,
 		slots = Duration.between(start, end).toNanos().toFloat() / Duration.ofMinutes(GuideTimeStepMinutes).toNanos(),
 		includesGuideTime = selectedTime != null && !selectedTime.isBefore(start) && selectedTime.isBefore(end),
+		start = start,
+		end = end,
 	)
 
 	return buildList {
