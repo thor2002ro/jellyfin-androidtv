@@ -26,6 +26,7 @@ import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
+import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
@@ -68,14 +69,16 @@ internal class MediaSessionPlayer(
 	}.launchIn(scope)
 
 	override fun getState(): State = State.Builder().apply {
-		val playPauseEnabled = manager.queue.entry.value?.isLiveTv != true
+		val currentEntry = manager.queue.entry.value
+		val playPauseEnabled = currentEntry?.isLiveTv != true
+		val seekEnabled = currentEntry?.isDirectPlayLiveTv != true
 
 		setAvailableCommands(Commands.Builder().apply {
 			addIf(COMMAND_PLAY_PAUSE, playPauseEnabled)
 			add(COMMAND_PREPARE)
 			add(COMMAND_STOP)
-			add(COMMAND_SEEK_TO_DEFAULT_POSITION)
-			add(COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+			addIf(COMMAND_SEEK_TO_DEFAULT_POSITION, seekEnabled)
+			addIf(COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, seekEnabled)
 			val allowPrevious = manager.queue.entryIndex.value > 0
 			addIf(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, allowPrevious)
 			addIf(COMMAND_SEEK_TO_PREVIOUS, allowPrevious)
@@ -83,8 +86,8 @@ internal class MediaSessionPlayer(
 			addIf(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, allowNext)
 			addIf(COMMAND_SEEK_TO_NEXT, allowNext)
 			// add(COMMAND_SEEK_TO_MEDIA_ITEM)
-			add(COMMAND_SEEK_BACK)
-			add(COMMAND_SEEK_FORWARD)
+			addIf(COMMAND_SEEK_BACK, seekEnabled)
+			addIf(COMMAND_SEEK_FORWARD, seekEnabled)
 			add(COMMAND_SET_SPEED_AND_PITCH)
 			add(COMMAND_SET_SHUFFLE_MODE)
 			add(COMMAND_SET_REPEAT_MODE)
@@ -106,7 +109,7 @@ internal class MediaSessionPlayer(
 			// add(COMMAND_GET_TRACKS)
 		}.build())
 
-		val current = manager.queue.entry.value
+		val current = currentEntry
 
 		if (current != null) {
 			val previous = manager.queue.peekPreviousCached()

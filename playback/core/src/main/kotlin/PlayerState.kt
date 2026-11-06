@@ -16,6 +16,7 @@ import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.model.VideoSize
 import org.jellyfin.playback.core.queue.QueueService
+import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import kotlin.time.Duration
 
 interface PlayerState {
@@ -91,6 +92,9 @@ class MutablePlayerState(
 	override val positionInfo: PositionInfo
 		get() = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
 
+	private val canSeek: Boolean
+		get() = queue?.entry?.value?.isDirectPlayLiveTv != true
+
 	init {
 		volume = options.playerVolumeState
 
@@ -136,10 +140,12 @@ class MutablePlayerState(
 	}
 
 	override fun seek(to: Duration) {
+		if (!canSeek) return
 		backendService.backend?.seekTo(to)
 	}
 
 	private fun seekRelative(amount: Duration) {
+		if (!canSeek) return
 		val current = backendService.backend?.getPositionInfo()?.active ?: Duration.ZERO
 		backendService.backend?.seekTo(current + amount)
 	}

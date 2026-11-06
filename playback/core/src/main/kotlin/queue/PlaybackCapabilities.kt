@@ -7,6 +7,12 @@ import org.jellyfin.playback.core.mediastream.mediaStream
 val QueueEntry.isLiveTv: Boolean
 	get() = liveStreamTargetOffset != null
 
+val QueueEntry.isDirectPlayLiveTv: Boolean
+	get() = isDirectPlayLiveTv(mediaStream)
+
+fun QueueEntry.isDirectPlayLiveTv(mediaStream: MediaStream?): Boolean =
+	isLiveTv && mediaStream?.conversionMethod == MediaConversionMethod.None
+
 val QueueEntry.isDirectStreamingLiveTv: Boolean
 	get() = isDirectStreamingLiveTv(mediaStream)
 
