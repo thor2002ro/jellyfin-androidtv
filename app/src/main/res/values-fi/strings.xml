@@ -26,7 +26,6 @@
     <string name="no_program_data">Ohjelmatietoja ei ole saatavilla</string>
     <string name="msg_record_entire_series">Tallennetaanko koko sarja\?</string>
     <string name="lbl_just_this_once">Vain tämän kerran</string>
-    <string name="lbl_select_date">Valitse päivä</string>
     <string name="lbl_show_backdrop">Näytä taustat</string>
     <string name="lbl_open">Avaa</string>
     <string name="lbl_play_next_up">Toista seuraava</string>
@@ -116,7 +115,6 @@
     <string name="lbl_programs">Ohjelmat</string>
     <string name="pref_live_tv_cat">Televisio</string>
     <string name="lbl_live_tv_guide">Ohjelmaopas</string>
-    <string name="lbl_filters">Television suodattimet</string>
     <string name="lbl_rating">Arvio</string>
     <string name="lbl_critic_rating">Kriitikoiden arvio</string>
     <string name="lbl_premier_date">Ensiesitys</string>
@@ -176,7 +174,6 @@
     <string name="home_section_library">Oma media</string>
     <string name="lbl_colored_backgrounds">Värikoodatut taustat</string>
     <string name="lbl_live_broadcasts">Suorat lähetykset</string>
-    <string name="lbl_tv_channel_status">%1$d/%2$d kanavaa</string>
     <string name="lbl_resume_from">Jatka kohdasta %1$s</string>
     <string name="lbl_guest_stars">Vierailevat näyttelijät</string>
     <string name="lbl_on_schedule">Ajoitetusti</string>
@@ -314,9 +311,6 @@
     <string name="subtitle_error">Tekstitystä ei voida valita</string>
     <string name="too_many_errors">Liian monta virhettä. Luovutetaan</string>
     <string name="player_error">Soittimessa tapahtui virhe. Yritetään uudelleen…</string>
-    <string name="msg_live_tv_prev">Ladataanko edelliset %1$d tuntia?</string>
-    <string name="msg_live_tv_next">Ladataanko seuraavat %1$d tuntia?</string>
-    <string name="lbl_load_guide_data">Lataa ohjelmaoppaan tiedot</string>
     <string name="episode_missing_message">Jaksoa ei ole kirjastossa. Haluatko ohittaa sen ja jatkaa seuraavaan jaksoon\?</string>
     <string name="episode_missing_message_2">Jaksoa ei ole kirjastossa. Toisto pysäytetään.</string>
     <string name="episode_missing">Jakso puuttuu</string>
@@ -408,7 +402,6 @@
     <string name="action_use_quickconnect">Käytä Pikayhdistystä</string>
     <string name="action_use_password">Käytä salasanaa</string>
     <string name="action_login">Kirjaudu</string>
-    <string name="lbl_tv_filter_status">seuraavat %1$d tuntia</string>
     <string name="lbl_starting_with">alkaen niillä, joiden nimi alkaa</string>
     <string name="state_disabled">Poistettu käytöstä</string>
     <string name="lbl_subtitle_delay">Tekstitysviive</string>
