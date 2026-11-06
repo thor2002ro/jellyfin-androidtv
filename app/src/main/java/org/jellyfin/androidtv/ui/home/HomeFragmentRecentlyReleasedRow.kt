@@ -5,7 +5,7 @@ import androidx.leanback.widget.Row
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.ChangeTriggerType
-import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
@@ -24,11 +24,11 @@ class HomeFragmentRecentlyReleasedRow(
 	private val userViews: Collection<BaseItemDto>,
 	private val itemLimit: Int,
 ) : HomeFragmentRow, KoinComponent {
-	private val userPreferences by inject<UserPreferences>()
+	private val userSettingPreferences by inject<UserSettingPreferences>()
 
 	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
 		val latestItemsExcludes = userRepository.currentUser.value?.configuration?.latestItemsExcludes.orEmpty()
-		val preferSeriesThumbnails = userPreferences[UserPreferences.seriesThumbnailsEnabled]
+		val preferSeriesThumbnails = userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled]
 
 		userViews
 			.filterNot { item -> item.collectionType in EXCLUDED_COLLECTION_TYPES || item.id in latestItemsExcludes }
