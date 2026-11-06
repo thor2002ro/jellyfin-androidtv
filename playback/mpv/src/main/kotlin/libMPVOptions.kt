@@ -34,19 +34,30 @@ internal fun effectiveLibMPVVideoOutput(
 	configured: String,
 	decoder: LibMPVVideoDecoder,
 	videoRange: String?,
+	videoWidth: Int = 0,
+	videoHeight: Int = 0,
+	videoFrameRate: Float? = null,
+	videoMetadataDescribesOutput: Boolean = true,
 ): String {
 	val triesNativeMediaCodec = decoder == LibMPVVideoDecoder.AUTOMATIC ||
 		decoder == LibMPVVideoDecoder.AUTO_SAFE ||
 		decoder == LibMPVVideoDecoder.MEDIACODEC
-	return if (isLibMPVHdrRange(videoRange) && triesNativeMediaCodec) "mediacodec_embed" else configured
+	val bypassesOverloadedGpuPath = videoMetadataDescribesOutput &&
+		videoWidth.toLong() * videoHeight >= 3840L * 2160 &&
+		videoFrameRate != null && videoFrameRate >= 50f
+	return if (triesNativeMediaCodec && (isLibMPVHdrRange(videoRange) || bypassesOverloadedGpuPath)) {
+		"mediacodec_embed"
+	} else {
+		configured
+	}
 }
 
 internal fun isLibMPVHdrRange(videoRange: String?) = !videoRange.isNullOrBlank() &&
 	!videoRange.equals("SDR", ignoreCase = true) &&
 	!videoRange.equals("UNKNOWN", ignoreCase = true)
 
-internal fun shouldUseNativeSubtitleOverlay(videoRange: String?, videoOutput: String) =
-	isLibMPVHdrRange(videoRange) && videoOutput == "mediacodec_embed"
+internal fun shouldUseNativeSubtitleOverlay(videoOutput: String, hasSelectedSubtitle: Boolean) =
+	videoOutput == "mediacodec_embed" && hasSelectedSubtitle
 
 /**
  * The Android-TV-friendly MPV profile. Every field has an explicit Jellyfin default.
