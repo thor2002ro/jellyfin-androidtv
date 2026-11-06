@@ -470,7 +470,7 @@ class ExoPlayerBackend(
 		private const val INITIAL_TRACK_SELECTION_RETRY_DELAY_MS = 250L
 		private const val LIVE_START_CHECK_INTERVAL_MS = 250L
 		private const val LIVE_START_TIMEOUT_MS = 15_000L
-		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
+		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 5_000L
 		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val AUDIO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
