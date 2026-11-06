@@ -185,13 +185,18 @@ class MutablePlayerState(
 	}
 
 	override fun setSubtitleTiming(offset: Duration, speed: Float) {
-		val coercedSpeed = speed.coerceSubtitleTimingSpeed()
+		val backend = backendService.backend
+		val coercedSpeed = if (backend?.supportsSubtitleTimingSpeed == false) {
+			DEFAULT_SUBTITLE_TIMING_SPEED
+		} else {
+			speed.coerceSubtitleTimingSpeed()
+		}
 		if (!_subtitleTimingOffsetSupported.value && (
 			offset != Duration.ZERO || coercedSpeed != DEFAULT_SUBTITLE_TIMING_SPEED
 		)) return
 		_subtitleTimingOffset.value = offset
 		_subtitleTimingSpeed.value = coercedSpeed
-		backendService.backend?.setSubtitleTiming(offset, coercedSpeed)
+		backend?.setSubtitleTiming(offset, coercedSpeed)
 	}
 
 	override fun setPlaybackOrder(order: PlaybackOrder) {
