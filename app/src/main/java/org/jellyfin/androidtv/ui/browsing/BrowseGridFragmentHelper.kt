@@ -67,9 +67,9 @@ fun BrowseGridFragment.addFilters(
 				loading = cachedChoices == null,
 				videoFiltersAvailable = supportsVideoFilters(includeTypes),
 			)
-			if (cachedChoices == null) {
-				val loadedChoices = loadLibraryFilterChoices(api, parentId, includeTypes)
-				if (shouldCacheLibraryFilterChoices(loadedChoices)) cachedChoices = loadedChoices
+			if (cachedChoices == null || cachedChoices?.unavailableSections?.isNotEmpty() == true) {
+				val loadedChoices = loadLibraryFilterChoices(api, parentId, includeTypes, cachedChoices)
+				cachedChoices = loadedChoices
 				state = state.copy(
 					choices = loadedChoices,
 					loading = false,

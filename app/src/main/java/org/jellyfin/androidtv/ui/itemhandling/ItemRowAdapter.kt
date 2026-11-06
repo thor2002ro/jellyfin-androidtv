@@ -93,12 +93,18 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var chunkSize = 0
 
 	var itemsLoaded = 0
+
+	internal var itemsRetrieved = 0
 		set(value) {
 			field = value
-			fullyLoaded = chunkSize == 0 || value >= totalItems
+			updateFullyLoaded()
 		}
 
 	var totalItems = 0
+		set(value) {
+			field = value
+			updateFullyLoaded()
+		}
 	var preferParentThumb = false
 		private set
 	var isStaticHeight = false
@@ -110,7 +116,26 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private val currentlyRetrievingSemaphore = Any()
 	private var currentlyRetrieving = false
 	private var pendingFullRetrieve = false
+	private var queryVersion = 0
 	private lateinit var context: Context
+
+	private fun updateFullyLoaded() {
+		fullyLoaded = chunkSize == 0 || itemsRetrieved >= totalItems
+	}
+
+	internal fun currentQueryVersion() = queryVersion
+
+	internal fun recordItemsRetrieved(startIndex: Int, count: Int) {
+		require(startIndex >= 0)
+		require(count >= 0)
+		itemsRetrieved = maxOf(itemsRetrieved, startIndex + count)
+	}
+
+	internal fun applyIfQueryCurrent(version: Int, block: () -> Unit): Boolean {
+		if (version != queryVersion) return false
+		block()
+		return true
+	}
 
 	private val api by inject<ApiClient>()
 	private val dataRefreshService by inject<DataRefreshService>()
@@ -490,20 +515,22 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 				QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsSorting(requireNotNull(albumArtistsQuery), field, direction)
 				else -> query = setItemsSorting(requireNotNull(query), field, direction)
 			}
-			if (field != ItemSortBy.SORT_NAME) setStartLetter(null)
+			if (field != ItemSortBy.SORT_NAME && getStartLetter() != null) setStartLetter(null)
+			else invalidateQueryResults()
 		}
 	}
 
 	fun getFilters(): FilterOptions? = filters
 
 	fun setFilters(filters: FilterOptions) {
+		if (this.filters == filters) return
 		this.filters = filters
 		when (queryType) {
 			QueryType.Artists -> artistsQuery = setArtistsFilter(requireNotNull(artistsQuery), filters.filters)
 			QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsFilter(requireNotNull(albumArtistsQuery), filters.filters)
 			else -> query = filters.applyTo(requireNotNull(query))
 		}
-		removeRow()
+		invalidateQueryResults()
 	}
 
 	fun getStartLetter(): String? = when (queryType) {
@@ -513,11 +540,23 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	}
 
 	fun setStartLetter(value: String?) {
+		val normalizedValue = value.takeUnless { it == "#" }
+		if (normalizedValue == getStartLetter()) return
+
 		when (queryType) {
-			QueryType.Artists -> artistsQuery = setArtistsStartLetter(requireNotNull(artistsQuery), value.takeUnless { it == "#" })
-			QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsStartLetter(requireNotNull(albumArtistsQuery), value.takeUnless { it == "#" })
-			else -> query = setItemsStartLetter(requireNotNull(query), value.takeUnless { it == "#" })
+			QueryType.Artists -> artistsQuery = setArtistsStartLetter(requireNotNull(artistsQuery), normalizedValue)
+			QueryType.AlbumArtists -> albumArtistsQuery = setAlbumArtistsStartLetter(requireNotNull(albumArtistsQuery), normalizedValue)
+			else -> query = setItemsStartLetter(requireNotNull(query), normalizedValue)
 		}
+		invalidateQueryResults()
+	}
+
+	private fun invalidateQueryResults() {
+		queryVersion++
+		removeRow()
+		itemsLoaded = 0
+		itemsRetrieved = 0
+		totalItems = 0
 	}
 
 	fun removeRow() {
@@ -604,25 +643,25 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 			QueryType.LiveTvChannel -> {
 				val request = tvChannelQuery ?: return
 				if (!notifyRetrieveStarted()) return
-				retrieveLiveTvChannels(api, request, itemsLoaded, chunkSize)
+				retrieveLiveTvChannels(api, request, itemsRetrieved, chunkSize)
 			}
 
 			QueryType.Artists -> {
 				val request = artistsQuery ?: return
 				if (!notifyRetrieveStarted()) return
-				retrieveArtists(api, request, itemsLoaded, chunkSize)
+				retrieveArtists(api, request, itemsRetrieved, chunkSize)
 			}
 
 			QueryType.AlbumArtists -> {
 				val request = albumArtistsQuery ?: return
 				if (!notifyRetrieveStarted()) return
-				retrieveAlbumArtists(api, request, itemsLoaded, chunkSize)
+				retrieveAlbumArtists(api, request, itemsRetrieved, chunkSize)
 			}
 
 			else -> {
 				val request = query ?: return
 				if (!notifyRetrieveStarted()) return
-				retrieveItems(api, request, itemsLoaded, chunkSize)
+				retrieveItems(api, request, itemsRetrieved, chunkSize)
 			}
 		}
 	}
@@ -656,6 +695,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		if (!notifyRetrieveStarted(queueIfBusy = true)) return
 		lastFullRetrieve = Instant.now()
 		itemsLoaded = 0
+		itemsRetrieved = 0
 
 		when (queryType) {
 			QueryType.Items -> {
@@ -761,6 +801,11 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		}
 		if (exception == null) retrieveFinishedRunnable?.run()
 		if (retrieveAgain) Retrieve()
+	}
+
+	internal fun notifyObsoleteRetrieveFinished() {
+		Timber.d("Ignoring items retrieved for an obsolete query")
+		if (finishRetrieveAndConsumePendingFullRetrieve()) Retrieve()
 	}
 
 	@Suppress("DEPRECATION")

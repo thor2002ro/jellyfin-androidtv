@@ -1,11 +1,17 @@
 package org.jellyfin.androidtv.ui.itemhandling
 
+import android.content.Context
+import androidx.leanback.widget.Presenter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.mockk
+import org.jellyfin.androidtv.data.model.FilterOptions
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFilter
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
 
@@ -60,6 +66,142 @@ class ItemRowAdapterHelperTests : FunSpec({
 			staticHeight = true,
 		).resumeSignature()
 	}
+
+	test("changing library sorting invalidates pages from the previous ordering") {
+		val adapter = itemAdapter()
+		adapter.totalItems = 160
+		adapter.itemsLoaded = 80
+
+		adapter.setSorting(ItemSortBy.DATE_CREATED, SortOrder.DESCENDING)
+
+		adapter.itemsLoaded shouldBe 0
+		adapter.totalItems shouldBe 0
+	}
+
+	test("changing the alphabet filter invalidates pages from the unfiltered query") {
+		val adapter = itemAdapter()
+		adapter.totalItems = 160
+		adapter.itemsLoaded = 80
+
+		adapter.setStartLetter("T")
+
+		adapter.itemsLoaded shouldBe 0
+		adapter.totalItems shouldBe 0
+	}
+
+	test("full refresh replaces stale pages from the previous result set") {
+		val staleItems = List(4) { index -> "Stale $index" }
+		val refreshedItems = listOf("New 1", "New 2")
+
+		val merged = mergeRetrievedItems(
+			existingItems = staleItems,
+			itemsLoaded = 0,
+			newItems = refreshedItems,
+		)
+
+		merged shouldBe refreshedItems
+	}
+
+	test("next page appends after every item already loaded") {
+		val firstPage = listOf("Item 1", "Item 2")
+		val secondPage = listOf("Item 3", "Item 4")
+
+		val merged = mergeRetrievedItems(
+			existingItems = firstPage,
+			itemsLoaded = firstPage.size,
+			newItems = secondPage,
+		)
+
+		merged shouldBe firstPage + secondPage
+	}
+
+	test("next page removes exact duplicates returned by Jellyfin") {
+		val firstId = UUID.randomUUID()
+		val duplicateId = UUID.randomUUID()
+		val lastId = UUID.randomUUID()
+		val firstPage = listOf(
+			BaseItemDtoBaseRowItem(BaseItemDto(id = firstId, name = "Item 1", type = BaseItemKind.MOVIE)),
+			BaseItemDtoBaseRowItem(BaseItemDto(id = duplicateId, name = "Item 2", type = BaseItemKind.MOVIE)),
+		)
+		val secondPage = listOf(
+			BaseItemDtoBaseRowItem(BaseItemDto(id = duplicateId, name = "Item 2 updated", type = BaseItemKind.MOVIE)),
+			BaseItemDtoBaseRowItem(BaseItemDto(id = lastId, name = "Item 3", type = BaseItemKind.MOVIE)),
+		)
+
+		val merged = mergeRetrievedItems(
+			existingItems = firstPage,
+			itemsLoaded = firstPage.size,
+			newItems = secondPage,
+			identity = BaseRowItem::itemId,
+		)
+
+		merged.map(BaseRowItem::itemId) shouldBe listOf(firstId, duplicateId, lastId)
+	}
+
+	test("Jellyfin page offset counts consumed records instead of displayed duplicates") {
+		val adapter = itemAdapter()
+		adapter.totalItems = 42
+
+		adapter.recordItemsRetrieved(startIndex = 40, count = 2)
+		adapter.itemsLoaded = 1
+
+		adapter.itemsLoaded shouldBe 1
+		adapter.itemsRetrieved shouldBe 42
+	}
+
+	test("query results from before a sort change are rejected") {
+		val adapter = itemAdapter()
+		val oldQueryVersion = adapter.currentQueryVersion()
+
+		adapter.setSorting(ItemSortBy.DATE_CREATED, SortOrder.DESCENDING)
+		var resultApplied = false
+		val applied = adapter.applyIfQueryCurrent(oldQueryVersion) {
+			resultApplied = true
+		}
+
+		applied shouldBe false
+		resultApplied shouldBe false
+	}
+
+	test("changing away from alphabet sorting invalidates the query once") {
+		val adapter = itemAdapter()
+		adapter.setStartLetter("T")
+		val previousVersion = adapter.currentQueryVersion()
+
+		adapter.setSorting(ItemSortBy.DATE_CREATED, SortOrder.DESCENDING)
+
+		adapter.currentQueryVersion() shouldBe previousVersion + 1
+	}
+
+	test("filters invalidate only when their query values change") {
+		val adapter = itemAdapter()
+		adapter.setFilters(FilterOptions())
+		val initialVersion = adapter.currentQueryVersion()
+
+		adapter.setFilters(FilterOptions())
+		adapter.currentQueryVersion() shouldBe initialVersion
+
+		adapter.setFilters(FilterOptions(favoriteOnly = true))
+		adapter.currentQueryVersion() shouldBe initialVersion + 1
+	}
+
+	test("query changes reset the Jellyfin page offset") {
+		val adapter = itemAdapter()
+		adapter.recordItemsRetrieved(startIndex = 0, count = 1)
+
+		adapter.setStartLetter("T")
+
+		adapter.itemsRetrieved shouldBe 0
+	}
 })
 
 private class NoIdRowItem : BaseRowItem(BaseRowType.BaseItem)
+
+private fun itemAdapter() = ItemRowAdapter(
+	context = mockk<Context>(),
+	query = GetItemsRequest(),
+	chunkSize = 80,
+	preferParentThumb = false,
+	presenter = mockk<Presenter>(),
+	parent = null,
+)
