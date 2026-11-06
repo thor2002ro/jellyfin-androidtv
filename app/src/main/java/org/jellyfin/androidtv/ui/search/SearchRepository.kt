@@ -3,11 +3,13 @@ package org.jellyfin.androidtv.ui.search
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.repository.ItemRepository
+import org.jellyfin.androidtv.util.sdk.streamBadgeItemTypes
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import timber.log.Timber
@@ -30,12 +32,14 @@ class SearchRepositoryImpl(
 		searchTerm: String,
 		itemTypes: Collection<BaseItemKind>,
 	): Result<List<BaseItemDto>> = try {
+		var fields = if (itemTypes.any { it in streamBadgeItemTypes }) ItemRepository.streamBadgeFields else ItemRepository.browseFields
+		if (itemTypes.any { it == BaseItemKind.LIVE_TV_CHANNEL || it == BaseItemKind.LIVE_TV_PROGRAM }) fields += ItemFields.CHANNEL_INFO
 		var request = GetItemsRequest(
 			searchTerm = searchTerm,
 			limit = QUERY_LIMIT,
 			imageTypeLimit = 1,
 			includeItemTypes = itemTypes,
-			fields = ItemRepository.itemFields,
+			fields = fields,
 			recursive = true,
 			enableTotalRecordCount = false,
 		)

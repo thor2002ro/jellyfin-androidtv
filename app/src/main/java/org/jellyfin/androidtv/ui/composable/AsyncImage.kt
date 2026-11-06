@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.State
@@ -26,7 +28,8 @@ import coil3.compose.asPainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runInterruptible
 import org.jellyfin.androidtv.util.BlurHashDecoder
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
@@ -74,10 +77,11 @@ fun AsyncImage(
 	val context = LocalContext.current
 	val imageLoader = koinInject<ImageLoader>()
 	val isLowRamDevice = remember { context.getSystemService<ActivityManager>()?.isLowRamDevice == true }
-	val blurHashRequest = remember(url, blurHash, isLowRamDevice, aspectRatio, blurHashResolution) {
-		createBlurHashRequest(url, blurHash, isLowRamDevice, aspectRatio.toDouble(), blurHashResolution)
+	var isLoading by remember(url) { mutableStateOf(false) }
+	val blurHashRequest = remember(url, blurHash, isLowRamDevice, aspectRatio, blurHashResolution, isLoading) {
+		if (isLoading) createBlurHashRequest(url, blurHash, isLowRamDevice, aspectRatio.toDouble(), blurHashResolution) else null
 	}
-	val blurHashBitmap by rememberBlurHashBitmap(blurHashRequest)
+	val blurHashBitmap by rememberBlurHashBitmap(blurHashRequest, 100)
 
 	val request = remember(context, url) {
 		ImageRequest.Builder(context).apply {
@@ -99,6 +103,9 @@ fun AsyncImage(
 		placeholder = placeholderPainter,
 		error = errorPainter,
 		fallback = errorPainter,
+		onLoading = { isLoading = true },
+		onSuccess = { isLoading = false },
+		onError = { isLoading = false },
 		contentScale = scaleType.toContentScale(),
 	)
 }
@@ -133,9 +140,11 @@ fun BlurHashImage(
 }
 
 @Composable
-private fun rememberBlurHashBitmap(request: BlurHashRequest?): State<Bitmap?> = produceState(null, request) {
+private fun rememberBlurHashBitmap(request: BlurHashRequest?, delayMillis: Long = 0): State<Bitmap?> = produceState(null, request, delayMillis) {
+	value = null
 	value = request?.let {
-		withContext(Dispatchers.Default) { BlurHashDecoder.decode(it.blurHash, it.width, it.height) }
+		delay(delayMillis)
+		runInterruptible(Dispatchers.Default) { BlurHashDecoder.decode(it.blurHash, it.width, it.height) }
 	}
 }
 
