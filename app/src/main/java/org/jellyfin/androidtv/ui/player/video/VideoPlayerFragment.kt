@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.ui.base.BaseScreen
@@ -33,14 +34,18 @@ import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.android.ext.android.inject
 import timber.log.Timber
+import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 
 class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	companion object {
 		const val EXTRA_POSITION: String = "position"
+		const val EXTRA_CLOSE_TO_LIVE_TV_LIBRARY: String = "close_to_live_tv_library"
+		const val EXTRA_LIVE_TV_CHANNEL_ID: String = "live_tv_channel_id"
 	}
 
 	private val videoQueueManager by inject<VideoQueueManager>()
@@ -48,6 +53,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val navigationRepository by inject<NavigationRepository>()
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
+	private val dataRefreshService by inject<DataRefreshService>()
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
 	private var closingPlayer = false
 	private var hasSeenVideoQueueEntry = false
@@ -58,28 +64,53 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 
+		if (
+			arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
+			playbackManager.queue.entry.value?.isLiveTv == true
+		) {
+			playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
+			playbackManager.state.stop()
+		}
+
 		// Create a queue from the items added to the legacy video queue
-		val startIndex = videoQueueManager.getCurrentMediaPosition()
+		val items = videoQueueManager.getCurrentVideoQueue()
+		val requestedLiveTvChannelId = arguments
+			?.getString(EXTRA_LIVE_TV_CHANNEL_ID)
+			?.let(UUID::fromString)
+		val startIndex = requestedLiveTvChannelId
+			?.let { channelId ->
+				items.indexOfFirst { item -> item.liveTvChannelId() == channelId }
+					.takeIf { index -> index >= 0 }
+			}
+			?: videoQueueManager.getCurrentMediaPosition()
 		val startPosition = arguments
 			?.takeIf { it.containsKey(EXTRA_POSITION) }
 			?.getInt(EXTRA_POSITION)
 			?.milliseconds
 		val queueSupplier = RewriteMediaManager.BaseItemQueueSupplier(
 			api = api,
-			items = videoQueueManager.getCurrentVideoQueue(),
+			items = items,
 			visibleInScreensaver = false,
 			initialStartPosition = startPosition,
 			initialStartIndex = startIndex,
 		)
 		Timber.i("Created a queue with ${queueSupplier.items.size} items")
+		videoQueueManager.setCurrentMediaPosition(startIndex)
 		playbackManager.queue.clear()
 		playbackManager.queue.addSupplier(queueSupplier, startIndex = startIndex)
+
 		mediaStreamEndListener = object : PlayerBackendEventListener() {
 			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
 				if (mediaStream.queueEntry !== playbackManager.queue.entry.value) return
 				if (mediaStream.queueEntry.isLiveTv) return
+				notifyPlaybackChanged(mediaStream.queueEntry.baseItem)
 				if (showNextUpIfAvailable(mediaStream)) return
 
+				if (!playbackManager.queue.hasNext(usePlaybackOrder = true, useRepeatMode = true)) {
+					Timber.i("Video queue ended, closing player")
+					closePlayer()
+					return
+				}
 				closeWhenVideoQueueEnds = true
 				closePlayerIfVideoQueueEnded()
 			}
@@ -148,12 +179,32 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		closingPlayer = true
 		remoteKeyEventHandler = null
 
+		notifyPlaybackChanged()
+		if (shouldReturnToLiveTvGuide()) {
+			if (!navigationRepository.goBack()) {
+				navigationRepository.reset(Destinations.home)
+			}
+			return
+		}
+
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
-		if (!navigationRepository.goBack()) {
+		if (arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true) {
+			if (!navigationRepository.goBack() || !navigationRepository.goBack()) {
+				navigationRepository.reset(Destinations.home)
+			}
+		} else if (!navigationRepository.goBack()) {
 			navigationRepository.reset(Destinations.home)
 		}
 	}
+
+	private fun notifyPlaybackChanged(item: BaseItemDto? = playbackManager.queue.entry.value?.baseItem) {
+		dataRefreshService.notifyPlayback(item)
+	}
+
+	private fun shouldReturnToLiveTvGuide(): Boolean =
+		arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
+			playbackManager.queue.entry.value?.isLiveTv == true
 
 	private fun closePlayerIfVideoQueueEnded() {
 		if (
@@ -210,6 +261,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	override fun onPause() {
 		super.onPause()
 
+		if (closingPlayer && shouldReturnToLiveTvGuide()) return
 		playbackManager.state.pause()
 	}
 
@@ -222,6 +274,8 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	override fun onStop() {
 		super.onStop()
 
+		if (closingPlayer && shouldReturnToLiveTvGuide()) return
+		notifyPlaybackChanged()
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
 	}
