@@ -39,6 +39,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.integerResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -141,7 +143,9 @@ private fun GenreCard(
 	modifier: Modifier = Modifier,
 ) {
 	var focused by remember(genre.id) { mutableStateOf(false) }
-	val scale by animateFloatAsState(if (focused) 1.04f else 1f, tween(120), label = "genre_focus")
+	val focusScale = LocalResources.current.getFraction(R.fraction.card_scale_focus, 1, 1)
+	val focusDuration = integerResource(R.integer.card_scale_duration)
+	val scale by animateFloatAsState(if (focused) focusScale else 1f, tween(focusDuration), label = "genre_focus")
 	val tint = remember(genre.id) { Color.hsv((genre.id.hashCode() and Int.MAX_VALUE).rem(360).toFloat(), 0.55f, 0.3f) }
 	BoxWithConstraints(modifier = modifier.fillMaxWidth().aspectRatio(16f / 9f).zIndex(if (focused) 1f else 0f)) {
 		val widthPx = with(LocalDensity.current) { maxWidth.roundToPx() }
