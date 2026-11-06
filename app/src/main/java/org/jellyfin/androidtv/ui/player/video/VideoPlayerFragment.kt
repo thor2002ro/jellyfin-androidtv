@@ -256,17 +256,18 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 			restoreDisplayMode(preparation, originalPreference, window = null)
 			return
 		}
+		val playerWindow = window ?: return
 		// The fragment may be gone before the delay finishes, so keep the job with the activity.
 		// If another player starts in the meantime, the ownership check leaves its mode alone.
 		Timber.i(
 			"Scheduling preferred display mode restore from %d to %s in 2 seconds",
-			window.attributes.preferredDisplayModeId,
+			playerWindow.attributes.preferredDisplayModeId,
 			originalPreference,
 		)
 		displayModeRestoreJob = requireActivity().lifecycleScope.launch {
 			// Give the player and TV a moment to settle in SDR before restoring the mode.
 			delay(2.seconds)
-			restoreDisplayMode(preparation, originalPreference, window)
+			restoreDisplayMode(preparation, originalPreference, playerWindow)
 		}
 	}
 

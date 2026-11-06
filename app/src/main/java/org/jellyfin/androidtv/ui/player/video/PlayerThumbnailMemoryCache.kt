@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.player.video
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -15,10 +14,12 @@ import coil3.request.bitmapConfig
 import coil3.size.Size
 import org.jellyfin.androidtv.util.apiclient.TrickplayImage
 import org.jellyfin.androidtv.util.apiclient.TrickplayTileSheet
-import org.jellyfin.androidtv.util.apiclient.TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT
-import org.jellyfin.androidtv.util.apiclient.TRICKPLAY_THUMBNAIL_PIXEL_WIDTH
+import org.jellyfin.androidtv.util.apiclient.TRICKPLAY_SHEET_MAX_BYTES
 
-internal const val PLAYER_THUMBNAIL_CACHE_MAX_BYTES = 15 * 1024 * 1024
+internal const val PLAYER_THUMBNAIL_CACHE_MAX_BYTES = TRICKPLAY_SHEET_MAX_BYTES
+
+internal fun isTrickplaySheetWithinMemoryLimit(allocationByteCount: Int) =
+	allocationByteCount in 0..PLAYER_THUMBNAIL_CACHE_MAX_BYTES
 
 internal data class PlayerThumbnailMemoryStats(
 	val count: Int,
@@ -55,36 +56,12 @@ internal object PlayerThumbnailMemoryCache {
 	}
 
 	fun put(url: String, bitmap: Bitmap) = bitmaps.put(url, bitmap)
-	fun put(sheet: TrickplayTileSheet, bitmap: Bitmap) = put(sheet.url, bitmap)
-	fun get(url: String): ImageBitmap? = bitmaps[url]?.asImageBitmap()
-
-	fun getThumbnailBitmap(image: TrickplayImage): Bitmap? {
-		val sheet = bitmaps[image.sheet.url] ?: return null
-		val crop = calculateTrickplayThumbnailCrop(
-			image = image,
-			decodedSheetWidth = sheet.width,
-			decodedSheetHeight = sheet.height,
-		)
-		return runCatching {
-			val matrix = Matrix().apply {
-				setScale(
-					TRICKPLAY_THUMBNAIL_PIXEL_WIDTH.toFloat() / crop.width,
-					TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT.toFloat() / crop.height,
-				)
-			}
-			Bitmap.createBitmap(
-				sheet,
-				crop.x,
-				crop.y,
-				crop.width,
-				crop.height,
-				matrix,
-				true,
-			)
-		}.getOrNull()
+	fun put(sheet: TrickplayTileSheet, bitmap: Bitmap): Bitmap? {
+		if (!isTrickplaySheetWithinMemoryLimit(bitmap.allocationByteCount)) return null
+		put(sheet.url, bitmap)
+		return bitmap
 	}
-
-	fun getThumbnail(image: TrickplayImage): ImageBitmap? = getThumbnailBitmap(image)?.asImageBitmap()
+	fun get(url: String): ImageBitmap? = bitmaps[url]?.asImageBitmap()
 
 	fun stats(urls: Collection<String>): PlayerThumbnailMemoryStats {
 		val matching = bitmaps.snapshot().filterKeys(urls::contains).values
