@@ -1,10 +1,8 @@
 package org.jellyfin.androidtv.ui.player.video
 
-import android.content.Context
 import android.view.KeyEvent
 import android.view.ViewConfiguration
 import android.widget.ImageView
-import android.widget.RelativeLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -34,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +44,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -53,13 +53,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.res.integerResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -71,10 +76,9 @@ import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
-import org.jellyfin.androidtv.ui.livetv.LiveTvGuide
 import org.jellyfin.androidtv.ui.livetv.TvManager
+import org.jellyfin.androidtv.ui.livetv.liveTvChannelFields
 import org.jellyfin.androidtv.util.ImageHelper
-import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
@@ -82,11 +86,14 @@ import org.jellyfin.design.Tokens
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
+import org.jellyfin.sdk.api.sockets.subscribe
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.LibraryChangedMessage
 import org.jellyfin.sdk.model.api.SortOrder
 import org.koin.compose.koinInject
 import timber.log.Timber
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -96,10 +103,19 @@ private const val GuideProgramWindowAfterMinutes = GuideTimeStepMinutes * 6
 private const val GuideVisibleTimeSlots = 5
 private val GuideChannelColumnWidth = 188.dp
 private val GuideRowHeight = 54.dp
-private val GuidePreviewWidth = 332.dp
-private val GuidePreviewHeight = 186.dp
+internal val GuidePreviewWidth = 332.dp
+internal val GuidePreviewHeight = 186.dp
+private val GuideSummaryCompactHeight = 160.dp
 private val ChannelIconWidth = 56.dp
 private val ChannelIconHeight = 36.dp
+
+private fun guideBrandBrush(start: Color, end: Color, alpha: Float) =
+	Brush.linearGradient(listOf(start.copy(alpha = alpha), Color.Transparent, end.copy(alpha = alpha)))
+
+internal fun guideStartTime(time: LocalDateTime): LocalDateTime = time
+	.minusMinutes((time.minute % GuideTimeStepMinutes.toInt()).toLong())
+	.withSecond(0)
+	.withNano(0)
 
 @Composable
 fun LiveTvGuideOverlay(
@@ -127,7 +143,7 @@ fun LiveTvGuideOverlay(
 	val currentChannelId = currentItem.liveTvChannelId()
 	var playingChannelId by remember(currentChannelId) { mutableStateOf(currentChannelId) }
 	var channels by remember { mutableStateOf<List<BaseItemDto>?>(null) }
-	var selectedChannelIndex by remember(currentChannelId) { mutableStateOf(0) }
+	var selectedChannelIndex by remember { mutableStateOf(0) }
 	var switchingChannel by remember { mutableStateOf(false) }
 	var expandingPreview by remember { mutableStateOf(false) }
 	var centerKeyCode by remember { mutableStateOf<Int?>(null) }
@@ -135,8 +151,12 @@ fun LiveTvGuideOverlay(
 	var centerLongPressJob by remember { mutableStateOf<Job?>(null) }
 	var programDetailPopup by remember { mutableStateOf<LiveProgramDetailPopup?>(null) }
 	var openingChannelId by remember { mutableStateOf<UUID?>(null) }
-	var guideTime by remember { mutableStateOf(LocalDateTime.now().withSecond(0).withNano(0)) }
+	var guideTime by remember { mutableStateOf(guideStartTime(LocalDateTime.now())) }
+	var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
+	var guideLoadedAt by remember { mutableStateOf<LocalDateTime?>(null) }
 	var guideProgramsByChannel by remember { mutableStateOf<Map<UUID, List<BaseItemDto>>?>(null) }
+	var refreshVersion by remember { mutableStateOf(0) }
+	val currentOnRemoteKeyEventHandlerChanged by rememberUpdatedState(onRemoteKeyEventHandlerChanged)
 	val previewExpansion by animateFloatAsState(
 		targetValue = if (showPreview && expandingPreview) 1f else 0f,
 		animationSpec = tween(durationMillis = 260),
@@ -148,75 +168,86 @@ fun LiveTvGuideOverlay(
 	val guideFillsScreen = !showPreview || fullScreenGuide
 
 	BackHandler(onBack = onDismiss)
-
-	LaunchedEffect(liveTvChannelNavigator) {
-		channels = liveTvChannelNavigator.getChannels()
+	fun updateGuidePrograms(programsByChannel: Map<UUID, List<BaseItemDto>>) {
+		guideProgramsByChannel = programsByChannel
+		programsByChannel.guideTimeRange()?.let { range ->
+			guideTime = guideTime.coerceIn(range.first, range.second)
+		}
 	}
 
-	LaunchedEffect(focusRequester, channels) {
-		if (channels != null) focusRequester.requestFocus()
-	}
+	LaunchedEffect(liveTvChannelNavigator, api, refreshVersion) {
+		val loadedChannels = liveTvChannelNavigator.getChannels(forceRefresh = true)
+		val previousChannelIds = channels?.map { channel -> channel.id }
+		val selectedChannelId = channels?.getOrNull(selectedChannelIndex)?.id
+		val channelIds = loadedChannels.map { channel -> channel.id }
+		channels = loadedChannels
+		if (channelIds.isNotEmpty() && channelIds != previousChannelIds) {
+			selectedChannelIndex = guideChannelIndex(
+				channelIds = channelIds,
+				selectedChannelId = selectedChannelId,
+				currentChannelId = currentChannelId,
+			)
+			listState.requestScrollToItem(selectedChannelIndex)
+		}
 
-	LaunchedEffect(channels, currentChannelId) {
-		val loadedChannels = channels.orEmpty()
-		if (loadedChannels.isEmpty()) return@LaunchedEffect
-		guideProgramsByChannel = loadedChannels.currentProgramsByChannel()
-
-		selectedChannelIndex = loadedChannels
-			.indexOfFirst { channel -> channel.liveTvChannelId() == currentChannelId }
-			.takeIf { index -> index >= 0 }
-			?: 0
-		listState.scrollToItem(selectedChannelIndex)
-	}
-
-	LaunchedEffect(api, channels) {
-		val loadedChannels = channels.orEmpty()
 		val currentProgramsByChannel = loadedChannels.currentProgramsByChannel()
-		val channelIds = loadedChannels
-			.mapNotNull { channel -> channel.liveTvChannelId() }
+		updateGuidePrograms(
+			currentProgramsByChannel.mergeWith(
+				guideProgramsByChannel.orEmpty().filterKeys(channelIds::contains),
+			),
+		)
 
 		if (channelIds.isEmpty()) {
-			guideProgramsByChannel = emptyMap()
 			return@LaunchedEffect
 		}
 
 		val referenceTime = LocalDateTime.now().withSecond(0).withNano(0)
-		val startTime = referenceTime.minusMinutes(GuideProgramWindowBeforeMinutes)
-		val endTime = referenceTime.plusMinutes(GuideProgramWindowAfterMinutes)
-
-		guideProgramsByChannel = runCatching {
+		val programs = runCatching {
 			withContext(Dispatchers.IO) {
 				api.liveTvApi.getLiveTvPrograms(
 					channelIds = channelIds,
 					enableImages = false,
+					fields = liveTvChannelFields,
 					sortBy = setOf(ItemSortBy.START_DATE),
 					sortOrder = setOf(SortOrder.ASCENDING),
-					maxStartDate = endTime,
-					minEndDate = startTime,
+					maxStartDate = referenceTime.plusMinutes(GuideProgramWindowAfterMinutes),
+					minEndDate = referenceTime.minusMinutes(GuideProgramWindowBeforeMinutes),
 					enableTotalRecordCount = false,
 				).content.items
 			}
 		}.onFailure { error ->
+			if (error is CancellationException) throw error
 			Timber.e(error, "Unable to load Live TV guide programs")
-		}.getOrDefault(emptyList())
-			.groupBy { program -> program.liveTvChannelId() }
-			.mapNotNull { (channelId, programs) ->
-				if (channelId != null) {
-					channelId to programs
-				} else {
-					null
+		}.getOrNull() ?: return@LaunchedEffect
+
+		guideLoadedAt = LocalDateTime.now()
+		updateGuidePrograms(
+			programs
+				.groupBy { program -> program.liveTvChannelId() }
+				.mapNotNull { (channelId, channelPrograms) ->
+					channelId?.let { it to channelPrograms }
 				}
-			}
-			.toMap()
-			.mergeWith(currentProgramsByChannel)
-			.also { programsByChannel ->
-				programsByChannel.guideTimeRange()?.let { range ->
-					guideTime = guideTime.coerceIn(range.first, range.second)
-				}
-			}
+				.toMap()
+				.mergeWith(currentProgramsByChannel),
+		)
 	}
 
-	LaunchedEffect(selectedChannelIndex, channels) {
+	LaunchedEffect(api) {
+		api.webSocket.subscribe<LibraryChangedMessage>().collectLatest {
+			refreshVersion++
+		}
+	}
+
+	LaunchedEffect(Unit) {
+		while (true) {
+			currentTime = LocalDateTime.now()
+			delay(5_000)
+		}
+	}
+
+	LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
+
+	LaunchedEffect(selectedChannelIndex, channels?.map { channel -> channel.id }) {
 		if (channels.isNullOrEmpty()) return@LaunchedEffect
 
 		val visibleItems = listState.layoutInfo.visibleItemsInfo
@@ -253,14 +284,9 @@ fun LiveTvGuideOverlay(
 		else onCurrentChannelSelected(openingChannelId)
 	}
 
-	fun selectChannel(channel: BaseItemDto) {
-		if (switchingChannel || expandingPreview) return
-
-		val targetChannelId = channel.liveTvChannelId()
-		if (targetChannelId != null && targetChannelId == playingChannelId) {
-			finishChannelSelection()
-			return
-		}
+	fun switchPlayingChannel(channel: BaseItemDto, onSwitched: () -> Unit = {}) {
+		val targetChannelId = channel.liveTvChannelId() ?: return
+		if (targetChannelId == playingChannelId || switchingChannel) return
 
 		coroutineScope.launch {
 			switchingChannel = true
@@ -274,12 +300,26 @@ fun LiveTvGuideOverlay(
 					)
 				) {
 					playingChannelId = targetChannelId
-					if (!previewOnChannelSelect) {
-						finishChannelSelection()
-					}
+					onSwitched()
 				}
 			} finally {
 				switchingChannel = false
+			}
+		}
+	}
+
+	fun selectChannel(channel: BaseItemDto) {
+		if (switchingChannel || expandingPreview) return
+
+		val targetChannelId = channel.liveTvChannelId()
+		if (targetChannelId != null && targetChannelId == playingChannelId) {
+			finishChannelSelection()
+			return
+		}
+
+		switchPlayingChannel(channel) {
+			if (!previewOnChannelSelect) {
+				finishChannelSelection()
 			}
 		}
 	}
@@ -322,29 +362,6 @@ fun LiveTvGuideOverlay(
 		}
 	}
 
-	fun playChannelFromPopup(channel: BaseItemDto) {
-		val targetChannelId = channel.liveTvChannelId() ?: return
-		if (targetChannelId == playingChannelId || switchingChannel) return
-
-		coroutineScope.launch {
-			switchingChannel = true
-			try {
-				if (
-					liveTvChannelNavigator.switchToChannel(
-						playbackManager = playbackManager,
-						currentItem = currentItem,
-						targetChannel = channel,
-						currentChannelId = playingChannelId,
-					)
-				) {
-					playingChannelId = targetChannelId
-				}
-			} finally {
-				switchingChannel = false
-			}
-		}
-	}
-
 	fun showSelectedProgramOptions() {
 		val channel = channels?.getOrNull(selectedChannelIndex) ?: return
 		val program = channel
@@ -358,19 +375,10 @@ fun LiveTvGuideOverlay(
 		programDetailPopup = LiveProgramDetailPopup(
 			context = context,
 			lifecycleOwner = lifecycleOwner,
-			tvGuide = object : LiveTvGuide {
-				override fun displayChannels(start: Int, max: Int) = Unit
-				override fun getCurrentLocalStartDate(): LocalDateTime = guideTime
-				override fun showProgramOptions() = Unit
-				override fun setSelectedProgram(programView: RelativeLayout) = Unit
-				override fun refreshFavorite(channelId: UUID, isFavorite: Boolean) {
-					refreshChannelFavorite(channelId, isFavorite)
-				}
-			},
-			width = liveTvProgramPopupWidth(context),
+			onFavoriteChanged = ::refreshChannelFavorite,
 			tuneAction = object : EmptyResponse(lifecycleOwner.lifecycle) {
 				override fun onResponse() {
-					if (isActive) playChannelFromPopup(channel)
+					if (isActive) switchPlayingChannel(channel)
 				}
 			},
 		).also { popup ->
@@ -460,11 +468,11 @@ fun LiveTvGuideOverlay(
 		onRemoteKeyEventHandlerChanged { keyEvent -> handleKeyEvent(keyEvent) }
 	}
 
-	DisposableEffect(onRemoteKeyEventHandlerChanged) {
+	DisposableEffect(Unit) {
 		onDispose {
 			centerLongPressJob?.cancel()
 			programDetailPopup?.dismiss()
-			onRemoteKeyEventHandlerChanged(null)
+			currentOnRemoteKeyEventHandlerChanged(null)
 		}
 	}
 
@@ -484,8 +492,16 @@ fun LiveTvGuideOverlay(
 				.fillMaxHeight(if (guideFillsScreen) 1f else 0.82f)
 				.graphicsLayer { alpha = 1f - previewExpansion }
 				.padding(
-					horizontal = if (showPreview && !fullScreenGuide) 56.dp else 0.dp,
-					vertical = if (showPreview && !fullScreenGuide) 36.dp else 0.dp,
+					horizontal = when {
+						showPreview && !fullScreenGuide -> 56.dp
+						!fullScreenGuide -> 32.dp
+						else -> 0.dp
+					},
+					vertical = when {
+						showPreview && !fullScreenGuide -> 36.dp
+						!fullScreenGuide -> 32.dp
+						else -> 0.dp
+					},
 				),
 		) {
 			val loadedChannels = channels
@@ -501,6 +517,9 @@ fun LiveTvGuideOverlay(
 				)
 
 				else -> {
+					val brandStart = colorResource(R.color.card_focus_gradient_start)
+					val brandEnd = colorResource(R.color.card_focus_gradient_end)
+					val brandAlpha = integerResource(R.integer.card_focus_overlay_alpha_percent) / 100f
 					val selectedChannel = loadedChannels.getOrNull(selectedChannelIndex)
 					val selectedProgram = selectedChannel
 						?.liveTvChannelId()
@@ -510,6 +529,7 @@ fun LiveTvGuideOverlay(
 					val timeSlots = remember(guideTime) {
 						List(GuideVisibleTimeSlots) { slot -> guideTime.plusMinutes(GuideTimeStepMinutes * slot) }
 					}
+					val guideTextSecondary = colorResource(R.color.guide_text_secondary)
 
 					GuideSummary(
 						channel = selectedChannel,
@@ -517,43 +537,56 @@ fun LiveTvGuideOverlay(
 						guideTime = guideTime,
 						timeFormatter = timeFormatter,
 						showPreview = showPreview,
+						textSecondary = guideTextSecondary,
 						miniPlayerContent = miniPlayerContent,
 					)
-					GuideTimeHeader(timeSlots, timeFormatter)
-
-					LazyColumn(
-						state = listState,
-						verticalArrangement = Arrangement.spacedBy(1.dp),
+					Box(
+						modifier = Modifier
+							.fillMaxWidth()
+							.weight(1f)
+							.currentTimeIndicator(guideTime, currentTime, brandStart, brandEnd),
 					) {
-						itemsIndexed(
-							items = loadedChannels,
-							key = { _, channel -> channel.id.toString() },
-						) { index, channel ->
-							val channelPrograms = guideProgramsByChannel?.get(channel.liveTvChannelId())
+						Column {
+							GuideTimeHeader(timeSlots, timeFormatter, guideLoadedAt, currentTime, guideTextSecondary)
 
-							LiveTvGuideChannelRow(
-								channel = channel,
-								programs = channelPrograms,
-								channelRecordingProgram = channelPrograms.recordingProgram() ?: channel.currentProgram?.takeIf { program ->
-									program.hasRecordingIndicator()
-								},
-								loadingProgram = guideProgramsByChannel == null,
-								selected = index == selectedChannelIndex,
-								current = channel.liveTvChannelId() == playingChannelId,
-								enabled = !switchingChannel,
-								timeSlots = timeSlots,
-								imageHelper = imageHelper,
-								onClick = {
-									selectedChannelIndex = index
-									selectChannel(channel)
-								},
-							)
+							LazyColumn(
+								state = listState,
+								verticalArrangement = Arrangement.spacedBy(1.dp),
+							) {
+								itemsIndexed(
+									items = loadedChannels,
+									key = { _, channel -> channel.id.toString() },
+								) { index, channel ->
+									val channelPrograms = guideProgramsByChannel?.get(channel.liveTvChannelId())
+
+									LiveTvGuideChannelRow(
+										channel = channel,
+										programs = channelPrograms,
+										channelRecordingProgram = channelPrograms.recordingProgram() ?: channel.currentProgram?.takeIf { program ->
+											program.hasRecordingIndicator()
+										},
+										loadingProgram = guideProgramsByChannel == null,
+										selected = index == selectedChannelIndex,
+										current = channel.liveTvChannelId() == playingChannelId,
+										enabled = !switchingChannel,
+										timeSlots = timeSlots,
+										brandStart = brandStart,
+										brandEnd = brandEnd,
+										brandAlpha = brandAlpha,
+										imageHelper = imageHelper,
+										onClick = {
+											selectedChannelIndex = index
+											selectChannel(channel)
+										},
+									)
+								}
+							}
 						}
 					}
-				}
 			}
 		}
 	}
+}
 }
 
 @Composable
@@ -566,15 +599,20 @@ private fun LiveTvGuideChannelRow(
 	current: Boolean,
 	enabled: Boolean,
 	timeSlots: List<LocalDateTime>,
+	brandStart: Color,
+	brandEnd: Color,
+	brandAlpha: Float,
 	imageHelper: ImageHelper,
 	onClick: () -> Unit,
 ) {
+	val currentOnClick by rememberUpdatedState(onClick)
+
 	Row(
 		modifier = Modifier
 			.fillMaxWidth()
 			.height(GuideRowHeight)
 			.pointerInput(enabled) {
-				if (enabled) detectTapGestures(onTap = { onClick() })
+				if (enabled) detectTapGestures(onTap = { currentOnClick() })
 			},
 	)
 	{
@@ -582,6 +620,9 @@ private fun LiveTvGuideChannelRow(
 			channel = channel,
 			channelRecordingProgram = channelRecordingProgram,
 			current = current,
+			brandStart = brandStart,
+			brandEnd = brandEnd,
+			brandAlpha = brandAlpha,
 			imageHelper = imageHelper,
 		)
 
@@ -598,6 +639,9 @@ private fun LiveTvGuideChannelRow(
 					program = block.program,
 					selected = selected && block.includesGuideTime,
 					loading = false,
+					brandStart = brandStart,
+					brandEnd = brandEnd,
+					brandAlpha = brandAlpha,
 					modifier = Modifier.weight(block.slots.toFloat()),
 				)
 			}
@@ -643,21 +687,43 @@ private fun GuideSummary(
 	guideTime: LocalDateTime,
 	timeFormatter: java.time.format.DateTimeFormatter,
 	showPreview: Boolean,
+	textSecondary: Color,
 	miniPlayerContent: (@Composable () -> Unit)?,
 ) {
+	val panelColor = colorResource(R.color.guide_panel_bg)
+	val panelBorderColor = colorResource(R.color.guide_panel_border)
+	val brandStart = colorResource(R.color.card_focus_gradient_start)
+	val brandEnd = colorResource(R.color.card_focus_gradient_end)
+	val brandAlpha = integerResource(R.integer.card_focus_overlay_alpha_percent) / 100f
+	val hasPreview = showPreview || miniPlayerContent != null
+	val overview = program.guideDescription()
+		?: channel
+			?.currentProgram
+			?.takeIf { currentProgram -> program == null || currentProgram.id == program.id }
+			.guideDescription()
+		?: channel
+			?.overview
+			?.takeIf { overview -> overview.any(Char::isLetterOrDigit) }
+		?: ""
+	val programTime = program
+		?.guideTimeRange(timeFormatter)
+		?.takeIf { timeRange -> timeRange.isNotBlank() }
+		?: timeFormatter.format(guideTime)
+	val programRating = program?.officialRating?.takeIf { rating -> rating.isNotBlank() }
+
 	Row(
 		modifier = Modifier
 			.fillMaxWidth()
-			.height(GuidePreviewHeight),
+			.height(if (hasPreview) GuidePreviewHeight else GuideSummaryCompactHeight),
 		horizontalArrangement = Arrangement.spacedBy(2.dp),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
-		if (showPreview || miniPlayerContent != null) {
+		if (hasPreview) {
 			Box(
 				modifier = Modifier
 					.size(GuidePreviewWidth, GuidePreviewHeight)
 					.clip(JellyfinTheme.shapes.small)
-					.border(1.dp, Color.White.copy(alpha = 0.72f), JellyfinTheme.shapes.small),
+					.border(1.dp, panelBorderColor, JellyfinTheme.shapes.small),
 			) {
 				miniPlayerContent?.invoke()
 			}
@@ -667,9 +733,10 @@ private fun GuideSummary(
 			modifier = Modifier
 				.fillMaxHeight()
 				.weight(1f)
-				.background(JellyfinTheme.colorScheme.surface.copy(alpha = 0.9f), JellyfinTheme.shapes.small)
+				.background(panelColor, JellyfinTheme.shapes.small)
+				.background(guideBrandBrush(brandStart, brandEnd, brandAlpha / 3f), JellyfinTheme.shapes.small)
 				.padding(14.dp),
-			verticalArrangement = Arrangement.spacedBy(4.dp),
+			verticalArrangement = if (hasPreview) Arrangement.spacedBy(4.dp, Alignment.CenterVertically) else Arrangement.spacedBy(4.dp),
 		) {
 			Text(
 				text = program?.name ?: channel?.name ?: stringResource(R.string.lbl_live_tv_guide),
@@ -678,45 +745,73 @@ private fun GuideSummary(
 				overflow = TextOverflow.Ellipsis,
 			)
 			Text(
-				text = program
-					?.guideTimeRange(timeFormatter)
-					?.takeIf { timeRange -> timeRange.isNotBlank() }
-					?: timeFormatter.format(guideTime),
-				style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption),
+				text = listOfNotNull(programTime, programRating).joinToString(" · "),
+				style = JellyfinTheme.typography.listCaption.copy(color = textSecondary),
 				maxLines = 1,
 				overflow = TextOverflow.Ellipsis,
 			)
 			Text(
-				text = program?.overview ?: channel?.overview ?: "",
-				style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption),
-				maxLines = 1,
+				text = overview,
+				style = JellyfinTheme.typography.listCaption.copy(color = textSecondary),
+				maxLines = 5,
 				overflow = TextOverflow.Ellipsis,
 			)
 		}
-
-		Text(
-			text = timeFormatter.format(guideTime),
-			style = JellyfinTheme.typography.listHeader.copy(color = JellyfinTheme.colorScheme.listHeader),
-			maxLines = 1,
-		)
 	}
 }
+
+private fun Modifier.currentTimeIndicator(
+	guideTime: LocalDateTime,
+	currentTime: LocalDateTime,
+	brandStart: Color,
+	brandEnd: Color,
+) = drawWithContent {
+	drawContent()
+	val fraction = currentTimeFraction(guideTime, currentTime) ?: return@drawWithContent
+	val channelWidth = GuideChannelColumnWidth.toPx()
+	val x = channelWidth + (size.width - channelWidth) * fraction
+	drawLine(
+		brush = Brush.verticalGradient(listOf(brandStart, brandEnd)),
+		start = Offset(x, 0f),
+		end = Offset(x, size.height),
+		strokeWidth = 2.dp.toPx(),
+	)
+	drawCircle(brandStart, radius = 4.dp.toPx(), center = Offset(x, 4.dp.toPx()))
+}
+
+internal fun currentTimeFraction(
+	guideTime: LocalDateTime,
+	currentTime: LocalDateTime,
+): Float? = (Duration.between(guideTime, currentTime).toMillis().toFloat() /
+	Duration.ofMinutes(GuideTimeStepMinutes * GuideVisibleTimeSlots).toMillis())
+	.takeIf { it in 0f..1f }
 
 @Composable
 private fun GuideTimeHeader(
 	timeSlots: List<LocalDateTime>,
 	timeFormatter: java.time.format.DateTimeFormatter,
+	guideLoadedAt: LocalDateTime?,
+	currentTime: LocalDateTime,
+	textSecondary: Color,
 ) {
+	val timelineColor = colorResource(R.color.guide_timeline_bg)
+	val brandStart = colorResource(R.color.card_focus_gradient_start)
+	val brandEnd = colorResource(R.color.card_focus_gradient_end)
+	val brandAlpha = integerResource(R.integer.card_focus_overlay_alpha_percent) / 100f
+
 	Row(
 		modifier = Modifier
 			.fillMaxWidth()
 			.height(28.dp)
-			.background(JellyfinTheme.colorScheme.surface.copy(alpha = 0.72f)),
+			.background(timelineColor)
+			.background(guideBrandBrush(brandStart, brandEnd, brandAlpha / 3f)),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
 		Text(
-			text = stringResource(R.string.lbl_live_tv_guide),
-			style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption),
+			text = guideLoadedAt?.let {
+				"${stringResource(R.string.lbl_live_tv_guide)} · ${stringResource(R.string.lbl_epg_age_minutes, guideAgeMinutes(it, currentTime))}"
+			} ?: stringResource(R.string.lbl_live_tv_guide),
+			style = JellyfinTheme.typography.listCaption.copy(color = textSecondary),
 			maxLines = 1,
 			overflow = TextOverflow.Ellipsis,
 			modifier = Modifier
@@ -727,7 +822,7 @@ private fun GuideTimeHeader(
 		timeSlots.forEach { time ->
 			Text(
 				text = timeFormatter.format(time),
-				style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption),
+				style = JellyfinTheme.typography.listCaption.copy(color = textSecondary),
 				maxLines = 1,
 				overflow = TextOverflow.Ellipsis,
 				modifier = Modifier
@@ -738,18 +833,29 @@ private fun GuideTimeHeader(
 	}
 }
 
+internal fun guideAgeMinutes(loadedAt: LocalDateTime, currentTime: LocalDateTime): Long =
+	Duration.between(loadedAt, currentTime).toMinutes().coerceAtLeast(0)
+
 @Composable
 private fun GuideChannelCell(
 	channel: BaseItemDto,
 	channelRecordingProgram: BaseItemDto?,
 	current: Boolean,
+	brandStart: Color,
+	brandEnd: Color,
+	brandAlpha: Float,
 	imageHelper: ImageHelper,
 ) {
+	val channelColor = colorResource(R.color.guide_channel_cell_bg)
+	val currentChannelColor = colorResource(R.color.guide_panel_bg)
+	val textSecondary = colorResource(R.color.guide_text_secondary)
+
 	Row(
 		modifier = Modifier
 			.width(GuideChannelColumnWidth)
 			.fillMaxHeight()
-			.background(JellyfinTheme.colorScheme.surface.copy(alpha = if (current) 0.9f else 0.72f))
+			.background(if (current) currentChannelColor else channelColor)
+			.background(guideBrandBrush(brandStart, brandEnd, if (current) brandAlpha else brandAlpha / 3f))
 			.padding(horizontal = 10.dp, vertical = 6.dp),
 		horizontalArrangement = Arrangement.spacedBy(8.dp),
 		verticalAlignment = Alignment.CenterVertically,
@@ -765,7 +871,7 @@ private fun GuideChannelCell(
 			)
 			Text(
 				text = channel.number.orEmpty(),
-				style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption),
+				style = JellyfinTheme.typography.listCaption.copy(color = textSecondary),
 				maxLines = 1,
 				overflow = TextOverflow.Ellipsis,
 			)
@@ -786,7 +892,12 @@ private fun Modifier.liveTvGuideScrim(
 	expansion: Float,
 	fullScreenGuide: Boolean,
 ): Modifier {
-	if (!showPreview) return background(Color.Black)
+	val gridColor = colorResource(R.color.guide_grid_bg)
+	val brandStart = colorResource(R.color.card_focus_gradient_start)
+	val brandEnd = colorResource(R.color.card_focus_gradient_end)
+	val brandAlpha = integerResource(R.integer.card_focus_overlay_alpha_percent) / 100f
+	val brandBrush = guideBrandBrush(brandStart, brandEnd, brandAlpha / 3f)
+	if (!showPreview) return background(gridColor).background(brandBrush)
 
 	val density = LocalDensity.current
 	val previewLeft = if (fullScreenGuide) 0f else with(density) { 56.dp.toPx() }
@@ -806,7 +917,8 @@ private fun Modifier.liveTvGuideScrim(
 			val height = previewHeight + (size.height - previewHeight) * progress
 			val radius = cornerRadius * (1f - progress)
 
-			drawRect(Color.Black.copy(alpha = 0.82f * (1f - progress)))
+			drawRect(gridColor.copy(alpha = gridColor.alpha * (1f - progress)))
+			drawRect(brush = brandBrush, alpha = 1f - progress)
 			drawRoundRect(
 				color = Color.Transparent,
 				topLeft = Offset(
@@ -826,38 +938,58 @@ private fun GuideProgramCell(
 	program: BaseItemDto?,
 	selected: Boolean,
 	loading: Boolean,
+	brandStart: Color? = null,
+	brandEnd: Color? = null,
+	brandAlpha: Float = 0f,
 	modifier: Modifier = Modifier,
 ) {
+	val context = LocalContext.current
+	val timeFormatter = remember(context) { context.getTimeFormatter() }
+	val programColor = colorResource(R.color.guide_program_cell_bg)
+	val focusStroke = colorResource(R.color.card_focus_stroke)
+	val focusStrokeWidth = dimensionResource(R.dimen.card_focus_stroke_width)
+	val description = program.guideDescription()
+
 	Box(
 		modifier = modifier
 			.fillMaxHeight()
 			.padding(start = 1.dp)
-			.background(
-				if (selected) JellyfinTheme.colorScheme.listButtonFocused
-				else JellyfinTheme.colorScheme.surface.copy(alpha = 0.56f)
+			.background(programColor)
+			.then(
+				if (brandStart != null && brandEnd != null) Modifier.background(
+					guideBrandBrush(brandStart, brandEnd, if (selected) brandAlpha else brandAlpha / 3f)
+				) else Modifier
 			)
 			.border(
-				width = if (selected) 1.dp else 0.dp,
-				color = if (selected) Color.White.copy(alpha = 0.72f) else Color.Transparent,
+				width = if (selected) focusStrokeWidth else 0.dp,
+				color = if (selected) focusStroke else Color.Transparent,
 			)
 			.padding(horizontal = 8.dp, vertical = 6.dp),
 	) {
-		Row(
-			horizontalArrangement = Arrangement.spacedBy(4.dp),
-			verticalAlignment = Alignment.CenterVertically,
-		) {
-			Text(
-				text = when {
-					loading -> stringResource(R.string.loading)
-					program != null -> program.name.orEmpty()
-					else -> stringResource(R.string.no_program_data)
-				},
-				style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listHeadline),
-				maxLines = 1,
-				overflow = TextOverflow.Ellipsis,
-				modifier = Modifier.weight(1f),
-			)
-			if (program.hasRecordingIndicator()) RecordingIndicator(requireNotNull(program))
+		Column {
+			Row(
+				horizontalArrangement = Arrangement.spacedBy(4.dp),
+				verticalAlignment = Alignment.CenterVertically,
+			) {
+				Text(
+					text = when {
+						loading -> stringResource(R.string.loading)
+						program != null -> program.name.orEmpty()
+						else -> stringResource(R.string.no_program_data)
+					},
+					style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listHeadline),
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+					modifier = Modifier.weight(1f),
+				)
+				if (program.hasRecordingIndicator()) RecordingIndicator(requireNotNull(program))
+			}
+			program?.guideTimeRange(timeFormatter)?.takeIf(String::isNotBlank)?.let { timeRange ->
+				Text(timeRange, style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption), maxLines = 1)
+			}
+			description?.let {
+				Text(it, style = JellyfinTheme.typography.listCaption.copy(color = JellyfinTheme.colorScheme.listCaption), maxLines = 1, overflow = TextOverflow.Ellipsis)
+			}
 		}
 	}
 }
@@ -921,29 +1053,48 @@ private fun Map<UUID, List<BaseItemDto>>.mergeWith(
 		.sortedBy { program -> program.startDate ?: LocalDateTime.MIN }
 }
 
-private fun Collection<BaseItemDto>.programAt(
+internal fun Collection<BaseItemDto>.programAt(
 	guideTime: LocalDateTime,
-): BaseItemDto? = sortedBy { program -> program.startDate ?: LocalDateTime.MIN }
-	.firstOrNull { program ->
+): BaseItemDto? {
+	val programs = sortedBy { program -> program.startDate ?: LocalDateTime.MIN }
+
+	return programs.firstOrNull { program ->
 		val start = program.startDate
 		val end = program.endDate
 
 		start != null && end != null && !start.isAfter(guideTime) && end.isAfter(guideTime)
 	}
-	?: firstOrNull { program ->
+	?: programs.firstOrNull { program ->
 		program.startDate?.isAfter(guideTime) == true
 	}
-	?: firstOrNull()
+	?: programs.lastOrNull()
+}
 
-private fun Map<UUID, List<BaseItemDto>>.guideTimeRange(): Pair<LocalDateTime, LocalDateTime>? {
+internal fun guideChannelIndex(
+	channelIds: List<UUID?>,
+	selectedChannelId: UUID?,
+	currentChannelId: UUID?,
+): Int = sequenceOf(selectedChannelId, currentChannelId)
+	.filterNotNull()
+	.map(channelIds::indexOf)
+	.firstOrNull { index -> index >= 0 }
+	?: 0
+
+internal fun Map<UUID, List<BaseItemDto>>.guideTimeRange(): Pair<LocalDateTime, LocalDateTime>? {
 	val programs = values
 		.asSequence()
 		.flatten()
 		.toList()
 	if (programs.isEmpty()) return null
 
-	val start = programs.mapNotNull { program -> program.startDate }.minOrNull() ?: return null
-	val end = programs.mapNotNull { program -> program.endDate ?: program.startDate }.maxOrNull() ?: return null
+	val start = guideStartTime(programs.mapNotNull { program -> program.startDate }.minOrNull() ?: return null)
+	val end = programs
+		.mapNotNull { program -> program.endDate ?: program.startDate }
+		.maxOrNull()
+		?.minusNanos(1)
+		?.let(::guideStartTime)
+		?.coerceAtLeast(start)
+		?: return null
 
 	return start to end
 }
@@ -996,13 +1147,9 @@ private fun BaseItemDto.guideTimeRange(
 	}
 }.orEmpty()
 
-private fun liveTvProgramPopupWidth(context: Context): Int {
-	val horizontalMargin = Utils.convertDpToPixel(context, 48)
-	return minOf(
-		Utils.convertDpToPixel(context, 600),
-		(context.resources.displayMetrics.widthPixels - horizontalMargin * 2).coerceAtLeast(horizontalMargin),
-	)
-}
+private fun BaseItemDto?.guideDescription(): String? =
+	this?.overview?.takeIf { it.any(Char::isLetterOrDigit) }
+		?: this?.episodeTitle?.takeIf { it != name && it.any(Char::isLetterOrDigit) }
 
 private fun LocalDateTime.coerceIn(
 	minimumValue: LocalDateTime,
@@ -1019,11 +1166,7 @@ private fun BaseItemDto?.guideCaption(): String {
 
 	val context = LocalContext.current
 	val timeFormatter = remember(context) { context.getTimeFormatter() }
-	val timeRange = startDate?.let { start ->
-		endDate?.let { end ->
-			"${timeFormatter.format(start)} - ${timeFormatter.format(end)}"
-		}
-	}
+	val timeRange = guideTimeRange(timeFormatter).takeIf(String::isNotBlank)
 
 	return listOfNotNull(name, timeRange)
 		.takeIf { parts -> parts.isNotEmpty() }
