@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.player.video
 
 import android.app.ActivityManager
 import android.content.Context
-import android.net.TrafficStats
 import android.os.Build
 import android.os.SystemClock
 import android.system.Os
@@ -13,10 +12,24 @@ import java.io.File
 
 internal class PlaybackPerformanceSampler(context: Context) {
 	private val appContext = context.applicationContext
-	private var previousCpuSnapshot: CpuSnapshot? = null
+	private var previousCpuSnapshot: SystemCpuSnapshot? = null
 	private var previousProcessCpuSnapshot: ProcessCpuSnapshot? = null
+	private var previousIdleCpuSnapshot: IdleCpuSnapshot? = null
 	private var previousGpuBusySnapshot: GpuBusySnapshot? = null
-	private var previousNetworkSnapshot: NetworkSnapshot? = null
+	private val ioUsageTracker = ByteUsageTracker()
+	private var ioSourceAvailable = true
+	private val idleCpuCores by lazy {
+		runCatching {
+			File("/sys/devices/system/cpu").listFiles().orEmpty()
+				.filter { it.name.matches(CpuDirectoryRegex) }
+				.sortedBy { it.name.removePrefix("cpu").toInt() }
+				.map { core ->
+					core to File(core, "cpuidle").listFiles().orEmpty()
+						.filter { it.name.startsWith("state") }.map { File(it, "time") }
+				}
+				.takeIf { cores -> cores.isNotEmpty() && cores.all { (_, states) -> states.isNotEmpty() && states.all(File::canRead) } }
+		}.getOrNull()
+	}
 	private var activeGpuPercentSource: GpuPercentSource? = null
 	private var activeGpuBusySource: GpuBusySource? = null
 	private val failedGpuPercentSourceKeys = mutableSetOf<String>()
@@ -30,13 +43,12 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	private var gpuPercentSourcesExhausted = false
 	private var gpuBusySourcesExhausted = false
 	private var memorySourceAvailable = true
-	private var uidNetworkSourceAvailable = true
-	private var totalNetworkSourceAvailable = true
 	private var hardwareCpuTemperatureAvailable = true
 	private var hardwareGpuTemperatureAvailable = true
 	private val activityManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
 	private val memoryInfo = ActivityManager.MemoryInfo()
-	private val appUid = context.applicationInfo.uid
+	private val runtime = Runtime.getRuntime()
+	private val heapUsageTracker = JavaHeapUsageTracker()
 	private val hardwarePropertiesManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
 		appContext.getSystemService("hardware_properties")
 	} else {
@@ -69,7 +81,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 	}
 	private val thermalZones by lazy { discoverThermalZones() }
 
-	suspend fun sample(): PlaybackPerformanceSample {
+	suspend fun sample(network: NetworkThroughputMetric): PlaybackPerformanceSample {
 		if (!::detectedGraphicsInfo.isInitialized) {
 			detectedGraphicsInfo = DeviceGraphicsInfoProvider.get()
 		}
@@ -77,7 +89,9 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			cpu = sampleCpu(),
 			gpu = sampleGpu(),
 			memory = sampleMemory(),
-			network = sampleNetwork(),
+			network = network,
+			javaHeap = sampleJavaHeap(),
+			io = sampleIo(),
 		)
 	}
 
@@ -86,14 +100,29 @@ internal class PlaybackPerformanceSampler(context: Context) {
 
 		readSystemCpuSnapshot()?.let { snapshot ->
 			val percent = previousCpuSnapshot
-				?.let { previous -> calculateSystemCpuPercent(previous, snapshot) }
+				?.let { previous -> cpuTimePercent(previous.total, snapshot.total) }
+			val corePercents = snapshot.cores.mapValues { (core, current) ->
+				previousCpuSnapshot?.cores?.get(core)?.let { cpuTimePercent(it, current) }
+			}
 			previousCpuSnapshot = snapshot
 
 			return UsageMetric(
 				label = "CPU",
 				percent = percent,
 				temperatureCelsius = temperatureCelsius,
+				corePercents = corePercents,
 			)
+		}
+
+		val idleSnapshot = readIdleCpuSnapshot()
+		val previousIdle = previousIdleCpuSnapshot
+		previousIdleCpuSnapshot = idleSnapshot
+		if (idleSnapshot != null) {
+			previousProcessCpuSnapshot = null
+			val corePercents = idleCpuCorePercents(previousIdle, idleSnapshot).mapIndexed { index, percent ->
+				idleCpuCores!![index].first.name.removePrefix("cpu").toInt() to percent
+			}.toMap()
+			return UsageMetric("CPU", idleCpuPercent(previousIdle, idleSnapshot), temperatureCelsius, corePercents)
 		}
 
 		readProcessCpuSnapshot()?.let { snapshot ->
@@ -115,38 +144,35 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		)
 	}
 
-	private fun readSystemCpuSnapshot(): CpuSnapshot? {
+	private fun readSystemCpuSnapshot(): SystemCpuSnapshot? {
 		if (!systemCpuSourceAvailable) return null
 
-		val line = runCatching {
+		val snapshot = runCatching {
 			File("/proc/stat").useLines { lines ->
-				lines.firstOrNull { line -> line.startsWith("cpu ") }
+				parseSystemCpu(lines.takeWhile { it.startsWith("cpu") }.joinToString("\n"))
 			}
 		}.getOrNull()
-		if (line == null) {
-			systemCpuSourceAvailable = false
-			return null
-		}
+		if (snapshot == null) systemCpuSourceAvailable = false
+		return snapshot
+	}
 
-		val values = line.split(WhitespaceRegex)
-			.drop(1)
-			.mapNotNull { value -> value.toLongOrNull() }
-		if (values.size < 4) {
-			systemCpuSourceAvailable = false
-			return null
+	private fun readIdleCpuSnapshot(): IdleCpuSnapshot? {
+		val cores = idleCpuCores ?: return null
+		val uptimeMs = SystemClock.uptimeMillis()
+		val idleMicros = cores.map { (core, states) ->
+			val onlineFile = File(core, "online")
+			val online = if (!onlineFile.exists()) true else {
+				when (runCatching { onlineFile.readText().trim() }.getOrNull()) {
+					"0" -> false
+					"1" -> true
+					else -> return null
+				}
+			}
+			if (!online) null else states.sumOf { state ->
+				runCatching { state.readText().trim().toLongOrNull()?.takeIf { it >= 0L } }.getOrNull() ?: return null
+			}
 		}
-
-		val idle = values.getOrNull(3).orZero() + values.getOrNull(4).orZero()
-		val total = values.sum()
-		if (total <= 0) {
-			systemCpuSourceAvailable = false
-			return null
-		}
-
-		return CpuSnapshot(
-			idle = idle,
-			total = total,
-		)
+		return IdleCpuSnapshot(uptimeMs, idleMicros).takeIf { idleMicros.any { it != null } }
 	}
 
 	private fun readProcessCpuSnapshot(): ProcessCpuSnapshot? {
@@ -177,18 +203,6 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			cpuTimeMs = ((userTicks + systemTicks) * 1_000L) / cpuClockTicksPerSecond,
 			elapsedMs = SystemClock.elapsedRealtime(),
 		)
-	}
-
-	private fun calculateSystemCpuPercent(
-		previous: CpuSnapshot,
-		current: CpuSnapshot,
-	): Float? {
-		val totalDelta = current.total - previous.total
-		val idleDelta = current.idle - previous.idle
-		if (totalDelta <= 0 || idleDelta < 0) return null
-
-		return (((totalDelta - idleDelta).toFloat() / totalDelta.toFloat()) * 100f)
-			.coerceIn(0f, 100f)
 	}
 
 	private fun calculateProcessCpuPercent(
@@ -395,62 +409,23 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			percent = percent,
 			usedBytes = usedBytes,
 			totalBytes = totalBytes,
+			lowMemory = memoryInfo.lowMemory,
+			lowMemoryThresholdBytes = memoryInfo.threshold.takeIf { it >= 0L },
 		)
 	}
 
-	private fun sampleNetwork(): NetworkThroughputMetric {
-		val snapshot = readUidNetworkSnapshot() ?: readTotalNetworkSnapshot() ?: return NetworkThroughputMetric()
-		val previous = previousNetworkSnapshot?.takeIf { previous -> previous.source == snapshot.source }
-		previousNetworkSnapshot = snapshot
+	private fun sampleJavaHeap(): JavaHeapUsageMetric = heapUsageTracker.sample(
+		usedBytes = runtime.totalMemory() - runtime.freeMemory(),
+		limitBytes = runtime.maxMemory(),
+	)
 
-		if (previous == null) return NetworkThroughputMetric()
-
-		val elapsedMs = snapshot.elapsedRealtimeMs - previous.elapsedRealtimeMs
-		val receivedBytes = snapshot.receivedBytes - previous.receivedBytes
-		val transmittedBytes = snapshot.transmittedBytes - previous.transmittedBytes
-		if (elapsedMs <= 0 || receivedBytes < 0L || transmittedBytes < 0L) return NetworkThroughputMetric()
-
-		val elapsedSeconds = elapsedMs.toFloat() / 1_000f
-		return NetworkThroughputMetric(
-			downloadBytesPerSecond = receivedBytes.toFloat() / elapsedSeconds,
-			uploadBytesPerSecond = transmittedBytes.toFloat() / elapsedSeconds,
-		)
-	}
-
-	private fun readUidNetworkSnapshot(): NetworkSnapshot? {
-		if (!uidNetworkSourceAvailable) return null
-
-		val receivedBytes = TrafficStats.getUidRxBytes(appUid)
-		val transmittedBytes = TrafficStats.getUidTxBytes(appUid)
-		if (receivedBytes == TrafficStats.UNSUPPORTED.toLong() || transmittedBytes == TrafficStats.UNSUPPORTED.toLong()) {
-			uidNetworkSourceAvailable = false
-			return null
-		}
-
-		return NetworkSnapshot(
-			source = NetworkSnapshotSource.APP,
-			receivedBytes = receivedBytes,
-			transmittedBytes = transmittedBytes,
-			elapsedRealtimeMs = SystemClock.elapsedRealtime(),
-		)
-	}
-
-	private fun readTotalNetworkSnapshot(): NetworkSnapshot? {
-		if (!totalNetworkSourceAvailable) return null
-
-		val receivedBytes = TrafficStats.getTotalRxBytes()
-		val transmittedBytes = TrafficStats.getTotalTxBytes()
-		if (receivedBytes == TrafficStats.UNSUPPORTED.toLong() || transmittedBytes == TrafficStats.UNSUPPORTED.toLong()) {
-			totalNetworkSourceAvailable = false
-			return null
-		}
-
-		return NetworkSnapshot(
-			source = NetworkSnapshotSource.DEVICE,
-			receivedBytes = receivedBytes,
-			transmittedBytes = transmittedBytes,
-			elapsedRealtimeMs = SystemClock.elapsedRealtime(),
-		)
+	private fun sampleIo(): ByteUsageMetric {
+		val snapshot = if (ioSourceAvailable) {
+			val text = runCatching { File("/proc/self/io").readText() }.getOrNull()
+			if (text == null) ioSourceAvailable = false
+			text?.let { parseProcessIo(it, SystemClock.elapsedRealtime()) }
+		} else null
+		return ioUsageTracker.sample(snapshot)
 	}
 
 	private fun sampleTemperature(device: TemperatureDevice): Float? =
@@ -687,13 +662,6 @@ internal class PlaybackPerformanceSampler(context: Context) {
 			.toSet()
 	}
 
-	private fun Long?.orZero() = this ?: 0L
-
-	private data class CpuSnapshot(
-		val idle: Long,
-		val total: Long,
-	)
-
 	private data class ProcessCpuSnapshot(
 		val cpuTimeMs: Long,
 		val elapsedMs: Long,
@@ -725,13 +693,6 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		val total: Long,
 	)
 
-	private data class NetworkSnapshot(
-		val source: NetworkSnapshotSource,
-		val receivedBytes: Long,
-		val transmittedBytes: Long,
-		val elapsedRealtimeMs: Long,
-	)
-
 	private data class TemperatureSource(
 		val file: File,
 		val sourceKey: String,
@@ -743,11 +704,6 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		val type: String,
 		val temperatureFile: File,
 	)
-
-	private enum class NetworkSnapshotSource {
-		APP,
-		DEVICE,
-	}
 
 	private enum class TemperatureDevice(
 		val hardwareDeviceType: Int,
@@ -764,6 +720,7 @@ internal class PlaybackPerformanceSampler(context: Context) {
 		private val FirstNumberRegex = Regex("-?\\d+(?:\\.\\d+)?")
 		private val SourceTokenSeparatorRegex = Regex("[^A-Za-z0-9]+")
 		private val WhitespaceRegex = Regex("\\s+")
+		private val CpuDirectoryRegex = Regex("cpu\\d+")
 		private val GpuPercentFileNames = setOf(
 			"busy_percent",
 			"gpu_busy_percent",
@@ -818,12 +775,15 @@ internal data class PlaybackPerformanceSample(
 	val gpu: UsageMetric,
 	val memory: MemoryUsageMetric,
 	val network: NetworkThroughputMetric,
+	val javaHeap: JavaHeapUsageMetric = JavaHeapUsageMetric(),
+	val io: ByteUsageMetric = ByteUsageMetric(),
 )
 
 internal data class UsageMetric(
 	val label: String,
 	val percent: Float?,
 	val temperatureCelsius: Float? = null,
+	val corePercents: Map<Int, Float?> = emptyMap(),
 )
 
 internal data class MemoryUsageMetric(
@@ -831,6 +791,21 @@ internal data class MemoryUsageMetric(
 	val percent: Float? = null,
 	val usedBytes: Long? = null,
 	val totalBytes: Long? = null,
+	val lowMemory: Boolean? = null,
+	val lowMemoryThresholdBytes: Long? = null,
+)
+
+internal data class JavaHeapUsageMetric(
+	val usedBytes: Long? = null,
+	val limitBytes: Long? = null,
+	val peakBytes: Long? = null,
+	val averageBytes: Long? = null,
+)
+
+internal fun javaHeapUsage(usedBytes: Long, limitBytes: Long, previousPeakBytes: Long) = JavaHeapUsageMetric(
+	usedBytes = usedBytes.coerceAtLeast(0L),
+	limitBytes = limitBytes.takeIf { it > 0L },
+	peakBytes = maxOf(previousPeakBytes, usedBytes, 0L),
 )
 
 internal data class NetworkThroughputMetric(
@@ -838,4 +813,5 @@ internal data class NetworkThroughputMetric(
 	val uploadLabel: String = "Up",
 	val downloadBytesPerSecond: Float? = null,
 	val uploadBytesPerSecond: Float? = null,
+	val dataUsage: ByteUsageMetric = ByteUsageMetric(),
 )
