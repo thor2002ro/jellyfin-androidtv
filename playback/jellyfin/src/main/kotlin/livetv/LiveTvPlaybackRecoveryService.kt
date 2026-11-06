@@ -26,6 +26,7 @@ import org.jellyfin.playback.jellyfin.queue.forceTranscodingRecoveryAttempts
 import org.jellyfin.playback.jellyfin.recovery.DoviRecoveryHandoffCoordinator
 import org.jellyfin.playback.jellyfin.recovery.doviTransformationFailureStatus
 import timber.log.Timber
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class LiveTvPlaybackRecoveryService(
@@ -257,7 +258,13 @@ class LiveTvPlaybackRecoveryService(
 						lastBuffer = positionInfo.buffer
 					}
 
-					delay(STALLED_BUFFER_RECOVERY_INTERVAL)
+					val recoveryPosition = state.positionInfo
+					val recoveryInterval = if (recoveryPosition.active == Duration.ZERO && recoveryPosition.buffer == Duration.ZERO) {
+						LIVE_TV_STARTUP_RECOVERY_INTERVAL
+					} else {
+						STALLED_BUFFER_RECOVERY_INTERVAL
+					}
+					delay(recoveryInterval)
 
 					val delayedEntry = manager.queue.entry.value
 					if (delayedEntry?.doviRecoveryOwnership != null) return@launch
@@ -297,7 +304,7 @@ class LiveTvPlaybackRecoveryService(
 						continue
 					}
 
-					val stalledDuration = STALLED_BUFFER_RECOVERY_INTERVAL
+					val stalledDuration = recoveryInterval
 					bufferedRecoveryAttempts += 1
 					if (!shouldReloadBufferedLiveTvStall(bufferedRecoveryAttempts, BUFFERED_STALL_RECOVERY_ATTEMPTS_BEFORE_RELOAD)) {
 						Timber.i(
@@ -407,6 +414,8 @@ class LiveTvPlaybackRecoveryService(
 		private const val MAX_FORCE_TRANSCODING_RECOVERY_ATTEMPTS = 1
 		private const val BUFFERED_STALL_RECOVERY_ATTEMPTS_BEFORE_RELOAD = 3
 		private val PLAYBACK_ERROR_RETRY_INTERVAL = 3.seconds
+		// Allow server-generated HLS to start before treating an empty buffer as a stalled connection.
+		private val LIVE_TV_STARTUP_RECOVERY_INTERVAL = 30.seconds
 		private val STALLED_BUFFER_RECOVERY_INTERVAL = 3.seconds
 	}
 }
