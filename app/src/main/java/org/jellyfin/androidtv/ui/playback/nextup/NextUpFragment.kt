@@ -76,22 +76,22 @@ fun NextUpScreen(
 		viewModel.setItemId(itemId)
 	}
 
-	val item by viewModel.item.collectAsState()
-	if (item == null) return
-
-	LaunchedEffect(item?.baseItem) {
-		backgroundService.setBackground(item?.baseItem)
-	}
-
 	LaunchedEffect(state) {
 		when (state) {
 			// Open next item
 			NextUpState.PLAY_NEXT -> playbackLauncher.launchCurrentVideoQueue(context)
 			// Close activity
-			NextUpState.CLOSE -> navigationRepository.goBack()
+			NextUpState.CLOSE, NextUpState.NO_DATA -> navigationRepository.goBack()
 			// Unknown state
 			else -> Unit
 		}
+	}
+
+	val item by viewModel.item.collectAsState()
+	if (item == null) return
+
+	LaunchedEffect(item?.baseItem) {
+		backgroundService.setBackground(item?.baseItem)
 	}
 
 	val focusRequester = remember { FocusRequester() }

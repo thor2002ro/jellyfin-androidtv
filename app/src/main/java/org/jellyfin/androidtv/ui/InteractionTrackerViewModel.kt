@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui
 
+import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -15,9 +16,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.preference.UserPreferences
-import org.jellyfin.androidtv.ui.playback.PlaybackControllerContainer
+import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import kotlin.time.Duration
@@ -25,7 +27,6 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class InteractionTrackerViewModel(
 	private val userPreferences: UserPreferences,
-	private val playbackControllerContainer: PlaybackControllerContainer,
 	playbackManager: PlaybackManager,
 ) : ViewModel() {
 	// Screensaver
@@ -36,10 +37,13 @@ class InteractionTrackerViewModel(
 
 	// Still Watching
 
-	private var isWatchingEpisodes = false
+	private var isWatchingVideo = false
+	private var playbackPlaying = false
+	private var watchStartedAt: Long? = null
 	private var episodeCount = 0
 	private var watchTime = 0L
 	private var episodeWasInterrupted: Boolean = false
+	private var currentItemId: UUID? = null
 
 	// Preferences
 
@@ -76,6 +80,7 @@ class InteractionTrackerViewModel(
 
 	fun getShowStillWatching(): Boolean {
 		if (!stillWatchingBehavior.enabled) return false
+		notifyPlaybackState(playbackPlaying)
 
 		if (stillWatchingBehavior.episodeCount > 0 && episodeCount >= stillWatchingBehavior.episodeCount) return true
 		if (stillWatchingBehavior.minDuration > Duration.ZERO && watchTime.milliseconds >= stillWatchingBehavior.minDuration) return true
@@ -93,24 +98,36 @@ class InteractionTrackerViewModel(
 
 	fun notifyStillWatching() {
 		resetSession()
+		episodeWasInterrupted = false
+	}
+
+	fun notifyPlaybackState(playing: Boolean) {
+		val now = SystemClock.elapsedRealtime()
+		watchStartedAt?.let { watchTime += now - it }
+		playbackPlaying = playing
+		watchStartedAt = now.takeIf { playing && isWatchingVideo }
 	}
 
 	fun onEpisodeWatched() {
+		notifyPlaybackState(false)
+		if (!isWatchingVideo) return
 		if (!episodeWasInterrupted) episodeCount++
-		watchTime += playbackControllerContainer.playbackController?.duration ?: 0
 		episodeWasInterrupted = false
 	}
 
 	fun notifyStart(item: BaseItemDto) {
-		if (item.type == BaseItemKind.EPISODE) isWatchingEpisodes = true
+		if (currentItemId != item.id) episodeWasInterrupted = false
+		currentItemId = item.id
+		isWatchingVideo = item.type != BaseItemKind.TRAILER && !item.isLiveTv()
+		notifyPlaybackState(playbackPlaying)
 	}
 
 	fun notifyInteraction(canCancel: Boolean, userInitiated: Boolean) {
 		// Cancel pending screensaver timer (if any)
 		timer?.cancel()
 
-		// If watching episodes, reset episode count and watch time
-		if (isWatchingEpisodes && userInitiated) {
+		// User input restarts the inactivity interval.
+		if (isWatchingVideo && userInitiated) {
 			resetSession()
 			episodeWasInterrupted = true
 		}
@@ -173,5 +190,6 @@ class InteractionTrackerViewModel(
 	private fun resetSession() {
 		watchTime = 0L
 		episodeCount = 0
+		watchStartedAt = SystemClock.elapsedRealtime().takeIf { playbackPlaying && isWatchingVideo }
 	}
 }

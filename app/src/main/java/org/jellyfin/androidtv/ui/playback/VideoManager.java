@@ -180,6 +180,7 @@ public class VideoManager {
                     stopProgressLoop();
                     _helper.setScreensaverLock(false);
                 }
+                if (mPlaybackControllerNotifiable != null) mPlaybackControllerNotifiable.onIsPlayingChanged(isPlaying);
             }
 
             @Override

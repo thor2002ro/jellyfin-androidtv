@@ -22,7 +22,6 @@ import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.UserSettingPreferences;
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior;
 import org.jellyfin.androidtv.util.PlaybackDisplayMode;
-import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
 import org.jellyfin.androidtv.ui.InteractionTrackerViewModel;
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache;
@@ -808,6 +807,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     }
 
     public void pause() {
+        interactionTracker.notifyPlaybackState(false);
         Timber.i("pause called at %s", mCurrentPosition);
         if (isLiveTv) {
             Timber.d("Ignoring pause request for Live TV");
@@ -861,6 +861,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     }
 
     private void stop(boolean cancelLiveTvRetry) {
+        interactionTracker.notifyPlaybackState(false);
         if (cancelLiveTvRetry) cancelLiveTvErrorRetry();
         refreshCurrentPosition();
         Timber.i("stop called at %s", mCurrentPosition);
@@ -1184,28 +1185,33 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         });
     }
 
+    @Override
+    public void onIsPlayingChanged(boolean playing) {
+        interactionTracker.notifyPlaybackState(playing);
+    }
+
     private void itemComplete() {
-        interactionTracker.onEpisodeWatched();
+        BaseItemDto curItem = getCurrentlyPlayingItem();
+        if (curItem != null && curItem.getType() == BaseItemKind.EPISODE) interactionTracker.onEpisodeWatched();
         stop();
         resetPlayerErrors();
 
         BaseItemDto nextItem = getNextItem();
-        BaseItemDto curItem = getCurrentlyPlayingItem();
         if (nextItem == null || curItem == null) {
             endPlayback(true);
             return;
         }
 
         Timber.i("Moving to next queue item. Index: %s", (mCurrentIndex + 1));
-        boolean stillWatchingEnabled = userPreferences.getValue().get(UserPreferences.Companion.getStillWatchingBehavior()) != StillWatchingBehavior.DISABLED;
+        boolean stillWatching = interactionTracker.getShowStillWatching();
         boolean nextUpEnabled = userPreferences.getValue().get(UserPreferences.Companion.getNextUpBehavior()) != NextUpBehavior.DISABLED;
-        if ((stillWatchingEnabled || nextUpEnabled) && curItem.getType() != BaseItemKind.TRAILER) {
+        if ((stillWatching || nextUpEnabled) && curItem.getType() != BaseItemKind.TRAILER) {
             mCurrentIndex++;
             videoQueueManager.getValue().setCurrentMediaPosition(mCurrentIndex);
             spinnerOff = false;
 
             if (mFragment != null) {
-                if (stillWatchingEnabled && interactionTracker.getShowStillWatching()) {
+                if (stillWatching) {
                     // Show "Still Watching" fragment
                     mFragment.showStillWatching(nextItem.getId());
                 } else if (nextUpEnabled) {
@@ -1269,6 +1275,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
 
     @Override
     public void onError() {
+        interactionTracker.notifyPlaybackState(false);
         if (mFragment == null) {
             playerErrorEncountered();
             return;
