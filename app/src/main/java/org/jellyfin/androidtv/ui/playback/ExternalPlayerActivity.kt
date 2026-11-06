@@ -20,6 +20,8 @@ import org.jellyfin.androidtv.ui.playback.external.ExternalPlayResult
 import org.jellyfin.androidtv.ui.playback.external.ExternalPlayerApi
 import org.jellyfin.androidtv.util.componentName
 import org.jellyfin.androidtv.util.sdk.getDisplayName
+import org.jellyfin.androidtv.util.sdk.isHdrVideo
+import org.jellyfin.androidtv.util.sdk.playbackMediaSource
 import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.playStateApi
@@ -33,7 +35,6 @@ import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
 import org.jellyfin.sdk.model.extensions.inWholeTicks
 import org.jellyfin.sdk.model.extensions.ticks
-import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.File
@@ -54,6 +55,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 	private val videoQueueManager by inject<VideoQueueManager>()
 	private val dataRefreshService by inject<DataRefreshService>()
 	private val externalAppRepository by inject<ExternalAppRepository>()
+	private val playbackLauncher by inject<PlaybackLauncher>()
 	private val api by inject<ApiClient>()
 
 	private var resultJob: Job? = null
@@ -94,7 +96,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 	private fun playNext(position: Duration = Duration.ZERO) {
 		val currentPosition = videoQueueManager.getCurrentMediaPosition()
 		val item = videoQueueManager.getCurrentVideoQueue().getOrNull(currentPosition) ?: return finish()
-		val mediaSource = item.mediaSources?.firstOrNull { it.id?.toUUIDOrNull() == item.id }
+		val mediaSource = item.playbackMediaSource
 
 		if (mediaSource == null) {
 			Toast.makeText(this, R.string.msg_no_playable_items, Toast.LENGTH_LONG).show()
@@ -120,7 +122,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 
 			// Set configured app to launch
 			externalAppRepository
-				.getCurrentExternalPlayerApp(this@ExternalPlayerActivity)
+				.getCurrentExternalPlayerApp(this@ExternalPlayerActivity, item.isHdrVideo)
 				?.componentName
 				?.let(::setComponent)
 
@@ -189,9 +191,6 @@ class ExternalPlayerActivity : FragmentActivity() {
 	}
 
 	private suspend fun onPlayResultSuccess(playResult: ExternalPlayResult.Success) {
-		// Advance queue
-		videoQueueManager.setCurrentMediaPosition(videoQueueManager.getCurrentMediaPosition() + 1)
-
 		// Check cache if we have an item to report on
 		if (currentItem == null) {
 			Toast.makeText(this@ExternalPlayerActivity, R.string.video_error_unknown_error, Toast.LENGTH_LONG).show()
@@ -240,8 +239,20 @@ class ExternalPlayerActivity : FragmentActivity() {
 		// Update data refresh service
 		dataRefreshService.notifyPlayback(item)
 
-		// Act on
-		if (shouldPlayNext) playNext()
-		else finish()
+		val queue = videoQueueManager.getCurrentVideoQueue()
+		val nextPosition = videoQueueManager.getCurrentMediaPosition() + 1
+		if (!shouldPlayNext || nextPosition !in queue.indices) {
+			finish()
+			return
+		}
+
+		videoQueueManager.setCurrentMediaPosition(nextPosition)
+		val nextPlayer = playbackLauncher.getVideoPlayerSelection(queue, nextPosition)?.player
+		if (nextPlayer == PlaybackLauncher.VideoPlayer.EXTERNAL) {
+			playNext()
+		} else {
+			playbackLauncher.launchCurrentVideoQueue(this)
+			finish()
+		}
 	}
 }

@@ -66,6 +66,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
     private static final long LIVE_TV_ERROR_RETRY_INTERVAL = TimeUtils.secondsToMillis(5);
 
     private Lazy<PlaybackManager> playbackManager = inject(PlaybackManager.class);
+    private Lazy<PlaybackLauncher> playbackLauncher = inject(PlaybackLauncher.class);
     private Lazy<UserPreferences> userPreferences = inject(UserPreferences.class);
     private Lazy<VideoQueueManager> videoQueueManager = inject(VideoQueueManager.class);
     private Lazy<ApiClient> api = inject(ApiClient.class);
@@ -1056,7 +1057,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             videoQueueManager.getValue().setCurrentMediaPosition(mCurrentIndex);
             Timber.i("Moving to index: %d out of %d total items.", mCurrentIndex, mItems.size());
             spinnerOff = false;
-            play(0);
+            playCurrentItem();
         }
     }
 
@@ -1069,6 +1070,17 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             videoQueueManager.getValue().setCurrentMediaPosition(mCurrentIndex);
             Timber.i("Moving to index: %d out of %d total items.", mCurrentIndex, mItems.size());
             spinnerOff = false;
+            playCurrentItem();
+        }
+    }
+
+    private void playCurrentItem() {
+        PlaybackLauncher.VideoPlayerSelection selection = playbackLauncher.getValue()
+                .getVideoPlayerSelection(mItems, mCurrentIndex);
+        if (mFragment != null && selection != null
+                && selection.getPlayer() != PlaybackLauncher.VideoPlayer.LEGACY) {
+            playbackLauncher.getValue().launchCurrentVideoQueue(mFragment.requireContext(), true);
+        } else {
             play(0);
         }
     }

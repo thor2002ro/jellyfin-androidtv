@@ -10,20 +10,22 @@ import androidx.fragment.compose.content
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.preference.UserPreferences
-import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.ui.base.BaseScreen
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
+import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
@@ -31,6 +33,7 @@ import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -59,6 +62,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val libVLCBackend by inject<LibVLCBackend>()
 	private val mpvBackend by inject<LibMPVBackend>()
 	private val navigationRepository by inject<NavigationRepository>()
+	private val playbackLauncher by inject<PlaybackLauncher>()
 	private val userPreferences by inject<UserPreferences>()
 	private val api by inject<ApiClient>()
 	private val dataRefreshService by inject<DataRefreshService>()
@@ -67,26 +71,13 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private var hasSeenVideoQueueEntry = false
 	private var closeWhenVideoQueueEnds = false
 	private var showingPostPlaybackPrompt = false
+	private var handingOffPlayer = false
 	private var mediaStreamEndListener: PlayerBackendEventListener? = null
+	private val entryChangePredicate: suspend (QueueEntry) -> Boolean = ::shouldChangeQueueEntry
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 
-		playbackManager.switchBackend(when (userPreferences[UserPreferences.playbackBackend]) {
-			PlaybackBackend.EXOPLAYER -> exoPlayerBackend
-			PlaybackBackend.LIBVLC -> libVLCBackend
-			PlaybackBackend.MPV -> mpvBackend
-		})
-
-		if (
-			arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
-			playbackManager.queue.entry.value?.isLiveTv == true
-		) {
-			playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
-			playbackManager.state.stop()
-		}
-
-		// Create a queue from the items added to the legacy video queue
 		val items = videoQueueManager.getCurrentVideoQueue()
 		val requestedLiveTvChannelId = arguments
 			?.getString(EXTRA_LIVE_TV_CHANNEL_ID)
@@ -97,6 +88,16 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 					.takeIf { index -> index >= 0 }
 			}
 			?: videoQueueManager.getCurrentMediaPosition()
+
+		if (
+			arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
+			playbackManager.queue.entry.value?.isLiveTv == true
+		) {
+			playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
+			playbackManager.state.stop()
+		}
+
+		// Create a queue from the items added to the legacy video queue
 		val startPosition = arguments
 			?.takeIf { it.containsKey(EXTRA_POSITION) }
 			?.getInt(EXTRA_POSITION)
@@ -110,6 +111,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		)
 		Timber.i("Created a queue with ${queueSupplier.items.size} items")
 		videoQueueManager.setCurrentMediaPosition(startIndex)
+		playbackManager.getService<QueueService>()?.setEntryChangePredicate(entryChangePredicate)
 		playbackManager.queue.clear()
 		playbackManager.queue.addSupplier(queueSupplier, startIndex = startIndex)
 
@@ -118,6 +120,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 				if (mediaStream.queueEntry !== playbackManager.queue.entry.value) return
 				if (mediaStream.queueEntry.isLiveTv) return
 				notifyPlaybackChanged(mediaStream.queueEntry.baseItem)
+				if (handingOffPlayer) return
 				if (showNextUpIfAvailable(mediaStream)) return
 
 				if (!playbackManager.queue.hasNext(usePlaybackOrder = true, useRepeatMode = true)) {
@@ -157,6 +160,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	}
 
 	override fun onDestroy() {
+		playbackManager.getService<QueueService>()?.clearEntryChangePredicate(entryChangePredicate)
 		mediaStreamEndListener?.let(playbackManager::removeBackendEventListener)
 		mediaStreamEndListener = null
 		super.onDestroy()
@@ -262,6 +266,35 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		navigationRepository.navigate(Destinations.nextUp(nextItem.id), replace = true)
 
 		return true
+	}
+
+	private suspend fun shouldChangeQueueEntry(entry: QueueEntry): Boolean = withContext(Dispatchers.Main.immediate) {
+		if (handingOffPlayer) return@withContext false
+		if (closingPlayer) return@withContext true
+		if (showingPostPlaybackPrompt) return@withContext false
+
+		val nextIndex = playbackManager.queue.indexOf(entry) ?: return@withContext true
+		val queue = videoQueueManager.getCurrentVideoQueue()
+		val selection = playbackLauncher.getVideoPlayerSelection(queue, nextIndex) ?: return@withContext true
+
+		if (selection.player == PlaybackLauncher.VideoPlayer.NEW) {
+			selection.backend?.let { backend ->
+				playbackManager.switchBackend(when (backend) {
+					PlaybackBackend.EXOPLAYER -> exoPlayerBackend
+					PlaybackBackend.LIBVLC -> libVLCBackend
+					PlaybackBackend.MPV -> mpvBackend
+				})
+			}
+			return@withContext true
+		}
+
+		val fragmentContext = context ?: return@withContext false
+		handingOffPlayer = true
+		videoQueueManager.setCurrentMediaPosition(nextIndex)
+		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
+		playbackManager.state.stop()
+		playbackLauncher.launchCurrentVideoQueue(fragmentContext)
+		false
 	}
 
 	private fun syncLegacyVideoQueuePosition(entry: QueueEntry) {

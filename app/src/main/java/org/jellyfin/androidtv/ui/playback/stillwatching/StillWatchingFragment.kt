@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,7 +41,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.service.BackgroundService
-import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.background.AppBackground
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.LocalTextStyle
@@ -51,8 +51,8 @@ import org.jellyfin.androidtv.ui.base.button.ProgressButton
 import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.FixedMotionDurationScale
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
-import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
+import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
@@ -68,9 +68,10 @@ fun StillWatchingScreen(
 	itemId: UUID,
 ) {
 	val api = koinInject<ApiClient>()
+	val context = LocalContext.current
 	val navigationRepository = koinInject<NavigationRepository>()
+	val playbackLauncher = koinInject<PlaybackLauncher>()
 	val backgroundService = koinInject<BackgroundService>()
-	val userPreferences = koinInject<UserPreferences>()
 	val viewModel = koinViewModel<StillWatchingViewModel>()
 
 	val state by viewModel.state.collectAsState()
@@ -89,11 +90,7 @@ fun StillWatchingScreen(
 	LaunchedEffect(state) {
 		when (state) {
 			// Open next item
-			StillWatchingState.STILL_WATCHING -> navigationRepository.navigate(
-				if (userPreferences[UserPreferences.playbackRewriteVideoEnabled]) Destinations.videoPlayerNew(0)
-				else Destinations.videoPlayer(0),
-				replace = true,
-			)
+			StillWatchingState.STILL_WATCHING -> playbackLauncher.launchCurrentVideoQueue(context)
 			// Close activity
 			StillWatchingState.CLOSE -> navigationRepository.goBack()
 			// Unknown state
