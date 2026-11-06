@@ -29,14 +29,11 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.layout.onVisibilityChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
@@ -77,6 +74,7 @@ private const val DefaultPlaybackSpeed = 1.0
 @Composable
 fun VideoPlayerControls(
 	playbackManager: PlaybackManager = koinInject(),
+	initialFocusRequester: FocusRequester,
 	item: BaseItemDto? = null,
 	mediaSourceId: String? = null,
 	trickPlayEnabled: Boolean = false,
@@ -87,6 +85,7 @@ fun VideoPlayerControls(
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onPlaybackInfoClick: () -> Unit = {},
 	onStopClick: () -> Unit = {},
+	onLiveTvGuideClick: () -> Unit = {},
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
 ) {
@@ -98,7 +97,7 @@ fun VideoPlayerControls(
 	var chaptersExpanded by remember(item?.id) { mutableStateOf(false) }
 	var restoreFocusToControls by remember(item?.id) { mutableStateOf(false) }
 	var changingLiveTvChannel by remember(item?.id) { mutableStateOf(false) }
-	val topControlsFocusRequester = remember { FocusRequester() }
+	val topControlsFocusRequester = initialFocusRequester
 	val isLiveTv = item?.isLiveTv() == true
 	val playPauseEnabled = currentQueueEntry?.isLiveTv != true
 	val seekEnabled = currentQueueEntry?.isDirectPlayLiveTv != true
@@ -106,6 +105,7 @@ fun VideoPlayerControls(
 	val liveTvChannelNavigator = rememberLiveTvChannelNavigator()
 	val showPreviousEntry = isLiveTv || entryIndex > 0
 	val showNextEntry = isLiveTv || (entryIndex >= 0 && entryIndex < playbackManager.queue.estimatedSize - 1)
+	val initialFocusModifier = Modifier.focusRequester(topControlsFocusRequester)
 
 	LaunchedEffect(chapters) {
 		if (chapters.isEmpty()) {
@@ -174,11 +174,14 @@ fun VideoPlayerControls(
 						if (
 							nativeEvent.action == KeyEvent.ACTION_DOWN &&
 							nativeEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP &&
-							nativeEvent.repeatCount == 0 &&
-							chapters.isNotEmpty()
+							nativeEvent.repeatCount == 0
 						) {
-							chaptersExpanded = true
-							true
+							handleVideoPlayerControlsUp(
+								isLiveTv = isLiveTv,
+								hasChapters = chapters.isNotEmpty(),
+								onOpenLiveTvGuide = onLiveTvGuideClick,
+								onOpenChapters = { chaptersExpanded = true },
+							)
 						} else {
 							false
 						}
@@ -187,10 +190,13 @@ fun VideoPlayerControls(
 				PlayPauseButton(
 					playbackManager = playbackManager,
 					playState = playState,
-					focusRequester = topControlsFocusRequester,
 					enabled = playPauseEnabled,
+					modifier = if (playPauseEnabled) initialFocusModifier else Modifier,
 				)
-				StopButton(onClick = onStopClick)
+				StopButton(
+					onClick = onStopClick,
+					modifier = if (playPauseEnabled) Modifier else initialFocusModifier,
+				)
 				RewindButton(
 					playbackManager = playbackManager,
 					enabled = seekEnabled,
@@ -255,6 +261,15 @@ fun VideoPlayerControls(
 				.fillMaxWidth()
 				.focusRestorer()
 				.focusGroup()
+				.onPreviewKeyEvent { event ->
+					val nativeEvent = event.nativeKeyEvent
+					handleVideoPlayerBottomControlsUp(
+						keyCode = nativeEvent.keyCode,
+						action = nativeEvent.action,
+						repeatCount = nativeEvent.repeatCount,
+						onMoveFocusToTop = { topControlsFocusRequester.requestFocus() },
+					)
+				}
 		) {
 			if (showPreviousEntry) {
 				PreviousEntryButton(
@@ -364,8 +379,8 @@ fun VideoPlayerSeekControls(
 private fun PlayPauseButton(
 	playbackManager: PlaybackManager,
 	playState: PlayState,
-	focusRequester: FocusRequester,
 	enabled: Boolean = true,
+	modifier: Modifier = Modifier,
 ) {
 	val tooltip = stringResource(
 		when (playState) {
@@ -377,7 +392,6 @@ private fun PlayPauseButton(
 			PlayState.ERROR -> R.string.lbl_play
 		}
 	)
-	val lifecycleOwner = LocalLifecycleOwner.current
 	IconButton(
 		onClick = {
 			when (playState) {
@@ -389,20 +403,7 @@ private fun PlayPauseButton(
 				PlayState.PAUSED -> playbackManager.state.unpause()
 			}
 		},
-		modifier = Modifier
-			.then(
-				if (enabled) {
-					Modifier
-						.focusRequester(focusRequester)
-						.onVisibilityChanged {
-							if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-								focusRequester.requestFocus()
-							}
-						}
-				} else {
-					Modifier
-				}
-			),
+		modifier = modifier,
 		enabled = enabled,
 		colors = IconButtonDefaults.colors(
 			disabledContainerColor = Color.White.copy(alpha = 0.16f),
@@ -436,10 +437,12 @@ private fun PlayPauseButton(
 @Composable
 private fun StopButton(
 	onClick: () -> Unit,
+	modifier: Modifier = Modifier,
 ) {
 	val tooltip = stringResource(R.string.lbl_stop)
 	IconButton(
 		onClick = onClick,
+		modifier = modifier,
 		tooltip = tooltip,
 	) {
 		Icon(
@@ -447,6 +450,43 @@ private fun StopButton(
 			contentDescription = tooltip,
 		)
 	}
+}
+
+internal fun handleVideoPlayerControlsUp(
+	isLiveTv: Boolean,
+	hasChapters: Boolean,
+	onOpenLiveTvGuide: () -> Unit,
+	onOpenChapters: () -> Unit,
+): Boolean = when {
+	isLiveTv -> {
+		onOpenLiveTvGuide()
+		true
+	}
+
+	hasChapters -> {
+		onOpenChapters()
+		true
+	}
+
+	else -> false
+}
+
+internal fun handleVideoPlayerBottomControlsUp(
+	keyCode: Int,
+	action: Int,
+	repeatCount: Int,
+	onMoveFocusToTop: () -> Unit,
+): Boolean {
+	if (
+		keyCode != KeyEvent.KEYCODE_DPAD_UP ||
+		action != KeyEvent.ACTION_DOWN ||
+		repeatCount != 0
+	) {
+		return false
+	}
+
+	onMoveFocusToTop()
+	return true
 }
 
 @Composable
