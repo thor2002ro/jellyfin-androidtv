@@ -98,9 +98,12 @@ class LibMPVBackend(
 			forced = forcedVideoDecoder,
 			softwareForLiveTv = playbackOptions.softwareDecodingForLiveTv,
 			isLiveTv = currentStream?.queueEntry?.isLiveTv == true,
+			videoPreset = playbackOptions.videoPreset,
 		)
 	private var playbackOptions = playbackOptionsProvider?.invoke() ?: LibMPVPlaybackOptions.DEFAULT
 	private val vulkanSupported = isLibMPVVulkanSupported(context)
+	private val requestedGpuApi: String
+		get() = if (playbackOptions.videoPreset == LibMPVVideoPreset.OPTIMIZED_8K) "opengl" else playbackOptions.gpuApi
 	private val effectiveVideoDecoderValue: String
 		get() = effectiveVideoDecoder.mpvValue
 	private val effectiveVideoOutput: String
@@ -115,6 +118,7 @@ class LibMPVBackend(
 		get() = forcedVideoDecoder?.toOption()
 
 	private val appContext = context.applicationContext
+	private val presetDirectory = appContext.filesDir.resolve("mpv-presets")
 	private val handler = Handler(Looper.getMainLooper())
 	private val playerLock = Any()
 	private var player: MPV
@@ -136,7 +140,7 @@ class LibMPVBackend(
 	@Volatile
 	private var playerGeneration = 0L
 	private var appliedInstanceOptions = emptyMap<String, String>()
-	private var appliedGpuApi = playbackOptions.gpuApi
+	private var appliedGpuApi = requestedGpuApi
 	private val timedEvents = TimedEventTracker()
 
 	private var bufferOptions = PlaybackBufferOptions()
@@ -168,6 +172,7 @@ class LibMPVBackend(
 	private var tracks = emptyList<LibMPVTrack>()
 	private var notifiedTracks = emptyList<LibMPVTrack>()
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
+	private val appliedPresetOptions = mutableSetOf<String>()
 	private val appliedCustomOptions = mutableSetOf<String>()
 	private val frameStatPropertyMisses = mutableMapOf<String, Long>()
 
@@ -218,10 +223,19 @@ class LibMPVBackend(
 	).apply {
 		putAll(playbackOptions.managedOptions(vulkanSupported))
 		put("hwdec", effectiveVideoDecoderValue)
+		putAll(currentPresetOptions())
 		putAll(currentCustomOptions())
 	}
 
-	private fun createPlayer(options: Map<String, String>) = MPV(appContext, options = options)
+	private fun createPlayer(options: Map<String, String>): MPV {
+		presetDirectory.mkdirs()
+		BUNDLED_PRESET_SHADERS.forEach { name ->
+			appContext.assets.open("mpv-anime/shaders/$name").use { input ->
+				presetDirectory.resolve(name).outputStream().use(input::copyTo)
+			}
+		}
+		return MPV(appContext, options = options)
+	}
 
 	private fun setStartupOption(target: MPV, name: String, value: String) {
 		runCatching { target.setOptionString(name, value) }
@@ -241,6 +255,8 @@ class LibMPVBackend(
 
 		// Match BaseMPVView: keep the VO dormant until a valid Android surface exists.
 		setStartupOption(target, "force-window", "no")
+		appliedPresetOptions.clear()
+		appliedPresetOptions += currentPresetOptions().keys
 		appliedCustomOptions.clear()
 		appliedCustomOptions += currentCustomOptions().keys
 		applySubtitleStyle(subtitleStyle)
@@ -255,7 +271,7 @@ class LibMPVBackend(
 		if (forceRecreate || desiredOptions != appliedInstanceOptions) {
 			recreatePlayer(desiredOptions)
 		} else {
-			appliedGpuApi = playbackOptions.gpuApi
+			appliedGpuApi = requestedGpuApi
 		}
 	}
 
@@ -277,7 +293,7 @@ class LibMPVBackend(
 		player = replacement
 		playerObserver = null
 		appliedInstanceOptions = LinkedHashMap(desiredOptions)
-		appliedGpuApi = playbackOptions.gpuApi
+		appliedGpuApi = requestedGpuApi
 		surfaceAttached = false
 		finishPlayerSetup(replacement)
 	}
@@ -634,16 +650,24 @@ class LibMPVBackend(
 	}
 
 	private fun applyPlaybackOptions() {
+		val presetOptions = currentPresetOptions()
 		val customOptions = currentCustomOptions()
+		val removedPresetOptions = appliedPresetOptions - presetOptions.keys
 		val removedOptions = appliedCustomOptions - customOptions.keys
 
-		playbackOptions.managedOptions(vulkanSupported).forEach(::setOption)
+		removedPresetOptions.forEach(::restoreOptionDefault)
 		removedOptions.forEach(::restoreCustomOption)
+		playbackOptions.managedOptions(vulkanSupported).forEach(::setOption)
+		presetOptions.forEach(::setOption)
 		customOptions.forEach(::setOption)
 
+		appliedPresetOptions.clear()
+		appliedPresetOptions += presetOptions.keys
 		appliedCustomOptions.clear()
 		appliedCustomOptions += customOptions.keys
 	}
+
+	private fun currentPresetOptions() = playbackOptions.presetOptions(presetDirectory)
 
 	private fun restoreCustomOption(name: String) = restoreOptionDefault(name)
 
@@ -1342,6 +1366,9 @@ internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float) =
 internal fun mpvSubtitleFontSize(textSizeDp: Float) =
 	(textSizeDp * 38f / 24f).coerceIn(8f, 96f)
 
+internal fun Duration?.mpvStartOption() =
+	this?.takeIf { it > Duration.ZERO }?.let { "start=${it.inWholeMilliseconds / 1_000.0}" }
+
 internal fun formatLibMPVBufferDetails(
 	bufferedBytes: Long?,
 	isPausedForCache: Boolean,
@@ -1358,9 +1385,6 @@ internal fun formatLibMPVBufferDetails(
 			?.let { add("$it/s") }
 	}
 }.joinToString(", ").takeIf(String::isNotEmpty)
-
-internal fun Duration?.mpvStartOption() =
-	this?.takeIf { it > Duration.ZERO }?.let { "start=${it.inWholeMilliseconds / 1_000.0}" }
 
 private fun Int.mpvColor() = String.format(Locale.US, "#%08X", toLong() and 0xFFFF_FFFFL)
 
