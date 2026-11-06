@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.jellyfin.design.Tokens
 
@@ -20,6 +21,7 @@ fun Badge(
 	shape: Shape = CircleShape,
 	containerColor: Color = JellyfinTheme.colorScheme.badge,
 	contentColor: Color = JellyfinTheme.colorScheme.onBadge,
+	contentPadding: Dp = Tokens.Space.spaceXs,
 	content: @Composable BoxScope.() -> Unit,
 ) {
 	ProvideTextStyle(JellyfinTheme.typography.badge.copy(color = contentColor)) {
@@ -27,7 +29,7 @@ fun Badge(
 			modifier = modifier
 				.defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
 				.background(containerColor, shape)
-				.padding(Tokens.Space.spaceXs),
+				.padding(contentPadding),
 			contentAlignment = Alignment.Center,
 		) {
 			content()
