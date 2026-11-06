@@ -24,6 +24,8 @@ import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.ui.livetv.TvManager
 import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
+import org.jellyfin.androidtv.util.sdk.compat.copyWithSeriesTimerId
+import org.jellyfin.androidtv.util.sdk.compat.copyWithTimerId
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.java.KoinJavaComponent
 import java.time.LocalDateTime
