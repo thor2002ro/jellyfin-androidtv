@@ -20,7 +20,12 @@ internal fun effectiveLibMPVVideoDecoder(
 	forced: LibMPVVideoDecoder?,
 	softwareForLiveTv: Boolean,
 	isLiveTv: Boolean,
-) = forced ?: if (softwareForLiveTv && isLiveTv) LibMPVVideoDecoder.SOFTWARE else configured
+	videoPreset: LibMPVVideoPreset = LibMPVVideoPreset.OFF,
+) = forced ?: when {
+	videoPreset == LibMPVVideoPreset.OPTIMIZED_8K -> LibMPVVideoDecoder.MEDIACODEC
+	softwareForLiveTv && isLiveTv -> LibMPVVideoDecoder.SOFTWARE
+	else -> configured
+}
 
 /**
  * The Android-TV-friendly MPV profile. Every field has an explicit Jellyfin default.
@@ -47,6 +52,8 @@ data class LibMPVPlaybackOptions(
 	val subtitleAssOverride: String = "no",
 	val subtitleUseMargins: Boolean = true,
 	val softwareDecodingForLiveTv: Boolean = false,
+	val videoPreset: LibMPVVideoPreset = LibMPVVideoPreset.OFF,
+	val audioPreset: LibMPVAudioPreset = LibMPVAudioPreset.OFF,
 	val customOptions: Map<String, String> = emptyMap(),
 ) {
 	internal fun managedOptions(vulkanSupported: Boolean = true): LinkedHashMap<String, String> {

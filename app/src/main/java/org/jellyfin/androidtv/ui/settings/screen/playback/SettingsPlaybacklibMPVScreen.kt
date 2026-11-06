@@ -35,6 +35,7 @@ import org.jellyfin.androidtv.preference.constant.resetLibMPVPreferences
 import org.jellyfin.androidtv.preference.mpvAudioChannels
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
+import org.jellyfin.androidtv.preference.mpvAudioPreset
 import org.jellyfin.androidtv.preference.mpvAudioSpdif
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
@@ -53,6 +54,7 @@ import org.jellyfin.androidtv.preference.mpvSubtitleUseMargins
 import org.jellyfin.androidtv.preference.mpvSoftwareDecodingForLiveTv
 import org.jellyfin.androidtv.preference.mpvToneMapping
 import org.jellyfin.androidtv.preference.mpvVideoOutput
+import org.jellyfin.androidtv.preference.mpvVideoPreset
 import org.jellyfin.androidtv.preference.mpvVideoSync
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
@@ -103,6 +105,8 @@ fun SettingsPlaybackLibMPVScreen() {
 	var audioPitchCorrection by rememberPreference(userPreferences, UserPreferences.mpvAudioPitchCorrection)
 	var subtitleUseMargins by rememberPreference(userPreferences, UserPreferences.mpvSubtitleUseMargins)
 	var softwareDecodingForLiveTv by rememberPreference(userPreferences, UserPreferences.mpvSoftwareDecodingForLiveTv)
+	val videoPreset by rememberPreference(userPreferences, UserPreferences.mpvVideoPreset)
+	val audioPreset by rememberPreference(userPreferences, UserPreferences.mpvAudioPreset)
 	var decoderThreads by rememberPreference(userPreferences, UserPreferences.mpvDecoderThreads)
 	var optionOverrides by rememberPreference(userPreferences, UserPreferences.mpvOptionOverrides)
 	val overrideCount = remember(optionOverrides) {
@@ -140,6 +144,7 @@ fun SettingsPlaybackLibMPVScreen() {
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.VIDEO_OUTPUT, videoOutput) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.GPU_CONTEXT, gpuContext) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.GPU_API, gpuApi) }
+		item { LibMPVChoiceButton(LibMPVChoiceSetting.VIDEO_PRESET, videoPreset) }
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_video)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.VIDEO_SYNC, videoSync) }
@@ -173,6 +178,7 @@ fun SettingsPlaybackLibMPVScreen() {
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.TONE_MAPPING, toneMapping) }
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_audio)) }) }
+		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_PRESET, audioPreset) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_OUTPUT, audioOutput) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_CHANNELS, audioChannels) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_SPDIF, audioSpdif) }
