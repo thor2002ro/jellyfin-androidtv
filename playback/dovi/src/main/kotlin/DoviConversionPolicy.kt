@@ -5,7 +5,9 @@ import io.github.thor2002ro.libdovi.DoviInspection
 import io.github.thor2002ro.libdovi.DoviPresentation
 import io.github.thor2002ro.libdovi.DoviRepair
 import io.github.thor2002ro.libdovi.DoviTarget
+import io.github.thor2002ro.libdovi.DoviTransformObservation
 import io.github.thor2002ro.libdovi.DoviTransformRequest
+import org.jellyfin.playback.core.model.PlaybackDoviTransformStats
 
 enum class DoviCompatibilityMode {
 	AUTO,
@@ -180,6 +182,7 @@ object DoviCompatibilityPolicy {
 	)
 
 	fun decide(input: Input): DoviDecision {
+		if (input.retrySuppressed) return serverFallback(DoviDecisionReason.RETRY_SUPPRESSED)
 		if (input.codec == DoviVideoCodec.AV1) {
 			return if (input.source.profile == DoviSourceProfile.PROFILE_7) {
 				serverFallback(DoviDecisionReason.INVALID_AV1_PROFILE_7, invalidStream = true)
@@ -198,7 +201,6 @@ object DoviCompatibilityPolicy {
 				serverFallback(DoviDecisionReason.DISABLED_BY_USER)
 			}
 		}
-		if (input.retrySuppressed) return serverFallback(DoviDecisionReason.RETRY_SUPPRESSED)
 		if (!input.builtInPlayerSelected || input.externalPlayerSelected || !input.backend.isSupported()) {
 			return serverFallback(DoviDecisionReason.BACKEND_UNSUPPORTED)
 		}
@@ -238,7 +240,7 @@ object DoviCompatibilityPolicy {
 		) {
 			transform(DoviTarget.PROFILE_8_1, reason = DoviDecisionReason.PROFILE_8_1)
 		} else {
-			serverFallback(DoviDecisionReason.NO_COMPATIBLE_ROUTE)
+			input.sourceBaseDecision()
 		}
 	}
 
@@ -482,4 +484,24 @@ internal fun DoviSource.accepts(target: DoviTarget): Boolean {
 		DoviTarget.SOURCE_BASE_PRESENTATION ->
 			sourceBasePresentation != DoviPresentation.UNKNOWN && profile != DoviSourceProfile.PROFILE_5
 	}
+}
+
+val DoviDecision.requiresHardwareVideoDecoder: Boolean
+	get() = route != DoviRoute.ServerFallback
+
+fun DoviTransformObservation.toPlaybackDoviTransformStats() = PlaybackDoviTransformStats(
+	inputPresentation = input.playbackDiagnosticLabel(),
+	outputPresentation = output.playbackDiagnosticLabel(),
+)
+
+fun DoviPresentation.playbackDiagnosticLabel() = when (this) {
+	DoviPresentation.PROFILE_5 -> "DV P5"
+	DoviPresentation.PROFILE_7_MEL -> "DV P7 MEL"
+	DoviPresentation.PROFILE_7_FEL -> "DV P7 FEL"
+	DoviPresentation.PROFILE_8_1 -> "DV P8.1"
+	DoviPresentation.PROFILE_8_4 -> "DV P8.4"
+	DoviPresentation.HDR10 -> "HDR10"
+	DoviPresentation.HDR10_PLUS -> "HDR10+"
+	DoviPresentation.HLG -> "HLG"
+	DoviPresentation.UNKNOWN -> "Unknown"
 }
