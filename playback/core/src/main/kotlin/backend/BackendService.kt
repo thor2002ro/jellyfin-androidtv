@@ -8,6 +8,7 @@ import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
+import timber.log.Timber
 import kotlin.time.Duration
 
 /**
@@ -155,8 +156,15 @@ class BackendService {
 		}
 
 		override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
-			if (mediaStream.queueEntry.mediaStream !== mediaStream) return
-			if (callListeners { shouldHandleMediaStreamEnd(mediaStream) }.any { !it }) return
+			if (mediaStream.queueEntry.mediaStream !== mediaStream) {
+				Timber.d("Ignoring completion from a replaced media stream")
+				return
+			}
+			if (callListeners { shouldHandleMediaStreamEnd(mediaStream) }.any { !it }) {
+				Timber.d("Media stream completion withheld by a playback service")
+				return
+			}
+			Timber.d("Forwarding media stream completion")
 			callListeners { onMediaStreamEnd(mediaStream) }
 		}
 
