@@ -27,7 +27,7 @@ typealias JellyfinMediaStreamOptionsProvider = (BaseItemDto, String?) -> Jellyfi
 data class JellyfinDeviceProfileRequest(
 	val profile: DeviceProfile,
 	val requestToken: Long,
-	val protectsDoviHlsVideoCopy: Boolean = false,
+	val protectsHlsVideoCopy: Boolean = false,
 )
 typealias JellyfinDeviceProfileProvider = (QueueEntry) -> JellyfinDeviceProfileRequest
 typealias JellyfinDoviDecisionValidator = (QueueEntry, Long, MediaSourceInfo?, MediaConversionMethod?, DoviDecision?) -> Unit

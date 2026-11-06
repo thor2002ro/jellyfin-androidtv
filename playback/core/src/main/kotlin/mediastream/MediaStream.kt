@@ -90,6 +90,8 @@ data class MediaStreamVideoTrack(
 	val isInterlaced: Boolean,
 	val profile: String? = null,
 	val bitDepth: Int? = null,
+	val dvProfile: Int? = null,
+	val dvLevel: Int? = null,
 ) : MediaStreamTrack
 
 data class MediaStreamSubtitleTrack(
