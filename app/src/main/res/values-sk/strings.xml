@@ -295,7 +295,6 @@
     <string name="lbl_manage_servers">Spravovať servery</string>
     <string name="lbl_sign_out_content">Vyžaduje prihlásenie pri ďalšom použití</string>
     <string name="login_help_description">Jellyfin vyžaduje server, ku ktorému sa môže pripojiť. Aby ste zistili, ako začať s Jellyfinom, prezrite si našu dokumentáciu na docs.jellyfin.org alebo nasnímajte QR kód.</string>
-    <string name="no_network_permissions">Jellyfin vyžaduje sieťové povolenia k svojmu korektnému fungovaniu</string>
     <string name="pref_theme_muted_purple">Tlmená fialová</string>
     <string name="lbl_switch_user">Zmeniť účet</string>
     <string name="user_picker_last_user_summary">Použiť posledný aktívny účet</string>

@@ -275,7 +275,6 @@
     <string name="welcome_title">مرحبًا بك في Jellyfin!</string>
     <string name="saved_servers">الخوادم المحفوظة</string>
     <string name="press_to_close">اضغط للإغلاق</string>
-    <string name="no_network_permissions">يتطلب Jellyfin أذونات الشبكة ليعمل</string>
     <string name="lbl_switch_user">تبديل الحساب</string>
     <string name="user_picker_last_user_summary">استخدام آخر حساب نشط</string>
     <string name="user_picker_disable_summary">عرض شاشة تسجيل الدخول دائمًا</string>

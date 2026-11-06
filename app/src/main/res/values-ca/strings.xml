@@ -333,7 +333,6 @@
     <string name="welcome_title">Us donem la benvinguda a Jellyfin!</string>
     <string name="saved_servers">Servidors desats</string>
     <string name="press_to_close">Pitgeu per a tancar</string>
-    <string name="no_network_permissions">Jellyfin requereix permisos per a funcionar</string>
     <string name="pref_theme_muted_purple">Morat silenciat</string>
     <string name="lbl_switch_user">Canvia de compte</string>
     <string name="user_picker_last_user_summary">Fes servir l\'últim compte actiu</string>

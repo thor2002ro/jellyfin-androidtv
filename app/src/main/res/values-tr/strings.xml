@@ -324,7 +324,6 @@
     <string name="welcome_title">Jellyfin\'e hoşgeldiniz!</string>
     <string name="saved_servers">Kaydedilen sunucular</string>
     <string name="press_to_close">Kapatmak için bas</string>
-    <string name="no_network_permissions">Jellyfin çalışabilmek için ağ yetkilerine ihtiyaç duyar</string>
     <string name="lbl_switch_user">Hesap değiştir</string>
     <string name="user_picker_last_user_summary">Son etkin hesabı kullanın</string>
     <string name="user_picker_last_user_title">En son kullanılan</string>

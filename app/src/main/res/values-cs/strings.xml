@@ -305,7 +305,6 @@
     <string name="user_picker_disable_title">Zakázat</string>
     <string name="auto_sign_in">Automatické přihlášení</string>
     <string name="lbl_switch_user">Přepnout účet</string>
-    <string name="no_network_permissions">Jellyfin ke svému fungování vyžaduje síťová oprávnění</string>
     <string name="pref_theme_muted_purple">Tlumená fialová</string>
     <string name="press_to_close">Stisknutím zavřete</string>
     <string name="lbl_time_range">%1$s–%2$s</string>

@@ -44,7 +44,6 @@
     <string name="welcome_title">ജെല്ലിഫിനിലേക്ക് സ്വാഗതം!</string>
     <string name="saved_servers">സംരക്ഷിച്ച സെർവറുകൾ</string>
     <string name="press_to_close">അടയ്‌ക്കാൻ അമർത്തുക</string>
-    <string name="no_network_permissions">പ്രവർത്തിക്കാൻ ജെല്ലിഫിന് നെറ്റ്‌വർക്ക് അനുമതികൾ ആവശ്യമാണ്</string>
     <string name="pref_theme_muted_purple">നിശബ്ദമാക്കിയ പർപ്പിൾ</string>
     <string name="lbl_switch_user">ഉപയോക്താവിനെ മാറ്റുക</string>
     <string name="user_picker_last_user_summary">അവസാന സജീവ ഉപയോക്താവ് ഉപയോഗിക്കുക</string>

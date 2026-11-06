@@ -332,7 +332,6 @@
     <string name="welcome_title">Dobrodošli v Jellyfinu!</string>
     <string name="saved_servers">Shranjeni strežniki</string>
     <string name="press_to_close">Pritisni za zapiranje</string>
-    <string name="no_network_permissions">Jellyfin zahteva omrežno povezavo za delovanje</string>
     <string name="pref_theme_muted_purple">Utišana vijolična</string>
     <string name="lbl_switch_user">Zamenjaj račun</string>
     <string name="user_picker_last_user_summary">Uporabi zadnje aktivni račun</string>

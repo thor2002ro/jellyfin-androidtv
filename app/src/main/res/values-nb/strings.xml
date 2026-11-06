@@ -299,7 +299,6 @@
     <string name="lbl_remove_user_content">Fjern konto</string>
     <string name="lbl_remove_users">Dette vil også fjerne alle tilknyttede kontoer</string>
     <string name="lbl_manage_servers">Administrere servere</string>
-    <string name="no_network_permissions">Jellyfin krever nettverkstillatelser for å fungere</string>
     <string name="pref_theme_muted_purple">Nedtonet lilla</string>
     <string name="lbl_switch_user">Bytt bruker</string>
     <string name="user_picker_last_user_summary">Bruk den siste aktive brukeren</string>
