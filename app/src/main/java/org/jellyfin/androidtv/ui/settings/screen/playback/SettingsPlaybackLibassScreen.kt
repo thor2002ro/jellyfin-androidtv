@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.settings.screen.playback
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -11,6 +12,7 @@ import org.jellyfin.androidtv.preference.constant.LibassCacheSize
 import org.jellyfin.androidtv.preference.constant.LibassGlyphSize
 import org.jellyfin.androidtv.preference.constant.LibassMaxRenderPixels
 import org.jellyfin.androidtv.preference.constant.LibassRenderType
+import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -99,10 +101,16 @@ fun SettingsPlaybackLibassScreen() {
 
 		item {
 			val description = stringResource(R.string.preference_libass_parse_subtitles_during_extraction_description)
+			val offsetWarning = stringResource(R.string.preference_libass_parse_subtitles_during_extraction_offset_warning)
 
 			ListButton(
 				headingContent = { Text(stringResource(R.string.preference_libass_parse_subtitles_during_extraction)) },
-				captionContent = { Text(description) },
+				captionContent = {
+					Column {
+						Text(description)
+						Text(offsetWarning, color = JellyfinTheme.colorScheme.recording)
+					}
+				},
 				trailingContent = { Checkbox(checked = parseSubtitlesDuringExtraction) },
 				onClick = { parseSubtitlesDuringExtraction = !parseSubtitlesDuringExtraction },
 			)
