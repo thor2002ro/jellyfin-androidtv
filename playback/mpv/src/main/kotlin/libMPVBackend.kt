@@ -613,11 +613,12 @@ class LibMPVBackend(
 
 	private fun updateNativeSubtitleOverlayMode() {
 		val active = usesNativeSubtitleOverlay && fileLoaded && nativeSubtitleView != null
+		val changed = libMPVSubtitleOverlayModeChanged(nativeSubtitleModeActive, active)
 		nativeSubtitleModeActive = active
 		if (active) {
-			setProperty("sub-visibility", "yes")
+			if (changed) setProperty("sub-visibility", "yes")
 			if (nativeSubtitleJob?.isActive != true) startNativeSubtitleOverlay()
-		} else {
+		} else if (changed) {
 			stopNativeSubtitleOverlay()
 		}
 	}
@@ -760,9 +761,10 @@ class LibMPVBackend(
 
 	private fun applyBufferOptions(stream: PlayableMediaStream) {
 		val bitrate = stream.totalBitrate()
+		val maximumBytes = bufferOptions.libMPVMaxCacheBytes()
 		val configuration = bufferOptions
 			.toLibMPVBufferConfiguration(stream.queueEntry.isLiveTv)
-			.cappedToBytes(bitrate, bufferOptions.maxBufferBytes)
+			.cappedToBytes(bitrate, maximumBytes)
 		rebufferWaitSeconds = configuration.rebufferWaitSeconds
 
 		setOption("cache", if (configuration.cacheSeconds == null) "auto" else "yes")
@@ -778,9 +780,8 @@ class LibMPVBackend(
 		} else {
 			val cacheSeconds = configuration.cacheSeconds.toLibMPVString()
 			setOption("cache-secs", cacheSeconds)
-			val maximumBytes = bufferOptions.maxBufferBytes
 			val forwardBytes = mpvCacheBytes(configuration.cacheSeconds, bitrate, maximumBytes)
-			if (forwardBytes != null && maximumBytes != null) {
+			if (forwardBytes != null) {
 				setOption("demuxer-max-bytes", forwardBytes.toString())
 				setOption("demuxer-max-back-bytes", (maximumBytes - forwardBytes).coerceAtLeast(0).toString())
 			} else {
@@ -1257,7 +1258,7 @@ class LibMPVBackend(
 			correction("video-speed-correction")?.let { put("Video speed correction", it) }
 			correction("audio-speed-correction")?.let { put("Audio speed correction", it) }
 			number("avsync", " ms", 1_000.0)?.let { put("A/V sync", it) }
-			number("total-avsync-change", " ms", 1_000.0)?.let { put("A/V sync correction", it) }
+			number("total-avsync-change", " ms", 1_000.0)?.let { put("Accumulated A/V correction", it) }
 			count("mistimed-frame-count")?.let { put("Mistimed frames", it) }
 			count("vo-delayed-frame-count")?.let { put("Delayed frames", it) }
 			put("Decoder drops", decoderDropped.toString())
