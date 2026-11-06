@@ -5,8 +5,15 @@ import androidx.leanback.widget.Presenter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.data.model.FilterOptions
+import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFilter
@@ -16,6 +23,26 @@ import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
 
 class ItemRowAdapterHelperTests : FunSpec({
+	test("cancelled row retrieval does not report a loading error to the screen") {
+		val adapter = ItemRowAdapter(mockk<Context>(), emptyList(), mockk<Presenter>(), null, QueryType.Search)
+		var notified = false
+		val listener = mockk<EmptyResponse>()
+		every { listener.onError(any()) } answers { notified = true }
+		adapter.setRetrieveFinishedListener(listener)
+		var stopped = false
+		adapter.retrievalScope.launch(Dispatchers.Unconfined) {
+			try {
+				awaitCancellation()
+			} finally {
+				stopped = true
+			}
+		}
+		adapter.cancelRetrieval()
+		stopped shouldBe true
+		adapter.notifyRetrieveFinished(CancellationException())
+		notified shouldBe false
+	}
+
 	listOf("timerId", "seriesTimerId").forEach { field ->
 		test("live TV row refresh detects $field changes after recording actions") {
 			val program = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.LIVE_TV_PROGRAM, name = "News")

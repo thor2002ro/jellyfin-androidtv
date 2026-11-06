@@ -155,8 +155,9 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
 
     @Override
     public void onDestroyView() {
+        cancelRowRetrievals();
         super.onDestroyView();
-        mHandler.removeCallbacks(mDelayedSetItem);
+        mHandler.removeCallbacksAndMessages(null);
         mClickedListener.removeListeners();
         mSelectedListener.removeListeners();
     }
@@ -207,7 +208,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
             // Re-retrieve anything that needs it but delay slightly so we don't take away gui landing
             if (mRowsAdapter != null) {
                 refreshCurrentItem();
-                new Handler().postDelayed(new Runnable() {
+                mHandler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED))
@@ -229,6 +230,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     }
 
     public void loadRows(List<BrowseRowDef> rows) {
+        cancelRowRetrievals();
         mRowsAdapter = new MutableObjectAdapter<Row>(new PositionableListRowPresenter(null, true));
         mCardPresenter = new CardPresenter(false, getDefaultCardImageType(), getDefaultCardHeight());
         ClassPresenterSelector ps = new ClassPresenterSelector();
@@ -290,6 +292,16 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         addAdditionalRows(mRowsAdapter);
 
         if (mRowsFragment != null) mRowsFragment.setAdapter(mRowsAdapter);
+    }
+
+    private void cancelRowRetrievals() {
+        if (mRowsAdapter == null) return;
+        for (int i = 0; i < mRowsAdapter.size(); i++) {
+            Row row = mRowsAdapter.get(i);
+            if (row instanceof ListRow && ((ListRow) row).getAdapter() instanceof ItemRowAdapter) {
+                ((ItemRowAdapter) ((ListRow) row).getAdapter()).cancelRetrieval();
+            }
+        }
     }
 
     static CardPresenter cardPresenterForRow(QueryType queryType, CardPresenter defaultPresenter) {
