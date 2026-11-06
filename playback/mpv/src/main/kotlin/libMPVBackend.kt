@@ -116,8 +116,22 @@ class LibMPVBackend(
 	private val appContext = context.applicationContext
 	private val handler = Handler(Looper.getMainLooper())
 	private val playerLock = Any()
-	private lateinit var player: MPV
+	private var player: MPV
 	private var playerObserver: MPV.EventObserver? = null
+	private var released = false
+	private val playerLogObserver = object : MPV.LogObserver {
+		override fun logMessage(prefix: String, level: Int, text: String) {
+			val message = text.trim()
+			if (message.isEmpty()) return
+			val source = prefix.takeIf(String::isNotBlank)?.let { "[$it] " }.orEmpty()
+			when {
+				level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_ERROR -> Timber.e("MPV %s%s", source, message)
+				level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_WARN -> Timber.w("MPV %s%s", source, message)
+				level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_INFO -> Timber.i("MPV %s%s", source, message)
+				else -> Timber.d("MPV %s%s", source, message)
+			}
+		}
+	}
 	@Volatile
 	private var playerGeneration = 0L
 	private var appliedInstanceOptions = emptyMap<String, String>()
@@ -220,6 +234,7 @@ class LibMPVBackend(
 		val observer = PlayerObserver(generation)
 		playerObserver = observer
 		target.addObserver(observer)
+		target.addLogObserver(playerLogObserver)
 		observeProperties(target)
 
 		// Match BaseMPVView: keep the VO dormant until a valid Android surface exists.
@@ -233,9 +248,11 @@ class LibMPVBackend(
 		surfaceHolder?.takeIf { holder -> holder.surface.isValid }?.let(::attachSurface)
 	}
 
-	private fun ensureInstanceOptions() = synchronized(playerLock) {
+	private fun ensureInstanceOptions(forceRecreate: Boolean = false) = synchronized(playerLock) {
 		val desiredOptions = currentInstanceOptions()
-		if (desiredOptions != appliedInstanceOptions) recreatePlayer(desiredOptions)
+		if (forceRecreate || desiredOptions != appliedInstanceOptions) {
+			recreatePlayer(desiredOptions)
+		}
 	}
 
 	private fun recreatePlayer(desiredOptions: Map<String, String>) {
@@ -249,6 +266,7 @@ class LibMPVBackend(
 		// Invalidate native callbacks already queued before observer removal.
 		playerGeneration++
 		previousObserver?.let(previous::removeObserver)
+		previous.removeLogObserver(playerLogObserver)
 		runCatching { previous.close() }
 			.onFailure { error -> Timber.w(error, "Unable to destroy previous MPV instance cleanly") }
 
@@ -392,10 +410,12 @@ class LibMPVBackend(
 		setMedia(stream)
 	}
 
-	override fun replaceItem(item: QueueEntry) = playItem(item)
+	override fun replaceItem(item: QueueEntry) {
+		setMedia(requireNotNull(item.mediaStream))
+	}
 
 	private fun setMedia(stream: PlayableMediaStream) {
-		ensureInstanceOptions()
+		ensureInstanceOptions(currentStream?.queueEntry !== stream.queueEntry)
 		currentStream = stream
 		endReported = false
 		externalSubtitlesAdded = false
@@ -522,6 +542,33 @@ class LibMPVBackend(
 		ensureInstanceOptions()
 		listener?.onSubtitleTimingOffsetSupportChange(false)
 		publishPlayState(force = true)
+	}
+
+	override fun reset() {
+		if (!released) stop()
+	}
+
+	override fun cleanup() {
+		if (released) return
+		handler.removeCallbacks(tick)
+		setListener(null)
+		setSurfaceView(null)
+		setSubtitleView(null)
+	}
+
+	override fun release() {
+		synchronized(playerLock) {
+			if (released) return
+			cleanup()
+			playerObserver?.let(player::removeObserver)
+			playerObserver = null
+			player.removeLogObserver(playerLogObserver)
+			runCatching { if (player.isInitialized) player.close() }
+				.onFailure { error -> Timber.w(error, "Unable to destroy MPV instance cleanly") }
+			currentStream = null
+			terminalState = PlayState.STOPPED
+			released = true
+		}
 	}
 
 	override fun seekTo(position: Duration) {
@@ -685,6 +732,9 @@ class LibMPVBackend(
 			terminalState == PlayState.ERROR
 		if (canRecreateImmediately) ensureInstanceOptions() else applyVideoDecoder()
 	}
+
+	override fun reloadVideoDecoder(): Boolean =
+		currentStream != null && terminalState == null && runCommand("video-reload")
 
 	private fun LibMPVVideoDecoder.toOption() = videoDecoderOptions.firstOrNull { option -> option.id == name }
 
