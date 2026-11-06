@@ -379,7 +379,7 @@ private object NewPlayerStreamStatusBuilder {
 					row("Play method", stream.conversionMethod.displayName())
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
-					row("Display HDR", displayHdrModes)
+					row("Display HDR support", displayHdrModes)
 					row("Position", "${positionInfo.active.formatDuration()}/${positionInfo.duration.formatDuration()}")
 					row("Buffer", positionInfo.formatBuffer(frameStats.bufferedBytes))
 					if (speed != 1f) row("Speed", "${"%.2f".format(speed)}x")
@@ -538,10 +538,10 @@ private object NewPlayerStreamStatusBuilder {
 		track: MediaStreamVideoTrack?,
 		transcodingInfo: TranscodingInfo?,
 	): String? = hdrMode ?: track
-		?.videoRange
-		?.toVideoRangeType()
-		?.takeIf { transcodingInfo?.isVideoDirect != false }
-		?.workaroundLabel()
+			?.videoRange
+			?.toVideoRangeType()
+			?.takeIf { transcodingInfo?.isVideoDirect != false }
+			?.workaroundLabel()
 
 	private fun streamingAudioCodec(
 		track: MediaStreamAudioTrack?,
