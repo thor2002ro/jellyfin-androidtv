@@ -127,6 +127,7 @@ fun UserPreferences.libVLCPlaybackOptions(
 	dav1dThreadFrames: Int = this[UserPreferences.libVLCDav1dThreadFrames],
 ) = LibVLCPlaybackOptions(
 	deblocking = deblocking.vlcValue,
+	surroundVolumeBoost = this[UserPreferences.surroundVolumeBoost],
 	frameSkip = frameSkip,
 	audioTimeStretch = audioTimeStretch,
 	dav1dThreadFrames = dav1dThreadFrames.coerceIn(0, 16),
