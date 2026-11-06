@@ -211,6 +211,7 @@ class LibVLCBackend(
 	private val instanceOptionsProvider: () -> LibVLCInstanceOptions = { LibVLCInstanceOptions() },
 	private val videoDecoderProvider: (() -> LibVLCVideoDecoder)? = null,
 	private val playbackOptionsProvider: (() -> LibVLCPlaybackOptions)? = null,
+	nativeLogSink: (String) -> Unit = {},
 ) : BasePlayerBackend(), TrackSelectionBackend, IVLCVout.OnNewVideoLayoutListener {
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
@@ -260,7 +261,7 @@ class LibVLCBackend(
 	private var liveTvBufferDuration: Duration? = null
 	private var maxBufferBytes: Long? = null
 	private var previousStatsSample: LibVLCStatsSample? = null
-	private val decoderLogReader = LibVLCDecoderLogReader(LibVLCDecoderLogParser())
+	private val decoderLogReader = LibVLCDecoderLogReader(LibVLCDecoderLogParser(), logSink = nativeLogSink)
 	private var decoderSessionCounter = 0L
 	private var currentStream: PlayableMediaStream? = null
 	private var surfaceView: PlayerSurfaceView? = null
