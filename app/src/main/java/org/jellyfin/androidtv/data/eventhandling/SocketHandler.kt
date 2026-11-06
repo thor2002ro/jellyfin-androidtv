@@ -235,7 +235,11 @@ class SocketHandler(
 				val playbackController = playbackControllerContainer.playbackController
 				when (message.data?.command) {
 					PlaystateCommand.STOP -> playbackController?.endPlayback(true)
-					PlaystateCommand.PAUSE, PlaystateCommand.UNPAUSE, PlaystateCommand.PLAY_PAUSE -> playbackController?.playPause()
+					PlaystateCommand.PAUSE -> playbackController?.pause()
+					PlaystateCommand.UNPAUSE -> if (playbackController?.isPaused == true) {
+						playbackController.play(playbackController.currentPosition)
+					}
+					PlaystateCommand.PLAY_PAUSE -> playbackController?.playPause()
 					PlaystateCommand.NEXT_TRACK -> playbackController?.next()
 					PlaystateCommand.PREVIOUS_TRACK -> playbackController?.prev()
 					PlaystateCommand.SEEK -> playbackController?.seek(
