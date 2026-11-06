@@ -105,7 +105,6 @@
     <string name="lbl_live_tv_guide">Przewodnik TV</string>
     <string name="msg_unable_load_subs">Nie można wczytać napisów</string>
     <string name="msg_subtitles_loading">Wczytuję napisy…</string>
-    <string name="lbl_filters">Filtry TV</string>
     <string name="lbl_ended">ZAKOŃCZONE</string>
     <string name="lbl_display_preferences">Preferencje wyświetlania</string>
     <string name="lbl_rating">Ocena</string>
@@ -150,7 +149,6 @@
     <string name="no_program_data">Brak dostępnych danych programu</string>
     <string name="msg_record_entire_series">Nagrać całą serię\?</string>
     <string name="lbl_just_this_once">Tylko ten jeden raz</string>
-    <string name="lbl_select_date">Wybierz datę</string>
     <string name="lbl_in_x_days">Za %d dni</string>
     <string name="desc_premieres">Pokaż rząd nowych pilotów odcinków dowolnego oglądanego serialu</string>
     <string name="lbl_show_premieres">Pokaż premiery sezonu</string>
@@ -233,7 +231,6 @@
     <string name="lbl_series_recordings">Nagrywanie serii</string>
     <string name="lbl_episode_not_record">Ten serial NIE będzie nagrany</string>
     <string name="lbl_play_next_up">Odtwórz kolejny</string>
-    <string name="lbl_load_guide_data">Załaduj dane przewodnika</string>
     <string name="just_one">Tylko to</string>
     <string name="turn_off">Wyłącz tę opcję</string>
     <string name="audio_error">Nie można odtworzyć dźwięku: %1$s</string>
@@ -242,10 +239,6 @@
     <string name="too_many_errors">Za dużo błędów. Poddaję się</string>
     <string name="player_error">Błąd odtwarzacza. Próbuję ponownie…</string>
     <string name="seek_error">Niemożliwe do odnalezienia</string>
-    <string name="msg_live_tv_prev">Załadować poprzednie %1$d godzin(y)?</string>
-    <string name="msg_live_tv_next">Załadować następne %1$d godzin(y)?</string>
-    <string name="lbl_tv_filter_status">przez następne %1$d godzin</string>
-    <string name="lbl_tv_channel_status">%1$d z %2$d kanałów</string>
     <string name="episode_missing_message_2">Tego epizodu nie ma w twojej bibliotece. Odtwarzanie zostanie zatrzymane.</string>
     <string name="episode_missing_message">Tego epizodu nie ma w twojej bibliotece. Czy chciałbyś go pominąć i odtworzyć następny epizod\?</string>
     <string name="episode_missing">Brakuje odcinka</string>
