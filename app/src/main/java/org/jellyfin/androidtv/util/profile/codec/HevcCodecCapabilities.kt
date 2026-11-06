@@ -39,6 +39,27 @@ class HevcCodecCapabilities(
 
 	fun supportsHevcDolbyVision(): Boolean = query.hasCodecForMime(MIME_DOLBY_VISION)
 
+	fun supportsHevcDolbyVisionProfile5(): Boolean =
+		query.hasDecoder(
+			MIME_DOLBY_VISION,
+			CodecProfileLevel.DolbyVisionProfileDvheStn,
+			CodecProfileLevel.DolbyVisionLevelHd24,
+		)
+
+	fun supportsHevcDolbyVisionProfile7(): Boolean =
+		query.hasDecoder(
+			MIME_DOLBY_VISION,
+			CodecProfileLevel.DolbyVisionProfileDvheDtb,
+			CodecProfileLevel.DolbyVisionLevelHd24,
+		)
+
+	fun supportsHevcDolbyVisionProfile8(): Boolean =
+		query.hasDecoder(
+			MIME_DOLBY_VISION,
+			CodecProfileLevel.DolbyVisionProfileDvheSt,
+			CodecProfileLevel.DolbyVisionLevelHd24,
+		)
+
 	fun supportsHevcDolbyVisionEL(): Boolean = query.hasDecoder(
 		MIME_DOLBY_VISION,
 		CodecProfileLevel.DolbyVisionProfileDvheDtb,

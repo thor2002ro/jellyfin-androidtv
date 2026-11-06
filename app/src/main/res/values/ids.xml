@@ -1,0 +1,4 @@
+<resources>
+    <item name="playback_control_tooltips_installed" type="id" />
+    <item name="playback_control_hover_tooltip_installed" type="id" />
+</resources>

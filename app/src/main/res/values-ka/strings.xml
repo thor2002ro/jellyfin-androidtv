@@ -72,11 +72,6 @@
     <string name="lbl_playlists">დასაკრავი სიები</string>
     <string name="lbl_delete">წაშლა</string>
     <string name="lbl_zoom">გადიდება</string>
-    <string name="playback_info_direct_play">პირდაპირი დაკვრა</string>
-    <string name="playback_info_direct_stream">პირდაპირი ნაკადი</string>
-    <string name="playback_info_transcoding">ტრანსკოდირება</string>
-    <string name="playback_info_video_title">ვიდეო</string>
-    <string name="playback_info_audio_title">აუდიო</string>
     <string name="lbl_stretch">გაწელვა</string>
     <string name="lbl_fit">ნორმალური</string>
     <string name="lbl_open">გახსნა</string>
@@ -251,11 +246,6 @@
     <string name="msg_item_added">" ელემენტი დაემატა"</string>
     <string name="lbl_new_premieres">ახალი პრემიერები</string>
     <string name="playback_info">დაკვრის ინფორმაცია</string>
-    <string name="playback_info_container">კონტეინერი: %1$s</string>
-    <string name="playback_info_codec">კოდეკი: %1$s</string>
-    <string name="playback_info_resolution">გაფართოება: %1$dx%2$d</string>
-    <string name="playback_info_bitrate">ბიტური სიხშირე: %1$s</string>
-    <string name="playback_info_channels">არხები: %1$d</string>
     <string name="lbl_auto_crop">ავტოამოჭრა</string>
     <string name="lbl_playback_speed">დაკვრის სიჩქარე</string>
     <string name="lbl_quality_profile">ხარისხის პროფილი</string>
@@ -393,8 +383,6 @@
     <string name="lbl_play_from_here">აქედან დაკვრა</string>
     <string name="lbl_remove_from_queue">რიგიდან წაშლა</string>
     <string name="desc_bitstream_ac3">სჭირდება შესაბამისი აპარატურა</string>
-    <string name="playback_info_play_method">დაკვრის მეთოდი: %1$s</string>
-    <string name="playback_info_video_range">ვიდეოს შუალედი: %1$s</string>
     <string name="lbl_audio_track">აუდიოტრეკის არჩევა</string>
     <string name="lbl_subtitle_track">სუბტიტრის ტრეკის არჩევა</string>
     <string name="lbl_play_next_up">შემდეგის დაკვრა</string>

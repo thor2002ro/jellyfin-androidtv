@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import coil3.ImageLoader
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.imageApi
 import org.jellyfin.sdk.model.api.BaseItemDto
+import java.util.LinkedHashMap
 import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -38,6 +40,8 @@ class BackgroundService(
 	companion object {
 		val SLIDESHOW_DURATION = 30.seconds
 		val TRANSITION_DURATION = 800.milliseconds
+		private const val BACKDROP_MAX_WIDTH = 1280
+		private const val MAX_CACHED_BACKDROPS = 16
 	}
 
 	// Async
@@ -49,6 +53,10 @@ class BackgroundService(
 	// Current background data
 	private var _backgrounds = emptyList<ImageBitmap>()
 	private var _currentIndex = 0
+	private var requestedBackdropUrls = emptySet<String>()
+	private val backgroundCache = object : LinkedHashMap<String, ImageBitmap>(MAX_CACHED_BACKDROPS, 0.75f, true) {
+		override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ImageBitmap>?) = size > MAX_CACHED_BACKDROPS
+	}
 	private var _currentBackground = MutableStateFlow<ImageBitmap?>(null)
 	private var _blurBackground = MutableStateFlow(false)
 	private var _enabled = MutableStateFlow(true)
@@ -71,7 +79,7 @@ class BackgroundService(
 
 		// Get all backdrop urls
 		val backdropUrls = (baseItem.itemBackdropImages + baseItem.parentBackdropImages)
-			.map { it.getUrl(api) }
+			.map { it.getUrl(api, maxWidth = BACKDROP_MAX_WIDTH) }
 			.toSet()
 
 		loadBackgrounds(backdropUrls)
@@ -101,17 +109,23 @@ class BackgroundService(
 
 	private fun loadBackgrounds(backdropUrls: Set<String>) {
 		if (backdropUrls.isEmpty()) return clearBackgrounds()
+		if (backdropUrls == requestedBackdropUrls) return
 
 		// Re-enable backgrounds if disabled
 		_enabled.value = true
+		requestedBackdropUrls = backdropUrls
 
 		// Cancel current loading job
 		loadBackgroundsJob?.cancel()
 		loadBackgroundsJob = scope.launch(Dispatchers.IO) {
 			_backgrounds = backdropUrls.mapNotNull { url ->
-				imageLoader.execute(
-					request = ImageRequest.Builder(context).data(url).build()
-				).image?.toBitmap()?.asImageBitmap()
+				backgroundCache[url] ?: imageLoader.execute(
+					request = ImageRequest.Builder(context)
+						.data(url)
+						.memoryCachePolicy(CachePolicy.ENABLED)
+						.diskCachePolicy(CachePolicy.ENABLED)
+						.build()
+				).image?.toBitmap()?.asImageBitmap()?.also { backgroundCache[url] = it }
 			}
 
 			// Go to first background
@@ -122,6 +136,7 @@ class BackgroundService(
 
 	fun clearBackgrounds() {
 		loadBackgroundsJob?.cancel()
+		requestedBackdropUrls = emptySet()
 
 		// Re-enable backgrounds if disabled
 		_enabled.value = true

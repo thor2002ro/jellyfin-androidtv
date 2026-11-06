@@ -15,14 +15,22 @@ class PlayerSubtitleView @JvmOverloads constructor(
 	defStyleAttr: Int = 0,
 	defStyleRes: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr, defStyleRes) {
-	lateinit var playbackManager: PlaybackManager
+	private var _playbackManager: PlaybackManager? = null
+	var playbackManager: PlaybackManager
+		get() = requireNotNull(_playbackManager) { "PlaybackManager must be set before using PlayerSubtitleView" }
+		set(value) {
+			if (_playbackManager == value) return
+			_playbackManager = value
+			if (isAttachedToWindow && !isInEditMode) {
+				value.backendService.attachSubtitleView(this)
+			}
+		}
 
 	override fun onAttachedToWindow() {
 		super.onAttachedToWindow()
 
 		if (!isInEditMode) {
-			playbackManager.backendService.attachSubtitleView(this)
+			_playbackManager?.backendService?.attachSubtitleView(this)
 		}
 	}
 }
-

@@ -14,6 +14,7 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 @Stable
 fun VideoPlayerHeader(
 	item: BaseItemDto?,
+	liveTvProgramName: String? = null,
 ) {
 	PlayerHeader {
 		if (item != null) {
@@ -28,7 +29,7 @@ fun VideoPlayerHeader(
 			)
 
 			Text(
-				text = item.seriesName.orEmpty(),
+				text = liveTvProgramName ?: item.seriesName.orEmpty(),
 				overflow = TextOverflow.Ellipsis,
 				maxLines = 1,
 				style = LocalTextStyle.current.copy(

@@ -15,6 +15,7 @@ import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -82,6 +83,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var currentItem: BaseRowItem? = null
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
+	private var backgroundUpdateJob: Job? = null
+	private var resumeRowsRefreshJob: Job? = null
+	private var currentBackgroundItemId: String? = null
 
 	// Special rows
 	private val notificationsRow by lazy { NotificationsHomeFragmentRow(lifecycleScope, notificationsRepository) }
@@ -200,6 +204,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			//Re-retrieve anything that needs it but delay slightly so we don't take away gui landing
 			refreshCurrentItem()
 			refreshRows()
+			scheduleResumeRowsRefresh()
 		} else {
 			justLoaded = false
 		}
@@ -228,6 +233,27 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 	}
 
+	private fun refreshResumeRows() {
+		lifecycleScope.launch(Dispatchers.IO) {
+			repeat(adapter.size()) { i ->
+				val rowAdapter = (adapter[i] as? ListRow)?.adapter as? ItemRowAdapter
+				if (rowAdapter?.queryType == QueryType.Resume) rowAdapter.Retrieve()
+			}
+		}
+	}
+
+	private fun scheduleResumeRowsRefresh() {
+		resumeRowsRefreshJob?.cancel()
+		resumeRowsRefreshJob = lifecycleScope.launch {
+			delay(2.seconds)
+			refreshResumeRows()
+			delay(4.seconds)
+			refreshResumeRows()
+			delay(6.seconds)
+			refreshResumeRows()
+		}
+	}
+
 	private fun refreshCurrentItem() {
 		val adapter = currentRow?.adapter as? ItemRowAdapter ?: return
 		val item = currentItem ?: return
@@ -239,7 +265,29 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	override fun onDestroy() {
 		super.onDestroy()
 
+		backgroundUpdateJob?.cancel()
+		resumeRowsRefreshJob?.cancel()
 		mediaManager.removeAudioEventListener(this)
+	}
+
+	private fun updateBackground(item: BaseRowItem?) {
+		backgroundUpdateJob?.cancel()
+
+		val itemId = item?.baseItem?.id?.toString()
+		if (itemId == currentBackgroundItemId) return
+
+		backgroundUpdateJob = lifecycleScope.launch {
+			delay(250)
+
+			if (item?.baseItem == null) {
+				currentBackgroundItemId = null
+				backgroundService.clearBackgrounds()
+				return@launch
+			}
+
+			currentBackgroundItemId = itemId
+			backgroundService.setBackground(item.baseItem)
+		}
 	}
 
 	private inner class ItemViewClickedListener : OnItemViewClickedListener {
@@ -251,6 +299,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		) {
 			if (item is GridButton) {
 				when (item.id) {
+					LiveTvOption.LIVE_TV_CHANNELS_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvChannels)
 					LiveTvOption.LIVE_TV_GUIDE_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvGuide)
 					LiveTvOption.LIVE_TV_SCHEDULE_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvSchedule)
 					LiveTvOption.LIVE_TV_RECORDINGS_OPTION_ID -> navigationRepository.navigate(Destinations.liveTvRecordings)
@@ -274,8 +323,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		) {
 			if (item !is BaseRowItem) {
 				currentItem = null
-				//fill in default background
-				backgroundService.clearBackgrounds()
+				updateBackground(null)
 			} else {
 				currentItem = item
 				currentRow = row as ListRow
@@ -283,7 +331,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				val itemRowAdapter = row.adapter as? ItemRowAdapter
 				itemRowAdapter?.loadMoreItemsIfNeeded(itemRowAdapter.indexOf(item))
 
-				backgroundService.setBackground(item.baseItem)
+				updateBackground(item)
 			}
 		}
 	}
