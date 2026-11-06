@@ -23,6 +23,20 @@ class NavigationRepositoryTests : FunSpec({
 		repository.synchronizeCurrentDestination(second)
 		repository.currentDestination.value shouldBe second
 	}
+
+	test("replacing current destination preserves navigation history") {
+		val root = destination<RootFragment>()
+		val first = destination<FirstFragment>()
+		val second = destination<SecondFragment>()
+		val repository = NavigationRepositoryImpl(root)
+
+		repository.navigate(first)
+		repository.navigate(second)
+		repository.navigate(second, replace = true)
+
+		repository.goBack() shouldBe true
+		repository.currentDestination.value shouldBe first
+	}
 })
 
 private inline fun <reified T : Fragment> destination() = Destination.Fragment(T::class, mockk<Bundle>())
