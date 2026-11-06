@@ -108,6 +108,7 @@ public class VideoManager {
     private String subtitleRenderDebug;
     private String subtitleParserDebug;
     private String subtitlePathDebug;
+    private final boolean parseSubtitlesDuringExtraction;
 
     public VideoManager(@NonNull Activity activity, @NonNull View view, @NonNull PlaybackOverlayFragmentHelper helper) {
         mActivity = activity;
@@ -116,7 +117,8 @@ public class VideoManager {
 
         boolean assDirectPlay = userPreferences.get(UserPreferences.Companion.getAssDirectPlay());
         AssRenderType assRenderType = assDirectPlay ? userPreferences.get(UserPreferences.Companion.getLibassRenderType()).getAssRenderType() : null;
-        boolean parseSubtitlesDuringExtraction = userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction());
+        parseSubtitlesDuringExtraction =
+                userPreferences.get(UserPreferences.Companion.getExoPlayerParseSubtitlesDuringExtraction()) && !assDirectPlay;
         subtitleExtractorDebug = assDirectPlay ? "AssMatroskaExtractor (MKV)" : "Media3 default";
         subtitleRenderDebug = subtitleRenderDebug(assRenderType);
         subtitleParserDebug = assDirectPlay && assRenderType != AssRenderType.CUES ? "AssSubtitleParserFactory" : "DefaultSubtitleParserFactory";
@@ -303,7 +305,7 @@ public class VideoManager {
 
             exoPlayerBuilder.setRenderersFactory(rendererFactory);
             DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory);
-            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(userPreferences.get(UserPreferences.Companion.getLibassParseSubtitlesDuringExtraction()));
+            mediaSourceFactory.experimentalParseSubtitlesDuringExtraction(parseSubtitlesDuringExtraction);
             mediaSourceFactory.setSubtitleParserFactory(defaultSubtitleParserFactory);
             exoPlayerBuilder.setMediaSourceFactory(new ExternalSubtitleMediaSourceFactory(mediaSourceFactory, dataSourceFactory));
         }

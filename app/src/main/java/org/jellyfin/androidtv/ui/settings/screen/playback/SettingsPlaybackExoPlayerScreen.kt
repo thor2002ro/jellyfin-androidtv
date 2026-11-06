@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.settings.screen.playback
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -11,10 +12,12 @@ import org.jellyfin.androidtv.preference.preferExoPlayerFfmpeg
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegAudioForLiveTv
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideoForLiveTv
+import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
+import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.koin.compose.koinInject
@@ -23,6 +26,7 @@ import org.koin.compose.koinInject
 fun SettingsPlaybackExoPlayerScreen() {
 	val userPreferences = koinInject<UserPreferences>()
 	val backendSettings = koinInject<ExoPlayerBackendSettings>()
+	val router = LocalRouter.current
 
 	SettingsColumn {
 		item {
@@ -30,6 +34,38 @@ fun SettingsPlaybackExoPlayerScreen() {
 				overlineContent = { Text(stringResource(R.string.pref_playback_advanced).uppercase()) },
 				headingContent = { Text(stringResource(R.string.preference_exoplayer_options)) },
 				captionContent = { Text(stringResource(R.string.preference_exoplayer_options_description)) },
+			)
+		}
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_libass_options)) },
+				captionContent = { Text(stringResource(R.string.preference_libass_options_description)) },
+				onClick = { router.push(LibassSettingsRoutes.PLAYBACK_LIBASS) }
+			)
+		}
+
+		item {
+			var assDirectPlay by rememberPreference(userPreferences, UserPreferences.assDirectPlay)
+			var parseSubtitlesDuringExtraction by rememberPreference(userPreferences, UserPreferences.exoPlayerParseSubtitlesDuringExtraction)
+			val description = stringResource(R.string.preference_exoplayer_parse_subtitles_during_extraction_description)
+			val offsetWarning = stringResource(R.string.preference_exoplayer_parse_subtitles_during_extraction_offset_warning)
+			val disabledWarning = stringResource(R.string.preference_exoplayer_parse_subtitles_during_extraction_disabled_by_libass)
+
+			ListButton(
+				enabled = !assDirectPlay,
+				headingContent = { Text(stringResource(R.string.preference_exoplayer_parse_subtitles_during_extraction)) },
+				captionContent = {
+					Column {
+						Text(description)
+						Text(offsetWarning, color = JellyfinTheme.colorScheme.recording)
+						if (assDirectPlay) {
+							Text(disabledWarning, color = JellyfinTheme.colorScheme.recording)
+						}
+					}
+				},
+				trailingContent = { Checkbox(checked = parseSubtitlesDuringExtraction) },
+				onClick = { parseSubtitlesDuringExtraction = !parseSubtitlesDuringExtraction },
 			)
 		}
 
