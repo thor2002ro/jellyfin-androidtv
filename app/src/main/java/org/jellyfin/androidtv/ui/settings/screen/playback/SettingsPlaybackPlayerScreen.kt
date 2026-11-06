@@ -37,6 +37,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 	val externalPlayerComponentName = userPreferences[playerPreferences.externalPlayerComponentName]
 	val playbackRewriteVideoEnabled = userPreferences[playerPreferences.playbackRewriteVideoEnabled]
 	val playbackBackend = userPreferences[playerPreferences.playbackBackend]
+	val followVideoPlayer = hdr && playbackBackend == PlaybackBackend.SAME_VIDEO_PLAYER
 	val currentExternalPlayer = remember(context, hdr, useExternalPlayer, externalPlayerComponentName, externalPlayerApps) {
 		externalAppRepository.getCurrentExternalPlayerApp(context, hdr, externalPlayerApps)
 	}
@@ -51,15 +52,32 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 			)
 		}
 
+		if (hdr) {
+			item {
+				ListButton(
+					leadingContent = { PlayerIcon(R.drawable.ic_tv_play) },
+					headingContent = { Text(stringResource(R.string.playback_hdr_follow_video_player)) },
+					trailingContent = { RadioButton(checked = followVideoPlayer) },
+					captionContent = { Text(stringResource(R.string.playback_hdr_follow_video_player_description)) },
+					onClick = {
+						userPreferences[playerPreferences.playbackBackend] = PlaybackBackend.SAME_VIDEO_PLAYER
+						router.back()
+					},
+					modifier = Modifier.focusKey("player_follow_video")
+				)
+			}
+		}
+
 		item {
 			ListButton(
 				leadingContent = {
 					PlayerIcon(R.mipmap.app_icon)
 				},
 				headingContent = { Text(stringResource(R.string.app_name)) },
-				trailingContent = { RadioButton(checked = !useExternalPlayer && !playbackRewriteVideoEnabled) },
+				trailingContent = { RadioButton(checked = !followVideoPlayer && !useExternalPlayer && !playbackRewriteVideoEnabled) },
 				captionContent = { Text(stringResource(R.string.video_player_internal)) },
 				onClick = {
+					if (hdr) userPreferences[playerPreferences.playbackBackend] = PlaybackBackend.EXOPLAYER
 					userPreferences[playerPreferences.playbackRewriteVideoEnabled] = false
 					externalAppRepository.setExternalPlayerapp(null, hdr)
 					router.back()
@@ -76,7 +94,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 				},
 				headingContent = { Text(stringResource(R.string.playback_backend_exoplayer_name)) },
 				trailingContent = {
-					RadioButton(checked = !useExternalPlayer && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.EXOPLAYER)
+					RadioButton(checked = !followVideoPlayer && !useExternalPlayer && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.EXOPLAYER)
 				},
 				captionContent = { Text(stringResource(R.string.enable_playback_module_description)) },
 				onClick = {
@@ -95,7 +113,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 				},
 				headingContent = { Text(stringResource(R.string.playback_backend_libvlc_name)) },
 				trailingContent = {
-					RadioButton(checked = !useExternalPlayer && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.LIBVLC)
+					RadioButton(checked = !followVideoPlayer && !useExternalPlayer && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.LIBVLC)
 				},
 				captionContent = { Text(stringResource(R.string.playback_backend_libvlc_description)) },
 				onClick = {
@@ -116,7 +134,7 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 				},
 				headingContent = { Text(stringResource(R.string.playback_backend_mpv_name)) },
 				trailingContent = {
-					RadioButton(checked = !useExternalPlayer && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.MPV)
+					RadioButton(checked = !followVideoPlayer && !useExternalPlayer && playbackRewriteVideoEnabled && playbackBackend == PlaybackBackend.MPV)
 				},
 				captionContent = { Text(stringResource(R.string.playback_backend_mpv_description)) },
 				onClick = {
@@ -148,10 +166,11 @@ fun SettingsPlaybackPlayerScreen(hdr: Boolean = false) {
 				},
 				headingContent = { Text(displayName) },
 				trailingContent = {
-					RadioButton(checked = useExternalPlayer && currentExternalPlayer?.componentName == app.activityInfo.componentName)
+					RadioButton(checked = !followVideoPlayer && useExternalPlayer && currentExternalPlayer?.componentName == app.activityInfo.componentName)
 				},
 				captionContent = { Text(stringResource(R.string.video_player_external)) },
 				onClick = {
+					if (hdr) userPreferences[playerPreferences.playbackBackend] = PlaybackBackend.EXOPLAYER
 					externalAppRepository.setExternalPlayerapp(app.activityInfo, hdr)
 					router.back()
 				},
