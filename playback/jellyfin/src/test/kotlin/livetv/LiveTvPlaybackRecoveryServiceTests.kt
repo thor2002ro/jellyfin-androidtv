@@ -2,6 +2,8 @@ package org.jellyfin.playback.jellyfin.livetv
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -29,5 +31,19 @@ class LiveTvPlaybackRecoveryServiceTests : FunSpec({
 
 		entry.liveStreamTargetOffset shouldBe LiveTvPlaybackPolicy.INITIAL_LIVE_STREAM_TARGET_OFFSET
 		entry.forceTranscodingRecoveryAttempts shouldBe null
+	}
+
+	test("dedicated Dolby Vision recovery cancels every active Live TV recovery job") {
+		val playbackError = Job()
+		val stalledBuffer = Job()
+		val streamEnd = Job()
+
+		runBlocking {
+			cancelAndJoinLiveTvRecoveryJobs(listOf(playbackError, stalledBuffer, streamEnd), currentJob = null)
+		}
+
+		playbackError.isCancelled shouldBe true
+		stalledBuffer.isCancelled shouldBe true
+		streamEnd.isCancelled shouldBe true
 	}
 })
