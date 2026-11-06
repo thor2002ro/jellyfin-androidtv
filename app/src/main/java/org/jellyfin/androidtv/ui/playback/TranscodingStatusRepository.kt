@@ -1,12 +1,19 @@
 package org.jellyfin.androidtv.ui.playback
 
+import androidx.annotation.OptIn
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.util.sdk.isUsable
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
+import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegAudioMimeTypes
+import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegSubtitleMimeTypes
+import org.jellyfin.playback.media3.exoplayer.mapping.ffmpegVideoMimeTypes
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.model.api.HardwareAccelerationType
@@ -242,6 +249,35 @@ internal fun Int.formatBitrate(): String = when {
 internal fun String?.formatCodec(): String? = this
 	?.takeIf { it.isNotBlank() }
 	?.uppercase()
+
+@OptIn(UnstableApi::class)
+private val codecNames = buildMap {
+	for (mapping in listOf(ffmpegAudioMimeTypes, ffmpegVideoMimeTypes, ffmpegSubtitleMimeTypes)) {
+		for ((codec, mime) in mapping) put(mime.lowercase(), codec)
+	}
+	put(MimeTypes.AUDIO_DTS_HD, Codec.Audio.DTS_HD)
+	put(MimeTypes.AUDIO_E_AC3_JOC, Codec.Audio.EAC3_JOC)
+	put(MimeTypes.AUDIO_RAW, Codec.Audio.PCM)
+	put(MimeTypes.AUDIO_AC4, Codec.Audio.AC4)
+	put(Codec.Audio.AAC_LATM, Codec.Audio.AAC)
+	put(Codec.Audio.DCA, Codec.Audio.DTS)
+}
+
+internal fun String?.codecDisplayName(): String? {
+	val codec = this?.trim()?.lowercase()?.takeIf(String::isNotEmpty) ?: return null
+	// The raw PCM MIME does not identify its sample format; G.711 remains distinct.
+	return (codecNames[codec] ?: when {
+		codec.startsWith("pcm_") && codec != Codec.Audio.PCM_ALAW && codec != Codec.Audio.PCM_MULAW -> Codec.Audio.PCM
+		else -> codec
+	}).uppercase()
+}
+
+// Jellyfin can report the base codec while the player identifies its profile.
+internal fun String.baseCodecName(): String = when (lowercase()) {
+	Codec.Audio.DTS_HD -> Codec.Audio.DTS.uppercase()
+	Codec.Audio.EAC3_JOC -> Codec.Audio.EAC3.uppercase()
+	else -> this
+}
 
 internal fun String?.isAssSubtitleCodec(): Boolean = when (this?.lowercase()) {
 	"ass", "ssa", "text/x-ssa", "text/ssa", "text/ass", "application/x-ass" -> true
