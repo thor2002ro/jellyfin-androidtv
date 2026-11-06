@@ -94,7 +94,6 @@ class PlaySessionService(
 						stopReportedStream(event.stream.identifier, event.position)
 					}
 				}
-				is PlayerBackendEvent.VideoSizeChanged -> Unit
 			}
 		}.launchIn(coroutineScope)
 
@@ -334,7 +333,7 @@ class PlaySessionService(
 					isMuted = state.volume.muted,
 					volumeLevel = (state.volume.volume * 100).roundToInt(),
 					isPaused = state.playState.value == PlayState.PAUSED,
-					aspectRatio = state.videoSize.value.aspectRatio.toString(),
+					aspectRatio = state.videoGeometry.value.videoAspectRatio.toString(),
 					positionTicks = reporting.positionTicks,
 					playMethod = playMethod,
 					audioStreamIndex = audioStreamIndex,
@@ -419,7 +418,7 @@ class PlaySessionService(
 					isMuted = state.volume.muted,
 					volumeLevel = (state.volume.volume * 100).roundToInt(),
 					isPaused = isPaused,
-					aspectRatio = state.videoSize.value.aspectRatio.toString(),
+					aspectRatio = state.videoGeometry.value.videoAspectRatio.toString(),
 					positionTicks = reporting.positionTicks,
 					playMethod = playMethod,
 					audioStreamIndex = audioStreamIndex,

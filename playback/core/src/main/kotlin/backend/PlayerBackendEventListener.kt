@@ -2,12 +2,13 @@ package org.jellyfin.playback.core.backend
 
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.VideoGeometry
 import kotlin.time.Duration
 
 abstract class PlayerBackendEventListener {
 	open fun onPlayStateChange(state: PlayState, stream: PlayableMediaStream?, position: Duration?) = Unit
 	open fun onPlaybackError(error: PlaybackError) = Unit
-	open fun onVideoSizeChange(width: Int, height: Int) = Unit
+	open fun onVideoGeometryChange(geometry: VideoGeometry) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) = Unit
 	open fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) = Unit
 	open fun onTracksChanged() = Unit

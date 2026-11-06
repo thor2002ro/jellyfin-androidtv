@@ -15,7 +15,7 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.RepeatMode
-import org.jellyfin.playback.core.model.VideoSize
+import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.DEFAULT_SUBTITLE_TIMING_SPEED
 import org.jellyfin.playback.core.model.coerceSubtitleTimingSpeed
 import org.jellyfin.playback.core.queue.QueueService
@@ -26,7 +26,7 @@ interface PlayerState {
 	val volume: PlayerVolumeState
 	val playState: StateFlow<PlayState>
 	val speed: StateFlow<Float>
-	val videoSize: StateFlow<VideoSize>
+	val videoGeometry: StateFlow<VideoGeometry>
 	val playbackOrder: StateFlow<PlaybackOrder>
 	val repeatMode: StateFlow<RepeatMode>
 	val scrubbing: StateFlow<Boolean>
@@ -85,8 +85,8 @@ class MutablePlayerState(
 	private val _speed = MutableStateFlow(1f)
 	override val speed: StateFlow<Float> get() = _speed.asStateFlow()
 
-	private val _videoSize = MutableStateFlow(VideoSize.EMPTY)
-	override val videoSize: StateFlow<VideoSize> get() = _videoSize.asStateFlow()
+	private val _videoGeometry = MutableStateFlow(VideoGeometry.EMPTY)
+	override val videoGeometry: StateFlow<VideoGeometry> get() = _videoGeometry.asStateFlow()
 
 	private val _playbackOrder = MutableStateFlow(PlaybackOrder.DEFAULT)
 	override val playbackOrder: StateFlow<PlaybackOrder> get() = _playbackOrder.asStateFlow()
@@ -133,10 +133,8 @@ class MutablePlayerState(
 				_backendEvents.tryEmit(PlayerBackendEvent.PlayStateChanged(state, stream, position))
 			}
 
-			override fun onVideoSizeChange(width: Int, height: Int) {
-				_videoSize.value = VideoSize(width, height)
-
-				_backendEvents.tryEmit(PlayerBackendEvent.VideoSizeChanged(width, height))
+			override fun onVideoGeometryChange(geometry: VideoGeometry) {
+				_videoGeometry.value = geometry
 			}
 
 			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) {
@@ -178,6 +176,7 @@ class MutablePlayerState(
 
 	override fun stop() {
 		_scrubbing.value = false
+		backendService.clearVideoOutput()
 		backendService.backend?.stop()
 		queue?.clear()
 		_playState.value = PlayState.STOPPED

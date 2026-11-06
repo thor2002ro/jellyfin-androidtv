@@ -6,7 +6,6 @@ import kotlin.time.Duration
 
 sealed interface PlayerBackendEvent {
 	data class PlayStateChanged(val state: PlayState, val stream: PlayableMediaStream?, val position: Duration?) : PlayerBackendEvent
-	data class VideoSizeChanged(val width: Int, val height: Int) : PlayerBackendEvent
 	data class MediaStreamEnded(val stream: PlayableMediaStream, val position: Duration) : PlayerBackendEvent
 	data class MediaStreamReplaced(val stream: PlayableMediaStream, val position: Duration) : PlayerBackendEvent
 }

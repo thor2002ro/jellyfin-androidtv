@@ -3,6 +3,8 @@ package org.jellyfin.playback.core.backend
 import androidx.core.view.doOnDetach
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.VideoGeometry
+import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import kotlin.time.Duration
@@ -18,17 +20,23 @@ class BackendService {
 	private var listeners = mutableListOf<PlayerBackendEventListener>()
 	private var _surfaceView: PlayerSurfaceView? = null
 	private var _subtitleView: PlayerSubtitleView? = null
+	var videoOutputTransform: VideoOutputTransform = VideoOutputTransform.NONE
+		private set
 
 	fun switchBackend(backend: PlayerBackend) {
 		if (_backend === backend) return
 
+		_backend?.setVideoOutputTransform(VideoOutputTransform.NONE)
 		_backend?.reset()
 		_backend?.cleanup()
+		videoOutputTransform = VideoOutputTransform.NONE
+		callListeners { onVideoGeometryChange(VideoGeometry.EMPTY) }
 
 		_backend = backend.apply {
 			_surfaceView?.let(::setSurfaceView)
 			_subtitleView?.let(::setSubtitleView)
 			setListener(BackendEventListener())
+			setVideoOutputTransform(VideoOutputTransform.NONE)
 			onActivated()
 		}
 	}
@@ -42,6 +50,7 @@ class BackendService {
 		// Apply new surface view
 		_surfaceView = surfaceView.apply {
 			_backend?.setSurfaceView(surfaceView)
+			_backend?.setVideoOutputTransform(videoOutputTransform)
 
 			// Automatically detach
 			doOnDetach {
@@ -81,7 +90,20 @@ class BackendService {
 		listeners.remove(listener)
 	}
 
+	fun setVideoOutputTransform(transform: VideoOutputTransform) {
+		if (videoOutputTransform == transform) return
+		videoOutputTransform = transform
+		_backend?.setVideoOutputTransform(transform)
+	}
+
+	fun clearVideoOutput() {
+		videoOutputTransform = VideoOutputTransform.NONE
+		_backend?.setVideoOutputTransform(VideoOutputTransform.NONE)
+		callListeners { onVideoGeometryChange(VideoGeometry.EMPTY) }
+	}
+
 	fun reset() {
+		clearVideoOutput()
 		_backend?.reset()
 	}
 
@@ -90,6 +112,7 @@ class BackendService {
 	}
 
 	fun release() {
+		clearVideoOutput()
 		_backend?.release()
 		_backend = null
 		_surfaceView = null
@@ -114,8 +137,11 @@ class BackendService {
 			callListeners { onPlaybackError(error) }
 		}
 
-		override fun onVideoSizeChange(width: Int, height: Int) {
-			callListeners { onVideoSizeChange(width, height) }
+		override fun onVideoGeometryChange(geometry: VideoGeometry) {
+			if (geometry.videoAspectRatio > 0f) {
+				_backend?.setVideoOutputTransform(videoOutputTransform)
+			}
+			callListeners { onVideoGeometryChange(geometry) }
 		}
 
 		override fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) {
@@ -134,4 +160,8 @@ class BackendService {
 			callListeners { onSubtitleTimingOffsetSupportChange(supported, resetTimingOnUnsupported) }
 		}
 	}
+
+	private fun <T> callListeners(
+		body: PlayerBackendEventListener.() -> T
+	): List<T> = listeners.map { listener -> listener.body() }
 }
