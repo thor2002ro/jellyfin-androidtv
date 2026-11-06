@@ -5,22 +5,19 @@ import android.util.AttributeSet
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.res.colorResource
@@ -30,8 +27,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.Text
+import org.jellyfin.androidtv.ui.base.button.ButtonDefaults
+import org.jellyfin.androidtv.ui.base.button.ProgressButton
+import org.jellyfin.androidtv.ui.playback.segment.rememberSkipPromptProgress
+import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -40,6 +42,7 @@ fun SkipOverlayComposable(
 	visible: Boolean,
 	playerUiVisible: Boolean,
 	onClick: () -> Unit,
+	progress: Float = 0f,
 ) {
 	val bottomPadding = if (playerUiVisible) 220.dp else 48.dp
 	val shape = RoundedCornerShape(6.dp)
@@ -51,23 +54,23 @@ fun SkipOverlayComposable(
 			.padding(start = 48.dp, top = 48.dp, end = 48.dp, bottom = bottomPadding)
 	) {
 		AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut()) {
-			Row(
-				modifier = Modifier
-					.clip(shape)
-					.background(colorResource(R.color.popup_menu_background).copy(alpha = 0.6f))
-					.then(
-						if (selected) Modifier.border(2.dp, colorResource(R.color.button_default_normal_text), shape)
-						else Modifier
-					)
-					.clickable(enabled = visible, onClick = onClick)
-					.padding(10.dp),
-				horizontalArrangement = Arrangement.spacedBy(8.dp),
-				verticalAlignment = Alignment.CenterVertically,
+			ProgressButton(
+				progress = progress,
+				onClick = onClick,
+				enabled = visible,
+				shape = shape,
+				colors = ButtonDefaults.colors(
+					containerColor = colorResource(R.color.popup_menu_background).copy(alpha = 0.6f),
+				),
+				contentPadding = PaddingValues(10.dp),
+				modifier = if (selected) Modifier.border(2.dp, colorResource(R.color.button_default_normal_text), shape)
+				else Modifier,
 			) {
 				Icon(
 					imageVector = ImageVector.vectorResource(R.drawable.ic_control_select),
 					contentDescription = null,
 				)
+				Spacer(Modifier.width(8.dp))
 
 				Text(
 					text = stringResource(R.string.segment_action_skip),
@@ -89,6 +92,7 @@ class SkipOverlayView @JvmOverloads constructor(
 	private val _skipUiEnabled = MutableStateFlow(true)
 	private val _playerUiVisible = MutableStateFlow(false)
 	private var onSkipClick: (() -> Unit)? = null
+	private var progress = 0f
 
 	var currentPosition: Duration
 		get() = _currentPosition.value
@@ -105,13 +109,14 @@ class SkipOverlayView @JvmOverloads constructor(
 	var targetPosition: Duration?
 		get() = _targetPosition.value
 		set(value) {
+			if (_targetPosition.value != value) progress = 0f
 			_targetPosition.value = value
 		}
 
 	var targetPositionMs: Long?
 		get() = _targetPosition.value?.inWholeMilliseconds
 		set(value) {
-			_targetPosition.value = value?.milliseconds
+			targetPosition = value?.milliseconds
 		}
 
 	var skipUiEnabled: Boolean
@@ -136,7 +141,7 @@ class SkipOverlayView @JvmOverloads constructor(
 			val targetPosition = _targetPosition.value
 			val currentPosition = _currentPosition.value
 
-			return enabled && targetPosition != null && currentPosition < targetPosition
+			return enabled && targetPosition != null && currentPosition < targetPosition && progress < 1f
 		}
 
 	@Composable
@@ -145,15 +150,28 @@ class SkipOverlayView @JvmOverloads constructor(
 		val currentPosition by _currentPosition.collectAsState()
 		val targetPosition by _targetPosition.collectAsState()
 		val playerUiVisible by _playerUiVisible.collectAsState()
+		val userPreferences = koinInject<UserPreferences>()
+		val promptActive = targetPosition?.let { currentPosition < it } == true
+		val countdown = rememberSkipPromptProgress(
+			promptKey = targetPosition.takeIf { promptActive },
+			timeoutSeconds = userPreferences[UserPreferences.skipPromptTimeout],
+		)
 
-		val visible by remember(skipUiEnabled, currentPosition, targetPosition) {
-			derivedStateOf { visible }
+		SideEffect {
+			progress = countdown
+			if (countdown >= 1f) {
+				isClickable = false
+				isFocusable = false
+				isFocusableInTouchMode = false
+				clearFocus()
+			}
 		}
 
 		SkipOverlayComposable(
-			visible = visible,
+			visible = skipUiEnabled && promptActive && countdown < 1f,
 			playerUiVisible = playerUiVisible,
 			onClick = { onSkipClick?.invoke() },
+			progress = countdown,
 		)
 	}
 }
