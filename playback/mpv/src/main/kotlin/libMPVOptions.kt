@@ -343,6 +343,8 @@ internal val MPV_INTERNAL_OPTIONS = setOf(
 	"android-surface-size",
 	// Universal Jellyfin subtitle appearance.
 	"sub-font-size",
+	"sub-scale-by-window",
+	"sub-scale-with-window",
 	"sub-bold",
 	"sub-color",
 	"sub-back-color",
