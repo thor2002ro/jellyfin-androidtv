@@ -1,7 +1,9 @@
 package org.jellyfin.androidtv.ui.settings.screen
 
 import android.content.Context
+import android.media.MediaCodecInfo
 import android.media.MediaCodecList
+import androidx.annotation.OptIn
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyListScope
@@ -12,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
@@ -24,6 +28,7 @@ import org.jellyfin.androidtv.ui.base.list.ListControl
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.androidtv.util.AndroidVersion
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
 import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
@@ -75,19 +80,27 @@ fun SettingsDebugCapabilitiesScreen() {
 private fun LazyListScope.capabilityGroup(group: CapabilityGroup) {
 	item {
 		ListSection(
-			headingContent = { Text(group.title) },
-			captionContent = group.caption?.let { caption -> ({ Text(caption) }) },
+			headingContent = { Text(group.title, fontSize = 16.sp, maxLines = 1) },
+			captionContent = group.caption?.let { caption -> ({ CompactCapabilityText(caption, 11) }) },
 		)
 	}
 
 	items(group.items) { item ->
 		FocusableListControl(
-			headingContent = { Text(item.title) },
-			captionContent = item.detail?.let { detail -> ({ Text(detail) }) },
+			headingContent = { CompactCapabilityText(item.title, 14) },
+			captionContent = item.detail?.let { detail -> ({ CompactCapabilityText(detail, 11) }) },
 			trailingContent = item.supported?.let { supported -> ({ CapabilityBadge(supported) }) },
 		)
 	}
 }
+
+@Composable
+private fun CompactCapabilityText(text: String, size: Int) = Text(
+	text = text,
+	fontSize = size.sp,
+	maxLines = 1,
+	overflow = TextOverflow.Ellipsis,
+)
 
 @Composable
 private fun FocusableListControl(
@@ -117,7 +130,8 @@ private fun CapabilityBadge(supported: Boolean) {
 				stringResource(R.string.pref_debug_capabilities_status_yes)
 			} else {
 				stringResource(R.string.pref_debug_capabilities_status_no)
-			}
+			},
+			fontSize = 11.sp,
 		)
 	}
 }
@@ -133,9 +147,36 @@ private fun buildCapabilityGroups(
 		buildHdrCapabilities(context, mediaTest, displayHdrTypes),
 		buildVideoCapabilities(context, mediaTest),
 		buildAudioCapabilities(context, softwareCodecsEnabled),
+		buildRawAndroidDecoderCapabilities(),
 		buildFfmpegCapabilities(context),
 	)
 }
+
+private fun buildRawAndroidDecoderCapabilities(): CapabilityGroup {
+	val decoders = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+		.asSequence()
+		.filterNot(MediaCodecInfo::isEncoder)
+		.distinctBy(MediaCodecInfo::getName)
+		.sortedBy(MediaCodecInfo::getName)
+		.toList()
+
+	return CapabilityGroup(
+		title = "RAW",
+		caption = "All decoders reported by Android MediaCodec",
+		items = decoders.map { codec ->
+			val type = if (codec.isSoftwareDecoder) "sw" else "hw"
+			CapabilityItem("$type › ${codec.name}", detail = codec.supportedTypes.sorted().joinToString())
+		},
+	)
+}
+
+private val MediaCodecInfo.isSoftwareDecoder: Boolean
+	get() = if (AndroidVersion.isAtLeastQ) {
+		isSoftwareOnly
+	} else {
+		name.startsWith("OMX.google.", ignoreCase = true) ||
+			name.startsWith("c2.android.", ignoreCase = true)
+	}
 
 private fun buildHdrCapabilities(
 	context: Context,
@@ -159,9 +200,11 @@ private fun buildHdrCapabilities(
 		CapabilityItem("AV1: Dolby Vision", mediaTest.supportsAV1DolbyVision()),
 		CapabilityItem("AV1: HDR10", mediaTest.supportsAV1HDR10()),
 		CapabilityItem("AV1: HDR10+", mediaTest.supportsAV1HDR10Plus()),
+		CapabilityItem("VP9: Profile 2/3 (10-bit)", mediaTest.supportsVp9Main10()),
 	),
 )
 
+@OptIn(UnstableApi::class)
 private fun buildVideoCapabilities(
 	context: Context,
 	mediaTest: MediaCodecCapabilitiesTest,
@@ -183,10 +226,24 @@ private fun buildVideoCapabilities(
 			CapabilityItem("HEVC Main 10", mediaTest.supportsHevcMain10(), hevcMain10Level),
 			CapabilityItem("AV1", mediaTest.supportsAV1(), maxResolutionDetail(context, mediaTest, MimeTypes.VIDEO_AV1)),
 			CapabilityItem("AV1 Main 10", mediaTest.supportsAV1Main10()),
+			CapabilityItem("AV2", mediaTest.supportsMimeType("video/av02") || mediaTest.supportsMimeType("video/av2")),
+			videoCapability(context, mediaTest, "VP9", MimeTypes.VIDEO_VP9),
+			videoCapability(context, mediaTest, "VP8", MimeTypes.VIDEO_VP8),
+			videoCapability(context, mediaTest, "MPEG-2", MimeTypes.VIDEO_MPEG2),
+			videoCapability(context, mediaTest, "MPEG-1", MimeTypes.VIDEO_MPEG),
+			videoCapability(context, mediaTest, "H.263", MimeTypes.VIDEO_H263),
+			videoCapability(context, mediaTest, "MJPEG", MimeTypes.VIDEO_MJPEG),
 			CapabilityItem("VC-1", mediaTest.supportsVc1(), maxResolutionDetail(context, mediaTest, MimeTypes.VIDEO_VC1)),
 		),
 	)
 }
+
+private fun videoCapability(
+	context: Context,
+	mediaTest: MediaCodecCapabilitiesTest,
+	title: String,
+	mime: String,
+) = CapabilityItem(title, mediaTest.supportsMimeType(mime), maxResolutionDetail(context, mediaTest, mime))
 
 private fun buildAudioCapabilities(
 	context: Context,
@@ -200,14 +257,24 @@ private fun buildAudioCapabilities(
 		items = listOf(
 			CapabilityItem("AAC", query.hasCodecForMime(MimeTypes.AUDIO_AAC)),
 			CapabilityItem("AC3", query.hasCodecForMime(MimeTypes.AUDIO_AC3)),
-			CapabilityItem("EAC3", query.hasCodecForMime(MimeTypes.AUDIO_E_AC3)),
-			CapabilityItem("EAC3-JOC", query.hasCodecForMime(MimeTypes.AUDIO_E_AC3_JOC)),
-			CapabilityItem("AC4", query.hasCodecForMime(MimeTypes.AUDIO_AC4)),
+			CapabilityItem("Dolby Digital Plus (EAC3)", query.hasCodecForMime(MimeTypes.AUDIO_E_AC3)),
+			CapabilityItem("Dolby Atmos (EAC3-JOC)", query.hasCodecForMime(MimeTypes.AUDIO_E_AC3_JOC)),
+			CapabilityItem("Dolby AC-4", query.hasCodecForMime(MimeTypes.AUDIO_AC4)),
 			CapabilityItem("DTS", query.hasCodecForMime(MimeTypes.AUDIO_DTS)),
 			CapabilityItem("DTS-HD", query.hasCodecForMime(MimeTypes.AUDIO_DTS_HD)),
 			CapabilityItem("TrueHD", query.hasCodecForMime(MimeTypes.AUDIO_TRUEHD)),
 			CapabilityItem("FLAC", query.hasCodecForMime(MimeTypes.AUDIO_FLAC)),
 			CapabilityItem("Opus", query.hasCodecForMime(MimeTypes.AUDIO_OPUS)),
+			CapabilityItem("Vorbis", query.hasCodecForMime(MimeTypes.AUDIO_VORBIS)),
+			CapabilityItem("ALAC", query.hasCodecForMime(MimeTypes.AUDIO_ALAC)),
+			CapabilityItem("MP3", query.hasCodecForMime(MimeTypes.AUDIO_MPEG)),
+			CapabilityItem("MP2", query.hasCodecForMime(MimeTypes.AUDIO_MPEG_L2)),
+			CapabilityItem("MP1", query.hasCodecForMime(MimeTypes.AUDIO_MPEG_L1)),
+			CapabilityItem("AMR-NB", query.hasCodecForMime(MimeTypes.AUDIO_AMR_NB)),
+			CapabilityItem("AMR-WB", query.hasCodecForMime(MimeTypes.AUDIO_AMR_WB)),
+			CapabilityItem("PCM", query.hasCodecForMime(MimeTypes.AUDIO_RAW)),
+			CapabilityItem("PCM A-law", query.hasCodecForMime(MimeTypes.AUDIO_ALAW)),
+			CapabilityItem("PCM µ-law", query.hasCodecForMime(MimeTypes.AUDIO_MLAW)),
 		),
 	)
 }
