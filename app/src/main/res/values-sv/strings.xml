@@ -643,7 +643,6 @@
     <string name="sdr">SDR</string>
     <string name="hdr10">HDR10</string>
     <string name="hlg">HLG</string>
-    <string name="preference_enable_ass_description">Experimentell funktion, kanske inte fungerar pålitligt</string>
     <string name="preference_enable_pgs_description">Kräver omkodning när inaktiverad</string>
     <string name="preference_enable_ass">Direktspela ASS-undertexter</string>
     <string name="playback_info">Återspelningsinformation</string>

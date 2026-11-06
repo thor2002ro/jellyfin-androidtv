@@ -648,7 +648,6 @@
     <string name="pref_software_codecs_enabled_description">Sommige softwarematige implementaties kunnen de prestaties verminderen. Het uitschakelen van deze optie vergroot de kans dat media moet worden getranscodeerd.</string>
     <string name="preference_enable_ass">ASS-ondertiteling direct afspelen</string>
     <string name="preference_enable_pgs_description">Vereist transcoderen indien uitgeschakeld</string>
-    <string name="preference_enable_ass_description">Experimentele functie, mogelijk onbetrouwbaar</string>
     <string name="lbl_date_show_added">Datum serie toegevoegd</string>
     <string name="lbl_date_episode_added">Datum aflevering toegevoegd</string>
     <string name="truehd">TrueHD</string>

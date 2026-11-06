@@ -668,7 +668,6 @@
     <string name="lbl_date_episode_added">Дата добавления эпизода</string>
     <string name="preference_enable_ass">Прямое воспроизведение ASS-субтитров</string>
     <string name="preference_enable_pgs_description">Требует перекодирования когда выключено</string>
-    <string name="preference_enable_ass_description">Экспериментальная функция, может работать нестабильно</string>
     <string name="pref_software_codecs_enabled">Использовать программные кодеки</string>
     <string name="pref_software_codecs_enabled_description">Некоторые программные кодеки могут ухудшить производительность. Отключение этой опции повышает вероятность перекодирования.</string>
     <string name="truehd">TrueHD</string>

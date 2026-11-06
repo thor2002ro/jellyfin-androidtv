@@ -706,6 +706,13 @@
     <string name="eac3_atmos">DD+ Atmos</string>
     <string name="truehd_atmos">TrueHD Atmos</string>
     <string name="preference_hdr_overrides">تنسيقات HDR</string>
+    <string name="preference_enable_pgs_description">يتطلب التشفير عند الاثباط</string>
+    <string name="lbl_date_episode_added">تم اضافة تاريخ الحلقة</string>
+    <string name="lbl_date_show_added">تم اضافة تاريخ البرنامج</string>
+    <string name="truehd">HD حقيقي</string>
+    <string name="eac3_atmos">DD+ نوى</string>
+    <string name="truehd_atmos">TrueHD نوى</string>
+    <string name="preference_hdr_overrides">تهيئات HDR</string>
     <string name="hdr_override_auto">تلقائي (اكتشاف الجهاز)</string>
     <string name="hdr_override_enable">تفعيل</string>
     <string name="hdr_override_disable">تعطيل</string>

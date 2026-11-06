@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.preference.LiveTvPreferences
+import org.jellyfin.androidtv.preference.constant.LiveTvChannelOrder
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -34,18 +35,20 @@ fun loadLiveTvChannels(fragment: Fragment, callback: (channels: Collection<BaseI
 	val api by fragment.inject<ApiClient>()
 
 	fragment.lifecycleScope.launch {
-		val sortDatePlayed =
-			liveTvPreferences[LiveTvPreferences.channelOrder] == ItemSortBy.DATE_PLAYED.serialName
+		val channelOrder = LiveTvChannelOrder.fromString(liveTvPreferences[LiveTvPreferences.channelOrder])
+		val favoritesAtTop = liveTvPreferences[LiveTvPreferences.favsAtTop]
 
 		runCatching {
 			withContext(Dispatchers.IO) {
 				api.liveTvApi.getLiveTvChannels(
 					addCurrentProgram = true,
 					fields = setOf(ItemFields.OVERVIEW),
-					enableFavoriteSorting = liveTvPreferences[LiveTvPreferences.favsAtTop],
-					sortBy = if (sortDatePlayed) setOf(ItemSortBy.DATE_PLAYED) else setOf(ItemSortBy.SORT_NAME),
-					sortOrder = if (sortDatePlayed) SortOrder.DESCENDING else SortOrder.ASCENDING,
-				).content.items
+					enableFavoriteSorting = channelOrder.usesServerFavoriteSorting(favoritesAtTop),
+					sortBy = setOf(channelOrder.toLiveTvItemSortBy()),
+					sortOrder = channelOrder.toLiveTvSortOrder(),
+				).content.items.let { channels ->
+					channels.sortedByLiveTvChannelOrder(channelOrder, favoritesAtTop)
+				}
 			}
 		}.fold(
 			onSuccess = { channels -> callback(channels) },
@@ -53,6 +56,91 @@ fun loadLiveTvChannels(fragment: Fragment, callback: (channels: Collection<BaseI
 		)
 	}
 }
+
+internal fun LiveTvChannelOrder.toLiveTvItemSortBy(): ItemSortBy = when (this) {
+	LiveTvChannelOrder.LAST_PLAYED -> ItemSortBy.DATE_PLAYED
+	LiveTvChannelOrder.CHANNEL_NUMBER -> ItemSortBy.SORT_NAME
+	LiveTvChannelOrder.CHANNEL_NAME -> ItemSortBy.NAME
+}
+
+internal fun LiveTvChannelOrder.toLiveTvSortOrder(): SortOrder = when (this) {
+	LiveTvChannelOrder.LAST_PLAYED -> SortOrder.DESCENDING
+	LiveTvChannelOrder.CHANNEL_NUMBER,
+	LiveTvChannelOrder.CHANNEL_NAME -> SortOrder.ASCENDING
+}
+
+internal fun LiveTvChannelOrder.usesServerFavoriteSorting(
+	favoritesAtTop: Boolean,
+) = this == LiveTvChannelOrder.LAST_PLAYED && favoritesAtTop
+
+fun Collection<BaseItemDto>.sortedByLiveTvChannelOrder(
+	channelOrder: LiveTvChannelOrder,
+	favoritesAtTop: Boolean,
+): List<BaseItemDto> = when (channelOrder) {
+	LiveTvChannelOrder.LAST_PLAYED -> toList()
+	LiveTvChannelOrder.CHANNEL_NUMBER -> sortedWithLiveTvChannelComparator(favoritesAtTop, ::compareLiveTvChannelNumbers)
+	LiveTvChannelOrder.CHANNEL_NAME -> sortedWithLiveTvChannelComparator(favoritesAtTop, ::compareLiveTvChannelNames)
+}
+
+private fun Collection<BaseItemDto>.sortedWithLiveTvChannelComparator(
+	favoritesAtTop: Boolean,
+	compareChannels: (BaseItemDto, BaseItemDto) -> Int,
+): List<BaseItemDto> = sortedWith { left, right ->
+	if (favoritesAtTop) {
+		val leftFavorite = left.userData?.isFavorite == true
+		val rightFavorite = right.userData?.isFavorite == true
+		if (leftFavorite != rightFavorite) return@sortedWith if (leftFavorite) -1 else 1
+	}
+
+	compareChannels(left, right)
+}
+
+private fun compareLiveTvChannelNumbers(left: BaseItemDto, right: BaseItemDto): Int {
+	val leftParts = left.number.channelNumberParts()
+	val rightParts = right.number.channelNumberParts()
+
+	if (leftParts.isNotEmpty() || rightParts.isNotEmpty()) {
+		if (leftParts.isEmpty()) return 1
+		if (rightParts.isEmpty()) return -1
+
+		val maxPartCount = maxOf(leftParts.size, rightParts.size)
+		for (index in 0 until maxPartCount) {
+			val leftPart = leftParts.getOrNull(index)
+			val rightPart = rightParts.getOrNull(index)
+
+			when {
+				leftPart == null -> return -1
+				rightPart == null -> return 1
+				leftPart != rightPart -> return leftPart.compareTo(rightPart)
+			}
+		}
+	}
+
+	return compareValuesBy(
+		left,
+		right,
+		{ channel -> channel.number.orEmpty().lowercase() },
+		{ channel -> channel.name.orEmpty().lowercase() },
+	)
+}
+
+private fun compareLiveTvChannelNames(left: BaseItemDto, right: BaseItemDto): Int = compareValuesBy(
+	left,
+	right,
+	{ channel -> channel.nameSortKey().lowercase() },
+	{ channel -> channel.number.orEmpty().lowercase() },
+)
+
+private val channelNumberPartRegex = Regex("\\d+")
+
+private fun String?.channelNumberParts(): List<Int> = channelNumberPartRegex
+	.findAll(orEmpty())
+	.mapNotNull { match -> match.value.toIntOrNull() }
+	.toList()
+
+private fun BaseItemDto.nameSortKey() = name
+	?.takeIf { value -> value.isNotBlank() }
+	?: sortName.orEmpty()
 
 fun getPrograms(
 	fragment: Fragment,
