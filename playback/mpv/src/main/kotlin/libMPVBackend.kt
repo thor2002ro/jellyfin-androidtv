@@ -550,6 +550,7 @@ class LibMPVBackend(
 		target.observeProperty("pause", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("paused-for-cache", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("seeking", MPV.mpvFormat.MPV_FORMAT_FLAG)
+		target.observeProperty("eof-reached", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("hwdec-current", MPV.mpvFormat.MPV_FORMAT_STRING)
@@ -1458,6 +1459,10 @@ class LibMPVBackend(
 	}
 
 	private fun handleEventProperty(generation: Long, property: String, value: Boolean) = onPlayerEvent(generation) {
+		if (property == "eof-reached") {
+			Timber.d("MPV eof-reached=%s entry=%s", value, activePlaylistEntryId)
+			return@onPlayerEvent
+		}
 		when (property) {
 			"pause" -> {
 				isPaused = value
@@ -1602,14 +1607,16 @@ class LibMPVBackend(
 		val reason = data["reason"]?.asString() ?: "unknown"
 		// loadfile replace first unloads the old entry. Ignore that old end-file event;
 		// a failed replacement emits start-file before its own end-file(error).
-		when (doviMpvEndAction(
+		val action = doviMpvEndAction(
 			eventEntryId = eventEntryId,
 			activeEntryId = activePlaylistEntryId,
 			loadRequested = loadRequested,
 			reason = reason,
 			hasCurrentStream = currentStream != null,
 			hasTerminalState = terminalState != null,
-		)) {
+		)
+		Timber.d("MPV end-file reason=%s entry=%s activeEntry=%s action=%s", reason, eventEntryId, activePlaylistEntryId, action)
+		when (action) {
 			DoviMpvEndAction.IGNORE -> return
 			DoviMpvEndAction.REDIRECT -> {
 				fileLoaded = false

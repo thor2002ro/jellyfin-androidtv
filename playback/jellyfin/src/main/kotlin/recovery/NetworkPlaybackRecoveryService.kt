@@ -111,13 +111,14 @@ class NetworkPlaybackRecoveryService(
 				if (manager.queue.entry.value !== entry || liveTvPlaybackPolicy.isLiveTv(entry) || entry.doviRecoveryOwnership != null) return true
 				if (failedRecoveryStream === mediaStream) return false
 				val pendingReplacement = pendingRecoveryStream === mediaStream
-				if (recoveringEntry !== entry && !pendingReplacement) return true
 				val position = state.positionInfo
 				val duration = position.duration.takeIf { it > Duration.ZERO && it.isFinite() }
 					?: entry.metadata.duration?.takeIf { it > Duration.ZERO && it.isFinite() }
 				val owner = recoveryOwnership?.takeIf { it.entry === entry }
-				val interrupted = pendingReplacement || errorRecoveryAttemptedEntry === entry ||
-					bufferingRecoveryAttemptedEntry === entry || owner != null && mediaStream !== owner.sourceStream
+				val interrupted = pendingReplacement || recoveringEntry === entry && (
+					errorRecoveryAttemptedEntry === entry || bufferingRecoveryAttemptedEntry === entry ||
+						owner != null && mediaStream !== owner.sourceStream
+				)
 				// Allow final-frame rounding; without a duration, connectivity loss alone cannot disprove a native EOF.
 				if (duration != null && position.active >= duration - 1.seconds || duration == null && !interrupted) {
 					if (pendingReplacement) pendingRecoveryStream = null
@@ -127,6 +128,7 @@ class NetworkPlaybackRecoveryService(
 				if (pendingReplacement && failedRecoveryStream !== mediaStream) {
 					manager.reportPlaybackError(PlaybackError("MEDIA_STREAM_RECOVERY_FAILED", origin = mediaStream.errorOrigin))
 				}
+				startRecovery(entry, "Playback ended before completion", playWhenReady = true)
 				return false
 			}
 

@@ -99,6 +99,25 @@ class NetworkRecoveryCompletionTests : FunSpec({
 		}
 	}
 
+	test("a recovered unknown-duration stream can finish immediately after PLAYING") {
+		withContext(dispatcher) {
+			val fixture = RecoveryCompletionFixture()
+			try {
+				fixture.startRecovery()
+				withTimeout(10.seconds) { fixture.reloaded.await() }
+				val replacement = requireNotNull(fixture.first.mediaStream)
+				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.position = PositionInfo(21.seconds, 21.seconds, Duration.ZERO)
+				fixture.events.onPlayStateChange(PlayState.STOPPED)
+				fixture.events.onMediaStreamEnd(replacement)
+				withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
+				fixture.completed shouldBe listOf(replacement)
+			} finally {
+				fixture.job.cancel()
+			}
+		}
+	}
+
 	test("ordinary recovery does not swallow a live TV end after changing entries") {
 		withContext(dispatcher) {
 			val fixture = RecoveryCompletionFixture()
@@ -141,6 +160,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.events.onPlayStateChange(PlayState.PLAYING)
 					withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 
+					fixture.position = PositionInfo(99.5.seconds, 100.seconds, 100.seconds)
 					fixture.events.onPlayStateChange(PlayState.STOPPED)
 					fixture.events.onMediaStreamEnd(requireNotNull(fixture.first.mediaStream))
 					withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
@@ -214,6 +234,35 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.replacementCount shouldBe 1
 				fixture.events.onPlayStateChange(PlayState.PLAYING)
 				withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
+			} finally {
+				fixture.job.cancel()
+			}
+		}
+	}
+
+	test("early EOF retries until the Jellyfin server returns") {
+		withContext(dispatcher) {
+			val serverAvailable = AtomicBoolean(false)
+			val resolver = object : MediaStreamResolver {
+				override suspend fun getStream(queueEntry: QueueEntry, startPosition: Duration?): PlayableMediaStream {
+					if (!serverAvailable.get()) throw SocketTimeoutException("Jellyfin unavailable")
+					return stream(queueEntry, "recovered")
+				}
+			}
+			val fixture = RecoveryCompletionFixture(resolver)
+			try {
+				fixture.first.metadata = QueueEntryMetadata(duration = 100.seconds)
+				fixture.startPlaying()
+				fixture.events.onPlayStateChange(PlayState.STOPPED)
+				fixture.events.onMediaStreamEnd(fixture.original)
+
+				fixture.completed shouldBe emptyList()
+				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
+				fixture.recovery.recovering.value shouldBe true
+
+				serverAvailable.set(true)
+				withTimeout(10.seconds) { fixture.reloaded.await() } shouldBe 20.seconds
+				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 			} finally {
 				fixture.job.cancel()
 			}
@@ -732,7 +781,11 @@ private class RecoveryCompletionFixture(resolverOverride: MediaStreamResolver? =
 	val second = QueueEntry()
 	val original = stream(first, "original").copy(errorOrigin = first.createPlaybackErrorOrigin("original"))
 	val queue = QueueService()
-	val recovery = NetworkPlaybackRecoveryService(LiveTvPlaybackPolicy(), online::get)
+	private val recoveryInitialized = CompletableDeferred<Unit>()
+	val recovery = NetworkPlaybackRecoveryService(LiveTvPlaybackPolicy(), networkAvailable = {
+		recoveryInitialized.complete(Unit)
+		online.get()
+	})
 	val reloaded = CompletableDeferred<Duration?>()
 	val completed = mutableListOf<PlayableMediaStream>()
 	val errors = mutableListOf<PlaybackError>()
@@ -788,14 +841,19 @@ private class RecoveryCompletionFixture(resolverOverride: MediaStreamResolver? =
 	}
 
 	suspend fun startAndDisconnect() {
+		startPlaying()
+		online.set(false)
+		withTimeout(5.seconds) { recovery.recovering.first { it } }
+	}
+
+	suspend fun startPlaying() {
+		withTimeout(2.seconds) { recoveryInitialized.await() }
 		queue.addSupplier(object : QueueSupplier {
 			override val size = 2
 			override suspend fun getItem(index: Int) = listOf(first, second).getOrNull(index)
 		})
 		withTimeout(2.seconds) { started.await() }
 		events.onPlayStateChange(PlayState.PLAYING)
-		online.set(false)
-		withTimeout(5.seconds) { recovery.recovering.first { it } }
 	}
 }
 
