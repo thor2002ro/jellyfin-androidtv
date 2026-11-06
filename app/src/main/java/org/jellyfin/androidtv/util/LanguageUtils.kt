@@ -61,19 +61,14 @@ private val UNDETERMINED_LANGUAGE_TOKEN = Regex(
 	pattern = "\\b(?:und|undetermined|undefined)\\b",
 	option = RegexOption.IGNORE_CASE,
 )
+private val UNKNOWN_STREAM_LANGUAGE_BADGES = setOf("und", "undetermined", "undefined", "unknown")
 private val REPEATED_LANGUAGE_SEPARATORS = Regex("\\s*[-:/|,;]+\\s*[-:/|,;]+\\s*")
 private val EDGE_LANGUAGE_SEPARATORS = Regex("^\\s*[-:/|,;]+\\s*|\\s*[-:/|,;]+\\s*$")
 private val REPEATED_WHITESPACE = Regex("\\s{2,}")
 
 fun String?.toIso2LanguageCodeOrNull(): String? {
-	val code = this
-		?.trim()
-		?.lowercase(Locale.ROOT)
-		?.substringBefore(' ')
-		?.substringBefore('-')
-		?.substringBefore('_')
+	val code = normalizedLanguageToken()
 		?.takeUnless { it == "und" }
-		?.takeIf { it.isNotBlank() }
 		?: return null
 
 	return when (code.length) {
@@ -86,6 +81,11 @@ fun String?.toIso2LanguageCodeOrNull(): String? {
 
 fun String?.toIso2LanguageBadgeOrNull(): String? =
 	toIso2LanguageCodeOrNull()?.let { code -> LANGUAGE_BADGE_ALIASES[code] ?: code.uppercase(Locale.ROOT) }
+
+fun String?.toStreamLanguageBadgeOrNull(): String? =
+	toIso2LanguageBadgeOrNull() ?: normalizedLanguageToken()
+		?.takeIf { it in UNKNOWN_STREAM_LANGUAGE_BADGES }
+		?.let { "UND" }
 
 fun String?.toIso2LanguageDisplayOrSelf(): String? =
 	toIso2LanguageBadgeOrNull() ?: withoutUndeterminedLanguagePrefix()
@@ -104,3 +104,12 @@ fun languageCodesMatch(first: String?, second: String?): Boolean {
 	val firstIso2 = first.toIso2LanguageCodeOrNull()
 	return firstIso2 != null && firstIso2 == second.toIso2LanguageCodeOrNull()
 }
+
+private fun String?.normalizedLanguageToken(): String? =
+	this
+		?.trim()
+		?.lowercase(Locale.ROOT)
+		?.substringBefore(' ')
+		?.substringBefore('-')
+		?.substringBefore('_')
+		?.takeIf { it.isNotBlank() }

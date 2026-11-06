@@ -391,6 +391,7 @@ private fun CardViewHolderContent(
 					ItemCardBaseItemOverlay(
 						item = baseItem,
 						streamBadgeItem = (item as? BaseItemDtoBaseRowItem)?.streamBadgeItem ?: baseItem,
+						showRemainingTimeBadge = item.showRemainingTimeBadge,
 						footer = {
 							if (liveTvText != null) {
 								LiveTvCardFooter(liveTvText, focused)
