@@ -53,7 +53,7 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 			)
 		}
 
-		if (cardDisplayOptionsVisible(viewStyle)) {
+		if (viewStyle != LibraryViewStyle.DENSE_LIST) {
 			item {
 				var posterSize by rememberPreference(libraryPreferences, LibraryPreferences.posterSize)
 
@@ -70,7 +70,7 @@ fun SettingsLibrariesDisplayScreen(itemId: UUID, displayPreferencesId: String) {
 				)
 			}
 
-			item {
+			if (cardDisplayOptionsVisible(viewStyle)) item {
 				var imageType by rememberPreference(libraryPreferences, LibraryPreferences.imageType)
 
 				ListButton(
