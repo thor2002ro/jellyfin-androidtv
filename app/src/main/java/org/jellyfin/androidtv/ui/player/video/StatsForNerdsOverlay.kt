@@ -170,8 +170,16 @@ fun PlaybackInfoOverlay(
 		)
 	}
 
+	val selectedAudio = playbackManager.trackSelection?.getAvailableTracks(TrackType.AUDIO)?.firstOrNull(PlayerTrack::isSelected)
+	val originalMediaInfo = remember(
+		stream, selectedAudio, frameStats.videoCodec, frameStats.videoSourceFps, frameStats.videoRange,
+		frameStats.audioCodec, frameStats.audioChannels, frameStats.audioSampleRate,
+	) {
+		NewPlayerStreamStatusBuilder.originalMediaInfo(stream, selectedAudio, frameStats)
+	}
 	val sections = remember(
 		stream,
+		selectedAudio,
 		speed,
 		playerVideoSize,
 		subtitleOffset,
@@ -190,6 +198,7 @@ fun PlaybackInfoOverlay(
 		NewPlayerStreamStatusBuilder.build(
 			playbackManager = playbackManager,
 			stream = stream,
+			selectedAudio = selectedAudio,
 			speed = speed,
 			playerVideoSize = playerVideoSize,
 			subtitleOffset = subtitleOffset,
@@ -215,15 +224,10 @@ fun PlaybackInfoOverlay(
 	val chapterCacheUrls = remember(item?.id, item?.chapters, api.accessToken, chapterThumbnailWidth, chapterThumbnailHeight) {
 		item?.getChapterThumbnailUrls(api, chapterThumbnailWidth, chapterThumbnailHeight).orEmpty()
 	}
-	val thumbnailCacheRows = remember(trickplayCacheUrls, chapterCacheUrls, refreshTick) {
-		buildThumbnailCacheRows(
-			trickplayUrls = trickplayCacheUrls,
-			chapterUrls = chapterCacheUrls,
-		)
-	}
 	val playerMetricSections = sections.filter { it.title == "${frameStats.playerName} Metrics" }
 	val libassMetricSections = sections.filter { it.title == "libass Metrics" }
-	val playbackInfoSections = sections - playerMetricSections - libassMetricSections
+	val playbackInfoSections = sections - playerMetricSections - libassMetricSections +
+		listOfNotNull(originalMediaInfo.takeIf { it.rows.isNotEmpty() })
 
 	Row(
 		modifier = modifier,
@@ -232,13 +236,14 @@ fun PlaybackInfoOverlay(
 	) {
 		Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 			PlaybackPerformanceOverlay(
+				playbackManager = playbackManager,
 				stream = stream,
 				frameStats = frameStats,
 			)
 			if (playerMetricSections.isNotEmpty() || libassMetricSections.isNotEmpty()) {
 				PlayerMetricsPanel(sections = playerMetricSections + libassMetricSections)
 			}
-			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
+			PlaybackThumbnailCachePanel(trickplayCacheUrls, chapterCacheUrls)
 		}
 
 		PlaybackInfoTextPanel(sections = playbackInfoSections)
@@ -247,8 +252,18 @@ fun PlaybackInfoOverlay(
 
 @Composable
 private fun PlaybackThumbnailCachePanel(
-	rows: List<PlaybackInfoRowModel>,
+	trickplayUrls: List<String>,
+	chapterUrls: List<String>,
 ) {
+	var rows by remember(trickplayUrls, chapterUrls) {
+		mutableStateOf(buildThumbnailCacheRows(trickplayUrls, chapterUrls))
+	}
+	LaunchedEffect(trickplayUrls, chapterUrls) {
+		while (true) {
+			delay(1_000)
+			rows = buildThumbnailCacheRows(trickplayUrls, chapterUrls)
+		}
+	}
 	Column(
 		modifier = Modifier
 			.width(146.dp)
@@ -351,6 +366,7 @@ private object NewPlayerStreamStatusBuilder {
 	fun build(
 		playbackManager: PlaybackManager,
 		stream: MediaStream,
+		selectedAudio: PlayerTrack?,
 		speed: Float,
 		playerVideoSize: VideoGeometry,
 		subtitleOffset: Duration,
@@ -368,9 +384,6 @@ private object NewPlayerStreamStatusBuilder {
 	): List<PlaybackInfoSection> {
 		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
 		val trackSelection = playbackManager.trackSelection
-		val selectedAudio = trackSelection
-			?.getAvailableTracks(TrackType.AUDIO)
-			?.firstOrNull(PlayerTrack::isSelected)
 		val audioTrack = stream.tracks
 			.filterIsInstance<MediaStreamAudioTrack>()
 			.selectedTrack(selectedAudio)
@@ -495,23 +508,28 @@ private object NewPlayerStreamStatusBuilder {
 					frameStats.backendDetails.forEach { (label, value) -> row(label, value) }
 				},
 			),
-			PlaybackInfoSection(
-				title = "Original Media Info",
-				rows = rows {
-					row("Container", stream.container.format)
-					row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
-					row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
-					row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
-					row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate() ?: frameStats.videoSourceFps?.formatFrameRate())
-					row("Video range", videoTrack?.videoRange.formatVideoRange() ?: frameStats.videoRange)
-					if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
-					row("Audio codec", audioTrack?.codec.formatCodec() ?: frameStats.audioCodec.formatCodec())
-					row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
-					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
-					row("Audio sample rate", (audioTrack?.sampleRate?.takeIf { it > 0 } ?: frameStats.audioSampleRate)?.let { "$it Hz" })
-				},
-			),
 		).filter { it.rows.isNotEmpty() }
+	}
+
+	fun originalMediaInfo(stream: MediaStream, selectedAudio: PlayerTrack?, frameStats: PlaybackFrameStats): PlaybackInfoSection {
+		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
+		val audioTrack = stream.tracks.filterIsInstance<MediaStreamAudioTrack>().selectedTrack(selectedAudio)
+		return PlaybackInfoSection(
+			title = "Original Media Info",
+			rows = rows {
+				row("Container", stream.container.format)
+				row("Resolution", resolution(videoTrack?.width, videoTrack?.height))
+				row("Video codec", videoTrack?.codec.formatCodec() ?: frameStats.videoCodec)
+				row("Video bitrate", videoTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
+				row("Video FPS", videoTrack?.realFrameRate?.takeIf { it > 0f }?.formatFrameRate() ?: frameStats.videoSourceFps?.formatFrameRate())
+				row("Video range", videoTrack?.videoRange.formatVideoRange() ?: frameStats.videoRange)
+				if (videoTrack?.isInterlaced == true) row("Interlaced", "Yes")
+				row("Audio codec", audioTrack?.codec.formatCodec() ?: frameStats.audioCodec.formatCodec())
+				row("Audio bitrate", audioTrack?.bitrate?.takeIf { it > 0 }?.formatBitrate())
+				row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
+				row("Audio sample rate", (audioTrack?.sampleRate?.takeIf { it > 0 } ?: frameStats.audioSampleRate)?.let { "$it Hz" })
+			},
+		)
 	}
 
 	private inline fun rows(build: MutableList<PlaybackInfoRowModel>.() -> Unit) = buildList(build)
