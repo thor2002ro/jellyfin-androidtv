@@ -412,11 +412,13 @@ class DoviPlaybackSupportTests : FunSpec({
 
 	test("create plan uses Profile 5 compatibility metadata and rejects absent base") {
 		val preferences = mockk<UserPreferences>()
+		val videoPlayer = UserPreferences.playbackPlayerPreferences(hdr = false)
 		val hdrPlayer = UserPreferences.playbackPlayerPreferences(hdr = true)
+		every { preferences[hdrPlayer.playbackBackend] } returns PlaybackBackend.SAME_VIDEO_PLAYER
 		every { preferences[UserPreferences.doviCompatibilityMode] } returns AppDoviCompatibilityMode.AUTO
-		every { preferences[hdrPlayer.useExternalPlayer] } returns false
-		every { preferences[hdrPlayer.playbackRewriteVideoEnabled] } returns true
-		every { preferences[hdrPlayer.playbackBackend] } returns PlaybackBackend.EXOPLAYER
+		every { preferences[videoPlayer.useExternalPlayer] } returns false
+		every { preferences[videoPlayer.playbackRewriteVideoEnabled] } returns true
+		every { preferences[videoPlayer.playbackBackend] } returns PlaybackBackend.EXOPLAYER
 		HdrFormat.entries.forEach { format ->
 			every { preferences[format.preference] } returns HdrOverrideMode.AUTO
 		}
