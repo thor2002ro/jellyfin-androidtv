@@ -194,7 +194,6 @@
     <string name="lbl_song_title">Titolo brano</string>
     <string name="lbl_album_name">Nome Album</string>
     <string name="lbl_next_episode">Prossimo episodio</string>
-    <string name="lbl_previous_episode">Episodio precedente</string>
     <string name="lbl_more_like_this">Simili a questo</string>
     <string name="lbl_resume_from">Riprendi da %1$s</string>
     <string name="lbl_resume_preroll">Riprendi il pre-roll</string>

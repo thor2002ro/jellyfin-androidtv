@@ -40,6 +40,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,6 +64,7 @@ fun PlayerOverlayLayout(
 	val controlsFocusRequester = remember { FocusRequester() }
 	val scope = rememberCoroutineScope()
 	val windowInfo = LocalWindowInfo.current
+	val lifecycleOwner = LocalLifecycleOwner.current
 	var controlsHaveFocus by remember { mutableStateOf(false) }
 	var centerShortcutArmed by remember { mutableStateOf(false) }
 	var centerLongPressHandled by remember { mutableStateOf(false) }
@@ -136,11 +139,16 @@ fun PlayerOverlayLayout(
 			}
 	) {
 		LaunchedEffect(visibilityState.visible, windowInfo.isWindowFocused, controls != null, controlsHaveFocus) {
+			if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+				return@LaunchedEffect
+			}
+
 			when {
 				visibilityState.visible && windowInfo.isWindowFocused && controls != null && !controlsHaveFocus ->
 					controlsFocusRequester.requestFocus()
 
-				!visibilityState.visible -> focusRequester.requestFocus()
+				!visibilityState.visible ->
+					focusRequester.requestFocus()
 			}
 		}
 

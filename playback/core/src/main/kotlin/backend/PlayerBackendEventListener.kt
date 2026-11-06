@@ -6,6 +6,7 @@ import kotlin.time.Duration
 
 abstract class PlayerBackendEventListener {
 	open fun onPlayStateChange(state: PlayState, stream: PlayableMediaStream?, position: Duration?) = Unit
+	open fun onPlaybackError(error: PlaybackError) = Unit
 	open fun onVideoSizeChange(width: Int, height: Int) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) = Unit
 	open fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) = Unit

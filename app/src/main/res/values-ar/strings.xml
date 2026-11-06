@@ -183,7 +183,6 @@
     <string name="lbl_song_title">عنوان الأغنية</string>
     <string name="lbl_album_name">اسم الألبوم</string>
     <string name="lbl_next_episode">الحلقة التالية</string>
-    <string name="lbl_previous_episode">الحلقة السابقة</string>
     <string name="lbl_more_like_this">مشابه لهذا</string>
     <string name="lbl_resume_from">استئناف من %1$s</string>
     <string name="lbl_resume_preroll">استئناف العرض التمهيدي</string>

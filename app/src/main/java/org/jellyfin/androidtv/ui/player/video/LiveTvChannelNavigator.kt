@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.preference.LiveTvPreferences
 import org.jellyfin.androidtv.preference.constant.LiveTvChannelOrder
 import org.jellyfin.androidtv.ui.livetv.TvManager
+import org.jellyfin.androidtv.ui.livetv.liveTvChannelFields
 import org.jellyfin.androidtv.ui.livetv.sortedByLiveTvChannelOrder
 import org.jellyfin.androidtv.ui.livetv.toLiveTvItemSortBy
 import org.jellyfin.androidtv.ui.livetv.toLiveTvSortOrder
@@ -20,7 +21,6 @@ import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
 import org.jellyfin.sdk.model.api.BaseItemDto
-import org.jellyfin.sdk.model.api.ItemFields
 import org.koin.compose.koinInject
 import timber.log.Timber
 
@@ -123,7 +123,7 @@ class LiveTvChannelNavigator(
 		val channels = withContext(Dispatchers.IO) {
 			api.liveTvApi.getLiveTvChannels(
 				addCurrentProgram = true,
-				fields = setOf(ItemFields.OVERVIEW),
+				fields = liveTvChannelFields,
 				enableFavoriteSorting = channelOrder.usesServerFavoriteSorting(favoritesAtTop),
 				sortBy = setOf(channelOrder.toLiveTvItemSortBy()),
 				sortOrder = channelOrder.toLiveTvSortOrder(),

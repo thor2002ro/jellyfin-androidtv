@@ -204,7 +204,6 @@
     <string name="lbl_song_title">Naslov pesmi</string>
     <string name="lbl_album_name">Ime albuma</string>
     <string name="lbl_next_episode">Naslednja epizoda</string>
-    <string name="lbl_previous_episode">Prejšnja epizoda</string>
     <string name="lbl_resume_from">Nadaljuj od %1$s</string>
     <string name="lbl_guide_option_number">Številka kanala</string>
     <string name="lbl_guide_option_played">Zadnje predvajano</string>

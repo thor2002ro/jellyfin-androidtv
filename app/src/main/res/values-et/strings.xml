@@ -247,7 +247,6 @@
     <string name="lbl_audio_track">Vali heliriba</string>
     <string name="lbl_repeat">Korda</string>
     <string name="lbl_more_like_this">Veel sarnaseid</string>
-    <string name="lbl_previous_episode">Eelmine episood</string>
     <string name="lbl_specials">Eriepisoodid</string>
     <string name="lbl_series">Sarjad</string>
     <string name="lbl_enable_debug">Silumise valikud</string>

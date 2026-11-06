@@ -266,7 +266,6 @@
     <string name="lbl_subtitle_text_color">ტექსტის ფერი</string>
     <string name="lbl_subtitle_background_color">ფონის ფერი</string>
     <string name="lbl_subtitle_text_stroke_color">წიბოს ფერი</string>
-    <string name="lbl_previous_episode">წინა ეპიზოდი</string>
     <string name="lbl_next_episode">შემდეგი ეპიზოდი</string>
     <string name="lbl_album_name">ალბომის სახელი</string>
     <string name="lbl_song_title">სიმღერის სახელი</string>
