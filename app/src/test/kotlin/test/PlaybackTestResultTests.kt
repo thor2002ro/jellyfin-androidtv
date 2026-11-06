@@ -8,11 +8,12 @@ import io.kotest.matchers.string.shouldNotContain
 class PlaybackTestResultTests : FunSpec({
 	test("runner arguments default to the complete matrix") {
 		PlaybackTestArguments.from(emptyMap()) shouldBe PlaybackTestArguments(
-			suites = setOf("resume", "server", "transcode", "backend"),
+			suites = setOf("resume", "server", "transcode", "backend", "soak", "recovery", "hdmi-audio"),
 			backend = null,
 			scenario = null,
 			testUser = "androidtv-playback-test",
 			testFolder = "Test Videos",
+			soakIterations = 3,
 		)
 	}
 
@@ -23,6 +24,7 @@ class PlaybackTestResultTests : FunSpec({
 			scenario = null,
 			testUser = "androidtv-playback-test",
 			testFolder = "Test Videos",
+			soakIterations = 3,
 		)
 	}
 
@@ -35,7 +37,7 @@ class PlaybackTestResultTests : FunSpec({
 				"testUser" to " tv-tests ",
 				"testFolder" to " Playback Matrix ",
 			)
-		) shouldBe PlaybackTestArguments(setOf("server"), "MPV", "4k-dv7-fel", "tv-tests", "Playback Matrix")
+		) shouldBe PlaybackTestArguments(setOf("server"), "MPV", "4k-dv7-fel", "tv-tests", "Playback Matrix", 3)
 	}
 
 	test("result line has a stable filterable shape") {

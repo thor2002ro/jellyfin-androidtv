@@ -16,6 +16,8 @@ import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.PlaybackError
+import org.jellyfin.playback.core.backend.createPlaybackErrorOrigin
+import org.jellyfin.playback.core.backend.matches
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStreamContainer
 import org.jellyfin.playback.core.mediastream.MediaStreamResolver
@@ -31,6 +33,8 @@ import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.core.queue.supplier.QueueSupplier
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import org.jellyfin.playback.libvlc.LibVLCBackend
+import org.jellyfin.playback.jellyfin.livetv.LiveTvPlaybackPolicy
+import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
 import org.jellyfin.playback.media3.exoplayer.ExoPlayerOptions
 import org.jellyfin.playback.mpv.LibMPVBackend
@@ -50,7 +54,7 @@ class PlaybackTestInstrumentation : Instrumentation() {
 	override fun onCreate(arguments: Bundle?) {
 		super.onCreate(arguments)
 		this.arguments = PlaybackTestArguments.from(
-			listOf("suite", "backend", "scenario", "testUser", "testFolder").associateWith { arguments?.getString(it) }
+			listOf("suite", "backend", "scenario", "testUser", "testFolder", "soakIterations").associateWith { arguments?.getString(it) }
 		)
 		start()
 	}
@@ -59,10 +63,12 @@ class PlaybackTestInstrumentation : Instrumentation() {
 		if (Timber.treeCount == 0) Timber.plant(Timber.DebugTree())
 		val results = mutableListOf<PlaybackTestResult>()
 		try {
-			if ("resume" in arguments.suites) {
+			if (arguments.suites.any { it == "resume" || it == "recovery" }) {
 				video = File(targetContext.cacheDir, "resume-test.mp4")
 				context.assets.open("silent-black-25s.mp4").use { input -> video.outputStream().use(input::copyTo) }
 				activity = startActivitySync(Intent(targetContext, PlaybackTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+			}
+			if ("resume" in arguments.suites) {
 				val factories = linkedMapOf<String, () -> PlayerBackend>(
 					"ExoPlayer" to { ExoPlayerBackend(targetContext, ExoPlayerOptions(baseDataSourceFactory = DefaultDataSource.Factory(targetContext))) },
 					"ExoPlayer-Libass" to {
@@ -104,7 +110,41 @@ class PlaybackTestInstrumentation : Instrumentation() {
 					}
 				}
 			}
-			if ("server" in arguments.suites || "transcode" in arguments.suites || "backend" in arguments.suites) {
+			if ("recovery" in arguments.suites) {
+				val factories = linkedMapOf<String, () -> PlayerBackend>(
+					"ExoPlayer" to { ExoPlayerBackend(targetContext, ExoPlayerOptions(baseDataSourceFactory = DefaultDataSource.Factory(targetContext))) },
+					"ExoPlayer-Libass" to {
+						ExoPlayerBackend(targetContext, ExoPlayerOptions(enableLibass = true, baseDataSourceFactory = DefaultDataSource.Factory(targetContext)))
+					},
+					"MPV" to { LibMPVBackend(targetContext) },
+					"VLC" to { LibVLCBackend(targetContext) },
+				)
+				for ((name, factory) in factories) {
+					if (arguments.backend != null && arguments.backend != name) continue
+					FaultingPlaybackHttpServer(video).use { server ->
+						try {
+							val first = checkStart(factory, 5_000L, "recovery", server.url, server)
+							check(server.failureInjected) { "The temporary HTTP failure was not exercised" }
+							results += PlaybackTestResult(
+								PlaybackTestStatus.PASS,
+								"recovery",
+								name,
+								"temporary-http",
+								"firstPlayingMs=$first requests=${server.requestCount}",
+							)
+						} catch (error: Throwable) {
+							results += PlaybackTestResult(
+								PlaybackTestStatus.FAIL,
+								"recovery",
+								name,
+								"temporary-http",
+								error.message ?: error.toString(),
+							)
+						}
+					}
+				}
+			}
+			if (arguments.suites.any { it in setOf("server", "transcode", "backend", "soak", "hdmi-audio") }) {
 				runServerCatalog(results)
 			}
 			if ("server" in arguments.suites) {
@@ -134,6 +174,28 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				}
 				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment))
 					.run(arguments.backend, arguments.scenario)
+			}
+			if ("soak" in arguments.suites) {
+				if (!::activity.isInitialized) {
+					activity = startActivitySync(Intent(targetContext, PlaybackTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+				}
+				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment)).run(
+					backendFilter = arguments.backend,
+					scenarioFilter = "controls",
+					repeatCount = arguments.soakIterations,
+					suiteName = "soak",
+				)
+			}
+			if ("hdmi-audio" in arguments.suites) {
+				if (!::activity.isInitialized) {
+					activity = startActivitySync(Intent(targetContext, PlaybackTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+				}
+				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment)).run(
+					backendFilter = arguments.backend,
+					scenarioFilter = arguments.scenario,
+					suiteName = "hdmi-audio",
+					hdmiAudioOnly = true,
+				)
 			}
 		} catch (error: Throwable) {
 			results += PlaybackTestResult(PlaybackTestStatus.FAIL, "runner", detail = error.toString())
@@ -197,16 +259,23 @@ class PlaybackTestInstrumentation : Instrumentation() {
 		failure?.let { throw it }
 	}
 
-	private fun streamFor(entry: QueueEntry) = PlayableMediaStream(
+	private fun streamFor(entry: QueueEntry, url: String = Uri.fromFile(video).toString()) = PlayableMediaStream(
 		identifier = "resume-test",
 		conversionMethod = MediaConversionMethod.None,
 		container = MediaStreamContainer("mp4"),
 		tracks = emptyList(),
 		queueEntry = entry,
-		url = Uri.fromFile(video).toString(),
+		url = url,
+		errorOrigin = entry.createPlaybackErrorOrigin(url),
 	)
 
-	private fun checkStart(factory: () -> PlayerBackend, requested: Long?, scenario: String): Long {
+	private fun checkStart(
+		factory: () -> PlayerBackend,
+		requested: Long?,
+		scenario: String,
+		streamUrl: String? = null,
+		faultServer: FaultingPlaybackHttpServer? = null,
+	): Long {
 		lateinit var backend: PlayerBackend
 		lateinit var manager: PlaybackManager
 		lateinit var surfaceView: PlayerSurfaceView
@@ -214,6 +283,11 @@ class PlaybackTestInstrumentation : Instrumentation() {
 		var createdManager: PlaybackManager? = null
 		var firstPlaying: Long? = null
 		var playbackError: String? = null
+		var playbackErrorCount = 0
+		val traceStarted = SystemClock.elapsedRealtime()
+		val playbackTrace = mutableListOf<String>()
+		var resolveCount = 0
+		var expected = (requested ?: 0).coerceAtLeast(0)
 		val warm = scenario == "preloaded" || scenario == "reload"
 		val entry = QueueEntry().apply { startPosition = if (warm) Duration.ZERO else requested?.milliseconds }
 		val nextEntry = QueueEntry().apply { startPosition = requested?.milliseconds }
@@ -224,17 +298,26 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				manager = playbackManager(targetContext) {
 					install(playbackPlugin {
 						provide(backend)
+						if (faultServer != null) provide(NetworkPlaybackRecoveryService(LiveTvPlaybackPolicy { false }))
 						provide(object : MediaStreamResolver {
-							override suspend fun getStream(queueEntry: QueueEntry, startPosition: Duration?) = streamFor(queueEntry)
+							override suspend fun getStream(queueEntry: QueueEntry, startPosition: Duration?): PlayableMediaStream {
+								val baseUrl = streamUrl ?: Uri.fromFile(video).toString()
+								val resolvedUrl = if (faultServer == null) baseUrl else "$baseUrl?load=${resolveCount++}"
+								return streamFor(queueEntry, resolvedUrl)
+							}
 						})
 					})
 				}
 				createdManager = manager
 				manager.addBackendEventListener(object : PlayerBackendEventListener() {
 					override fun onPlayStateChange(state: PlayState) {
+						playbackTrace += "${SystemClock.elapsedRealtime() - traceStarted}ms:$state@${backend.getPositionInfo().active.inWholeMilliseconds}ms"
 						if (state == PlayState.PLAYING && firstPlaying == null) firstPlaying = backend.getPositionInfo().active.inWholeMilliseconds
 					}
-					override fun onPlaybackError(error: PlaybackError) { playbackError = error.toString() }
+					override fun onPlaybackError(error: PlaybackError) {
+						playbackErrorCount++
+						playbackError = "${error.codeName} originMatches=${error.origin?.matches(entry)} state=${manager.state.playState.value}"
+					}
 				})
 				surfaceView = PlayerSurfaceView(activity).apply { playbackManager = manager }
 				activity.setContentView(surfaceView)
@@ -257,25 +340,44 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				}, startIndex = 0)
 			}
 			fun awaitPlaying() {
-				val deadline = SystemClock.elapsedRealtime() + 30_000
+				val timeoutSeconds = if (faultServer == null) 30 else 75
+				val deadline = SystemClock.elapsedRealtime() + timeoutSeconds * 1_000L
 				while (SystemClock.elapsedRealtime() < deadline) {
 					var ready = false
 					onMain {
-						check(playbackError == null) { playbackError.orEmpty() }
+						if (faultServer == null) check(playbackError == null) { playbackError.orEmpty() }
 						ready = firstPlaying != null
 					}
 					if (ready) break
 					SystemClock.sleep(100)
 				}
-				checkNotNull(firstPlaying) { "No PLAYING event within 30 seconds" }
+				checkNotNull(firstPlaying) {
+					"No PLAYING event within $timeoutSeconds seconds; trace=$playbackTrace errors=$playbackErrorCount lastError=$playbackError"
+				}
 			}
 			awaitPlaying()
+			if (faultServer != null) {
+				// Let the recovery monitor observe successful playback before simulating a mid-stream outage.
+				SystemClock.sleep(7_500)
+				var beforeFailure = 0L
+				onMain { beforeFailure = backend.getPositionInfo().active.inWholeMilliseconds }
+				faultServer.armFailure()
+				firstPlaying = null
+				runBlocking { withContext(Dispatchers.Main) { check(manager.reloadCurrentMediaStream(beforeFailure.milliseconds)) } }
+				awaitPlaying()
+				val recovered = checkNotNull(firstPlaying)
+				check(faultServer.failureInjected) { "The temporary HTTP failure was not exercised" }
+				check(playbackErrorCount <= 1) { "Duplicate backend errors: $playbackErrorCount" }
+				check(recovered >= beforeFailure - 250) { "Recovery reset position from $beforeFailure to $recovered ms" }
+				check(recovered <= beforeFailure + 2_500) { "Recovery skipped ahead from $beforeFailure to $recovered ms" }
+				expected = beforeFailure
+			}
 			if (warm) {
 				onMain {
 					manager.state.pause()
 					firstPlaying = null
 					if (scenario == "preloaded") {
-						nextEntry.mediaStream = streamFor(nextEntry)
+						nextEntry.mediaStream = streamFor(nextEntry, streamUrl ?: Uri.fromFile(video).toString())
 						backend.prepareItem(nextEntry)
 					}
 				}
@@ -288,14 +390,14 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				awaitPlaying()
 			}
 			val first = checkNotNull(firstPlaying) { "No PLAYING event within 30 seconds" }
-			val expected = (requested ?: 0).coerceAtLeast(0)
-			check(first in expected - 250..expected + 1500) { "Expected first playback near $expected ms, got $first ms" }
+			val startTolerance = if (faultServer == null) 1_500 else 2_500
+			check(first in expected - 250..expected + startTolerance) { "Expected first playback near $expected ms, got $first ms" }
 			fun awaitAdvance(from: Long) {
 				val deadline = SystemClock.elapsedRealtime() + 10_000
 				var position = from
 				while (SystemClock.elapsedRealtime() < deadline) {
 					onMain {
-						check(playbackError == null) { playbackError.orEmpty() }
+						if (faultServer == null) check(playbackError == null) { playbackError.orEmpty() }
 						position = backend.getPositionInfo().active.inWholeMilliseconds
 					}
 					check(position >= expected - 250) { "Playback reset from $expected to $position ms" }
