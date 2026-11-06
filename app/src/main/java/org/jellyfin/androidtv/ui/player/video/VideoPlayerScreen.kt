@@ -310,11 +310,13 @@ private fun TrickplayTileSheetPrefetcher(
 internal fun selectTrickplaySheetsToPrefetch(
 	sheets: List<TrickplayTileSheet>,
 ): List<TrickplayTileSheet> {
-	var remainingBytes = PLAYER_THUMBNAIL_CACHE_MAX_BYTES.toLong()
+	fun estimatedBytes(sheet: TrickplayTileSheet) = sheet.decodeWidth.toLong() * sheet.decodeHeight * 2
+	val reservedBytes = sheets.maxOfOrNull(::estimatedBytes) ?: 0
+	var remainingBytes = PLAYER_THUMBNAIL_CACHE_MAX_BYTES - reservedBytes
 	return sheets.takeWhile { sheet ->
-		val estimatedBytes = sheet.decodeWidth.toLong() * sheet.decodeHeight * 2
-		(estimatedBytes <= remainingBytes).also { fits ->
-			if (fits) remainingBytes -= estimatedBytes
+		val bytes = estimatedBytes(sheet)
+		(bytes <= remainingBytes).also { fits ->
+			if (fits) remainingBytes -= bytes
 		}
 	}
 }
