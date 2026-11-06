@@ -8,12 +8,28 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class LibraryFilterOptionsLoaderTests : FunSpec({
-	test("only complete filter choices are cached between dialog opens") {
-		val incomplete = LibraryFilterChoices(unavailableSections = setOf(LibraryFilterSection.STUDIOS))
-		val complete = LibraryFilterChoices(years = listOf(2024))
+	test("filter refresh keeps successful cached sections and replaces the retried section") {
+		val genre = LibraryGenreChoice("Drama", setOf(UUID.randomUUID()))
+		val studio = BaseItemDto(id = UUID.randomUUID(), name = "HBO", type = BaseItemKind.STUDIO)
+		val cached = LibraryFilterChoices(
+			genres = listOf(genre),
+			years = listOf(2024),
+			ratings = listOf(LibraryRatingChoice("PG-13", setOf("PG-13"))),
+			unavailableSections = setOf(LibraryFilterSection.STUDIOS),
+		)
 
-		shouldCacheLibraryFilterChoices(incomplete) shouldBe false
-		shouldCacheLibraryFilterChoices(complete) shouldBe true
+		val refreshed = mergeFilterChoiceRefresh(
+			previous = cached,
+			genres = null,
+			years = null,
+			ratings = null,
+			studios = Result.success(listOf(studio)),
+		)
+
+		refreshed shouldBe cached.copy(
+			studios = listOf(studio),
+			unavailableSections = emptySet(),
+		)
 	}
 
 	test("equivalent age ratings become grouped choices without merging TV rating variants") {
