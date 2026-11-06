@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.livetv
 
+import android.view.View
 import android.widget.RelativeLayout
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -7,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.ui.LiveProgramDetailPopup
-import org.jellyfin.androidtv.ui.card.ChannelCardView
+import org.jellyfin.androidtv.ui.RecordingIndicatorView
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowType
@@ -41,36 +42,36 @@ class LiveTvCardActionHandler(
 		detailPopup?.dismiss()
 	}
 
-	fun onLongClick(item: Any?, cardView: ChannelCardView): Boolean {
+	fun onLongClick(item: Any?, anchor: View): Boolean {
 		val rowItem = item as? BaseRowItem ?: return false
-		val program = getProgramForOptions(rowItem, cardView) ?: return false
-		val channel = getChannelForOptions(rowItem, cardView)
+		val program = getProgramForOptions(rowItem) ?: return false
+		val channel = getChannelForOptions(rowItem)
 
-		showProgramOptions(program, channel, cardView)
+		showProgramOptions(program, channel, anchor)
 		return true
 	}
 
-	private fun getProgramForOptions(rowItem: BaseRowItem, cardView: ChannelCardView): BaseItemDto? {
-		val item = cardView.currentItem ?: rowItem.baseItem ?: return null
+	private fun getProgramForOptions(rowItem: BaseRowItem): BaseItemDto? {
+		val item = rowItem.baseItem ?: return null
 
 		return when {
 			rowItem.baseRowType == BaseRowType.LiveTvProgram &&
-				rowItem.selectAction == BaseRowItemSelectAction.Play -> cardView.currentProgram ?: item
+				rowItem.selectAction == BaseRowItemSelectAction.Play -> item
 
 			rowItem.baseRowType == BaseRowType.LiveTvChannel ->
-				cardView.currentProgram?.withChannelFallback(item) ?: item.withChannelFallback(item)
+				item.currentProgram?.withChannelFallback(item) ?: item.withChannelFallback(item)
 
 			else -> null
 		}
 	}
 
-	private fun getChannelForOptions(rowItem: BaseRowItem, cardView: ChannelCardView): BaseItemDto? {
+	private fun getChannelForOptions(rowItem: BaseRowItem): BaseItemDto? {
 		if (rowItem.baseRowType != BaseRowType.LiveTvChannel) return null
 
-		return cardView.currentItem ?: rowItem.baseItem
+		return rowItem.baseItem
 	}
 
-	private fun showProgramOptions(program: BaseItemDto, favoriteChannel: BaseItemDto?, anchor: ChannelCardView) {
+	private fun showProgramOptions(program: BaseItemDto, favoriteChannel: BaseItemDto?, anchor: View) {
 		if (favoriteChannel != null || program.channelId == null) {
 			showProgramOptionsWithChannel(program, favoriteChannel, anchor)
 			return
@@ -87,15 +88,12 @@ class LiveTvCardActionHandler(
 				null
 			}
 
-			if (!fragment.isAdded || !anchor.isCurrentProgramActionTarget(program)) return@launch
+			if (!fragment.isAdded || !anchor.isAttachedToWindow || !anchor.hasFocus() || anchor.tag != program.id) return@launch
 			showProgramOptionsWithChannel(program, loadedChannel, anchor)
 		}
 	}
 
-	private fun ChannelCardView.isCurrentProgramActionTarget(program: BaseItemDto) =
-		isAttachedToWindow && hasFocus() && currentProgram?.id == program.id
-
-	private fun showProgramOptionsWithChannel(program: BaseItemDto, favoriteChannel: BaseItemDto?, anchor: ChannelCardView) {
+	private fun showProgramOptionsWithChannel(program: BaseItemDto, favoriteChannel: BaseItemDto?, anchor: View) {
 		val popupWidth = getProgramPopupWidth()
 		val popupProgram = favoriteChannel?.let { program.withChannelFallback(it) } ?: program
 
@@ -114,8 +112,24 @@ class LiveTvCardActionHandler(
 				}
 			},
 		).also { popup ->
-			popup.setContent(popupProgram, anchor, favoriteChannel)
+			popup.setContent(popupProgram, recordingIndicator(popupProgram, favoriteChannel), favoriteChannel)
 			popup.show(anchor, 0, 0)
+		}
+	}
+
+	private fun recordingIndicator(program: BaseItemDto, favoriteChannel: BaseItemDto?) = object : RecordingIndicatorView {
+		private var refreshed = false
+
+		override fun setRecTimer(id: String?) = refreshOnce()
+
+		override fun setRecSeriesTimer(id: String?) = refreshOnce()
+
+		private fun refreshOnce() {
+			if (refreshed) return
+			refreshed = true
+			(program.channelId ?: favoriteChannel?.id)?.let { channelId ->
+				refreshFavorite(channelId, favoriteChannel?.userData?.isFavorite == true)
+			}
 		}
 	}
 
