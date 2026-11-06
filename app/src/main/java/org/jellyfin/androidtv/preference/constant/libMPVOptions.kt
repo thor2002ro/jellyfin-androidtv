@@ -62,6 +62,7 @@ enum class LibMPVDecoder(
 enum class LibMPVVideoOutput(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
 	GPU(R.string.preference_mpv_video_output_gpu, R.string.preference_mpv_video_output_gpu_description, "gpu"),
 	GPU_NEXT(R.string.preference_mpv_video_output_gpu_next, R.string.preference_mpv_video_output_gpu_next_description, "gpu-next"),
+	MEDIACODEC_EMBED(R.string.preference_mpv_video_output_mediacodec_embed, R.string.preference_mpv_video_output_mediacodec_embed_description, "mediacodec_embed"),
 }
 
 enum class LibMPVGpuContext(override val nameRes: Int, override val descriptionRes: Int, override val mpvValue: String) : LibMPVPreferenceOption {
