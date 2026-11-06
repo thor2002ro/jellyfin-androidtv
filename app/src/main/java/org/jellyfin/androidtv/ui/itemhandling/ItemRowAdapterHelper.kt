@@ -5,6 +5,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -1122,8 +1123,9 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 	api: ApiClient,
 	query: GetRecommendedProgramsRequest,
 	selectAction: BaseRowItemSelectAction = BaseRowItemSelectAction.ShowDetails,
-) {
-	retrievalScope.launch {
+): Job {
+	val queryVersion = currentQueryVersion()
+	return retrievalScope.launch {
 		runCatching {
 			val items = withContext(Dispatchers.IO) {
 				val programs = api.liveTvApi.getRecommendedPrograms(query).content.items
@@ -1150,7 +1152,12 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 					selectAction,
 				)
 			}
-			replaceIfChanged(rowItems, BaseRowItem::liveTvProgramSignature)
+			if (!applyIfQueryCurrent(queryVersion) {
+				replaceIfChanged(rowItems, BaseRowItem::liveTvProgramSignature)
+			}) {
+				notifyObsoleteRetrieveFinished()
+				return@launch
+			}
 			prefetchLiveTvTracks(api, items)
 
 			if (items.isEmpty()) removeRow()
@@ -1277,9 +1284,11 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 	api: ApiClient,
 	query: GetLiveTvChannelsRequest,
 	startIndex: Int,
-	batchSize: Int
-) {
-	retrievalScope.launch {
+	batchSize: Int,
+	refreshExisting: Boolean = false,
+): Job {
+	val queryVersion = currentQueryVersion()
+	return retrievalScope.launch {
 		runCatching {
 			val response = withContext(Dispatchers.IO) {
 				api.liveTvApi.getLiveTvChannels(
@@ -1290,6 +1299,23 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 				).content
 			}
 
+			if (queryVersion != currentQueryVersion()) {
+				notifyObsoleteRetrieveFinished()
+				return@launch
+			}
+			if (refreshExisting) {
+				// Update loaded channels in place so a program change cannot reset paging or focus.
+				val channels = response.items.associateBy { it.id }
+				applyIfQueryCurrent(queryVersion) {
+					for (index in 0 until size()) {
+						val row = get(index) as? BaseItemDtoBaseRowItem ?: continue
+						val channel = channels[row.itemId] ?: continue
+						if (row.baseItem != channel) set(index, row.copyWithItem(channel))
+					}
+				}
+				notifyRetrieveFinished()
+				return@launch
+			}
 			val filterToCurrentWeek = query.isRecentlyPlayedChannelsRequest()
 			val items = if (filterToCurrentWeek) {
 				val weekStart = currentWeekStart()

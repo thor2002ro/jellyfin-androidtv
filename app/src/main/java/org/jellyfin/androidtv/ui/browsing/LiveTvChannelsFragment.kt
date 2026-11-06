@@ -205,6 +205,7 @@ class LiveTvChannelsFragment : Fragment(), View.OnKeyListener {
 		}
 
 		adapter = rowAdapter
+		rowAdapter.startLiveTvProgramUpdates(viewLifecycleOwner)
 		gridPresenter?.onBindViewHolder(requireNotNull(gridViewHolder), rowAdapter)
 		rowAdapter.Retrieve()
 		viewBinding.counter.text = "0 | 0"

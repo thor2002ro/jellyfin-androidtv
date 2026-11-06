@@ -151,6 +151,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         super.onViewCreated(view, savedInstanceState);
 
         setupEventListeners();
+        startLiveTvProgramUpdates();
     }
 
     @Override
@@ -292,6 +293,16 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         addAdditionalRows(mRowsAdapter);
 
         if (mRowsFragment != null) mRowsFragment.setAdapter(mRowsAdapter);
+        startLiveTvProgramUpdates();
+    }
+
+    private void startLiveTvProgramUpdates() {
+        if (getView() == null || mRowsAdapter == null) return;
+        for (Row row : mRowsAdapter) {
+            if (row instanceof ListRow && ((ListRow) row).getAdapter() instanceof ItemRowAdapter) {
+                ((ItemRowAdapter) ((ListRow) row).getAdapter()).startLiveTvProgramUpdates(getViewLifecycleOwner());
+            }
+        }
     }
 
     private void cancelRowRetrievals() {
