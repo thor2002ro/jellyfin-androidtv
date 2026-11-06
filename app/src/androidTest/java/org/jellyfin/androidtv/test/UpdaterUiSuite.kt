@@ -123,8 +123,8 @@ private val scenarios = listOf(
 	UpdaterUiExpectation(UpdaterTestScenario.PRERELEASE_UPDATE, listOf("PRE-RELEASE UPDATE", "Update now")),
 	UpdaterUiExpectation(UpdaterTestScenario.DOWNLOADING, listOf("Updating 42%")),
 	UpdaterUiExpectation(UpdaterTestScenario.DOWNLOAD_FAILED, listOf("simulated connection failure", "Update now")),
-	UpdaterUiExpectation(UpdaterTestScenario.INSTALL_PERMISSION, listOf("Allow installs from this app", "Update now")),
-	UpdaterUiExpectation(UpdaterTestScenario.INSTALLER_OPENED, listOf("Installer opened", "Update now")),
+	UpdaterUiExpectation(UpdaterTestScenario.INSTALL_PERMISSION, listOf("Allow installs from this app", "Install again")),
+	UpdaterUiExpectation(UpdaterTestScenario.INSTALLER_OPENED, listOf("Installer opened", "Install again")),
 	UpdaterUiExpectation(UpdaterTestScenario.POPUP_STABILITY, listOf("UPDATE AVAILABLE", "Update now")),
 	UpdaterUiExpectation(
 		UpdaterTestScenario.FOCUS_CONFLICT,
