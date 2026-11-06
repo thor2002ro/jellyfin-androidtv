@@ -34,6 +34,7 @@ import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.integration.provider.ImageProvider
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.startup.StartupActivity
 import org.jellyfin.androidtv.util.AndroidVersion
 import org.jellyfin.androidtv.util.ImageHelper
@@ -106,6 +107,7 @@ class LeanbackChannelWorker(
 
 	private val api by inject<ApiClient>()
 	private val userPreferences by inject<UserPreferences>()
+	private val userSettingPreferences by inject<UserSettingPreferences>()
 	private val userViewsRepository by inject<UserViewsRepository>()
 	private val imageHelper by inject<ImageHelper>()
 
@@ -168,7 +170,7 @@ class LeanbackChannelWorker(
 					.setAppLinkIntent(Intent(context, StartupActivity::class.java))
 					.build()
 			)
-			val preferParentThumb = userPreferences[UserPreferences.seriesThumbnailsEnabled]
+			val preferParentThumb = userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled]
 
 			// Add new items
 			arrayOf(
@@ -495,7 +497,7 @@ class LeanbackChannelWorker(
 	@Suppress("RestrictedApi")
 	private fun getBaseItemAsWatchNextProgram(item: BaseItemDto) =
 		WatchNextProgram.Builder().apply {
-			val preferParentThumb = userPreferences[UserPreferences.seriesThumbnailsEnabled]
+			val preferParentThumb = userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled]
 
 			setInternalProviderId(item.id.toString())
 

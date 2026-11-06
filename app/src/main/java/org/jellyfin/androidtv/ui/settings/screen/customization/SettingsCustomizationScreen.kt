@@ -11,8 +11,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.CustomMessage
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.integration.LeanbackChannelWorker
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
@@ -30,6 +33,8 @@ fun SettingsCustomizationScreen() {
 	val context = LocalContext.current
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
+	val userSettingPreferences = koinInject<UserSettingPreferences>()
+	val customMessageRepository = koinInject<CustomMessageRepository>()
 	val workManager = koinInject<WorkManager>()
 	val leanbackChannelWorkerAvailable = remember(context) { LeanbackChannelWorker.isAvailable(context) }
 
@@ -86,13 +91,18 @@ fun SettingsCustomizationScreen() {
 		}
 
 		item {
-			var seriesThumbnailsEnabled by rememberPreference(userPreferences, UserPreferences.seriesThumbnailsEnabled)
+			var seriesThumbnailsEnabled by rememberPreference(
+				userSettingPreferences,
+				UserSettingPreferences.seriesThumbnailsEnabled,
+			) { customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration) }
 
 			ListButton(
 				headingContent = { Text(stringResource(R.string.lbl_use_series_thumbnails)) },
 				trailingContent = { Checkbox(checked = seriesThumbnailsEnabled) },
 				captionContent = { Text(stringResource(R.string.lbl_use_series_thumbnails_description)) },
-				onClick = { seriesThumbnailsEnabled = !seriesThumbnailsEnabled },
+				onClick = {
+					seriesThumbnailsEnabled = !seriesThumbnailsEnabled
+				},
 				modifier = Modifier.focusKey("series_thumbnails_enabled")
 			)
 		}
