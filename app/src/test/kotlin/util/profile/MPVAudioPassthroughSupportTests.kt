@@ -1,11 +1,105 @@
 package org.jellyfin.androidtv.util.profile
 
 import android.media.AudioFormat
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.media.AudioTrack
+import android.os.SystemClock
 import androidx.media3.common.MimeTypes
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.Runs
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.mockkStatic
+import io.mockk.unmockkConstructor
+import io.mockk.unmockkStatic
 
 class MPVAudioPassthroughSupportTests : FunSpec({
+	test("next item reuses carrier support until the output device changes") {
+		mockkStatic(::getSupportedPassthroughAudioMimes)
+		mockkStatic(SystemClock::class, AudioTrack::class)
+		mockkConstructor(AudioAttributes.Builder::class, AudioFormat.Builder::class, AudioTrack::class)
+		try {
+			val context = mockk<Context>()
+			val manager = mockk<AudioManager>()
+			var deviceId = 701
+			val device = mockk<AudioDeviceInfo> { every { id } answers { deviceId } }
+			every { device.type } returns AudioDeviceInfo.TYPE_HDMI
+			every { device.encodings } returns intArrayOf(AudioFormat.ENCODING_AC3)
+			val pcmDevice = mockk<AudioDeviceInfo> {
+				every { id } returns 799
+				every { type } returns AudioDeviceInfo.TYPE_USB_DEVICE
+				every { encodings } returns intArrayOf(AudioFormat.ENCODING_PCM_16BIT)
+			}
+			every { context.getSystemService(Context.AUDIO_SERVICE) } returns manager
+			every { manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) } returns arrayOf(device)
+			var playing = false
+			every { manager.isMusicActive } answers { playing }
+			var routeMimes = setOf(MimeTypes.AUDIO_AC3)
+			every { getSupportedPassthroughAudioMimes(context, any()) } answers { routeMimes }
+			var now = 1_000_000L
+			every { SystemClock.elapsedRealtime() } answers { now }
+			var probes = 0
+			var outputAvailable = true
+			var highRateAvailable = true
+			every { AudioTrack.getMinBufferSize(any(), any(), any()) } answers {
+				probes++
+				if (outputAvailable && (firstArg<Int>() < 192_000 || highRateAvailable)) 4_096 else AudioTrack.ERROR_BAD_VALUE
+			}
+			every { anyConstructed<AudioAttributes.Builder>().setUsage(any()) } answers { self as AudioAttributes.Builder }
+			every { anyConstructed<AudioAttributes.Builder>().setContentType(any()) } answers { self as AudioAttributes.Builder }
+			every { anyConstructed<AudioAttributes.Builder>().build() } returns mockk<AudioAttributes>()
+			every { anyConstructed<AudioFormat.Builder>().setEncoding(any()) } answers { self as AudioFormat.Builder }
+			every { anyConstructed<AudioFormat.Builder>().setSampleRate(any()) } answers { self as AudioFormat.Builder }
+			every { anyConstructed<AudioFormat.Builder>().setChannelMask(any()) } answers { self as AudioFormat.Builder }
+			every { anyConstructed<AudioFormat.Builder>().build() } returns mockk<AudioFormat>()
+			every { anyConstructed<AudioTrack>().state } returns AudioTrack.STATE_INITIALIZED
+			every { anyConstructed<AudioTrack>().release() } just Runs
+
+			getSupportedMPVPassthroughAudioMimes(context, setOf(MimeTypes.AUDIO_AC3)) shouldBe setOf(MimeTypes.AUDIO_AC3)
+			probes shouldBe 1
+			now += 60_000
+			playing = true
+			every { manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) } returns arrayOf(device, pcmDevice)
+			getSupportedMPVPassthroughAudioMimes(context, setOf(MimeTypes.AUDIO_AC3)) shouldBe setOf(MimeTypes.AUDIO_AC3)
+			probes shouldBe 1
+			playing = false
+			deviceId++
+			getSupportedMPVPassthroughAudioMimes(context, setOf(MimeTypes.AUDIO_AC3)) shouldBe setOf(MimeTypes.AUDIO_AC3)
+			probes shouldBe 2
+			deviceId++
+			outputAvailable = false
+			getSupportedMPVPassthroughAudioMimes(context, setOf(MimeTypes.AUDIO_AC3)) shouldBe emptySet()
+			val failedProbeCount = probes
+			outputAvailable = true
+			now += 3_000
+			getSupportedMPVPassthroughAudioMimes(context, setOf(MimeTypes.AUDIO_AC3)) shouldBe setOf(MimeTypes.AUDIO_AC3)
+			probes shouldBe failedProbeCount + 1
+			deviceId++
+			routeMimes = setOf(MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3)
+			highRateAvailable = false
+			getSupportedMPVPassthroughAudioMimes(context, routeMimes) shouldBe setOf(MimeTypes.AUDIO_AC3)
+			val partialProbeCount = probes
+			highRateAvailable = true
+			now += 3_000
+			playing = true
+			getSupportedMPVPassthroughAudioMimes(context, routeMimes) shouldBe setOf(MimeTypes.AUDIO_AC3)
+			probes shouldBe partialProbeCount
+			playing = false
+			getSupportedMPVPassthroughAudioMimes(context, routeMimes) shouldBe routeMimes
+			probes shouldBe partialProbeCount + 1
+		} finally {
+			unmockkConstructor(AudioAttributes.Builder::class, AudioFormat.Builder::class, AudioTrack::class)
+			unmockkStatic(SystemClock::class, AudioTrack::class)
+			unmockkStatic(::getSupportedPassthroughAudioMimes)
+		}
+	}
+
 	test("carrier probes are shared between codecs and skip unnecessary alternate rates") {
 		val probes = mutableListOf<MPVIec61937Carrier>()
 		val supported = probeMPVIec61937Carriers(
