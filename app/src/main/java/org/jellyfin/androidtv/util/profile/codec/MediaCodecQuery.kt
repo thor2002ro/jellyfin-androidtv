@@ -70,19 +70,33 @@ class MediaCodecQuery(
 	}
 
 	fun getMaxResolution(mime: String): Size {
+		// Software decoders can advertise sizes beyond the hardware decoder used for playback.
+		val hardware = maxResolution(mime, hardwareOnly = true)
+		val (maxWidth, maxHeight) = if (hardware.first > 0 && hardware.second > 0) {
+			hardware
+		} else {
+			maxResolution(mime, hardwareOnly = false)
+		}
+
+		Timber.d("Computed max resolution for %s: %dx%d", mime, maxWidth, maxHeight)
+		return Size(maxWidth, maxHeight)
+	}
+
+	private fun maxResolution(mime: String, hardwareOnly: Boolean): Pair<Int, Int> {
 		val resolutions = decoderInfos()
+			.filter { !hardwareOnly || !it.isSoftwareCodec }
 			.mapNotNull { info -> getCapabilitiesOrNull(info, mime)?.videoCapabilities }
 			.mapNotNull { vc ->
 				val w = vc.supportedWidths?.upper ?: return@mapNotNull null
 				val h = vc.supportedHeights?.upper ?: return@mapNotNull null
-				w to h
+				(w to h).takeIf { w > 0 && h > 0 }
 			}
+			.toList()
 
 		val maxWidth = resolutions.maxOfOrNull { it.first } ?: 0
 		val maxHeight = resolutions.maxOfOrNull { it.second } ?: 0
 
-		Timber.d("Computed max resolution for %s: %dx%d", mime, maxWidth, maxHeight)
-		return Size(maxWidth, maxHeight)
+		return maxWidth to maxHeight
 	}
 
 	fun supportsMultiInstance(mime: String): Boolean =
