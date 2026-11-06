@@ -32,6 +32,7 @@ import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesDispla
 import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesDisplayImageTypeScreen
 import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesDisplayScreen
 import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesDisplaySpacingScreen
+import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesDisplayViewStyleScreen
 import org.jellyfin.androidtv.ui.settings.screen.library.SettingsLibrariesScreen
 import org.jellyfin.androidtv.ui.settings.screen.license.SettingsLicenseScreen
 import org.jellyfin.androidtv.ui.settings.screen.license.SettingsLicensesScreen
@@ -100,6 +101,7 @@ object Routes {
 	const val LIBRARIES_DISPLAY_IMAGE_SIZE = "/libraries/display/{itemId}/{displayPreferencesId}/image-size"
 	const val LIBRARIES_DISPLAY_IMAGE_TYPE = "/libraries/display/{itemId}/{displayPreferencesId}/image-type"
 	const val LIBRARIES_DISPLAY_GRID = "/libraries/display/{itemId}/{displayPreferencesId}/grid"
+	const val LIBRARIES_DISPLAY_VIEW_STYLE = "/libraries/display/{itemId}/{displayPreferencesId}/view-style"
 	const val LIBRARIES_DISPLAY_SPACING = "/libraries/display/{itemId}/{displayPreferencesId}/spacing"
 	const val HOME = "/home"
 	const val HOME_SECTION = "/home/section/{index}"
@@ -229,6 +231,12 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.LIBRARIES_DISPLAY_GRID to { context ->
 		SettingsLibrariesDisplayGridScreen(context.parameters["itemId"]?.toUUIDOrNull()!!, context.parameters["displayPreferencesId"]!!)
+	},
+	Routes.LIBRARIES_DISPLAY_VIEW_STYLE to { context ->
+		SettingsLibrariesDisplayViewStyleScreen(
+			context.parameters["itemId"]?.toUUIDOrNull()!!,
+			context.parameters["displayPreferencesId"]!!,
+		)
 	},
 	Routes.LIBRARIES_DISPLAY_SPACING to { context ->
 		SettingsLibrariesDisplaySpacingScreen(

@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.animation.core.animateFloatAsState
@@ -352,7 +353,13 @@ class HorizontalGridPresenter : Presenter() {
 						.focusRequester(requester)
 						.onPreviewKeyEvent { event ->
 							val nativeEvent = event.nativeKeyEvent
-							if (keyListener?.onKey(holder.gridView, nativeEvent.keyCode, nativeEvent) == true) {
+							if (
+								shouldForwardHorizontalGridKey(
+									entry.adapterPosition,
+									configValue.rows,
+									nativeEvent.keyCode,
+								) && keyListener?.onKey(holder.gridView, nativeEvent.keyCode, nativeEvent) == true
+							) {
 								return@onPreviewKeyEvent true
 							}
 							val directional = event.key == Key.DirectionUp ||
@@ -400,3 +407,6 @@ internal fun findHorizontalGridInitialItemIndex(itemCount: Int, selectedPosition
 	if (itemCount <= 0) return 0
 	return selectedPosition.coerceAtLeast(0).coerceAtMost(itemCount - 1)
 }
+
+internal fun shouldForwardHorizontalGridKey(position: Int, rows: Int, keyCode: Int): Boolean =
+	keyCode != KeyEvent.KEYCODE_DPAD_UP || position % rows.coerceAtLeast(1) == 0

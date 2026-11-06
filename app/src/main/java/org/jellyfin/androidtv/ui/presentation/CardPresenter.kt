@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
+import org.jellyfin.androidtv.constant.LibraryViewStyle
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.AsyncImage
@@ -321,7 +322,8 @@ internal fun BaseRowItem.browseCardAspectRatio(imageType: ImageType, uniformAspe
 
 internal fun resolveBrowseGridSpacing(base: Int, option: LibraryCardSpacing): Int = option.apply(base)
 
-internal fun shouldShowBrowseCardInfo(showCardTitles: Boolean): Boolean = showCardTitles
+internal fun shouldShowBrowseCardInfo(style: LibraryViewStyle, showCardTitles: Boolean): Boolean =
+	style == LibraryViewStyle.DENSE_LIST || showCardTitles
 
 @Composable
 @Stable
