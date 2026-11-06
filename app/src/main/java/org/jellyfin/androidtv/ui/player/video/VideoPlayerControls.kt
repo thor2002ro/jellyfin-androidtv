@@ -44,6 +44,7 @@ import org.jellyfin.androidtv.ui.base.LocalTextStyle
 import org.jellyfin.androidtv.ui.base.Seekbar
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.IconButton
+import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.IconButtonDefaults
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.player.base.PlayerSeekbar
@@ -53,7 +54,7 @@ import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
-import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
+import org.jellyfin.playback.core.queue.canSeek
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -75,6 +76,7 @@ private const val DefaultPlaybackSpeed = 1.0
 fun VideoPlayerControls(
 	playbackManager: PlaybackManager = koinInject(),
 	onPlayPauseClick: () -> Unit,
+	onGoLiveClick: () -> Unit = { playbackManager.state.goLive() },
 	initialFocusRequester: FocusRequester,
 	item: BaseItemDto? = null,
 	mediaSourceId: String? = null,
@@ -100,8 +102,9 @@ fun VideoPlayerControls(
 	var changingLiveTvChannel by remember(item?.id) { mutableStateOf(false) }
 	val topControlsFocusRequester = initialFocusRequester
 	val isLiveTv = item?.isLiveTv() == true
-	val playPauseEnabled = currentQueueEntry?.isLiveTv != true
-	val seekEnabled = currentQueueEntry?.isDirectPlayLiveTv != true
+	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = currentQueueEntry, updateWhilePaused = isLiveTv)
+	val seekEnabled = currentQueueEntry.canSeek(positionInfo)
+	val playPauseEnabled = seekEnabled
 	val coroutineScope = rememberCoroutineScope()
 	val liveTvChannelNavigator = rememberLiveTvChannelNavigator()
 	val showPreviousEntry = isLiveTv || entryIndex > 0
@@ -208,6 +211,9 @@ fun VideoPlayerControls(
 					enabled = seekEnabled,
 					onPreview = { onRelativeSeekPreview(true) },
 				)
+				if (isLiveTv && seekEnabled) {
+					Button(onClick = onGoLiveClick) { Text(stringResource(R.string.lbl_live)) }
+				}
 
 				Spacer(Modifier.weight(1f))
 
@@ -595,7 +601,7 @@ private fun PositionText(
 		return
 	}
 
-	val positionInfo by rememberPlayerPositionInfo(playbackManager, precision = 1.seconds)
+	val positionInfo by rememberPlayerPositionInfo(playbackManager, precision = 1.seconds, updateWhilePaused = playbackManager.queue.entry.value?.isLiveTv == true)
 	val speed by playbackManager.state.speed.collectAsState()
 	if (positionInfo.duration == Duration.ZERO) return
 
@@ -606,7 +612,9 @@ private fun PositionText(
 	val durationFormatted = positionInfo.duration.formatted(includeHours)
 	val remaining = (positionInfo.duration - activePosition).coerceAtLeast(Duration.ZERO)
 	val finishTime = finishTimeFor(remaining, speed)
-	val endsText = stringResource(
+	val endsText = if (playbackManager.queue.entry.value?.isLiveTv == true) {
+		stringResource(R.string.pref_live_tv_cat)
+	} else stringResource(
 		R.string.lbl_playback_control_ends,
 		timeFormatter.format(finishTime),
 	)
