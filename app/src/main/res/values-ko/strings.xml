@@ -403,7 +403,6 @@
     <string name="lbl_hidden">숨김</string>
     <string name="pref_watched_indicator">시청 여부 표시</string>
     <string name="lbl_switch_user">계정 전환</string>
-    <string name="no_network_permissions">Jellyfin의 작동을 위해서는 네트워크 권한이 필요합니다</string>
     <string name="add_user">계정 생성</string>
     <string name="lbl_season_number">시즌 %1$d</string>
     <string name="lbl_episode_number">에피소드 %1$d</string>
