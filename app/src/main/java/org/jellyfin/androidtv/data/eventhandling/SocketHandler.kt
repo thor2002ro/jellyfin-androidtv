@@ -12,7 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.ui.itemhandling.DirectStreamBadgeCache
@@ -271,13 +270,13 @@ class SocketHandler(
 		}
 	}
 
-	private fun onDisplayMessage(header: String?, text: String?) {
+	private suspend fun onDisplayMessage(header: String?, text: String?) {
 		val toastMessage = buildString {
 			if (!header.isNullOrBlank()) append(header, ": ")
 			append(text)
 		}
 
-		runBlocking(Dispatchers.Main) {
+		withContext(Dispatchers.Main) {
 			Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show()
 		}
 	}
