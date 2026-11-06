@@ -171,7 +171,6 @@
     <string name="pref_live_tv_cat">电视直播</string>
     <string name="lbl_recorded_tv">录制电视</string>
     <string name="lbl_live_tv_guide">电视节目指南</string>
-    <string name="lbl_no_recordings">没有可用的录制</string>
     <string name="msg_unable_load_subs">字幕加载失败</string>
     <string name="msg_subtitles_loading">加载字幕中……</string>
     <string name="lbl_filters">过滤器</string>
@@ -374,7 +373,6 @@
     <string name="pref_subtitles_background_summary">在字幕后面显示黑色背景</string>
     <string name="pref_subtitles_background_title">启用背景</string>
     <string name="pref_next_up_timeout_disabled">无限</string>
-    <string name="server_issue_ssl_handshake">SSL握手失败</string>
     <string name="server_issue_timeout">连接超时</string>
     <string name="server_issue_outdated_version">服务器使用不支持的版本 %1$s。请更新到 %2$s 或更高版本</string>
     <string name="server_issue_unsupported_version">服务器使用版本 %1$s，它不受支持</string>

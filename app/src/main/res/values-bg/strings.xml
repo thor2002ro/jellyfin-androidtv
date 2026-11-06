@@ -146,7 +146,6 @@
     <string name="pref_live_tv_cat">Телевизия на живо</string>
     <string name="lbl_recorded_tv">Записана Телевизия</string>
     <string name="lbl_live_tv_guide">Програма</string>
-    <string name="lbl_no_recordings">Няма налични записи</string>
     <string name="msg_burn_sub_warning">Внедряване на субтитрите. Може да отнеме няколко секунди…</string>
     <string name="lbl_additional_parts">Допълнителни части</string>
     <string name="lbl_open_artist">Отвори изпълнител</string>
@@ -458,7 +457,6 @@
     <string name="home_section_library_small">Моето съдържание (малко)</string>
     <string name="server_issue_unable_to_connect">Неуспешно свързване</string>
     <string name="server_issue_timeout">Времето за свързване изтече</string>
-    <string name="server_issue_ssl_handshake">SSL ръкостискането неуспешно</string>
     <string name="sort_accounts_by">Сортирай акаунтите по</string>
     <string name="pref_home_description">Настрой показваните секции</string>
     <string name="pref_direct_stream_live_on">Транскодирането е изключено</string>

@@ -202,7 +202,6 @@
     <string name="pref_live_tv_cat">TV en vivo</string>
     <string name="lbl_recorded_tv">Grabaciones de TV</string>
     <string name="lbl_live_tv_guide">Guía de TV en vivo</string>
-    <string name="lbl_no_recordings">No hay grabaciones disponibles</string>
     <string name="msg_burn_sub_warning">Quemando los subtítulos, esto puede tomar algunos minutos. Por favor, sé paciente…</string>
     <string name="msg_unable_load_subs">No fue posible cargar el subtítulo</string>
     <string name="msg_subtitles_loading">Cargando subtítulos…</string>
@@ -362,7 +361,6 @@
     <string name="pref_accounts">Cuentas</string>
     <string name="sort_accounts_by">Ordenar cuentas por</string>
     <string name="pref_customization">Personalización</string>
-    <string name="server_issue_ssl_handshake">El emparejamiento (handshake) SSL falló</string>
     <string name="server_issue_timeout">No se pudo conectar</string>
     <string name="server_issue_outdated_version">El servidor está usando la versión sin soporte %1$s. Por favor, actualice a la versión %2$s o posterior</string>
     <string name="server_issue_unsupported_version">El servidor usa la versión %1$s la cual no está soportada</string>

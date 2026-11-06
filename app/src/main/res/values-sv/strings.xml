@@ -92,7 +92,6 @@
     <string name="lbl_artists">Artister</string>
     <string name="lbl_albums">Album</string>
     <string name="lbl_live_tv_guide">Direktsänd TV guide</string>
-    <string name="lbl_no_recordings">Inga inspelningar tillgängliga</string>
     <string name="msg_burn_sub_warning">Bränner in undertexter. Detta kan ta några sekunder…</string>
     <string name="msg_unable_load_subs">Kan inte ladda undertext</string>
     <string name="msg_subtitles_loading">Undertexter laddas…</string>
@@ -394,7 +393,6 @@
     <string name="pref_accounts">Konton</string>
     <string name="sort_accounts_by">Sortera konton efter</string>
     <string name="pref_customization">Anpassning</string>
-    <string name="server_issue_ssl_handshake">SSL-handskakning misslyckades</string>
     <string name="server_issue_timeout">Anslutningen överskred tidsbegränsningen</string>
     <string name="server_issue_outdated_version">Servern har inte stöd för version %1$s. Vänligen uppdatera till %2$s eller senare</string>
     <string name="server_issue_unsupported_version">Servern använder version %1$s vilket stöds ej</string>

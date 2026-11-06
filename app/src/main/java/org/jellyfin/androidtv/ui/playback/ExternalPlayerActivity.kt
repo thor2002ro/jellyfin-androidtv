@@ -170,7 +170,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 		)
 		player.populateIntent(playIntent, playData)
 
-		Timber.i("Starting item ${item.id} from $position using $player. playData=$playData")
+		Timber.d("Starting item ${item.id} from $position using $player. playData=$playData")
 
 		// Launch playback
 		try {

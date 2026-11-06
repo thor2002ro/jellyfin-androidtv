@@ -246,8 +246,8 @@ private object NewPlayerStreamStatusBuilder {
 					row("Video resolution", resolution(videoTrack?.width, videoTrack?.height))
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
-					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo))
-					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo))
+					row("Video codec", streamingVideoCodec(videoTrack, transcodingInfo, frameStats.videoDecoderName))
+					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, frameStats.audioDecoderName))
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels())
 					row("Audio language", audioLanguage(selectedAudio))
 					row("Bitrate", streamBitrate(videoTrack, audioTrack, transcodingInfo))
@@ -294,13 +294,14 @@ private object NewPlayerStreamStatusBuilder {
 	private fun streamingVideoCodec(
 		track: MediaStreamVideoTrack?,
 		transcodingInfo: TranscodingInfo?,
+		decoderName: String?,
 	): String? {
 		val source = track?.codec.formatCodec()
 		val target = transcodingInfo?.videoCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.let { "$it (direct)" }
-			transcodingInfo.isVideoDirect && source != null -> "$source (direct)"
+			transcodingInfo == null -> source?.let { "$it (${decoderName.directCodecLabel()})" }
+			transcodingInfo.isVideoDirect && source != null -> "$source (${decoderName.directCodecLabel()})"
 			source != null && target != null -> "$source -> $target"
 			target != null -> "-> $target"
 			else -> source
@@ -311,13 +312,14 @@ private object NewPlayerStreamStatusBuilder {
 		track: MediaStreamAudioTrack?,
 		selectedTrack: PlayerTrack?,
 		transcodingInfo: TranscodingInfo?,
+		decoderName: String?,
 	): String? {
 		val source = (track?.codec ?: selectedTrack?.codec).formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
-			transcodingInfo == null -> source?.let { "$it (direct)" }
-			transcodingInfo.isAudioDirect && source != null -> "$source (direct)"
+			transcodingInfo == null -> source?.let { "$it (${decoderName.directCodecLabel()})" }
+			transcodingInfo.isAudioDirect && source != null -> "$source (${decoderName.directCodecLabel()})"
 			source != null && target != null -> "$source -> $target"
 			target != null -> "-> $target"
 			else -> source
@@ -442,6 +444,13 @@ private object NewPlayerStreamStatusBuilder {
 	private fun String?.formatCodec(): String? = this
 		?.takeIf { it.isNotBlank() }
 		?.uppercase()
+
+	private fun String?.directCodecLabel() = when {
+		isFfmpegDecoderName() -> "ffmpeg direct"
+		else -> "direct"
+	}
+
+	private fun String?.isFfmpegDecoderName() = this?.contains("ffmpeg", ignoreCase = true) == true
 
 	private fun StringBuilder.appendInline(value: String?) {
 		if (value.isNullOrBlank()) return

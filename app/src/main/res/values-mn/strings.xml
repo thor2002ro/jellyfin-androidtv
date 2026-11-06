@@ -118,7 +118,6 @@
     <string name="lbl_filters">Шууд ТВ шүүлтүүрүүд</string>
     <string name="msg_subtitles_loading">Хадмалуудыг ачаалж байна…</string>
     <string name="msg_unable_load_subs">Хадмал орчуулгыг ачаалах боломжгүй байна</string>
-    <string name="lbl_no_recordings">Ямар ч бичлэг байхгүй</string>
     <string name="lbl_live_tv_guide">Хөтөлбөр</string>
     <string name="lbl_recorded_tv">Бичигдсэн ТВ</string>
     <string name="msg_error_live_stream">Шууд ТВ цацахад алдаа гарлаа. Дахин оролдоно уу…</string>

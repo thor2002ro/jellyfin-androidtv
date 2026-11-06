@@ -82,12 +82,16 @@ class ServerAddFragment : Fragment() {
 					binding.address.isEnabled = true
 					binding.confirm.isEnabled = true
 					// Update state text
-					binding.error.text = getString(
-						R.string.server_connection_failed_candidates,
-						state.addressCandidates
-							.map { "${it.key} - ${it.value.getSummary(requireContext())}" }
-							.joinToString(prefix = "\n", separator = "\n")
-					)
+					binding.error.text = if (state.addressCandidates.isEmpty()) {
+						getString(R.string.server_connection_failed)
+					} else {
+						getString(
+							R.string.server_connection_failed_candidates,
+							state.addressCandidates
+								.map { "${it.key} - ${it.value.getSummary(requireContext())}" }
+								.joinToString(prefix = "\n", separator = "\n")
+						)
+					}
 				}
 
 				is ConnectedState -> parentFragmentManager.commit {

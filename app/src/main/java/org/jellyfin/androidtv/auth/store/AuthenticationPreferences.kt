@@ -7,6 +7,7 @@ import org.jellyfin.preference.booleanPreference
 import org.jellyfin.preference.enumPreference
 import org.jellyfin.preference.store.SharedPreferenceStore
 import org.jellyfin.preference.stringPreference
+import java.util.UUID
 
 class AuthenticationPreferences(context: Context) : SharedPreferenceStore(
 	sharedPreferences = context.getSharedPreferences("authentication", Context.MODE_PRIVATE)
@@ -38,6 +39,41 @@ class AuthenticationPreferences(context: Context) : SharedPreferenceStore(
 
 				putString("last_user_id", "")
 			}
+		}
+	}
+
+	fun clearServer(serverId: UUID) {
+		val serverIdString = serverId.toString()
+
+		if (this[lastServerId] == serverIdString) {
+			this[lastServerId] = ""
+			this[lastUserId] = ""
+		}
+
+		if (this[autoLoginServerId] == serverIdString) {
+			clearSpecificAutoLogin()
+		}
+	}
+
+	fun clearUser(serverId: UUID, userId: UUID) {
+		val serverIdString = serverId.toString()
+		val userIdString = userId.toString()
+
+		if (this[lastServerId] == serverIdString && this[lastUserId] == userIdString) {
+			this[lastUserId] = ""
+		}
+
+		if (this[autoLoginServerId] == serverIdString && this[autoLoginUserId] == userIdString) {
+			clearSpecificAutoLogin()
+		}
+	}
+
+	private fun clearSpecificAutoLogin() {
+		this[autoLoginServerId] = ""
+		this[autoLoginUserId] = ""
+
+		if (this[autoLoginUserBehavior] == UserSelectBehavior.SPECIFIC_USER) {
+			this[autoLoginUserBehavior] = UserSelectBehavior.DISABLED
 		}
 	}
 }

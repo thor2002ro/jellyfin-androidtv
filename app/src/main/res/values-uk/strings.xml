@@ -212,7 +212,6 @@
     <string name="pref_live_tv_cat">Телеканали</string>
     <string name="lbl_recorded_tv">Записи телеканалів</string>
     <string name="lbl_live_tv_guide">Телегід</string>
-    <string name="lbl_no_recordings">Немає доступних записів</string>
     <string name="msg_burn_sub_warning">Вбудовуються субтитри. Це може зайняти деякий час…</string>
     <string name="msg_unable_load_subs">Не вдається завантажити субтитри</string>
     <string name="msg_subtitles_loading">Завантаження субтитрів…</string>
@@ -304,7 +303,6 @@
     <string name="pref_accounts">Облікові записи</string>
     <string name="sort_accounts_by">Сортування облікових записів</string>
     <string name="pref_customization">Персональні налаштування</string>
-    <string name="server_issue_ssl_handshake">SSL-рукостискання не вдалось</string>
     <string name="server_issue_timeout">Термін підʼєднання сплив</string>
     <string name="server_issue_outdated_version">Сервер використовує несумісну версію %1$s. Будь ласка, оновіть до %2$s або новішої версії</string>
     <string name="server_issue_unsupported_version">Сервер використовує версію %1$s яка не підтримується</string>

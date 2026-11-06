@@ -147,7 +147,7 @@ class SessionRepositoryImpl(
 				userRepository.setCurrentUser(user)
 				serverRepository.setCurrentServer(server)
 			} catch (err: ApiClientException) {
-				Timber.e(err, "Unable to authenticate: bad response when getting user info")
+				Timber.e(err, "Unable to authenticate on server ${server?.address}: bad response when getting user info")
 				destroyCurrentSession()
 				return false
 			}
@@ -156,11 +156,12 @@ class SessionRepositoryImpl(
 			val crashReportUrl = userApiClient.clientLogApi.logFileUrl()
 			telemetryPreferences[TelemetryPreferences.crashReportUrl] = crashReportUrl
 			telemetryPreferences[TelemetryPreferences.crashReportToken] = session.accessToken
+
+			preferencesRepository.onSessionChanged()
 		} else {
 			userRepository.setCurrentUser(null)
 			serverRepository.setCurrentServer(null)
 		}
-		preferencesRepository.onSessionChanged()
 		_currentSession.value = session
 
 		return true
