@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -41,39 +42,58 @@ class SearchViewModel(
 	private var searchJob: Job? = null
 
 	private var previousQuery: String? = null
+	private var resultsQuery: String? = null
 
 	private val _searchResultsFlow = MutableStateFlow<Collection<SearchResultGroup>>(emptyList())
 	val searchResultsFlow = _searchResultsFlow.asStateFlow()
 
-	fun searchImmediately(query: String) = searchDebounced(query, 0.milliseconds)
+	private val _hasSearchErrorFlow = MutableStateFlow(false)
+	val hasSearchErrorFlow = _hasSearchErrorFlow.asStateFlow()
+
+	fun searchImmediately(query: String) = search(query, 0.milliseconds, force = true)
 
 	fun cancelSearch() {
 		searchJob?.cancel()
 		previousQuery = null
+		_hasSearchErrorFlow.value = false
 	}
 
-	fun searchDebounced(query: String, debounce: Duration = debounceDuration): Boolean {
+	fun searchDebounced(query: String, debounce: Duration = debounceDuration) = search(query, debounce)
+
+	private fun search(query: String, debounce: Duration, force: Boolean = false): Boolean {
 		val trimmed = query.trim()
-		if (trimmed == previousQuery) return false
+		if (!force && trimmed == previousQuery) return false
+		val retainedResults = if (trimmed == resultsQuery) _searchResultsFlow.value else emptyList()
 		previousQuery = trimmed
 
 		searchJob?.cancel()
+		_hasSearchErrorFlow.value = false
 
 		if (trimmed.isBlank()) {
+			resultsQuery = null
 			_searchResultsFlow.value = emptyList()
 			return true
 		}
 
 		searchJob = viewModelScope.launch {
 			delay(debounce)
-			val results = groups.map { (label, _) -> SearchResultGroup(label, emptyList()) }.toMutableList()
+			resultsQuery = trimmed
+			val results = groups.map { (label, _) ->
+				retainedResults.firstOrNull { it.labelRes == label } ?: SearchResultGroup(label, emptyList())
+			}.toMutableList()
 			_searchResultsFlow.value = results.toList()
 			val requests = Semaphore(3)
 			groups.entries.forEachIndexed { index, (stringRes, itemKinds) ->
 				launch {
-					val items = requests.withPermit { searchRepository.search(trimmed, itemKinds).getOrNull().orEmpty() }
-					results[index] = SearchResultGroup(stringRes, items)
-					_searchResultsFlow.value = results.toList()
+					val result = requests.withPermit { searchRepository.search(trimmed, itemKinds) }
+					ensureActive()
+					result.fold(
+						onSuccess = { items ->
+							results[index] = SearchResultGroup(stringRes, items)
+							_searchResultsFlow.value = results.toList()
+						},
+						onFailure = { _hasSearchErrorFlow.value = true },
+					)
 				}
 			}
 		}
