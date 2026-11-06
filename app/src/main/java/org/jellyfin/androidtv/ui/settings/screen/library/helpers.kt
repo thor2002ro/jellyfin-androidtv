@@ -10,7 +10,7 @@ import org.jellyfin.androidtv.preference.LibraryPreferences
 import org.jellyfin.androidtv.preference.PreferencesRepository
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
-import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.compose.koinInject
 import timber.log.Timber
@@ -34,7 +34,7 @@ fun rememberBaseItemDto(itemId: UUID): BaseItemDto? {
 		val item by produceState<BaseItemDto?>(null) {
 			value = try {
 				withContext(Dispatchers.IO) {
-					api.userLibraryApi.getItem(itemId = itemId).content
+					api.libraryApi.getItem(itemId = itemId).content
 				}
 			} catch (error: ApiClientException) {
 				Timber.w(error, "Failed to get display settings item $itemId")

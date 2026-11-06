@@ -24,9 +24,9 @@ import org.jellyfin.androidtv.util.sdk.isHdrVideo
 import org.jellyfin.androidtv.util.sdk.playbackMediaSource
 import org.jellyfin.androidtv.util.withoutUndeterminedLanguagePrefix
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.api.client.extensions.subtitleApi
-import org.jellyfin.sdk.api.client.extensions.videosApi
+import org.jellyfin.sdk.api.client.extensions.videoApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
@@ -107,7 +107,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 	}
 
 	private fun playItem(item: BaseItemDto, mediaSource: MediaSourceInfo, position: Duration) {
-		val videoUrl = api.videosApi.getVideoStreamUrl(
+		val videoUrl = api.videoApi.getVideoStreamUrl(
 			itemId = item.id,
 			mediaSourceId = mediaSource.id,
 			static = true,
@@ -222,7 +222,7 @@ class ExternalPlayerActivity : FragmentActivity() {
 		// Report playback event
 		runCatching {
 			withContext(Dispatchers.IO) {
-				api.playStateApi.reportPlaybackStopped(
+				api.sessionApi.reportPlaybackStopped(
 					PlaybackStopInfo(
 						itemId = item.id,
 						mediaSourceId = mediaSource.id,

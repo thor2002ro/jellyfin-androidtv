@@ -17,7 +17,7 @@ import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButton
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.clientLogApi
+import org.jellyfin.sdk.api.client.extensions.systemApi
 import org.koin.compose.koinInject
 
 @Composable
@@ -91,7 +91,7 @@ fun SettingsMainScreen() {
 						.redirectErrorStream(true)
 						.start()
 						.inputStream.bufferedReader().use { it.readText() }
-					val response by api.clientLogApi.logFile(logs)
+					val response by api.systemApi.logFile(logs)
 					response
 				},
 				onSuccess = { result ->
