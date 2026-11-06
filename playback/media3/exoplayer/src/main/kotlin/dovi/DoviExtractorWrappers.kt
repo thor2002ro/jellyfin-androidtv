@@ -21,6 +21,7 @@ import io.github.thor2002ro.libdovi.DoviTarget
 import io.github.thor2002ro.libdovi.DoviTransformSessionState
 import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import java.util.TreeMap
+import java.io.EOFException
 
 private data class Mp4TrackIdentity(val trackId: Int, val baseTrackId: Int)
 
@@ -164,12 +165,15 @@ private class DoviDualTrackDispatcher(
 	}
 }
 
+@UnstableApi
 private class DeferredVideoTrackOutput(
 	val id: Int,
 	val type: Int,
 	private val formatChanged: (DeferredVideoTrackOutput, Format) -> Unit,
 ) : TrackOutput {
 	private var prepared: TrackOutput? = null
+	private val pendingData = mutableListOf<Pair<Int, ByteArray>>()
+	private var pendingBytes = 0
 	private var pendingDurationUs: Long? = null
 	var format: Format? = null
 		private set
@@ -179,9 +183,16 @@ private class DeferredVideoTrackOutput(
 		prepared = output
 		pendingDurationUs?.let(output::durationUs)
 		format?.let(output::format)
+		pendingData.forEach { (part, bytes) -> output.sampleData(ParsableByteArray(bytes), bytes.size, part) }
+		pendingData.clear()
+		pendingBytes = 0
 	}
 
-	fun resetSampleState() = (prepared as? DoviTrackOutput)?.reset() ?: Unit
+	fun resetSampleState() {
+		pendingData.clear()
+		pendingBytes = 0
+		(prepared as? DoviTrackOutput)?.reset()
+	}
 
 	override fun durationUs(durationUs: Long) {
 		prepared?.durationUs(durationUs) ?: run { pendingDurationUs = durationUs }
@@ -189,15 +200,46 @@ private class DeferredVideoTrackOutput(
 
 	override fun format(format: Format) {
 		this.format = format
+		val existingOutput = prepared
 		formatChanged(this, format)
-		prepared?.format(format)
+		// prepare() already forwards the initial format before replaying staged bytes.
+		existingOutput?.format(format)
 	}
 
-	override fun sampleData(input: DataReader, length: Int, allowEndOfInput: Boolean, sampleDataPart: Int): Int =
-		(prepared ?: throw unprepared()).sampleData(input, length, allowEndOfInput, sampleDataPart)
+	override fun sampleData(input: DataReader, length: Int, allowEndOfInput: Boolean, sampleDataPart: Int): Int {
+		prepared?.let { return it.sampleData(input, length, allowEndOfInput, sampleDataPart) }
+		checkPendingLimit(length)
+		val bytes = ByteArray(length)
+		val read = input.read(bytes, 0, length)
+		if (read == C.RESULT_END_OF_INPUT && !allowEndOfInput) throw EOFException()
+		if (read > 0) stage(sampleDataPart, if (read == length) bytes else bytes.copyOf(read))
+		return read
+	}
 
-	override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) =
-		(prepared ?: throw unprepared()).sampleData(data, length, sampleDataPart)
+	override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
+		prepared?.let { return it.sampleData(data, length, sampleDataPart) }
+		checkPendingLimit(length)
+		if (length > 0) {
+			require(length <= data.bytesLeft())
+			val bytes = ByteArray(length)
+			System.arraycopy(data.data, data.position, bytes, 0, length)
+			data.position += length
+			stage(sampleDataPart, bytes)
+		}
+	}
+
+	// TS forwards payload before parsing its first SPS/PPS. Stage only this initial data;
+	// track selection and dependency validation still happen before sample emission.
+	private fun stage(part: Int, bytes: ByteArray) {
+		pendingData += part to bytes
+		pendingBytes += bytes.size
+	}
+
+	private fun checkPendingLimit(length: Int) {
+		if (length < 0 || length > MAX_INITIAL_BYTES - pendingBytes || pendingData.size >= MAX_INITIAL_PARTS) {
+			throw DoviSampleTransformationException(DoviStatus.INCONSISTENT_RPU, "Dolby Vision initial track data exceeded its bounded buffer")
+		}
+	}
 
 	override fun sampleMetadata(
 		timeUs: Long,
@@ -211,6 +253,11 @@ private class DeferredVideoTrackOutput(
 		DoviStatus.INCONSISTENT_RPU,
 		"Dolby Vision sample arrived before its source track was selected",
 	)
+
+	private companion object {
+		const val MAX_INITIAL_BYTES = 1024 * 1024
+		const val MAX_INITIAL_PARTS = 1024
+	}
 }
 
 @UnstableApi
