@@ -7,9 +7,15 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.PresenterSelector
 import androidx.leanback.widget.Row
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.ChangeTriggerType
@@ -31,6 +37,7 @@ import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.BaseItemPerson
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
@@ -50,6 +57,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import timber.log.Timber
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 
 class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var query: GetItemsRequest? = null
@@ -123,6 +132,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var pendingFullRetrieve = false
 	private var interruptedRetrieve = false
 	internal val retrievalScope by lazy { MainScope() }
+	private var liveTvProgramUpdates: Job? = null
 	private var queryVersion = 0
 	private lateinit var context: Context
 
@@ -131,6 +141,56 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	}
 
 	internal fun currentQueryVersion() = queryVersion
+
+	fun startLiveTvProgramUpdates(owner: LifecycleOwner) {
+		if (queryType != QueryType.LiveTvChannel && queryType != QueryType.LiveTvProgram) return
+		if (liveTvProgramUpdates?.isActive == true) return
+		liveTvProgramUpdates = retrievalScope.launch {
+			owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+				var lastRefresh: LocalDateTime? = null
+				var lastBoundary: LocalDateTime? = null
+				while (true) {
+					val now = LocalDateTime.now()
+					val boundaries = liveTvProgramBoundaries(now)
+					val nextBoundary = boundaries.minOrNull()
+					// One row refresh at a program boundary; the card's second-by-second clock stays local.
+					val waitMillis = if (nextBoundary?.isAfter(now) == true) {
+						ChronoUnit.MILLIS.between(now, nextBoundary) + 1000
+					} else if (lastRefresh != null && lastBoundary == nextBoundary) {
+						// Back off only when the server still has no replacement for the same ended program.
+						30_000 - ChronoUnit.MILLIS.between(lastRefresh, now)
+					} else 1000
+					val nextFutureBoundary = boundaries.filter { it.isAfter(now) }.minOrNull()
+					val futureWaitMillis = nextFutureBoundary?.let { ChronoUnit.MILLIS.between(now, it) + 1000 } ?: waitMillis
+					// Recheck locally so newly loaded pages can introduce an earlier program boundary.
+					delay(minOf(waitMillis, futureWaitMillis).coerceIn(1000, 30_000))
+					if (boundaries != liveTvProgramBoundaries(now)) continue
+					if (nextBoundary?.isAfter(LocalDateTime.now()) == true) continue
+					if (notifyRetrieveStarted()) {
+						val refresh = when (queryType) {
+							QueryType.LiveTvChannel -> retrieveLiveTvChannels(
+								api, requireNotNull(tvChannelQuery), 0, maxOf(itemsRetrieved, chunkSize), refreshExisting = true,
+							)
+							QueryType.LiveTvProgram -> retrieveLiveTvRecommendedPrograms(api, requireNotNull(tvProgramQuery), tvProgramSelectAction)
+							else -> null
+						}
+						refresh?.join()
+						lastRefresh = LocalDateTime.now()
+						lastBoundary = nextBoundary
+					}
+				}
+			}
+		}
+	}
+
+	private fun liveTvProgramBoundaries(now: LocalDateTime) = (0 until size()).mapNotNull { index ->
+		val item = (get(index) as? BaseRowItem)?.baseItem ?: return@mapNotNull null
+		val program = when (item.type) {
+			BaseItemKind.TV_CHANNEL, BaseItemKind.LIVE_TV_CHANNEL -> item.currentProgram
+			else -> item
+		}
+		program?.startDate?.takeIf { it.isAfter(now) } ?: program?.endDate
+	}
 
 	internal fun recordItemsRetrieved(startIndex: Int, count: Int) {
 		require(startIndex >= 0)
