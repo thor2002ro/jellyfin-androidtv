@@ -21,6 +21,7 @@ import androidx.navigationevent.NavigationEvent
 import androidx.savedstate.compose.serialization.serializers.SnapshotStateListSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
+import org.jellyfin.androidtv.ui.navigation.focus.INITIAL_FOCUS_KEY_METADATA
 import org.jellyfin.androidtv.ui.navigation.focus.rememberFocusRestorationNavEntryDecorator
 
 typealias RouteParameters = Map<String, String>
@@ -30,6 +31,8 @@ typealias RouteComposable = @Composable ((context: RouteContext) -> Unit)
 data class RouteContext(
 	val route: String,
 	val parameters: RouteParameters = emptyMap(),
+	val initialFocusKey: String? = null,
+	val initialFocusIndex: Int = 0,
 )
 
 class Router(
@@ -45,10 +48,15 @@ class Router(
 
 	// Route manipulation
 
-	fun push(route: String, parameters: RouteParameters = emptyMap()) {
+	fun push(
+		route: String,
+		parameters: RouteParameters = emptyMap(),
+		initialFocusKey: String? = null,
+		initialFocusIndex: Int = 0,
+	) {
 		verifyRoute(route, parameters)
 
-		val context = RouteContext(route, parameters)
+		val context = RouteContext(route, parameters, initialFocusKey, initialFocusIndex)
 		backStack.add(context)
 	}
 
@@ -120,7 +128,10 @@ fun RouterContent(
 				popTransitionSpec = popTransitionSpec,
 				predictivePopTransitionSpec = predictivePopTransitionSpec,
 				entryProvider = { backStackEntry ->
-					NavEntry(backStackEntry) {
+					NavEntry(
+						key = backStackEntry,
+						metadata = backStackEntry.initialFocusKey?.let { mapOf(INITIAL_FOCUS_KEY_METADATA to it) }.orEmpty(),
+					) {
 						val route = backStackEntry.route
 						val composable = router.resolve(route)
 						if (composable == null) {
