@@ -24,7 +24,9 @@ class HomeRowsFragmentTests : FunSpec({
 		mockkObject(fragment)
 		try {
 			val config = mockk<Configuration>().apply { densityDpi = 320; fontScale = 1f }
-			val resources = mockk<Resources> { every { configuration } returns config }
+			val resources = mockk<Resources> {
+				every { configuration } returns config
+			}
 			val callbacks = mutableListOf<Runnable>()
 			val grid = mockk<VerticalGridView>(relaxed = true) {
 				every { childCount } returns 0

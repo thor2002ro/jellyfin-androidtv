@@ -30,4 +30,36 @@ class CardPresenterDisplayConfigTests : FunSpec({
 		rowItem.getDisplayConfig(ImageType.POSTER, uniformAspect = false).aspectRatio shouldBe
 			ImageHelper.ASPECT_RATIO_2_3.toFloat()
 	}
+
+	test("library cards use server artwork without adding a second name over it") {
+		for (type in listOf(BaseItemKind.USER_VIEW, BaseItemKind.COLLECTION_FOLDER)) {
+			val rowItem = BaseItemDtoBaseRowItem(BaseItemDto(
+				id = UUID.randomUUID(),
+				type = type,
+				imageTags = mapOf(org.jellyfin.sdk.model.api.ImageType.PRIMARY to "server-artwork"),
+			))
+
+			rowItem.getImage(ImageType.POSTER)?.tag shouldBe "server-artwork"
+			rowItem.showCardInfoOverlay shouldBe false
+		}
+	}
+
+	test("libraries without server artwork retain their fallback name") {
+		for (type in listOf(BaseItemKind.USER_VIEW, BaseItemKind.COLLECTION_FOLDER)) {
+			val rowItem = BaseItemDtoBaseRowItem(BaseItemDto(id = UUID.randomUUID(), type = type))
+
+			rowItem.getImage(ImageType.POSTER) shouldBe null
+			rowItem.showCardInfoOverlay shouldBe true
+		}
+	}
+
+	test("other artwork cards keep their existing title overlay") {
+		val rowItem = BaseItemDtoBaseRowItem(BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.VIDEO,
+			imageTags = mapOf(org.jellyfin.sdk.model.api.ImageType.PRIMARY to "video-artwork"),
+		))
+
+		rowItem.showCardInfoOverlay shouldBe true
+	}
 })

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -35,14 +36,15 @@ fun Logo(modifier: Modifier = Modifier) {
 @Composable
 fun Toolbar(
 	modifier: Modifier = Modifier,
+	compact: Boolean = false,
 	start: @Composable () -> Unit = { Logo() },
 	center: @Composable () -> Unit = {},
 	end: @Composable () -> Unit = { ToolbarClock() },
 ) {
 	ToolbarLayout(
 		modifier = modifier
-			.height(95.dp)
-			.overscan(),
+			.height(if (compact) 72.dp else 95.dp)
+			.then(if (compact) Modifier.padding(horizontal = 48.dp, vertical = 16.dp) else Modifier.overscan()),
 		start = start,
 		center = center,
 		end = end,

@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.findViewTreeCompositionContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
@@ -360,6 +361,9 @@ internal fun CardViewHolderContent(
 	}
 
 	val usePreview = liveTvText == null && (showBrowserTitle || (displayConfig.overrideShowInfo ?: showInfo))
+	val libraryTextFallback = !usePreview && image == null && (
+		item.baseItem?.type == BaseItemKind.USER_VIEW || item.baseItem?.type == BaseItemKind.COLLECTION_FOLDER
+	)
 
 	val cardModifier = if (fillAvailableWidth) {
 		modifier
@@ -397,7 +401,7 @@ internal fun CardViewHolderContent(
 						modifier = Modifier
 							.fillMaxSize()
 					)
-				} else {
+				} else if (!libraryTextFallback) {
 					Image(
 						painter = painterResource(displayConfig.iconRes),
 						contentDescription = null,
@@ -408,7 +412,19 @@ internal fun CardViewHolderContent(
 				}
 			},
 			overlay = {
-				val showInfo = !usePreview && item.showCardInfoOverlay
+				if (libraryTextFallback && title != null) {
+					Text(
+						text = title,
+						modifier = Modifier.align(Alignment.Center).padding(12.dp),
+						color = JellyfinTheme.colorScheme.onBackground,
+						fontSize = 20.sp,
+						fontWeight = FontWeight.Bold,
+						textAlign = TextAlign.Center,
+						maxLines = 2,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+				val showInfo = !usePreview && !libraryTextFallback && item.showCardInfoOverlay
 				item.baseItem?.let { baseItem ->
 					ItemCardBaseItemOverlay(
 						item = baseItem,
