@@ -26,6 +26,9 @@ class NetworkPlaybackRecoveryServiceTests : FunSpec({
 	test("automatic recovery only handles network and libVLC errors") {
 		isRecoverablePlaybackError("ERROR_CODE_IO_NETWORK_CONNECTION_FAILED") shouldBe true
 		isRecoverablePlaybackError("ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT") shouldBe true
+		isRecoverablePlaybackError("ERROR_CODE_IO_BAD_HTTP_STATUS") shouldBe true
+		isRecoverablePlaybackError("MPV_HTTP_ERROR") shouldBe true
+		isRecoverablePlaybackError("MPV_ERROR") shouldBe true
 		isRecoverablePlaybackError("LIBVLC_ERROR") shouldBe true
 		isRecoverablePlaybackError("ERROR_CODE_DECODING_FAILED") shouldBe false
 		isRecoverablePlaybackError("DOVI_TRANSFORMATION_FAILED_RPU_WRITE_FAILED") shouldBe false

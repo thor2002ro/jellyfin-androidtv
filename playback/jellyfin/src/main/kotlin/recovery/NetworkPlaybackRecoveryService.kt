@@ -290,6 +290,9 @@ internal fun hasPlaybackRecovered(
 internal fun isRecoverablePlaybackError(codeName: String) = doviTransformationFailureStatus(codeName) == null && when (codeName) {
 	"ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
 	"ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT",
+	"ERROR_CODE_IO_BAD_HTTP_STATUS",
+	"MPV_HTTP_ERROR",
+	"MPV_ERROR",
 	"LIBVLC_ERROR",
 	-> true
 	else -> false
