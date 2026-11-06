@@ -459,7 +459,6 @@
     <string name="color_green">Hijau</string>
     <string name="pref_crash_reports_disabled">Laporan kerusakan tidak akan dikirim</string>
     <string name="pref_screensaver_inapp_timeout">Mulai screensaver setelah</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="past_24_hours">24 jam lalu</string>
     <plurals name="hours">
         <item quantity="other">%1$s jam</item>
