@@ -76,8 +76,15 @@ internal fun parseLibMPVSubtitleOverlay(
 		y = y,
 		width = width,
 		height = height,
-		pixels = pixels,
+		pixels = pixels.bgraToRgba(),
 	)
+}
+
+private fun ByteArray.bgraToRgba() = copyOf().also { rgba ->
+	for (offset in indices step 4) {
+		rgba[offset] = this[offset + 2]
+		rgba[offset + 2] = this[offset]
+	}
 }
 
 private fun Map<String, MPVNode>.positiveInt(key: String): Int? = this[key]?.asInt()
