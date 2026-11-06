@@ -133,6 +133,12 @@ internal fun createDeviceProfile(
 	softwareCodecsEnabled: Boolean = userPreferences[UserPreferences.softwareCodecsEnabled],
 	mediaTest: MediaCodecCapabilitiesTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled),
 ): DeviceProfile {
+	val audioBehavior = userPreferences[UserPreferences.audioBehaviour]
+	val supportedPassthroughAudioMimes = if (enableMpvAudio) {
+		getSupportedMPVPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
+	} else {
+		getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
+	}
 	return createDeviceProfile(
 		mediaTest = mediaTest,
 		maxBitrate = userPreferences.getMaxBitrate(),
@@ -141,7 +147,7 @@ internal fun createDeviceProfile(
 		isEAC3PrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.EAC3.mimeType),
 		isDTSPrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.DTS.mimeType),
 		isTrueHDPrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.TRUEHD.mimeType),
-		downMixAudio = userPreferences[UserPreferences.audioBehaviour] == AudioBehavior.DOWNMIX_TO_STEREO,
+		downMixAudio = audioBehavior == AudioBehavior.DOWNMIX_TO_STEREO,
 		assDirectPlay = userPreferences[UserPreferences.assDirectPlay],
 		pgsDirectPlay = userPreferences[UserPreferences.pgsDirectPlay],
 		userAVCLevel = userPreferences[UserPreferences.userAVCLevel].level,
@@ -149,9 +155,9 @@ internal fun createDeviceProfile(
 		forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE),
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
-		passthroughAudioCodecs = userPreferences.profilePassthroughAudioCodecs(
-			getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
-		),
+		passthroughAudioCodecs = userPreferences.profilePassthroughAudioCodecs(supportedPassthroughAudioMimes),
+		transcodeToPassthrough = audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH,
+		supportsDtsHdPassthrough = MimeTypes.AUDIO_DTS_HD in supportedPassthroughAudioMimes,
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
@@ -176,6 +182,8 @@ internal fun createDeviceProfile(
 	forceDisabledHdr: Set<VideoRangeType>,
 	doviPlaybackPlan: DoviPlaybackPlan? = null,
 	passthroughAudioCodecs: Set<String> = allPassthroughAudioCodecs,
+	transcodeToPassthrough: Boolean = false,
+	supportsDtsHdPassthrough: Boolean = true,
 	enableFfmpegAudio: Boolean = false,
 	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
@@ -196,6 +204,12 @@ internal fun createDeviceProfile(
 		isDTSEnabled = isDTSPrefEnabled,
 		isTrueHDEnabled = isTrueHDPrefEnabled,
 	)
+	val enabledRoutePassthroughCodecs = passthroughAudioCodecs intersect enabledPassthroughCodecs
+	val surroundTranscodeAudioCodecs = if (transcodeToPassthrough) listOfNotNull(
+		Codec.Audio.AC3.takeIf(enabledRoutePassthroughCodecs::contains),
+		Codec.Audio.DTS.takeIf { Codec.Audio.DTS in enabledRoutePassthroughCodecs || Codec.Audio.DCA in enabledRoutePassthroughCodecs },
+	) else emptyList()
+	val transcodeMultichannelAudio = surroundTranscodeAudioCodecs.isNotEmpty()
 	val allowedAudioCodecs = when {
 		// Media3 and MPV mix decoded PCM locally; other backends retain the server stereo policy.
 		downMixAudio && !canMixAudioLocally -> downmixSupportedAudioCodecs
@@ -267,32 +281,38 @@ internal fun createDeviceProfile(
 		if (supportsVP9) Codec.Video.VP9 else null,
 	)
 
-	transcodingProfile {
-		type = DlnaProfileType.VIDEO
-		context = EncodingContext.STREAMING
-
-		container = Codec.Container.TS
-		protocol = MediaStreamProtocol.HLS
-
-		videoCodec(*hlsMpegTsVideoCodecs)
-		audioCodec(*hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray())
-
-		copyTimestamps = false
-		enableSubtitlesInManifest = true
+	val videoTranscodeProfiles = listOf(
+		Triple(
+			Codec.Container.TS,
+			hlsMpegTsVideoCodecs,
+			hlsMpegTsAudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
+		),
+		Triple(
+			Codec.Container.MP4,
+			hlsFmp4VideoCodecs,
+			hlsFmp4AudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray(),
+		),
+	)
+	// Separate fallback profiles let the server select conversion without removing stream-copy codecs.
+	val fallbackVideoTranscodeProfiles = if (transcodeMultichannelAudio) videoTranscodeProfiles.mapNotNull { (container, video, audio) ->
+		val fallbackAudio = surroundTranscodeAudioCodecs.filter(audio::contains).toTypedArray()
+		if (fallbackAudio.isEmpty()) null else Triple(container, video, fallbackAudio)
+	} else emptyList()
+	val orderedVideoTranscodeProfiles = fallbackVideoTranscodeProfiles + videoTranscodeProfiles.mapNotNull { (container, video, audio) ->
+		val copyAudio = audio.filterNot(surroundTranscodeAudioCodecs::contains).toTypedArray()
+		if (copyAudio.isEmpty()) null else Triple(container, video, copyAudio)
 	}
-
-	transcodingProfile {
-		type = DlnaProfileType.VIDEO
-		context = EncodingContext.STREAMING
-
-		container = Codec.Container.MP4
-		protocol = MediaStreamProtocol.HLS
-
-		videoCodec(*hlsFmp4VideoCodecs)
-		audioCodec(*hlsFmp4AudioCodecs.filter(allowedAudioCodecs::contains).toTypedArray())
-
-		copyTimestamps = false
-		enableSubtitlesInManifest = true
+	for ((profileContainer, videoCodecs, audioCodecs) in orderedVideoTranscodeProfiles) {
+		transcodingProfile {
+			type = DlnaProfileType.VIDEO
+			context = EncodingContext.STREAMING
+			container = profileContainer
+			protocol = MediaStreamProtocol.HLS
+			videoCodec(*videoCodecs)
+			audioCodec(*audioCodecs)
+			copyTimestamps = false
+			enableSubtitlesInManifest = true
+		}
 	}
 
 	// Audio
@@ -712,6 +732,35 @@ internal fun createDeviceProfile(
 		type = CodecType.AUDIO
 		conditions {
 			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals 8
+		}
+	}
+	if (transcodeMultichannelAudio && Codec.Audio.AC3 in surroundTranscodeAudioCodecs) codecProfile {
+		type = CodecType.VIDEO_AUDIO
+		codec = Codec.Audio.AC3
+		conditions {
+			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals 6
+		}
+	}
+	if (transcodeMultichannelAudio && Codec.Audio.DTS in surroundTranscodeAudioCodecs) codecProfile {
+		type = CodecType.VIDEO_AUDIO
+		codec = dtsServerAudioCodecs.joinToString(",")
+		conditions {
+			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals 6
+			if (!supportsDtsHdPassthrough) {
+				ProfileConditionValue.AUDIO_PROFILE notEquals "DTS-HD HRA"
+				ProfileConditionValue.AUDIO_PROFILE notEquals "DTS-HD MA"
+			}
+		}
+		if (supportsDtsHdPassthrough) applyConditions {
+			ProfileConditionValue.AUDIO_PROFILE notEquals "DTS-HD HRA"
+			ProfileConditionValue.AUDIO_PROFILE notEquals "DTS-HD MA"
+		}
+	}
+	if (transcodeMultichannelAudio) codecProfile {
+		type = CodecType.VIDEO_AUDIO
+		codec = allowedAudioCodecs.filterNot(enabledRoutePassthroughCodecs::contains).joinToString(",")
+		conditions {
+			ProfileConditionValue.AUDIO_CHANNELS lowerThanOrEquals 2
 		}
 	}
 	codecProfile {
