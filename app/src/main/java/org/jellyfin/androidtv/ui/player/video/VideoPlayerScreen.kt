@@ -309,17 +309,7 @@ private fun TrickplayTileSheetPrefetcher(
 
 internal fun selectTrickplaySheetsToPrefetch(
 	sheets: List<TrickplayTileSheet>,
-): List<TrickplayTileSheet> {
-	fun estimatedBytes(sheet: TrickplayTileSheet) = sheet.decodeWidth.toLong() * sheet.decodeHeight * 2
-	val reservedBytes = sheets.maxOfOrNull(::estimatedBytes) ?: 0
-	var remainingBytes = PLAYER_THUMBNAIL_CACHE_MAX_BYTES - reservedBytes
-	return sheets.takeWhile { sheet ->
-		val bytes = estimatedBytes(sheet)
-		(bytes <= remainingBytes).also { fits ->
-			if (fits) remainingBytes -= bytes
-		}
-	}
-}
+): List<TrickplayTileSheet> = sheets.take(1)
 
 @Composable
 private fun LiveTvTrackCacheUpdater(playbackManager: PlaybackManager) {
