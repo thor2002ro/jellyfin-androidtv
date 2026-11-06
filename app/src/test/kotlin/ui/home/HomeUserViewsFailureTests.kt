@@ -7,9 +7,48 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import org.jellyfin.androidtv.constant.HomeSectionType
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 
 class HomeUserViewsFailureTests : FunSpec({
+	test("independent sections start before a single shared User Views request") {
+		runBlocking {
+			val events = mutableListOf<String>()
+			loadHomeSections(
+				sections = listOf(HomeSectionType.LIBRARY_BUTTONS, HomeSectionType.RESUME, HomeSectionType.LATEST_MEDIA, HomeSectionType.NEXT_UP),
+				includeRecentlyReleased = true,
+				loader = { events.add("views"); emptyList() },
+			) { section, _ -> events.add(section.name) }
+			events shouldBe listOf("RESUME", "NEXT_UP", "views", "LIBRARY_BUTTONS", "LATEST_MEDIA")
+		}
+	}
+
+	test("independent sections survive User Views failure without adding dependent sections") {
+		runBlocking {
+			val sections = mutableListOf<HomeSectionType>()
+			loadHomeSections(
+				sections = listOf(HomeSectionType.LIBRARY_BUTTONS, HomeSectionType.RESUME),
+				includeRecentlyReleased = false,
+				loader = { throw ApiClientException("offline") },
+			) { section, _ -> sections.add(section) }.shouldBeNull()
+			sections shouldBe listOf(HomeSectionType.RESUME)
+		}
+	}
+
+	test("cancelling library discovery never appends dependent sections") {
+		val sections = mutableListOf<HomeSectionType>()
+		shouldThrow<CancellationException> {
+			runBlocking {
+				loadHomeSections(
+					sections = listOf(HomeSectionType.LIBRARY_BUTTONS, HomeSectionType.RESUME),
+					includeRecentlyReleased = false,
+					loader = { throw CancellationException() },
+				) { section, _ -> sections.add(section) }
+			}
+		}
+		sections shouldBe listOf(HomeSectionType.RESUME)
+	}
+
 	test("a failed User Views request does not abort independent Home rows") {
 		 runBlocking {
 			loadHomeUserViews(required = true) {
