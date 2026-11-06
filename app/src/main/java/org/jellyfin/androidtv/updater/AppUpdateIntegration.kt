@@ -28,10 +28,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
@@ -48,11 +49,10 @@ import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.ui.settings.composable.SettingsDialog
+import org.jellyfin.androidtv.util.getActivity
 import org.jellyfin.design.Tokens
 import org.jellyfin.updater.AppUpdate
 import org.jellyfin.updater.AppUpdater
-import org.jellyfin.updater.DownloadResult
-import org.jellyfin.updater.InstallStartResult
 import org.jellyfin.updater.UpdateCheckResult
 import org.koin.compose.koinInject
 
@@ -62,7 +62,9 @@ fun startAppUpdateCheck(
 ) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		appUpdater.clearUpdateCacheAtStartup()
-		when (val result = appUpdater.checkForUpdate(force = false)) {
+		val result = appUpdater.checkForUpdate(force = false)
+		if (appUpdater.checkState.value.result != result) return@launch
+		when (result) {
 			is UpdateCheckResult.Available -> notificationsRepository.updateAppUpdateNotification(result.update)
 			else -> Unit
 		}
@@ -87,10 +89,10 @@ fun AppUpdatePrompt(
 	)
 	SideEffect { promptedUpdate = availableUpdate }
 	availableUpdate ?: return
-	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
-	var downloading by remember(availableUpdate) { mutableStateOf(false) }
-	var downloadProgress by remember(availableUpdate) { mutableStateOf<Int?>(null) }
-	var updateMessage by remember(availableUpdate) { mutableStateOf<String?>(null) }
+	val operation by appUpdater.operationState.collectAsState()
+	val updateScope = ProcessLifecycleOwner.get().lifecycleScope
+	val canInstallNow = rememberInstallEligibility()
+	LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { appUpdater.resumeInstallAfterPermission(canInstallNow) }
 
 	SettingsDialog(
 		visible = true,
@@ -98,29 +100,12 @@ fun AppUpdatePrompt(
 	) {
 		UpdatePromptContent(
 			update = availableUpdate,
-			downloading = downloading,
-			downloadProgress = downloadProgress,
-			message = updateMessage,
+			downloading = operation.downloading,
+			downloadProgress = operation.progress,
+			message = operation.message.takeIf { operation.update == availableUpdate },
+			readyToInstall = operation.update == availableUpdate && operation.file != null,
 			onUpdate = {
-				downloading = true
-				downloadProgress = 0
-				updateMessage = null
-				lifecycleScope.launch {
-					val install = appUpdater.downloadAndStartInstall(
-						availableUpdate,
-						lifecycleScope.downloadProgressUpdater(
-							isDownloading = { downloading },
-							setProgress = { downloadProgress = it },
-						),
-					)
-					downloading = false
-					downloadProgress = null
-					if (install.installerStarted) {
-						notificationsRepository.dismissAppUpdatePrompt()
-					} else {
-						updateMessage = install.message
-					}
-				}
+				updateScope.launch { appUpdater.downloadAndInstall(availableUpdate, canInstallNow) }
 			},
 			onClose = { notificationsRepository.dismissAppUpdatePrompt() },
 		)
@@ -150,48 +135,38 @@ fun AppUpdateSettings(
 	notificationsRepository: NotificationsRepository = koinInject(),
 ) {
 	val context = LocalContext.current
-	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
+	val updateScope = ProcessLifecycleOwner.get().lifecycleScope
 	val availableAppUpdate by notificationsRepository.appUpdate.collectAsState()
+	val operation by appUpdater.operationState.collectAsState()
+	val check by appUpdater.checkState.collectAsState()
 	var includePrereleases by remember { mutableStateOf(appUpdater.includePrereleases) }
 	var useUniversalApk by remember { mutableStateOf<Boolean?>(null) }
-	var checking by remember { mutableStateOf(false) }
-	var downloading by remember { mutableStateOf(false) }
-	var downloadProgress by remember { mutableStateOf<Int?>(null) }
-	var update by remember { mutableStateOf<AppUpdate?>(null) }
-	var updateMessage by remember { mutableStateOf<String?>(null) }
-
-	LaunchedEffect(availableAppUpdate) {
-		availableAppUpdate?.let {
-			update = it
-			updateMessage = "Update ${it.versionName} is available"
-		}
+	val checking = check.checking
+	val downloading = operation.downloading
+	val downloadProgress = operation.progress
+	val update = availableAppUpdate
+	val updateMessage = when (val result = check.result) {
+		is UpdateCheckResult.Available -> "Update ${result.update.versionName} is available"
+		UpdateCheckResult.NoUpdate -> "No compatible update found"
+		UpdateCheckResult.Skipped -> "Checked recently"
+		is UpdateCheckResult.Failed -> result.message
+		null -> null
 	}
+	val canInstallNow = rememberInstallEligibility()
+
+	LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { appUpdater.resumeInstallAfterPermission(canInstallNow) }
 	LaunchedEffect(Unit) {
 		useUniversalApk = appUpdater.initializeUseUniversalApk()
 	}
 
 	val checkForUpdates: () -> Unit = {
-		checking = true
-		lifecycleScope.launch {
-			try {
-				when (val result = appUpdater.checkForUpdate(force = true)) {
-					is UpdateCheckResult.Available -> {
-						update = result.update
-						notificationsRepository.updateAppUpdateNotification(result.update, prompt = false)
-						updateMessage = "Update ${result.update.versionName} is available"
-					}
-
-					UpdateCheckResult.NoUpdate -> {
-						update = null
-						notificationsRepository.updateAppUpdateNotification(null, prompt = false)
-						updateMessage = "No compatible update found"
-					}
-
-					UpdateCheckResult.Skipped -> updateMessage = "Checked recently"
-					is UpdateCheckResult.Failed -> updateMessage = result.message
-				}
-			} finally {
-				checking = false
+		updateScope.launch {
+			val result = appUpdater.checkForUpdate(force = true)
+			if (appUpdater.checkState.value.result != result) return@launch
+			when (result) {
+				is UpdateCheckResult.Available -> notificationsRepository.updateAppUpdateNotification(result.update, prompt = false)
+				UpdateCheckResult.NoUpdate -> notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+				else -> Unit
 			}
 		}
 	}
@@ -201,12 +176,18 @@ fun AppUpdateSettings(
 		verticalArrangement = Arrangement.spacedBy(Tokens.Space.spaceXs),
 	) {
 		ListButton(
+			enabled = !checking && !downloading,
 			leadingContent = { Icon(painterResource(R.drawable.ic_upload), contentDescription = null) },
 			headingContent = { Text("Include pre-releases") },
 			trailingContent = { Checkbox(checked = includePrereleases) },
 			onClick = {
-				includePrereleases = !includePrereleases
-				appUpdater.includePrereleases = includePrereleases
+				val current = appUpdater.includePrereleases
+				appUpdater.includePrereleases = !current
+				includePrereleases = appUpdater.includePrereleases
+				if (includePrereleases != current) {
+					notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+					checkForUpdates()
+				}
 			},
 		)
 
@@ -222,12 +203,12 @@ fun AppUpdateSettings(
 			},
 			onClick = {
 				useUniversalApk?.let { current ->
-					useUniversalApk = !current
 					appUpdater.useUniversalApk = !current
-					update = null
-					updateMessage = null
-					notificationsRepository.updateAppUpdateNotification(null, prompt = false)
-					checkForUpdates()
+					useUniversalApk = appUpdater.useUniversalApk
+					if (useUniversalApk != current) {
+						notificationsRepository.updateAppUpdateNotification(null, prompt = false)
+						checkForUpdates()
+					}
 				}
 			},
 		)
@@ -244,6 +225,7 @@ fun AppUpdateSettings(
 		)
 
 		update?.let { availableUpdate ->
+			val readyToInstall = operation.update == availableUpdate && operation.file != null
 			ListSection(
 				overlineContent = { Text(if (availableUpdate.prerelease) "PRE-RELEASE" else "RELEASE") },
 				headingContent = { Text("Update ${availableUpdate.versionName}") },
@@ -260,28 +242,21 @@ fun AppUpdateSettings(
 			}
 
 			ListButton(
-				enabled = !downloading,
+				enabled = !checking && !downloading,
 				leadingContent = {
 					if (downloading) CircularProgressIndicator(Modifier.size(20.dp))
 					else Icon(painterResource(R.drawable.ic_upload), contentDescription = null)
 				},
 				headingContent = {
-					Text(downloadProgress?.let { "Download and install $it%" } ?: "Download and install")
+					Text(when {
+						downloading -> downloadProgress?.let { "Downloading $it%" } ?: "Downloading"
+						readyToInstall -> "Install again"
+						else -> "Download and install"
+					})
 				},
+				captionContent = { operation.message.takeIf { operation.update == availableUpdate }?.let { Text(it) } },
 				onClick = {
-					downloading = true
-					downloadProgress = 0
-					lifecycleScope.launch {
-						updateMessage = appUpdater.downloadAndStartInstall(
-							availableUpdate,
-							lifecycleScope.downloadProgressUpdater(
-								isDownloading = { downloading },
-								setProgress = { downloadProgress = it },
-							),
-						).message
-						downloading = false
-						downloadProgress = null
-					}
+					updateScope.launch { appUpdater.downloadAndInstall(availableUpdate, canInstallNow) }
 				},
 			)
 
@@ -304,6 +279,7 @@ internal fun UpdatePromptContent(
 	message: String?,
 	onUpdate: () -> Unit,
 	onClose: () -> Unit,
+	readyToInstall: Boolean = false,
 ) {
 	Column(
 		modifier = Modifier
@@ -322,7 +298,7 @@ internal fun UpdatePromptContent(
 			maxLines = 2,
 			overflow = TextOverflow.Ellipsis,
 		)
-		Text("${update.buildType} build is ready to install.")
+		Text("${update.buildType} build is available.")
 
 		Column(
 			modifier = Modifier
@@ -360,12 +336,11 @@ internal fun UpdatePromptContent(
 					onClick = onUpdate,
 					modifier = Modifier.weight(1f),
 				) {
-					Text("Update now")
+					Text(if (readyToInstall) "Install again" else "Update now")
 				}
 			}
 			Button(
 				onClick = onClose,
-				enabled = !downloading,
 				modifier = Modifier.weight(1f),
 			) {
 				Text("Close")
@@ -374,48 +349,23 @@ internal fun UpdatePromptContent(
 	}
 }
 
-private suspend fun AppUpdater.downloadAndStartInstall(
-	update: AppUpdate,
-	onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> },
-): InstallOutcome {
-	return when (val download = download(update, onProgress)) {
-		is DownloadResult.Ready -> when (val install = startInstall(download.file)) {
-			InstallStartResult.Started -> InstallOutcome("Installer opened", installerStarted = true)
-			InstallStartResult.PermissionRequired -> {
-				openInstallPermissionSettings()
-				InstallOutcome("Allow installs from this app, then try again")
-			}
-
-			is InstallStartResult.Failed -> InstallOutcome(install.message)
-		}
-
-		is DownloadResult.Failed -> InstallOutcome(download.message)
-	}
-}
-
-private fun downloadProgressPercent(downloaded: Long, total: Long): Int? =
-	if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else null
-
-private fun CoroutineScope.downloadProgressUpdater(
-	isDownloading: () -> Boolean,
-	setProgress: (Int) -> Unit,
-): (downloaded: Long, total: Long) -> Unit {
-	var lastProgress = -1
-	return { downloaded, total ->
-		val progress = downloadProgressPercent(downloaded, total)
-		if (progress != null && progress != lastProgress) {
-			lastProgress = progress
-			launch {
-				if (isDownloading()) setProgress(progress)
-			}
+@Composable
+private fun rememberInstallEligibility(navigationRepository: NavigationRepository = koinInject()): () -> Boolean {
+	val owner = LocalLifecycleOwner.current
+	val activity = LocalContext.current.getActivity()
+	return remember(owner, activity, navigationRepository) {
+		{
+			appUpdateInstallAllowed(
+				isPlayback = Destinations.isPlayback(navigationRepository.currentDestination.value),
+				hostResumed = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+				hostAvailable = activity != null && !activity.isFinishing && !activity.isDestroyed,
+			)
 		}
 	}
 }
 
-private data class InstallOutcome(
-	val message: String,
-	val installerStarted: Boolean = false,
-)
+internal fun appUpdateInstallAllowed(isPlayback: Boolean, hostResumed: Boolean, hostAvailable: Boolean) =
+	hostAvailable && hostResumed && !isPlayback
 
 internal fun appUpdatePrompt(
 	update: AppUpdate?,
