@@ -977,7 +977,6 @@ class LibMPVBackend(
 		lastTickPosition = Duration.ZERO
 		forcedVideoDecoder = null
 		restoreNvidiaFallbackOptions()
-		ensureInstanceOptions()
 		listener?.onSubtitleTimingOffsetSupportChange(false)
 		publishPlayState(force = true)
 	}
