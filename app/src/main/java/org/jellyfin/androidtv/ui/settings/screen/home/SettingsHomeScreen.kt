@@ -9,6 +9,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.HomeSectionType
+import org.jellyfin.androidtv.constant.distinctHomeSections
+import org.jellyfin.androidtv.constant.hasSameHomeContentAs
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Text
@@ -28,7 +30,7 @@ fun SettingsHomeScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
-	val sections = userSettingPreferences.homesections.map(userSettingPreferences::get)
+	val sections = compactHomeSections(userSettingPreferences.homesections.map(userSettingPreferences::get))
 	val activeSections = sections.filterNot { it == HomeSectionType.NONE }
 
 	SettingsColumn {
@@ -65,8 +67,6 @@ fun SettingsHomeScreen() {
 		}
 
 		item { HomeRecentlyReleasedPreference(userSettingPreferences) }
-
-		item { HomeFavoriteVideosPreference(userSettingPreferences) }
 
 		item {
 			ListSection(headingContent = { Text(stringResource(R.string.home_appearance)) })
@@ -125,19 +125,6 @@ private fun HomeRecentlyReleasedPreference(userSettingPreferences: UserSettingPr
 }
 
 @Composable
-private fun HomeFavoriteVideosPreference(userSettingPreferences: UserSettingPreferences) {
-	var favoriteVideos by rememberPreference(userSettingPreferences, UserSettingPreferences.homeFavoriteVideos)
-
-	ListButton(
-		headingContent = { Text(stringResource(R.string.home_favorite_videos)) },
-		captionContent = { Text(stringResource(R.string.home_favorite_videos_description)) },
-		trailingContent = { Checkbox(checked = favoriteVideos) },
-		onClick = { favoriteVideos = !favoriteVideos },
-		modifier = Modifier.focusKey("home_favorite_videos")
-	)
-}
-
-@Composable
 private fun HomeRowItemLimitPreference(userSettingPreferences: UserSettingPreferences) {
 	val router = LocalRouter.current
 	val homeRowItemLimit by rememberPreference(userSettingPreferences, UserSettingPreferences.homeRowItemLimit)
@@ -180,11 +167,10 @@ private fun HomeNextUpCutoffPreference(userPreferences: UserPreferences) {
 	)
 }
 
-internal fun compactHomeSections(sections: List<HomeSectionType>): List<HomeSectionType> =
-	sections.filterNot { it == HomeSectionType.NONE } + List(
-		size = sections.count { it == HomeSectionType.NONE },
-		init = { HomeSectionType.NONE },
-	)
+internal fun compactHomeSections(sections: List<HomeSectionType>): List<HomeSectionType> {
+	val active = sections.filterNot { it == HomeSectionType.NONE }.distinctHomeSections()
+	return active + List(sections.size - active.size) { HomeSectionType.NONE }
+}
 
 internal fun moveHomeSection(
 	sections: List<HomeSectionType>,
@@ -215,7 +201,11 @@ internal fun setHomeSection(
 	activeIndex: Int,
 	section: HomeSectionType,
 ): List<HomeSectionType> {
-	val active = sections.filterNot { it == HomeSectionType.NONE }.toMutableList()
+	val active = sections.filterNot { it == HomeSectionType.NONE }.distinctHomeSections().toMutableList()
+	val conflictsWithAnotherRow = active.withIndex().any { (index, existing) ->
+		index != activeIndex && existing.hasSameHomeContentAs(section)
+	}
+	if (conflictsWithAnotherRow) return compactHomeSections(sections)
 	when {
 		activeIndex in active.indices -> active[activeIndex] = section
 		activeIndex == active.size && active.size < sections.size -> active.add(section)

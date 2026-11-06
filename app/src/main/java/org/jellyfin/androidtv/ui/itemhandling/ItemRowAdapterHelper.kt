@@ -121,6 +121,20 @@ internal fun areAdapterItemsTheSame(old: Any, new: Any): Boolean {
 	return old == new
 }
 
+private fun BaseRowItem.visualSignature() = listOf(
+	baseItem?.imageTags,
+	baseItem?.imageBlurHashes,
+	baseItem?.backdropImageTags,
+	baseItem?.parentPrimaryImageItemId,
+	baseItem?.parentPrimaryImageTag,
+	baseItem?.parentThumbItemId,
+	baseItem?.parentThumbImageTag,
+	baseItem?.seriesId,
+	baseItem?.seriesPrimaryImageTag,
+	baseItem?.seriesThumbImageTag,
+	baseItem?.primaryImageAspectRatio,
+)
+
 internal fun BaseRowItem.resumeSignature() = listOf(
 	itemId,
 	showRemainingTimeBadge,
@@ -128,16 +142,21 @@ internal fun BaseRowItem.resumeSignature() = listOf(
 	baseItem?.userData?.played,
 	baseItem?.userData?.playedPercentage,
 	baseItem?.userData?.playbackPositionTicks,
-)
+) + visualSignature()
 
-private fun BaseRowItem.itemSignature() = listOf(
+internal fun BaseRowItem.itemSignature() = listOf(
 	itemId,
+	showRemainingTimeBadge,
 	baseItem?.name,
 	baseItem?.episodeTitle,
+	baseItem?.seriesName,
+	baseItem?.seasonName,
+	baseItem?.indexNumber,
+	baseItem?.parentIndexNumber,
 	baseItem?.userData?.played,
 	baseItem?.userData?.playedPercentage,
 	baseItem?.userData?.playbackPositionTicks,
-)
+) + visualSignature()
 
 internal fun BaseRowItem.liveTvProgramSignature() = listOf(
 	itemId,
@@ -187,12 +206,20 @@ fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequ
 	}
 }
 
-fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) {
+fun ItemRowAdapter.retrieveNextUpItems(
+	api: ApiClient,
+	query: GetNextUpRequest,
+	combinedResumeQuery: GetResumeItemsRequest? = null,
+) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		var displayedItems = emptyList<BaseItemDto>()
 		runCatching {
-			val response = withContext(Dispatchers.IO) {
-				api.showApi.getNextUp(query).content
+			val (response, resumeItems) = coroutineScope {
+				val nextUp = async(Dispatchers.IO) { api.showApi.getNextUp(query).content }
+				val resume = combinedResumeQuery?.let { request ->
+					async(Dispatchers.IO) { api.libraryApi.getResumeItems(request).content.items }
+				}
+				nextUp.await() to resume?.await().orEmpty()
 			}
 
 			// Some special flavor for series, used in FullDetailsFragment
@@ -226,18 +253,17 @@ fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) 
 
 				if (items.isEmpty()) removeRow()
 			} else {
-				displayedItems = response.items
-
-				val rowItems = response.items.map { item ->
-					BaseItemDtoBaseRowItem(
-						item,
-						preferParentThumb,
-						isStaticHeight
-					)
-				}
+				val rowItems = combinedContinueWatchingAndNextUpRowItems(
+					resumeItems = resumeItems,
+					nextUpItems = response.items,
+					limit = query.limit,
+					preferParentThumb = preferParentThumb,
+					staticHeight = isStaticHeight,
+				)
+				displayedItems = rowItems.mapNotNull(BaseRowItem::baseItem)
 				replaceIfChanged(rowItems, BaseRowItem::itemSignature)
 
-				if (response.items.isEmpty()) removeRow()
+				if (rowItems.isEmpty()) removeRow()
 			}
 		}.fold(
 			onSuccess = {
@@ -254,6 +280,31 @@ fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) 
 				}
 			},
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
+		)
+	}
+}
+
+internal fun combineContinueWatchingAndNextUpItems(
+	resumeItems: Collection<BaseItemDto>,
+	nextUpItems: Collection<BaseItemDto>,
+	limit: Int?,
+): List<BaseItemDto> = (resumeItems + nextUpItems)
+	.distinctBy(BaseItemDto::id)
+	.take(limit ?: Int.MAX_VALUE)
+
+internal fun combinedContinueWatchingAndNextUpRowItems(
+	resumeItems: Collection<BaseItemDto>,
+	nextUpItems: Collection<BaseItemDto>,
+	limit: Int?,
+	preferParentThumb: Boolean,
+	staticHeight: Boolean,
+): List<BaseRowItem> {
+	val resumeItemIds = resumeItems.mapTo(hashSetOf(), BaseItemDto::id)
+	return combineContinueWatchingAndNextUpItems(resumeItems, nextUpItems, limit).map { item ->
+		item.toBaseItemRowItem(
+			preferParentThumb = preferParentThumb,
+			staticHeight = staticHeight,
+			showRemainingTimeBadge = item.id in resumeItemIds,
 		)
 	}
 }
@@ -940,14 +991,18 @@ fun ItemRowAdapter.retrieveAdditionalParts(api: ApiClient, query: GetAdditionalP
 	}
 }
 
-fun ItemRowAdapter.retrieveUserViews(api: ApiClient, userViewsRepository: UserViewsRepository) {
+fun ItemRowAdapter.retrieveUserViews(
+	api: ApiClient,
+	userViewsRepository: UserViewsRepository,
+	initialViews: Collection<BaseItemDto>? = null,
+) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		runCatching {
-			val response = withContext(Dispatchers.IO) {
-				api.userViewApi.getUserViews().content
+			val items = initialViews ?: withContext(Dispatchers.IO) {
+				api.userViewApi.getUserViews().content.items
 			}
 
-			val filteredItems = userViewsRepository.withSpecialViews(response.items)
+			val filteredItems = userViewsRepository.withSpecialViews(items)
 
 			setItems(
 				items = filteredItems,

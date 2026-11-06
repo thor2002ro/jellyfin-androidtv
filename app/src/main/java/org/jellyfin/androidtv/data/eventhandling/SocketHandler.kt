@@ -32,12 +32,14 @@ import org.jellyfin.sdk.api.sockets.subscribeGeneralCommand
 import org.jellyfin.sdk.api.sockets.subscribeGeneralCommands
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.GeneralCommandType
+import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.LibraryChangedMessage
 import org.jellyfin.sdk.model.api.LibraryUpdateInfo
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PlayMessage
 import org.jellyfin.sdk.model.api.PlaystateCommand
 import org.jellyfin.sdk.model.api.PlaystateMessage
+import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.extensions.get
 import org.jellyfin.sdk.model.extensions.getValue
 import org.jellyfin.sdk.model.extensions.ticks
@@ -46,7 +48,7 @@ import timber.log.Timber
 import java.time.Instant
 import java.util.UUID
 
-private const val SERIES_STREAM_BADGE_INVALIDATION_RESOLVE_LIMIT = 50
+private const val SERIES_STREAM_BADGE_INVALIDATION_BATCH_SIZE = 100
 
 class SocketHandler(
 	private val context: Context,
@@ -185,18 +187,18 @@ class SocketHandler(
 		val resolvedIds = ((info.foldersAddedTo + info.foldersRemovedFrom)
 			.mapNotNull { itemId -> itemId.toUUIDOrNull() } + changedItemIds)
 			.toMutableSet()
-		if (changedItemIds.size > SERIES_STREAM_BADGE_INVALIDATION_RESOLVE_LIMIT) return resolvedIds
-
-		for (itemId in changedItemIds) {
+		for (request in createSeriesStreamBadgeInvalidationRequests(changedItemIds)) {
 			try {
-				val item = api.libraryApi.getItem(itemId = itemId).content
-				item.seriesId?.let(resolvedIds::add)
-				item.seasonId?.let(resolvedIds::add)
-				item.parentId?.let(resolvedIds::add)
+				val items = api.libraryApi.getItems(request).content.items
+				for (item in items) {
+					item.seriesId?.let(resolvedIds::add)
+					item.seasonId?.let(resolvedIds::add)
+					item.parentId?.let(resolvedIds::add)
+				}
 			} catch (error: CancellationException) {
 				throw error
 			} catch (error: Exception) {
-				Timber.d(error, "Unable to resolve library changed item $itemId for stream badge cache")
+				Timber.d(error, "Unable to resolve library changed items for stream badge cache")
 			}
 		}
 
@@ -281,3 +283,16 @@ class SocketHandler(
 		}
 	}
 }
+
+internal fun createSeriesStreamBadgeInvalidationRequests(changedItemIds: Set<UUID>) = changedItemIds
+	.chunked(SERIES_STREAM_BADGE_INVALIDATION_BATCH_SIZE)
+	.map { itemIds ->
+		GetItemsRequest(
+			ids = itemIds,
+			fields = setOf(ItemFields.PARENT_ID),
+			limit = itemIds.size,
+			enableImages = false,
+			enableUserData = false,
+			enableTotalRecordCount = false,
+		)
+	}

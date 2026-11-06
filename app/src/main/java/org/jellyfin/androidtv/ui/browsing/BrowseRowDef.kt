@@ -70,6 +70,8 @@ class BrowseRowDef private constructor(
 
 	val resumeQuery: GetResumeItemsRequest
 		get() = requireNotNull(resumeItemsQuery)
+	val supplementalResumeQuery: GetResumeItemsRequest?
+		get() = resumeItemsQuery
 
 	val specialsQuery: GetSpecialsRequest
 		get() = requireNotNull(specialFeaturesQuery)
@@ -172,6 +174,20 @@ class BrowseRowDef private constructor(
 	) : this(
 		headerText = header,
 		nextUpItemsQuery = query,
+		queryType = QueryType.NextUp,
+		isStaticHeight = true,
+		changeTriggers = changeTriggers,
+	)
+
+	constructor(
+		header: String?,
+		query: GetNextUpRequest,
+		resumeQuery: GetResumeItemsRequest,
+		changeTriggers: Array<ChangeTriggerType>,
+	) : this(
+		headerText = header,
+		nextUpItemsQuery = query,
+		resumeItemsQuery = resumeQuery,
 		queryType = QueryType.NextUp,
 		isStaticHeight = true,
 		changeTriggers = changeTriggers,
