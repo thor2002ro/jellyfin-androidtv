@@ -43,6 +43,8 @@ import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
+import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.mediastream.totalBitrate
@@ -1612,13 +1614,18 @@ class LibMPVBackend(
 		if (externalSubtitlesAdded) return
 		externalSubtitlesAdded = true
 		val stream = currentStream ?: return
+		if (stream.externalSubtitles.any { shouldSelectExternalSubtitle(it, stream.selectedSubtitleStreamIndex) }) {
+			pendingInitialTrackTypes += TrackType.SUBTITLE
+		}
 		stream.externalSubtitles.forEach { subtitle ->
 			val flags = buildString {
-				append(if (shouldSelectExternalSubtitle(subtitle, stream.selectedSubtitleStreamIndex)) "select" else "auto")
+				// Select through track-list updates, so late loads cannot override a newer user choice.
+				append("auto")
 				if (subtitle.isForced) append("+forced")
 				if (subtitle.isDefault) append("+default")
 			}
 			runCommand(
+				"async",
 				"sub-add",
 				subtitle.url,
 				flags,
@@ -1669,6 +1676,7 @@ class LibMPVBackend(
 			val streamIndex = when (type) {
 				TrackType.AUDIO -> stream.selectedAudioStreamIndex
 				TrackType.SUBTITLE -> stream.selectedSubtitleStreamIndex
+					?: stream.externalSubtitles.lastOrNull { it.isDefault }?.index
 			} ?: return@forEach
 			if (applyInitialTrackSelection(stream, type, streamIndex)) pendingInitialTrackTypes -= type
 		}
@@ -1686,6 +1694,8 @@ class LibMPVBackend(
 
 		val track = findTrack(stream, type, streamIndex)
 		if (track == null) {
+			// External subtitles may finish out of order; wait for the requested URL, not any subtitle.
+			if (type == TrackType.SUBTITLE && stream.externalSubtitles.any { it.index == streamIndex }) return false
 			if (tracks.none { it.type == type }) return false
 			Timber.w("Could not find initial %s stream index %d", type.name.lowercase(), streamIndex)
 			return true
@@ -1698,16 +1708,16 @@ class LibMPVBackend(
 
 	private fun findTrack(stream: PlayableMediaStream, type: TrackType, streamIndex: Int): LibMPVTrack? {
 		val selectable = tracks.filter { track -> track.type == type }
-		selectable.firstOrNull { track -> track.ffIndex == streamIndex }?.let { return it }
 
 		if (type == TrackType.SUBTITLE) {
 			val external = stream.externalSubtitles.firstOrNull { subtitle -> subtitle.index == streamIndex }
 			if (external != null) {
-				selectable.firstOrNull { track ->
+				return selectable.firstOrNull { track ->
 					track.isExternal && track.externalFilename.matchesExternalUrl(external.url)
-				}?.let { return it }
+				}
 			}
 		}
+		selectable.firstOrNull { track -> track.ffIndex == streamIndex }?.let { return it }
 
 		val sourceIndex = stream.mpvSourceTracks(type).indexOfFirst { source -> source.index == streamIndex }
 		return selectable.getOrNull(sourceIndex)
@@ -1735,8 +1745,9 @@ class LibMPVBackend(
 
 	override fun selectTrack(type: TrackType, index: Int): Boolean {
 		pendingInitialTrackTypes -= type
-		if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
+		val stream = currentStream ?: return false
 		if (type == TrackType.SUBTITLE && index == -1) {
+			if (!stream.allowsLocalSubtitleDisable()) return false
 			setProperty("sid", "no")
 			refreshTracks()
 			nativeSubtitleView?.clear()
@@ -1744,6 +1755,9 @@ class LibMPVBackend(
 		}
 		refreshTracks()
 		val track = tracks.filter { candidate -> candidate.type == type }.getOrNull(index) ?: return false
+		val sourceTracks = stream.mpvSourceTracks(type)
+		val sourceTrack = stream.sourceTrackFor(track, index, sourceTracks)
+		if (!stream.allowsLocalTrackSelection(type, sourceTrack)) return false
 		setProperty(type.selectionProperty, track.id.toString())
 		refreshTracks()
 		return true
@@ -1754,7 +1768,6 @@ class LibMPVBackend(
 		ordinal: Int,
 		sourceTracks: List<MediaStreamTrack>,
 	): MediaStreamTrack? {
-		track.ffIndex?.let { index -> sourceTracks.firstOrNull { source -> source.index == index }?.let { return it } }
 		if (track.type == TrackType.SUBTITLE && track.isExternal) {
 			val external = externalSubtitles.firstOrNull { subtitle ->
 				track.externalFilename.matchesExternalUrl(subtitle.url)
@@ -1763,6 +1776,7 @@ class LibMPVBackend(
 				sourceTracks.firstOrNull { source -> source.index == subtitle.index }?.let { return it }
 			}
 		}
+		track.ffIndex?.let { index -> sourceTracks.firstOrNull { source -> source.index == index }?.let { return it } }
 		return sourceTracks.getOrNull(ordinal)
 	}
 
