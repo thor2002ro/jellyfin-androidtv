@@ -24,7 +24,11 @@ import org.jellyfin.sdk.model.api.MediaSegmentType
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 
 typealias JellyfinMediaStreamOptionsProvider = (BaseItemDto, String?) -> JellyfinMediaStreamOptions
-data class JellyfinDeviceProfileRequest(val profile: DeviceProfile, val requestToken: Long)
+data class JellyfinDeviceProfileRequest(
+	val profile: DeviceProfile,
+	val requestToken: Long,
+	val protectsDoviHlsVideoCopy: Boolean = false,
+)
 typealias JellyfinDeviceProfileProvider = (QueueEntry) -> JellyfinDeviceProfileRequest
 typealias JellyfinDoviDecisionValidator = (QueueEntry, Long, MediaSourceInfo?, MediaConversionMethod?, DoviDecision?) -> Unit
 
