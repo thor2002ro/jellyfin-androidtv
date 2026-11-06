@@ -115,7 +115,6 @@
     <string name="lbl_song_title">歌曲標題</string>
     <string name="lbl_album_name">專輯名稱</string>
     <string name="lbl_next_episode">下一集</string>
-    <string name="lbl_previous_episode">上一集</string>
     <string name="lbl_more_like_this">更多類似的</string>
     <string name="lbl_resume_from">從%1$s繼續</string>
     <string name="lbl_sort_by">排序按照</string>

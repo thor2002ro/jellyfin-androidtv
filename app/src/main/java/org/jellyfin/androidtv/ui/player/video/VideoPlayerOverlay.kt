@@ -373,6 +373,7 @@ fun VideoPlayerOverlay(
 					VideoPlayerHeader(
 						item = item,
 						liveTvProgramName = liveTvProgramTimeline?.programName,
+						liveTvNextProgram = liveTvProgramTimeline?.nextProgram,
 					)
 					PlaybackDebugInfo(
 						playbackManager = playbackManager,

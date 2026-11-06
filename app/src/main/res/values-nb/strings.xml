@@ -157,7 +157,6 @@
     <string name="lbl_song_title">Låtnavn</string>
     <string name="lbl_album_name">Albumnavn</string>
     <string name="lbl_next_episode">Neste episode</string>
-    <string name="lbl_previous_episode">Forrige episode</string>
     <string name="lbl_more_like_this">Mer som dette</string>
     <string name="lbl_resume_from">Fortsett fra %1$s</string>
     <string name="lbl_resume_preroll">Fortsett forvideo</string>

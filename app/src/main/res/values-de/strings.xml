@@ -169,7 +169,6 @@
     <string name="lbl_song_title">Liedtitel</string>
     <string name="lbl_album_name">Albumname</string>
     <string name="lbl_next_episode">Nächste Episode</string>
-    <string name="lbl_previous_episode">Vorherige Episode</string>
     <string name="lbl_more_like_this">Ähnliches</string>
     <string name="lbl_resume_from">Weiterschauen ab %1$s</string>
     <string name="lbl_resume_preroll">Rücksprung vor dem Weiterschauen</string>

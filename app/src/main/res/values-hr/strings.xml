@@ -197,7 +197,6 @@
     <string name="lbl_song_title">Naslov pjesme</string>
     <string name="lbl_album_name">Naslov albuma</string>
     <string name="lbl_next_episode">Sljedeća epizoda</string>
-    <string name="lbl_previous_episode">Prethodna epizoda</string>
     <string name="lbl_more_like_this">Više sličnih stavki</string>
     <string name="lbl_resume_from">Nastavi od %1$s</string>
     <string name="lbl_resume_preroll">Nastavi reklamu</string>

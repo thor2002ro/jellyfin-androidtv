@@ -238,7 +238,6 @@
     <string name="lbl_resume_from">เล่นต่อจาก %1$s</string>
     <string name="lbl_from_beginning">เล่นตั้งแต่เริ่มต้น</string>
     <string name="lbl_more_like_this">รายการที่คล้ายกัน</string>
-    <string name="lbl_previous_episode">ตอนก่อนหน้า</string>
     <string name="lbl_next_episode">ตอนถัดไป</string>
     <string name="lbl_album_name">ชื่ออัลบั้ม</string>
     <string name="lbl_song_title">ชื่อเพลง</string>
