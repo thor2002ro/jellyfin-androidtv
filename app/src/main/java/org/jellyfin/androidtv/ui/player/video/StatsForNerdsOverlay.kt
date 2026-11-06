@@ -393,7 +393,7 @@ private object NewPlayerStreamStatusBuilder {
 				title = "",
 				rows = rows {
 					row("Player", frameStats.playerName)
-					row("Play method", stream.conversionMethod.displayName())
+					row("Play method", stream.conversionMethod.displayName(transcodingInfo?.isVideoDirect))
 					row("Protocol", stream.protocol())
 					row("Stream type", stream.streamType())
 					row("Display HDR support", displayHdrModes)
