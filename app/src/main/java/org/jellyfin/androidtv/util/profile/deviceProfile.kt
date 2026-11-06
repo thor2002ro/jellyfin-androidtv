@@ -10,6 +10,7 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.audio.AudioCapabilities
+import kotlin.math.roundToInt
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
@@ -17,10 +18,13 @@ import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
 import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
+import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
+import org.jellyfin.playback.dovi.DoviRoute
+import org.jellyfin.playback.dovi.DoviVideoCodec
 import org.jellyfin.sdk.model.ServerVersion
 import org.jellyfin.sdk.model.api.CodecType
-import org.jellyfin.sdk.model.api.DlnaProfileType
 import org.jellyfin.sdk.model.api.DeviceProfile
+import org.jellyfin.sdk.model.api.DlnaProfileType
 import org.jellyfin.sdk.model.api.EncodingContext
 import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.ProfileConditionValue
@@ -28,9 +32,6 @@ import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod
 import org.jellyfin.sdk.model.api.VideoRangeType
 import org.jellyfin.sdk.model.deviceprofile.DeviceProfileBuilder
 import org.jellyfin.sdk.model.deviceprofile.buildDeviceProfile
-import org.jellyfin.playback.dovi.DoviRoute
-import org.jellyfin.playback.dovi.DoviVideoCodec
-import kotlin.math.roundToInt
 
 private val downmixSupportedAudioCodecs = arrayOf(
 	Codec.Audio.AAC,
@@ -110,13 +111,6 @@ private fun isAudioCodecAvailable(codec: String, supportsOpus: Boolean): Boolean
 	else -> true
 }
 
-private fun UserPreferences.isBitstreamAudioEnabled(context: Context, format: BitstreamAudioFormat): Boolean =
-	when (this[format.preference]) {
-		BitstreamAudioMode.AUTO -> isPassthroughAudioAvailable(context, format.mimeType)
-		BitstreamAudioMode.ENABLE -> true
-		BitstreamAudioMode.DISABLE -> false
-	}
-
 @JvmOverloads
 internal fun createDeviceProfile(
 	context: Context,
@@ -130,10 +124,10 @@ internal fun createDeviceProfile(
 		mediaTest = mediaTest,
 		maxBitrate = userPreferences.getMaxBitrate(),
 		maxResolution = userPreferences[UserPreferences.maxResolution],
-		isAC3PrefEnabled = userPreferences.isBitstreamAudioEnabled(context, BitstreamAudioFormat.AC3),
-		isEAC3PrefEnabled = userPreferences.isBitstreamAudioEnabled(context, BitstreamAudioFormat.EAC3),
-		isDTSPrefEnabled = userPreferences.isBitstreamAudioEnabled(context, BitstreamAudioFormat.DTS),
-		isTrueHDPrefEnabled = userPreferences.isBitstreamAudioEnabled(context, BitstreamAudioFormat.TRUEHD),
+		isAC3PrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.AC3.mimeType),
+		isEAC3PrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.EAC3.mimeType),
+		isDTSPrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.DTS.mimeType),
+		isTrueHDPrefEnabled = userPreferences.isAudioPassthroughEnabled(BitstreamAudioFormat.TRUEHD.mimeType),
 		downMixAudio = userPreferences[UserPreferences.audioBehaviour] == AudioBehavior.DOWNMIX_TO_STEREO,
 		assDirectPlay = userPreferences[UserPreferences.assDirectPlay],
 		pgsDirectPlay = userPreferences[UserPreferences.pgsDirectPlay],
@@ -142,7 +136,9 @@ internal fun createDeviceProfile(
 		forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE),
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
-		passthroughAudioCodecs = getPassthroughAudioCodecs(context),
+		passthroughAudioCodecs = userPreferences.profilePassthroughAudioCodecs(
+			getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
+		),
 	)
 }
 
@@ -694,17 +690,23 @@ private fun Size.capTo(resolution: PlaybackResolution) = Size(
 )
 
 @OptIn(UnstableApi::class)
-fun isPassthroughAudioAvailable(context: Context, mimetype: String): Boolean {
-	val audioAttributes = passthroughAudioAttributes()
-	return getAudioCapabilities(context, audioAttributes).supportsPassthrough(mimetype, audioAttributes)
+internal fun UserPreferences.profilePassthroughAudioCodecs(detectedMimes: Set<String>): Set<String> {
+	// Enable overrides detection in the server profile; players still validate their output route.
+	val forcedMimes = BitstreamAudioFormat.entries
+		.filter { this[it.preference] == BitstreamAudioMode.ENABLE && isAudioPassthroughEnabled(it.mimeType) }
+		.map { it.mimeType }
+	val supportedMimes = detectedMimes + forcedMimes
+	return passthroughAudioCodecMimes.entries.flatMapTo(mutableSetOf()) { (mime, codecs) ->
+		if (mime in supportedMimes) codecs else emptySet()
+	}
 }
 
 @OptIn(UnstableApi::class)
-private fun getPassthroughAudioCodecs(context: Context): Set<String> {
+fun getSupportedPassthroughAudioMimes(context: Context, mimeTypes: Collection<String>): Set<String> {
 	val audioAttributes = passthroughAudioAttributes()
 	val audioCapabilities = getAudioCapabilities(context, audioAttributes)
-	return passthroughAudioCodecMimes.entries.flatMapTo(mutableSetOf()) { (mime, codecs) ->
-		if (audioCapabilities.supportsPassthrough(mime, audioAttributes)) codecs else emptySet()
+	return mimeTypes.filterTo(mutableSetOf()) { mime ->
+		audioCapabilities.supportsPassthrough(mime, audioAttributes)
 	}
 }
 
