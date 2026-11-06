@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.navigation
 import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.constant.Extras
 import org.jellyfin.androidtv.constant.LiveTvOption
+import org.jellyfin.androidtv.data.model.FilterOptions
 import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseRecordingsFragment
 import org.jellyfin.androidtv.ui.browsing.BrowseScheduleFragment
@@ -61,10 +62,12 @@ object Destinations {
 
 	// Browsing
 	// TODO only pass item id instead of complete JSON to browsing destinations
-	fun libraryBrowser(item: BaseItemDto, includeType: String? = null) =
+	@JvmOverloads
+	fun libraryBrowser(item: BaseItemDto, includeType: String? = null, filters: FilterOptions? = null) =
 		fragmentDestination<BrowseGridFragment> {
 			putString(Extras.Folder, Json.encodeToString(item))
 			putString(Extras.IncludeType, includeType)
+			filters?.let { putString(Extras.Filters, it.encode()) }
 		}
 
 	// TODO only pass item id instead of complete JSON to browsing destinations

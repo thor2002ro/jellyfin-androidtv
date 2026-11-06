@@ -108,13 +108,17 @@ internal fun mergeFilterChoiceRefresh(
 	},
 )
 
-private fun List<BaseItemDto>.groupEquivalentGenres(): List<LibraryGenreChoice> =
+internal fun List<BaseItemDto>.groupEquivalentGenres(): List<LibraryGenreChoice> =
 	filter { !it.name.isNullOrBlank() }
 		.groupBy { canonicalGenreName(it.name.orEmpty()) }
-		.values
-		.map { genres ->
+		.filterNot { (_, genres) -> genres.all { it.childCount == 0 } }
+		.map { (canonicalName, genres) ->
 			LibraryGenreChoice(
-				name = genres.mapNotNull(BaseItemDto::name).preferredLabel(),
+				name = if (canonicalName == "sciencefiction") {
+					"Sci-Fi"
+				} else {
+					genres.mapNotNull(BaseItemDto::name).preferredLabel()
+				},
 				ids = genres.mapTo(linkedSetOf(), BaseItemDto::id),
 			)
 		}

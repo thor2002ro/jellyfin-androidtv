@@ -365,30 +365,30 @@ private fun GenreChoiceSection(
 )
 
 @Composable
-private fun playbackLabel(filter: PlaybackFilter): String = stringResource(
-	when (filter) {
-		PlaybackFilter.ANY -> R.string.library_filter_any
-		PlaybackFilter.UNWATCHED -> R.string.lbl_unwatched
-		PlaybackFilter.WATCHED -> R.string.lbl_watched
-	}
-)
+private fun playbackLabel(filter: PlaybackFilter): String = stringResource(playbackLabelResource(filter))
+
+internal fun playbackLabelResource(filter: PlaybackFilter): Int = when (filter) {
+	PlaybackFilter.ANY -> R.string.library_filter_any
+	PlaybackFilter.UNWATCHED -> R.string.lbl_unwatched
+	PlaybackFilter.WATCHED -> R.string.lbl_watched
+}
 
 @Composable
-private fun qualityLabel(filter: QualityFilter): String = stringResource(
-	when (filter) {
-		QualityFilter.ANY -> R.string.library_filter_any
-		QualityFilter.SD -> R.string.library_filter_quality_sd
-		QualityFilter.HD -> R.string.library_filter_quality_hd
-		QualityFilter.FOUR_K -> R.string.library_filter_quality_4k
-	}
-)
+private fun qualityLabel(filter: QualityFilter): String = stringResource(qualityLabelResource(filter))
+
+internal fun qualityLabelResource(filter: QualityFilter): Int = when (filter) {
+	QualityFilter.ANY -> R.string.library_filter_any
+	QualityFilter.SD -> R.string.library_filter_quality_sd
+	QualityFilter.HD -> R.string.library_filter_quality_hd
+	QualityFilter.FOUR_K -> R.string.library_filter_quality_4k
+}
 
 @Composable
-private fun videoTypeLabel(type: VideoType): String = stringResource(
-	when (type) {
-		VideoType.VIDEO_FILE -> R.string.library_filter_video_file
-		VideoType.ISO -> R.string.library_filter_video_iso
-		VideoType.DVD -> R.string.library_filter_video_dvd
-		VideoType.BLU_RAY -> R.string.library_filter_video_bluray
-	}
-)
+private fun videoTypeLabel(type: VideoType): String = stringResource(videoTypeLabelResource(type))
+
+internal fun videoTypeLabelResource(type: VideoType): Int = when (type) {
+	VideoType.VIDEO_FILE -> R.string.library_filter_video_file
+	VideoType.ISO -> R.string.library_filter_video_iso
+	VideoType.DVD -> R.string.library_filter_video_dvd
+	VideoType.BLU_RAY -> R.string.library_filter_video_bluray
+}
