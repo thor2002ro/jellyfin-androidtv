@@ -30,6 +30,17 @@
     <color name="red_gradient_start">#7c0b09</color>
     <color name="red_gradient_end">#900d10</color>
 
+    <!-- Card Theme Colors -->
+    <color name="card_focus_gradient_start">@color/jellyfin_blue</color>
+    <color name="card_focus_gradient_center">@color/lb_basic_card_info_bg_color</color>
+    <color name="card_focus_gradient_end">@color/jellyfin_purple</color>
+    <color name="card_focus_stroke">@color/jellyfin_blue</color>
+    <color name="card_focus_sheen">#66FFFFFF</color>
+    <color name="card_neutral_gradient_start">@color/grey_light</color>
+    <color name="card_neutral_gradient_center">@color/lb_basic_card_info_bg_color</color>
+    <color name="card_neutral_gradient_end">@color/grey</color>
+    <color name="card_neutral_sheen">#26FFFFFF</color>
+
     <!-- Live TV Colors -->
     <color name="channel_scroller_bg">#201b1c</color>
     <color name="program_scroller_bg">#0b0e14</color>

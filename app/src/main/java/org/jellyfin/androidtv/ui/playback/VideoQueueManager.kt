@@ -1,13 +1,19 @@
 package org.jellyfin.androidtv.ui.playback
 
+import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.util.MAX_SUBTITLE_LANGUAGE_PREFERENCES
+import org.jellyfin.androidtv.util.toSubtitleLanguagePreferences
+import org.jellyfin.androidtv.util.toIso2LanguageCodeOrNull
 import org.jellyfin.sdk.model.api.BaseItemDto
 
-class VideoQueueManager {
+class VideoQueueManager(
+	private val userPreferences: UserPreferences? = null,
+) {
 	private var _currentVideoQueue: List<BaseItemDto> = emptyList()
 	private var _currentMediaPosition = -1
 	private var _lastPlayedAudioLanguageIsoCode: String? = null
 	private var _lastPlayedAudioCodec: String? = null
-	private var _lastPlayedSubtitleLanguageIsoCode: String? = null
+	private var _lastPlayedSubtitleLanguageIsoCodes: List<String>? = preferredSubtitleLanguages()
 	private var _lastPlayedSubtitleForcedState: Boolean = false
 	private var _lastPlayedSubtitleCodec: String? = null
 	private var _lastPlayedSubtitleTitle: String? = null
@@ -34,7 +40,7 @@ class VideoQueueManager {
 	}
 
 	fun setLastPlayedAudioLanguageIsoCode(isoCode: String?) {
-		_lastPlayedAudioLanguageIsoCode = isoCode
+		_lastPlayedAudioLanguageIsoCode = isoCode.toIso2LanguageCodeOrNull()
 	}
 
 	fun getLastPlayedAudioCodec(): String? {
@@ -46,11 +52,25 @@ class VideoQueueManager {
 	}
 
 	fun getLastPlayedSubtitleLanguageIsoCode(): String? {
-		return _lastPlayedSubtitleLanguageIsoCode
+		return _lastPlayedSubtitleLanguageIsoCodes?.firstOrNull()
+	}
+
+	fun getLastPlayedSubtitleLanguageIsoCodes(): List<String>? {
+		return _lastPlayedSubtitleLanguageIsoCodes
 	}
 
 	fun setLastPlayedSubtitleLanguageIsoCode(isoCode: String?) {
-		_lastPlayedSubtitleLanguageIsoCode = isoCode
+		_lastPlayedSubtitleLanguageIsoCodes = when {
+			isoCode == "" -> listOf("")
+			else -> isoCode.toIso2LanguageCodeOrNull()?.let { code ->
+				(listOf(code) + _lastPlayedSubtitleLanguageIsoCodes.orEmpty().filter { it.isNotBlank() && it != code })
+					.take(MAX_SUBTITLE_LANGUAGE_PREFERENCES)
+			}
+		}
+	}
+
+	fun setLastPlayedSubtitleLanguageIsoCodes(isoCodes: List<String>) {
+		_lastPlayedSubtitleLanguageIsoCodes = isoCodes.toSubtitleLanguagePreferences().takeIf { it.isNotEmpty() }
 	}
 
 	fun getLastPlayedSubtitleForcedState(): Boolean {
@@ -82,9 +102,14 @@ class VideoQueueManager {
 		_currentMediaPosition = -1
 		_lastPlayedAudioLanguageIsoCode = null
 		_lastPlayedAudioCodec = null
-		_lastPlayedSubtitleLanguageIsoCode = null
+		_lastPlayedSubtitleLanguageIsoCodes = preferredSubtitleLanguages()
 		_lastPlayedSubtitleForcedState = false
 		_lastPlayedSubtitleCodec = null
 		_lastPlayedSubtitleTitle = null
 	}
+
+	private fun preferredSubtitleLanguages() =
+		userPreferences?.get(UserPreferences.subtitleLanguagePreferences)
+			.toSubtitleLanguagePreferences()
+			.takeIf { it.isNotEmpty() }
 }

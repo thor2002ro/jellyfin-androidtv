@@ -34,4 +34,9 @@ object ItemRepository {
 		ItemFields.OVERVIEW,
 		ItemFields.PRIMARY_IMAGE_ASPECT_RATIO,
 	)
+
+	val streamBadgeFields = browseFields + setOf(
+		ItemFields.MEDIA_SOURCES,
+		ItemFields.MEDIA_STREAMS,
+	)
 }

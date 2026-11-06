@@ -13,6 +13,7 @@ import org.jellyfin.androidtv.util.sdk.getSubName
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.MediaSourceInfo
 import java.time.format.DateTimeFormatter
 import org.jellyfin.androidtv.constant.ImageType as BaseRowImageType
 
@@ -22,7 +23,7 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	staticHeight: Boolean = false,
 	selectAction: BaseRowItemSelectAction = BaseRowItemSelectAction.ShowDetails,
 	val preferSeriesPoster: Boolean = false,
-	private val showParentTitle: Boolean = false,
+	val streamBadgeMediaSources: List<MediaSourceInfo>? = null,
 ) : BaseRowItem(
 	baseRowType = when (item.type) {
 		BaseItemKind.TV_CHANNEL,
@@ -40,6 +41,11 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	selectAction = selectAction,
 	baseItem = item,
 ) {
+	val streamBadgeItem: BaseItemDto?
+		get() = streamBadgeMediaSources
+			?.let { sources -> baseItem?.copy(mediaSources = sources) }
+			?: baseItem
+
 	override val showCardInfoOverlay
 		get() = when (baseItem?.type) {
 			BaseItemKind.FOLDER,
