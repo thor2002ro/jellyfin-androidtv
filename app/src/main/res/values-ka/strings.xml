@@ -331,7 +331,6 @@
     <string name="not_set">დაყენებული არაა</string>
     <string name="lbl_album_artists">ალბომის შემსრულებლები</string>
     <string name="photo_albums">ფოტოალბომები</string>
-    <string name="dolby_vision">Dolby Vision</string>
     <string name="dolby_atmos">Dolby Atmos</string>
     <string name="clear_image_cache_content">გამოყენებულია: %1$s</string>
     <string name="pref_screensaver_ageratingmax_zero">ყველა ასაკი</string>
@@ -539,7 +538,6 @@
     <string name="preference_enable_pgs">PGS სუბტიტრების პირდაპირი დაკვრა</string>
     <string name="still_watching_label">ჯერ კიდევ უყურებთ?</string>
     <string name="preference_codecs_summary">მოწყობილობის მიერ მოწოდებული კოდეკის შესაძლებლობების გადაფარვა</string>
-    <string name="dolby_vision_with_el">\'Dolby Vision\' EL-ით</string>
     <string name="preference_enable_ass">ASS სუბტიტრების პირდაპირი დაკვრა</string>
     <string name="preference_enable_pgs_description">სჭირდება ტრანსკოდინგი, როცა გამორთულია</string>
     <string name="msg_playback_incompatible">ამ ვიდეოფორმატის დაკვრა შეუძლებელია</string>
