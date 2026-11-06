@@ -90,7 +90,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Duration in seconds to subtract from resume time
 		 */
-		var resumeSubtractDuration = stringPreference("pref_resume_preroll", "0")
+		var resumeSubtractDuration = stringPreference("pref_resume_preroll", "20")
 
 		/**
 		 * Enable cinema mode
