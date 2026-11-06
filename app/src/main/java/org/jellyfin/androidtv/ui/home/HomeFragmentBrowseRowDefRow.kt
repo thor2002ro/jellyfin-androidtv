@@ -31,6 +31,7 @@ class HomeFragmentBrowseRowDefRow(
 		// Some of these members are probably never used and could be removed
 		val rowAdapter = when (browseRowDef.queryType) {
 			QueryType.NextUp -> ItemRowAdapter(context, browseRowDef.nextUpQuery, preferParentThumb, cardPresenter, rowsAdapter).apply {
+				combinedResumeQuery = browseRowDef.supplementalResumeQuery
 				nextUpQueryProvider = {
 					browseRowDef.nextUpQuery.withHomeNextUpCutoff(userPreferences[UserPreferences.homeNextUpMaxDays])
 				}
@@ -48,15 +49,21 @@ class HomeFragmentBrowseRowDefRow(
 				browseRowDef.liveTvProgramSelectAction,
 			)
 			QueryType.LiveTvRecording -> ItemRowAdapter(context, browseRowDef.recordingQuery, browseRowDef.chunkSize, cardPresenter, rowsAdapter)
-			QueryType.Resume -> createResumeHomeRowAdapter(context, browseRowDef, cardPresenter, rowsAdapter)
+			QueryType.Resume -> createResumeHomeRowAdapter(
+				context = context,
+				browseRowDef = browseRowDef,
+				cardPresenter = cardPresenter,
+				rowsAdapter = rowsAdapter,
+				preferParentThumb = browseRowDef.preferParentThumb && preferParentThumb,
+			)
 			else -> ItemRowAdapter(context, browseRowDef.query, browseRowDef.chunkSize, browseRowDef.preferParentThumb, browseRowDef.isStaticHeight, cardPresenter, rowsAdapter, browseRowDef.queryType)
 		}
 
 		rowAdapter.setReRetrieveTriggers(browseRowDef.changeTriggers)
 		val row = ListRow(header, rowAdapter)
 		rowAdapter.setRow(row, rowsAdapter.size().toDouble())
-		rowAdapter.Retrieve()
 		rowsAdapter.add(row)
+		rowAdapter.Retrieve()
 	}
 }
 
@@ -65,11 +72,12 @@ internal fun createResumeHomeRowAdapter(
 	browseRowDef: BrowseRowDef,
 	cardPresenter: CardPresenter,
 	rowsAdapter: MutableObjectAdapter<Row>,
+	preferParentThumb: Boolean = browseRowDef.preferParentThumb,
 ) = ItemRowAdapter(
 	context,
 	browseRowDef.resumeQuery,
 	browseRowDef.chunkSize,
-	browseRowDef.preferParentThumb,
+	preferParentThumb,
 	browseRowDef.isStaticHeight,
 	cardPresenter,
 	rowsAdapter,

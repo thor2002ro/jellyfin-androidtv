@@ -10,6 +10,7 @@ class HomeNextUpRequestTests : FunSpec({
 		request.limit shouldBe 50
 		request.enableResumable shouldBe false
 		request.enableRewatching shouldBe false
+		request.enableTotalRecordCount shouldBe false
 	}
 
 	test("next up rewatching can be enabled without bypassing the row limit") {
@@ -20,14 +21,4 @@ class HomeNextUpRequestTests : FunSpec({
 		request.enableRewatching shouldBe true
 	}
 
-	test("combined continue watching includes resumable items in next up") {
-		val request = createHomeNextUpRequest(
-			itemLimit = 50,
-			includeRewatching = false,
-			includeResumable = true,
-		)
-
-		request.limit shouldBe 50
-		request.enableResumable shouldBe true
-	}
 })
