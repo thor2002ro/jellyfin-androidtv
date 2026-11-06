@@ -213,7 +213,8 @@ fun PlaybackInfoOverlay(
 		)
 	}
 	val playerMetricSections = sections.filter { it.title == "${frameStats.playerName} Metrics" }
-	val playbackInfoSections = sections - playerMetricSections
+	val libassMetricSections = sections.filter { it.title == "libass Metrics" }
+	val playbackInfoSections = sections - playerMetricSections - libassMetricSections
 
 	Row(
 		modifier = modifier,
@@ -225,10 +226,10 @@ fun PlaybackInfoOverlay(
 				stream = stream,
 				frameStats = frameStats,
 			)
-			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
-			if (playerMetricSections.isNotEmpty()) {
-				PlayerMetricsPanel(sections = playerMetricSections)
+			if (playerMetricSections.isNotEmpty() || libassMetricSections.isNotEmpty()) {
+				PlayerMetricsPanel(sections = playerMetricSections + libassMetricSections)
 			}
+			PlaybackThumbnailCachePanel(rows = thumbnailCacheRows)
 		}
 
 		PlaybackInfoTextPanel(sections = playbackInfoSections)
@@ -510,6 +511,7 @@ private object NewPlayerStreamStatusBuilder {
 	}
 
 	private fun MutableList<PlaybackInfoRowModel>.addLibassStats(stats: PlaybackLibassStats) {
+		row("OpenGL", stats.openGlMode)
 		row("Samples", stats.renderCount.toString())
 		row("FPS", stats.fps.formatLibassRate())
 		row(

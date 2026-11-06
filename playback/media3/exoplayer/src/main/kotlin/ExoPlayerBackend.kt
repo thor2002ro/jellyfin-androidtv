@@ -1896,6 +1896,7 @@ class ExoPlayerBackend(
 		minRenderMs = minRenderMs,
 		maxRenderMs = maxRenderMs,
 		lastRenderMs = lastRenderMs,
+		openGlMode = openGlMode,
 	)
 
 	private fun currentTsExtractorFlags(): Int? {
