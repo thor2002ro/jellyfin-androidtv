@@ -127,12 +127,7 @@ fun FullDetailsFragment.togglePlayed() {
 		}
 
 		// Force lists to re-fetch
-		dataRefreshService.lastPlayback = Instant.now()
-		when (mBaseItem.type) {
-			BaseItemKind.MOVIE -> dataRefreshService.lastMoviePlayback = Instant.now()
-			BaseItemKind.EPISODE -> dataRefreshService.lastTvPlayback = Instant.now()
-			else -> Unit
-		}
+		dataRefreshService.notifyPlayback(mBaseItem)
 
 		showMoreButtonIfNeeded()
 	}
