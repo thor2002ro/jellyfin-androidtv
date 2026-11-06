@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.card
 
 import android.content.Context
 import android.graphics.Rect
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.KeyEvent
 import androidx.compose.animation.core.animateFloatAsState
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.ui.base.CircularProgressIndicator
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.LocalTextStyle
@@ -72,6 +75,7 @@ fun UserCard(
 	modifier: Modifier = Modifier,
 	interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 	shape: Shape = CircleShape,
+	loading: Boolean = false,
 ) {
 	val focused by interactionSource.collectIsFocusedAsState()
 	val context = LocalContext.current
@@ -99,9 +103,17 @@ fun UserCard(
 				.aspectRatio(1f)
 				.clip(shape)
 				.background(JellyfinTheme.colorScheme.surface, shape)
-				.border(if (focused) UserCardView.FOCUS_BORDER_WIDTH else 1.dp, color.first, shape)
+				.border(
+					if (focused || loading) UserCardView.FOCUS_BORDER_WIDTH else 1.dp,
+					if (loading) accentColor.copy(alpha = 0.2f) else color.first,
+					shape,
+				)
 		) {
 			image()
+			if (loading) CircularProgressIndicator(
+				modifier = Modifier.matchParentSize().padding(UserCardView.FOCUS_BORDER_WIDTH / 2).progressSemantics(),
+				color = accentColor,
+			)
 		}
 
 		Spacer(Modifier.height(UserCardView.NAME_SPACING))
@@ -149,6 +161,7 @@ class UserCardView @JvmOverloads constructor(
 	var name by mutableStateOf<String?>(null)
 	var image by mutableStateOf<String?>(null)
 	var imageIcon by mutableStateOf<Int?>(null)
+	var loading by mutableStateOf(false)
 	private var focused by mutableStateOf(false)
 	private var avatarCoordinates: LayoutCoordinates? = null
 	private var nameCoordinates: LayoutCoordinates? = null
@@ -158,8 +171,14 @@ class UserCardView @JvmOverloads constructor(
 		val label = nameCoordinates?.takeIf { it.isAttached }?.boundsInWindow() ?: return null
 		val density = Density(context)
 		val scale = avatar.width / with(density) { AVATAR_SIZE.toPx() }
-		return ProfileLoginOrigin(avatar, label, name.orEmpty(), image, with(density) { NAME_FONT_SIZE.toPx() } * scale)
-			.takeIf { it.isUsable }
+		return ProfileLoginOrigin(
+			avatarBounds = avatar,
+			nameBounds = label,
+			name = name.orEmpty(),
+			imageUrl = image,
+			nameFontSizePx = with(density) { NAME_FONT_SIZE.toPx() } * scale,
+			selectedAtMillis = SystemClock.elapsedRealtime(),
+		).takeIf { it.isUsable }
 	}
 
 	init {
@@ -201,6 +220,7 @@ class UserCardView @JvmOverloads constructor(
 		}
 
 		UserCard(
+			loading = loading,
 			image = {
 				val icon = imageIcon
 				if (icon != null) Icon(
