@@ -16,6 +16,7 @@ data class ExoPlayerOptions(
 	val libassGlyphSize: Int = 20_000,
 	val libassCacheSize: Int = 256,
 	val libassMaxRenderPixels: Int = 0,
+	val libassMaxFps: Float = 35f,
 	val parseSubtitlesDuringExtraction: Boolean = false,
 	val baseDataSourceFactory: DataSource.Factory = DefaultHttpDataSource.Factory(),
 	val minBufferDuration: Duration? = null,
