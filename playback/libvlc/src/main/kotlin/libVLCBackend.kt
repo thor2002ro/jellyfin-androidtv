@@ -24,6 +24,8 @@ import org.jellyfin.playback.core.mediastream.MediaStreamAudioTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamSubtitleTrack
 import org.jellyfin.playback.core.mediastream.MediaStreamTrack
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
+import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.mediastream.totalBitrate
@@ -155,18 +157,23 @@ internal fun shouldSelectExternalSubtitle(
 	else -> subtitle.index == selectedSubtitleStreamIndex
 }
 
-internal fun PlayableMediaStream.libVLCSourceTracks(type: TrackType): List<MediaStreamTrack> = when (type) {
+internal fun PlayableMediaStream.libVLCSourceTracks(
+	type: TrackType,
+	embeddedSubtitleCount: Int = Int.MAX_VALUE,
+): List<MediaStreamTrack> = when (type) {
 	TrackType.AUDIO -> tracks.filterIsInstance<MediaStreamAudioTrack>()
 	TrackType.SUBTITLE -> {
 		val subtitles = tracks.filterIsInstance<MediaStreamSubtitleTrack>()
-		subtitles.filterNot { it.isExternal } + externalSubtitles.mapNotNull { external ->
+		// Converted streams can omit embedded subtitles or carry only the selected one.
+		val embedded = subtitles.filter { !it.isExternal && (conversionMethod == MediaConversionMethod.None || it.index == selectedSubtitleStreamIndex) }
+		embedded.take(embeddedSubtitleCount) + externalSubtitles.mapNotNull { external ->
 			subtitles.firstOrNull { subtitle -> subtitle.isExternal && subtitle.index == external.index }
 		}
 	}
 }
 
-internal fun PlayableMediaStream.sourceTrackIndex(type: TrackType, streamIndex: Int): Int? =
-	libVLCSourceTracks(type)
+internal fun PlayableMediaStream.sourceTrackIndex(type: TrackType, streamIndex: Int, embeddedSubtitleCount: Int = Int.MAX_VALUE): Int? =
+	libVLCSourceTracks(type, embeddedSubtitleCount)
 		.indexOfFirst { track -> track.index == streamIndex }
 		.takeIf { index -> index >= 0 }
 
@@ -736,11 +743,11 @@ class LibVLCBackend(
 		return selected
 	}
 
-	private fun selectableTracks(type: TrackType): List<IMedia.Track> {
+	private fun selectableTracks(type: TrackType, mediaIds: List<String> = mediaTrackIds(type)): List<IMedia.Track> {
 		val vlcType = type.libVLCTrackType()
 		val descriptions = player.getTracks(vlcType).orEmpty()
 		val descriptionsById = descriptions.associateBy(IMedia.Track::id)
-		return orderedLibVLCTrackIds(mediaTrackIds(type), descriptions.map(IMedia.Track::id))
+		return orderedLibVLCTrackIds(mediaIds, descriptions.map(IMedia.Track::id))
 			.mapNotNull(descriptionsById::get)
 	}
 
@@ -768,8 +775,9 @@ class LibVLCBackend(
 	}
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
-		val sourceTracks = currentStream?.libVLCSourceTracks(type).orEmpty()
-		val tracks = selectableTracks(type)
+		val mediaIds = mediaTrackIds(type)
+		val sourceTracks = currentStream?.libVLCSourceTracks(type, mediaIds.size).orEmpty()
+		val tracks = selectableTracks(type, mediaIds)
 		return tracks.mapIndexed { index, track ->
 			libVLCPlayerTrack(index, type, track, sourceTracks.getOrNull(index))
 		}
@@ -777,12 +785,16 @@ class LibVLCBackend(
 
 	override fun selectTrack(type: TrackType, index: Int): Boolean {
 		pendingInitialTrackTypes -= type
-		if (currentStream?.conversionMethod != MediaConversionMethod.None) return false
+		val stream = currentStream ?: return false
 		if (type == TrackType.SUBTITLE && index == -1) {
+			if (!stream.allowsLocalSubtitleDisable()) return false
 			player.unselectTrackType(IMedia.Track.Type.Text)
 			return true
 		}
-		val track = selectableTracks(type).getOrNull(index) ?: return false
+		val mediaIds = mediaTrackIds(type)
+		val track = selectableTracks(type, mediaIds).getOrNull(index) ?: return false
+		val sourceTrack = stream.libVLCSourceTracks(type, mediaIds.size).getOrNull(index)
+		if (!stream.allowsLocalTrackSelection(type, sourceTrack)) return false
 		return player.selectTrack(track.id)
 	}
 }
