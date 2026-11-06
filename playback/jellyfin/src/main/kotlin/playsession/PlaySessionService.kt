@@ -98,7 +98,7 @@ class PlaySessionService(
 			selectedAudioStreamIndex = null
 			selectedSubtitleStreamIndex = null
 			observedTrackSelection = null
-			if (entry?.mediaStream?.identifier != stoppedPlaySessionId) stoppedPlaySessionId = null
+			if (entry != null && entry.mediaStream?.identifier != stoppedPlaySessionId) stoppedPlaySessionId = null
 			activePlaybackKey = null
 			liveTvReportingState = null
 		}.launchIn(coroutineScope)
