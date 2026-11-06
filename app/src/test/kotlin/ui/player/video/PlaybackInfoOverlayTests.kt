@@ -18,6 +18,16 @@ class PlaybackInfoOverlayTests : FunSpec({
 		tracks.selectedTrack(selected) shouldBe tracks[1]
 	}
 
+	test("audio debug summary follows codec and channels when the selected stream changes") {
+		val tracks = listOf(
+			MediaStreamAudioTrack(1, "aac", 128_000, 2, 48_000, null, null),
+			MediaStreamAudioTrack(2, "eac3", 640_000, 6, 48_000, null, null),
+		)
+		val selected = PlayerTrack(1, TrackType.AUDIO, null, null, "eac3", true, streamIndex = 2)
+
+		tracks.audioSummary(selected) shouldBe "Audio: EAC3 6ch"
+	}
+
 	test("formatDisplayHdrModes includes every reported HDR mode") {
 		formatDisplayHdrModes(setOf(1, 2, 4, 3)) shouldBe "DV; HDR10; HDR10+; HLG"
 	}
