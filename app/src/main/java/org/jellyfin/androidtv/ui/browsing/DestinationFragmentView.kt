@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Parcel
 import android.os.Parcelable
 import android.util.AttributeSet
+import android.view.View
 import android.widget.FrameLayout
 import androidx.core.os.BundleCompat
 import androidx.core.os.ParcelCompat
@@ -13,12 +14,21 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
+import androidx.lifecycle.Lifecycle
+import kotlinx.serialization.json.Json
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.Extras
+import org.jellyfin.androidtv.ui.itemdetail.FullDetailsFragment
+import org.jellyfin.androidtv.ui.itemdetail.ItemListFragment
 import org.jellyfin.androidtv.ui.navigation.Destination
+import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationAction
 import org.jellyfin.androidtv.util.createBundle
+import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
 import java.util.Stack
+import java.util.UUID
 import kotlin.jvm.kotlin
 
 private class HistoryEntry(
@@ -27,6 +37,7 @@ private class HistoryEntry(
 
 	var fragment: Fragment? = null,
 	var savedState: Fragment.SavedState? = null,
+	var focusedView: View? = null,
 ) : Parcelable {
 	override fun describeContents(): Int = 0
 
@@ -57,6 +68,17 @@ class DestinationFragmentView @JvmOverloads constructor(
 		private const val FRAGMENT_TAG_CONTENT = "content"
 		private const val BUNDLE_SUPER = "super"
 		private const val BUNDLE_HISTORY = "history"
+		private val LIBRARY_SCREENS = setOf(
+			BrowseGridFragment::class.java,
+			BrowseViewFragment::class.java,
+			GenericFolderFragment::class.java,
+			CollectionFragment::class.java,
+			ByGenreFragment::class.java,
+			ByLetterFragment::class.java,
+			SuggestedMoviesFragment::class.java,
+			FullDetailsFragment::class.java,
+			ItemListFragment::class.java,
+		)
 	}
 
 	private val fragmentManager by lazy {
@@ -71,6 +93,7 @@ class DestinationFragmentView @JvmOverloads constructor(
 	}
 
 	private val history = Stack<HistoryEntry>()
+	private var activeLibraryId: UUID? = null
 	var onDestinationChanged: ((Destination.Fragment) -> Unit)? = null
 
 	fun navigate(action: NavigationAction.NavigateFragment) {
@@ -127,6 +150,15 @@ class DestinationFragmentView @JvmOverloads constructor(
 		history[history.size - 1].savedState = fragmentManager.saveFragmentInstanceState(fragment)
 	}
 
+	private fun libraryId(): UUID? {
+		for (entry in history.asReversed()) {
+			if (entry.name !in LIBRARY_SCREENS && !Destinations.isPlayback(Destination.Fragment(entry.name.kotlin, entry.arguments))) return null
+			val folder = entry.arguments.getString(Extras.Folder)?.let { Json.decodeFromString<BaseItemDto>(it) } ?: continue
+			if (folder.type == BaseItemKind.USER_VIEW || folder.type == BaseItemKind.COLLECTION_FOLDER) return folder.id
+		}
+		return null
+	}
+
 	@SuppressLint("CommitTransaction")
 	private fun activateHistoryEntry(
 		entry: HistoryEntry,
@@ -150,18 +182,46 @@ class DestinationFragmentView @JvmOverloads constructor(
 			fragment.arguments = entry.arguments
 		}
 
+		val nextLibraryId = libraryId()
+		val keepLibraryViews = nextLibraryId != null && nextLibraryId == activeLibraryId
 		transaction.apply {
 			// Set options
 			setReorderingAllowed(true)
 			setCustomAnimations(R.anim.fade_in, R.anim.fade_out, R.anim.fade_in, R.anim.fade_out)
 
-			// Detach current fragment
-			fragmentManager.findFragmentByTag(FRAGMENT_TAG_CONTENT)?.let(::detach)
+			val current = fragmentManager.findFragmentByTag(FRAGMENT_TAG_CONTENT)
+			val currentEntry = history.firstOrNull { it.fragment === current }
+			if (!keepLibraryViews) {
+				// Crossing a library boundary releases its retained views while keeping normal Back history.
+				for (previous in history) {
+					val retained = previous.fragment ?: continue
+					if (!retained.isHidden || retained === fragment) continue
+					previous.focusedView = null
+					detach(retained)
+					show(retained)
+					setMaxLifecycle(retained, Lifecycle.State.RESUMED)
+				}
+			}
+			if (keepLibraryViews && currentEntry != null && current != null && current.javaClass in LIBRARY_SCREENS) {
+				// Keep only the current library's Back path ready to show without rebuilding its cards.
+				currentEntry.focusedView = current.view?.findFocus()
+				hide(current)
+				setMaxLifecycle(current, Lifecycle.State.STARTED)
+			} else {
+				current?.let(::detach)
+			}
 
 			// Attach or add next fragment
-			if (fragment.isDetached) attach(fragment)
-			else replace(container.id, fragment, FRAGMENT_TAG_CONTENT)
+			if (fragment.isHidden) {
+				show(fragment)
+				setMaxLifecycle(fragment, Lifecycle.State.RESUMED)
+				val focusedView = entry.focusedView
+				entry.focusedView = null
+				runOnCommit { if (focusedView?.requestFocus() != true) fragment.view?.requestFocus() }
+			} else if (fragment.isDetached) attach(fragment)
+			else add(container.id, fragment, FRAGMENT_TAG_CONTENT)
 		}
+		activeLibraryId = nextLibraryId
 
 		if (fragmentManager.isDestroyed) {
 			Timber.w("FragmentManager is already destroyed")
