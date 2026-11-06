@@ -32,6 +32,8 @@ import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
+import org.jellyfin.androidtv.util.PlaybackDisplayMode
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
@@ -75,9 +77,32 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private var handingOffPlayer = false
 	private var mediaStreamEndListener: PlayerBackendEventListener? = null
 	private val entryChangePredicate: suspend (QueueEntry) -> Boolean = ::shouldChangeQueueEntry
+	private var displayModePreparation: (suspend (PlayableMediaStream) -> Boolean)? = null
+	private var originalDisplayModePreference: Int? = null
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
+
+		// Capture the baseline once, before playback changes the output mode. Using
+		// each item's current mode instead would gradually lose the original baseline.
+		val playerActivity = requireActivity()
+		val originalMode = playerActivity.windowManager.defaultDisplay.mode
+		val originalPreference = playerActivity.window.attributes.preferredDisplayModeId
+		originalDisplayModePreference = originalPreference
+		displayModePreparation = { stream ->
+			val video = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
+			if (video == null) true else PlaybackDisplayMode.applyAndAwait(
+				playerActivity, video.width, video.height,
+				PlaybackDisplayMode.frameRateForDisplay(video.realFrameRate, video.isInterlaced),
+				userPreferences[UserPreferences.refreshRateSwitchingEnabled],
+				userPreferences[UserPreferences.resolutionSwitchingEnabled], originalMode,
+				originalPreference = originalPreference,
+				isCurrent = { isAdded && playbackManager.options.beforePlayItem === displayModePreparation },
+			)
+		}
+		// Install before adding the queue: its first entry can start resolving at once.
+		// Preparation belongs in the startup path, rather than a separate Compose effect.
+		playbackManager.options.beforePlayItem = displayModePreparation
 
 		val items = videoQueueManager.getCurrentVideoQueue()
 		val requestedLiveTvChannelId = arguments
@@ -166,6 +191,19 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	}
 
 	override fun onDestroy() {
+		// The manager is shared. An older fragment must not remove a newer screen's
+		// callback or restore its window preference after that screen takes ownership.
+		if (playbackManager.options.beforePlayItem === displayModePreparation) {
+			playbackManager.options.beforePlayItem = null
+			activity?.window?.let { window ->
+				originalDisplayModePreference?.let { originalPreference ->
+					val attributes = window.attributes
+					attributes.preferredDisplayModeId = originalPreference
+					window.attributes = attributes
+				}
+			}
+		}
+		displayModePreparation = null
 		playbackManager.getService<QueueService>()?.clearEntryChangePredicate(entryChangePredicate)
 		mediaStreamEndListener?.let(playbackManager::removeBackendEventListener)
 		mediaStreamEndListener = null
