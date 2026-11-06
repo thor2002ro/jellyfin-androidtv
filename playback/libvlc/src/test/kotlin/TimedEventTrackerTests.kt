@@ -23,6 +23,10 @@ class TimedEventTrackerTests : StringSpec({
 		bufferingPlayState(100f) shouldBe PlayState.PLAYING
 	}
 
+	"buffer size estimate uses demux bytes per second and configured duration" {
+		estimateBufferedBytes(2_000_000f, 5.seconds) shouldBe 10_000_000L
+	}
+
 	"LibVLC descriptions follow media track IDs with unmatched slaves appended" {
 		orderedLibVLCTrackIds(
 			mediaTrackIds = listOf(7, 3),
@@ -184,5 +188,11 @@ class TimedEventTrackerTests : StringSpec({
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 12) shouldBe 0
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 9) shouldBe 1
 		stream.sourceTrackIndex(TrackType.SUBTITLE, 4) shouldBe 2
+	}
+
+	"libVLC buffer details clamp invalid progress and do not claim cache speed" {
+		normalizeBufferingPercent(120f, 50f) shouldBe 100f
+		normalizeBufferingPercent(Float.NaN, 50f) shouldBe 50f
+		formatLibVLCBufferDetails(1_048_576, 50f) shouldBe "~1.00 MiB, buffering 50%"
 	}
 })

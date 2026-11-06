@@ -26,6 +26,7 @@ import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackFrameStats
+import org.jellyfin.playback.core.model.formatBufferBytes
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.isLiveTv
@@ -196,6 +197,7 @@ class LibVLCBackend(
 	private val appContext = context.applicationContext
 	private var subtitleStyle: PlayerSubtitleStyle? = null
 	private var subtitleTimingOffset = Duration.ZERO
+	private var bufferingPercent = 100f
 	private var playbackSpeed = 1f
 	private var appliedInstanceOptions = currentInstanceOptions()
 	private var libVLC = createLibVLC(appliedInstanceOptions)
@@ -448,6 +450,11 @@ class LibVLCBackend(
 				media.release()
 			}
 		}
+		val estimatedBytes = estimateBufferedBytes(
+			stats?.demuxBitrate,
+			if (currentStream?.queueEntry?.isLiveTv == true) liveTvBufferDuration else normalBufferDuration,
+		)
+		val bufferDetails = formatLibVLCBufferDetails(estimatedBytes, bufferingPercent)
 		return PlaybackFrameStats(
 			droppedFrames = stats?.lostPictures ?: 0,
 			corruptedFrames = stats?.demuxCorrupted ?: 0,
@@ -455,6 +462,7 @@ class LibVLCBackend(
 			videoDecodedFrames = stats?.decodedVideo ?: 0,
 			videoDecoderName = "LibVLC ${effectiveVideoDecoder.label}",
 			audioDecoderName = "LibVLC",
+			bufferedBytes = bufferDetails,
 			subtitleExtractor = "LibVLC",
 			subtitleRender = "LibVLC",
 		)
@@ -462,14 +470,21 @@ class LibVLCBackend(
 
 	private fun onPlayerEvent(event: MediaPlayer.Event) {
 		when (event.type) {
-			MediaPlayer.Event.Opening -> listener?.onPlayStateChange(PlayState.BUFFERING)
-			MediaPlayer.Event.Buffering -> bufferingPlayState(event.buffering)?.let { listener?.onPlayStateChange(it) }
+			MediaPlayer.Event.Opening -> {
+				bufferingPercent = 0f
+				listener?.onPlayStateChange(PlayState.BUFFERING)
+			}
+			MediaPlayer.Event.Buffering -> {
+				bufferingPercent = normalizeBufferingPercent(event.buffering, bufferingPercent)
+				bufferingPlayState(event.buffering)?.let { listener?.onPlayStateChange(it) }
+			}
 			MediaPlayer.Event.ESAdded -> when (event.esChangedType) {
 				IMedia.Track.Type.Audio -> applyInitialTrackSelection(TrackType.AUDIO)
 				IMedia.Track.Type.Text -> applyInitialTrackSelection(TrackType.SUBTITLE)
 				else -> Unit
 			}
 			MediaPlayer.Event.Playing -> {
+				bufferingPercent = 100f
 				applyInitialTrackSelection()
 				applySubtitleTimingOffset()
 				handler.removeCallbacks(tick)
@@ -614,3 +629,16 @@ class LibVLCBackend(
 
 internal fun bufferingPlayState(percent: Float): PlayState? =
 	PlayState.PLAYING.takeIf { percent >= 100f }
+
+internal fun estimateBufferedBytes(bytesPerSecond: Float?, duration: Duration?): Long? {
+	if (bytesPerSecond == null || !bytesPerSecond.isFinite() || bytesPerSecond <= 0f || duration == null || duration <= Duration.ZERO) return null
+	return (bytesPerSecond * duration.inWholeMilliseconds / 1_000.0).toLong()
+}
+
+internal fun normalizeBufferingPercent(percent: Float, fallback: Float): Float =
+	percent.takeIf(Float::isFinite)?.coerceIn(0f, 100f) ?: fallback
+
+internal fun formatLibVLCBufferDetails(estimatedBytes: Long?, bufferingPercent: Float) = buildList {
+	estimatedBytes?.let { add("~${it.formatBufferBytes()}") }
+	if (bufferingPercent < 100f) add("buffering ${bufferingPercent.toInt()}%")
+}.joinToString(", ").takeIf(String::isNotEmpty)
