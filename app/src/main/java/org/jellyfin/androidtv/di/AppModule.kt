@@ -64,6 +64,7 @@ import org.jellyfin.androidtv.util.MarkdownRenderer
 import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.androidtv.util.apiclient.ReportingHelper
 import org.jellyfin.androidtv.util.coil.CoilTimberLogger
+import org.jellyfin.androidtv.util.coil.IMAGE_CACHE_DIRECTORY_NAME
 import org.jellyfin.androidtv.util.coil.createCoilConnectivityChecker
 import org.jellyfin.androidtv.util.sdk.SdkPlaybackHelper
 import org.jellyfin.androidtv.util.TrackSelectionServerSync
@@ -142,7 +143,7 @@ val appModule = module {
 			}
 			diskCache {
 				DiskCache.Builder()
-					.directory(androidContext().cacheDir.resolve("image_cache").absolutePath.toPath())
+					.directory(androidContext().cacheDir.resolve(IMAGE_CACHE_DIRECTORY_NAME).absolutePath.toPath())
 					.maximumMaxSizeBytes(1024L * 1024L * 1024L)
 					.build()
 			}
