@@ -19,9 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
@@ -41,7 +42,6 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
@@ -117,15 +117,12 @@ class CardPresenter(
 	}
 
 	private inner class CardViewHolder(private val composeView: ComposeView) : ViewHolder(composeView) {
-		private val _item = MutableStateFlow<BaseRowItem?>(null)
-		private val _focused = MutableStateFlow(false)
+		private var item by mutableStateOf<BaseRowItem?>(null)
+		private var focused by mutableStateOf(false)
 
 		init {
-			composeView.setOnFocusChangeListener { _, hasFocus -> _focused.value = hasFocus }
+			composeView.setOnFocusChangeListener { _, hasFocus -> focused = hasFocus }
 			composeView.setContent {
-				val item by _item.collectAsState()
-				val focused by _focused.collectAsState()
-
 				CardViewHolderContent(
 					item = item,
 					focused = focused,
@@ -139,9 +136,9 @@ class CardPresenter(
 			}
 		}
 
-		fun bind(item: BaseRowItem, originalItem: Any?) {
-			_item.value = item
-			composeView.tag = item.itemId
+		fun bind(rowItem: BaseRowItem, originalItem: Any?) {
+			item = rowItem
+			composeView.tag = rowItem.itemId
 			composeView.setOnLongClickListener(
 				onLongClick?.let { handler ->
 					View.OnLongClickListener { view -> handler(originalItem, view) }
@@ -150,7 +147,7 @@ class CardPresenter(
 		}
 
 		fun unbind() {
-			_item.value = null
+			item = null
 			composeView.tag = null
 			composeView.setOnLongClickListener(null)
 		}
@@ -316,12 +313,13 @@ internal fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: B
 	)
 }
 
-internal fun BaseRowItem.browseCardAspectRatio(imageType: ImageType, uniformAspect: Boolean): Float {
-	val displayConfig = getDisplayConfig(imageType, uniformAspect)
-	return displayConfig.aspectRatio.takeIf { it >= 0.1f }
-		?: displayConfig.image?.aspectRatio?.takeIf { it >= 0.1f }
+internal fun BaseRowItem.browseCardAspectRatio(imageType: ImageType, uniformAspect: Boolean): Float =
+	getDisplayConfig(imageType, uniformAspect).resolvedAspectRatio()
+
+internal fun BaseRowItemDisplayConfig.resolvedAspectRatio(): Float =
+	aspectRatio.takeIf { it >= 0.1f }
+		?: image?.aspectRatio?.takeIf { it >= 0.1f }
 		?: 1f
-}
 
 internal fun resolveBrowseGridSpacing(base: Int, option: LibraryCardSpacing): Int = option.apply(base)
 
@@ -352,7 +350,7 @@ internal fun CardViewHolderContent(
 	if (item == null || displayConfig == null) return
 
 	val image = displayConfig.image
-	val aspectRatio = item.browseCardAspectRatio(imageType, uniformAspect)
+	val aspectRatio = displayConfig.resolvedAspectRatio()
 
 	val size = when (item.staticHeight) {
 		true -> DpSize(staticHeight.dp * aspectRatio, staticHeight.dp)

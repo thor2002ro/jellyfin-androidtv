@@ -10,6 +10,14 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 
 class CardPresenterDisplayConfigTests : FunSpec({
+	test("display config resolves invalid aspect ratios safely") {
+		BaseRowItemDisplayConfig(
+			image = null,
+			iconRes = 0,
+			aspectRatio = 0f,
+		).resolvedAspectRatio() shouldBe 1f
+	}
+
 	test("series poster preference cannot force a portrait ratio on wide episode cards") {
 		val rowItem = BaseItemDtoBaseRowItem(
 			item = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.EPISODE),
