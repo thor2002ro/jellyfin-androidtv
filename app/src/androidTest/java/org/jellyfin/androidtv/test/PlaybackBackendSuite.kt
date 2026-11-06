@@ -63,6 +63,7 @@ import org.jellyfin.playback.media3.exoplayer.ExoPlayerOptions
 import org.jellyfin.playback.mpv.LibMPVBackend
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.koin.core.context.GlobalContext
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -81,6 +82,7 @@ class PlaybackBackendSuite(
 		repeatCount: Int = 1,
 		suiteName: String? = null,
 		hdmiAudioOnly: Boolean = false,
+		playerFlowOnly: Boolean = false,
 	): List<PlaybackTestResult> {
 		val factories = backendFactories()
 		val standardCases = listOf(
@@ -92,6 +94,19 @@ class PlaybackBackendSuite(
 			BackendCase("dolby-7", "4k-dv7"),
 			BackendCase("dolby-7-transcode", "4k-dv7", variant = PlaybackProfileVariant.VIDEO_TRANSCODE),
 			BackendCase("dolby-8", "4k-dv8"),
+		)
+		val playerFlowCases = listOf(
+			BackendCase("seek", "1080p-sdr-avc", controls = true, verifyHealth = false),
+			BackendCase("chapter-seek", "1080p-sdr-avc", chapterSeek = true, verifyHealth = false),
+			BackendCase("resume-track-persistence", "multi-track", trackPersistence = true, verifyHealth = false),
+			BackendCase("next-episode", "1080p-sdr-avc", nextEpisode = true, verifyHealth = false),
+			BackendCase(
+				"next-episode-track-persistence",
+				"multi-track",
+				trackPersistence = true,
+				nextEpisode = true,
+				verifyHealth = false,
+			),
 		)
 		val hdmiSupport = detectHdmiAudioSupport(context).takeIf { hdmiAudioOnly }
 		if (hdmiSupport != null && (!hdmiSupport.outputPresent || hdmiSupport.codecs.isEmpty())) {
@@ -117,7 +132,8 @@ class PlaybackBackendSuite(
 					selectedSubtitleCodec = testCase.selectedSubtitleCodec,
 				)
 			}
-		} else standardCases
+		} else if (playerFlowOnly) playerFlowCases
+		else standardCases
 		val results = mutableListOf<PlaybackTestResult>()
 		if (hdmiSupport != null) {
 			val planned = cases.mapNotNull(BackendCase::expectedPassthroughCodec).toSet()
@@ -266,6 +282,15 @@ class PlaybackBackendSuite(
 		var playbackErrorCount = 0
 		var mediaEndCount = 0
 		var playing = false
+		val nextEntry = QueueEntry().apply {
+			baseItem = fixture.item.copy(id = UUID.randomUUID())
+			mediaSourceId = fixture.source.id
+			bindDoviPlaybackPlan(doviPlan)
+		}
+		var nextStream = stream.copy(
+			identifier = "${stream.identifier}-next",
+			queueEntry = nextEntry,
+		)
 		try {
 			onMain {
 				backend = factory()
@@ -274,7 +299,8 @@ class PlaybackBackendSuite(
 					install(playbackPlugin {
 						provide(backend)
 						provide(object : MediaStreamResolver {
-							override suspend fun getStream(queueEntry: QueueEntry, startPosition: kotlin.time.Duration?) = activeStream
+							override suspend fun getStream(queueEntry: QueueEntry, startPosition: kotlin.time.Duration?) =
+								if (queueEntry === nextEntry) nextStream else activeStream
 						})
 					})
 				}
@@ -293,8 +319,12 @@ class PlaybackBackendSuite(
 			await("video surface", 10_000) { onMain { surfaceView.surface.holder.surface.isValid && activity.hasWindowFocus() } }
 			onMain {
 				manager.queue.addSupplier(object : QueueSupplier {
-					override val size = 1
-					override suspend fun getItem(index: Int) = stream.queueEntry.takeIf { index == 0 }
+					override val size = if (testCase.nextEpisode) 2 else 1
+					override suspend fun getItem(index: Int) = when (index) {
+						0 -> stream.queueEntry
+						1 -> nextEntry.takeIf { testCase.nextEpisode }
+						else -> null
+					}
 				}, 0)
 			}
 			await("PLAYING", 35_000) {
@@ -308,6 +338,13 @@ class PlaybackBackendSuite(
 			}
 
 			if (testCase.controls) exerciseControls(manager, backend)
+			if (testCase.chapterSeek) {
+				val chapterTarget = 7.seconds
+				onMain { manager.state.seek(chapterTarget) }
+				await("chapter seek", 12_000) {
+					onMain { backend.getPositionInfo().active.inWholeMilliseconds } in 6_750..9_500
+				}
+			}
 			val trackBackend = backend as? TrackSelectionBackend
 			val audioTracks = onMain { trackBackend?.getAvailableTracks(TrackType.AUDIO).orEmpty() }
 			val subtitleTracks = onMain { trackBackend?.getAvailableTracks(TrackType.SUBTITLE).orEmpty() }
@@ -347,6 +384,29 @@ class PlaybackBackendSuite(
 				await("track reload", 30_000) { onMain { backend.getPositionInfo().active >= seekTarget - 500.milliseconds } }
 				awaitTrackSelections(trackBackend, selectedAudioStreamIndex, selectedSubtitleStreamIndex)
 			}
+			if (testCase.nextEpisode) {
+				nextStream = nextStream.copy(
+					selectedAudioStreamIndex = selectedAudioStreamIndex ?: stream.selectedAudioStreamIndex,
+					selectedSubtitleStreamIndex = selectedSubtitleStreamIndex ?: stream.selectedSubtitleStreamIndex,
+				)
+				runBlocking {
+					withContext(Dispatchers.Main) {
+						check(manager.queue.next(usePlaybackOrder = false, useRepeatMode = false) === nextEntry)
+					}
+				}
+				await("next episode activation", 35_000) {
+					check(playbackError == null) { playbackError.orEmpty() }
+					onMain {
+						manager.queue.entry.value === nextEntry && manager.state.playState.value == PlayState.PLAYING
+					}
+				}
+				await("next episode position advance", 12_000) {
+					onMain { backend.getPositionInfo().active.inWholeMilliseconds > 250 }
+				}
+				if (testCase.trackPersistence) {
+					awaitTrackSelections(trackBackend, selectedAudioStreamIndex, selectedSubtitleStreamIndex)
+				}
+			}
 			val healthBefore = onMain { backend.getFrameStats().healthSample() }
 			SystemClock.sleep(1_500)
 			val stats = onMain { backend.getFrameStats() }
@@ -360,7 +420,7 @@ class PlaybackBackendSuite(
 					onMain { backend.getPositionInfo().active.inWholeMilliseconds } +
 					" frames=${stats.videoDecodedFrames}/${stats.droppedFrames} dovi=${stats.doviTransform}\n")
 			})
-			check(health.failures.isEmpty()) { health.failures.joinToString("; ") }
+			if (testCase.verifyHealth) check(health.failures.isEmpty()) { health.failures.joinToString("; ") }
 			testCase.expectedPassthroughCodec?.let { expectedCodec ->
 				check(stream.conversionMethod != org.jellyfin.playback.core.mediastream.MediaConversionMethod.Transcode) {
 					"Audio was transcoded instead of sent directly"
@@ -546,8 +606,11 @@ private data class BackendCase(
 	val selectedAudioCodec: String? = null,
 	val selectedSubtitleCodec: String? = null,
 	val controls: Boolean = false,
+	val chapterSeek: Boolean = false,
 	val requireSubtitle: Boolean = false,
 	val trackPersistence: Boolean = false,
+	val nextEpisode: Boolean = false,
+	val verifyHealth: Boolean = true,
 	val expectedPassthroughCodec: String? = null,
 )
 
