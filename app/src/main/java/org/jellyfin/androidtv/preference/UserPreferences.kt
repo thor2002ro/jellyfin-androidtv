@@ -22,7 +22,6 @@ import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.androidtv.preference.constant.PlayerHeaderLayout
-import org.jellyfin.androidtv.preference.constant.RefreshRateSwitchingBehavior
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior
 import org.jellyfin.androidtv.preference.constant.WatchedIndicatorBehavior
 import org.jellyfin.androidtv.preference.constant.ZoomMode
@@ -117,7 +116,9 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		/**
 		 * Change refresh rate to match media when device supports it
 		 */
-		var refreshRateSwitchingBehavior = enumPreference("refresh_rate_switching_behavior", RefreshRateSwitchingBehavior.DISABLED)
+		var refreshRateSwitchingEnabled = booleanPreference("refresh_rate_switching_enabled", false)
+		/** Match the output resolution independently of refresh-rate switching. */
+		var resolutionSwitchingEnabled = booleanPreference("resolution_switching_enabled", false)
 
 		/**
 		 * Enable trickplay thumbnails while seeking.
@@ -422,6 +423,13 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 			migration(toVersion = 10) {
 				remove(UserSettingPreferences.seriesThumbnailsEnabled.key)
 				remove(UserSettingPreferences.homeNextUpMaxDays.key)
+			}
+
+			migration(toVersion = 11) {
+				val oldBehavior = it.getString("refresh_rate_switching_behavior", "DISABLED")
+				putBoolean("refresh_rate_switching_enabled", oldBehavior == "SCALE_ON_TV" || oldBehavior == "SCALE_ON_DEVICE")
+				putBoolean("resolution_switching_enabled", oldBehavior == "SCALE_ON_TV")
+				remove("refresh_rate_switching_behavior")
 			}
 		}
 	}
