@@ -4,6 +4,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,7 +18,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.flow.filterNotNull
@@ -67,6 +70,7 @@ fun MainToolbar(
 
 	MainToolbar(
 		userImage = userImage,
+		userName = currentUser?.name,
 		activeButton = activeButton,
 	)
 }
@@ -74,6 +78,7 @@ fun MainToolbar(
 @Composable
 private fun MainToolbar(
 	userImage: String? = null,
+	userName: String? = null,
 	activeButton: MainToolbarActiveButton,
 ) {
 	val focusRequester = remember { FocusRequester() }
@@ -117,6 +122,18 @@ private fun MainToolbar(
 						modifier = Modifier
 							.aspectRatio(1f)
 							.clip(IconButtonDefaults.Shape)
+					)
+				}
+
+				if (activeButton == MainToolbarActiveButton.Home && !userName.isNullOrBlank()) {
+					// Keep long names from crowding the Home, Favorites, and Search controls.
+					Text(
+						text = userName,
+						modifier = Modifier.widthIn(max = 120.dp),
+						fontSize = 14.sp,
+						color = JellyfinTheme.colorScheme.onBackground,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
 					)
 				}
 
