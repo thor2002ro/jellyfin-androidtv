@@ -75,6 +75,7 @@ internal fun createHomeRecentlyReleasedRequest(
 	recursive = true,
 	imageTypeLimit = 1,
 	limit = effectiveHomeRowItemLimit(itemLimit, maximum = 50),
+	enableTotalRecordCount = false,
 	maxPremiereDate = now,
 	isUnaired = false,
 	sortBy = listOf(

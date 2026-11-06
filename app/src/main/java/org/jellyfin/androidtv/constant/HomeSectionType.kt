@@ -23,3 +23,17 @@ enum class HomeSectionType(
 	LIVE_TV("livetv", R.string.home_section_livetv),
 	NONE("none", R.string.home_section_none),
 }
+
+internal fun HomeSectionType.hasSameHomeContentAs(other: HomeSectionType) =
+	this == other || this in LIBRARY_HOME_SECTIONS && other in LIBRARY_HOME_SECTIONS
+
+internal fun Iterable<HomeSectionType>.distinctHomeSections() = buildList<HomeSectionType> {
+	for (section in this@distinctHomeSections) {
+		if (none { existing -> existing.hasSameHomeContentAs(section) }) add(section)
+	}
+}
+
+private val LIBRARY_HOME_SECTIONS = setOf(
+	HomeSectionType.LIBRARY_TILES_SMALL,
+	HomeSectionType.LIBRARY_BUTTONS,
+)
