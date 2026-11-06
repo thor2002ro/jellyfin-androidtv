@@ -20,10 +20,10 @@ class BackendService {
 	private var _subtitleView: PlayerSubtitleView? = null
 
 	fun switchBackend(backend: PlayerBackend) {
-		_backend?.stop()
-		_backend?.setListener(null)
-		_backend?.setSurfaceView(null)
-		_backend?.setSubtitleView(null)
+		if (_backend === backend) return
+
+		_backend?.reset()
+		_backend?.cleanup()
 
 		_backend = backend.apply {
 			_surfaceView?.let(::setSurfaceView)
@@ -79,6 +79,21 @@ class BackendService {
 
 	fun removeListener(listener: PlayerBackendEventListener) {
 		listeners.remove(listener)
+	}
+
+	fun reset() {
+		_backend?.reset()
+	}
+
+	fun cleanup() {
+		_backend?.cleanup()
+	}
+
+	fun release() {
+		_backend?.release()
+		_backend = null
+		_surfaceView = null
+		_subtitleView = null
 	}
 
 	/**
