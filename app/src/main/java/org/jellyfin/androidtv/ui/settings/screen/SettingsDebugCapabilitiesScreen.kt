@@ -2,7 +2,6 @@ package org.jellyfin.androidtv.ui.settings.screen
 
 import android.content.Context
 import android.media.MediaCodecList
-import android.os.Build
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyListScope
@@ -13,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.core.content.ContextCompat
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
@@ -26,15 +24,14 @@ import org.jellyfin.androidtv.ui.base.list.ListControl
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_DOLBY_VISION
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HDR10_PLUS
+import org.jellyfin.androidtv.util.profile.DISPLAY_HDR_TYPE_HLG
 import org.jellyfin.androidtv.util.profile.MediaCodecCapabilitiesTest
 import org.jellyfin.androidtv.util.profile.codec.MediaCodecQuery
+import org.jellyfin.androidtv.util.profile.getSupportedDisplayHdrTypes
 import org.koin.compose.koinInject
-
-// Values from Display.HdrCapabilities. Kept local to avoid minSdk inlined API warnings.
-private const val HDR_TYPE_DOLBY_VISION = 1
-private const val HDR_TYPE_HDR10 = 2
-private const val HDR_TYPE_HLG = 3
-private const val HDR_TYPE_HDR10_PLUS = 4
 
 @Composable
 fun SettingsDebugCapabilitiesScreen() {
@@ -130,7 +127,7 @@ private fun buildCapabilityGroups(
 	softwareCodecsEnabled: Boolean,
 ): List<CapabilityGroup> {
 	val mediaTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled)
-	val displayHdrTypes = getSupportedHdrTypes(context)
+	val displayHdrTypes = getSupportedDisplayHdrTypes(context)
 
 	return listOf(
 		buildHdrCapabilities(context, mediaTest, displayHdrTypes),
@@ -148,10 +145,10 @@ private fun buildHdrCapabilities(
 	title = context.getString(R.string.pref_debug_capabilities_hdr_section),
 	caption = context.getString(R.string.pref_debug_capabilities_hdr_section_summary),
 	items = listOf(
-		CapabilityItem("Display: Dolby Vision", displayHdrTypes.contains(HDR_TYPE_DOLBY_VISION)),
-		CapabilityItem("Display: HDR10", displayHdrTypes.contains(HDR_TYPE_HDR10)),
-		CapabilityItem("Display: HDR10+", displayHdrTypes.contains(HDR_TYPE_HDR10_PLUS)),
-		CapabilityItem("Display: HLG", displayHdrTypes.contains(HDR_TYPE_HLG)),
+		CapabilityItem("Display: Dolby Vision", displayHdrTypes.contains(DISPLAY_HDR_TYPE_DOLBY_VISION)),
+		CapabilityItem("Display: HDR10", displayHdrTypes.contains(DISPLAY_HDR_TYPE_HDR10)),
+		CapabilityItem("Display: HDR10+", displayHdrTypes.contains(DISPLAY_HDR_TYPE_HDR10_PLUS)),
+		CapabilityItem("Display: HLG", displayHdrTypes.contains(DISPLAY_HDR_TYPE_HLG)),
 		CapabilityItem("HEVC: Dolby Vision", mediaTest.supportsHevcDolbyVision()),
 		CapabilityItem("HEVC: Dolby Vision Profile 5", mediaTest.supportsHevcDolbyVisionProfile5(), "dvhe.05"),
 		CapabilityItem("HEVC: Dolby Vision Profile 7", mediaTest.supportsHevcDolbyVisionProfile7(), "dvhe.07"),
@@ -257,18 +254,6 @@ private val FfmpegCodecCapability.detail
 		),
 		mimeType,
 	).joinToString(" / ")
-
-private fun getSupportedHdrTypes(context: Context): Set<Int> {
-	if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return emptySet()
-
-	val display = ContextCompat.getDisplayOrDefault(context)
-	@Suppress("DEPRECATION")
-	return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-		display.mode.supportedHdrTypes.toSet()
-	} else {
-		display.hdrCapabilities?.supportedHdrTypes?.toSet().orEmpty()
-	}
-}
 
 private fun maxResolutionDetail(
 	context: Context,
