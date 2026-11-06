@@ -14,9 +14,11 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.PlaybackBackend
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
 import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
+import org.jellyfin.androidtv.util.profile.getSupportedMPVPassthroughAudioMimes
 import org.jellyfin.androidtv.util.profile.getSupportedPassthroughAudioMimes
 import org.jellyfin.design.Tokens
 import org.koin.compose.koinInject
@@ -48,7 +50,9 @@ private fun createPassthroughAudioFormatsByFamily(): Map<BitstreamAudioFormat, L
 	),
 )
 
-internal val passthroughAudioMimeTypes: Set<String> = passthroughAudioFormatsByFamily.values
+internal val passthroughAudioMimeTypes: Set<String> = managedAudioPassthroughMimeTypes
+
+internal val passthroughAudioFormatMimeTypes: Set<String> = passthroughAudioFormatsByFamily.values
 	.flatten()
 	.mapTo(linkedSetOf()) { format -> format.mimeType }
 
@@ -67,7 +71,11 @@ internal fun rememberSupportedPassthroughAudioMimes(): Set<String>? {
 	val supportedMimes by produceState<Set<String>?>(null, context, playbackBackend) {
 		value = null
 		value = withContext(Dispatchers.IO) {
-			getSupportedPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+			if (playbackBackend == PlaybackBackend.MPV) {
+				getSupportedMPVPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+			} else {
+				getSupportedPassthroughAudioMimes(context, passthroughAudioMimeTypes)
+			}
 		}
 	}
 	return supportedMimes

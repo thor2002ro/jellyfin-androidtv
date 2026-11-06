@@ -32,11 +32,9 @@ import org.jellyfin.androidtv.preference.constant.LibMPVChoiceSetting
 import org.jellyfin.androidtv.preference.constant.LibMPVGpuApi
 import org.jellyfin.androidtv.preference.constant.LibMPVPreferenceOption
 import org.jellyfin.androidtv.preference.constant.resetLibMPVPreferences
-import org.jellyfin.androidtv.preference.mpvAudioChannels
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioPreset
-import org.jellyfin.androidtv.preference.mpvAudioSpdif
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoder
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
@@ -96,8 +94,6 @@ fun SettingsPlaybackLibMPVScreen() {
 	val scaler by rememberPreference(userPreferences, UserPreferences.mpvScaler)
 	val toneMapping by rememberPreference(userPreferences, UserPreferences.mpvToneMapping)
 	val audioOutput by rememberPreference(userPreferences, UserPreferences.mpvAudioOutput)
-	val audioChannels by rememberPreference(userPreferences, UserPreferences.mpvAudioChannels)
-	val audioSpdif by rememberPreference(userPreferences, UserPreferences.mpvAudioSpdif)
 	val replayGain by rememberPreference(userPreferences, UserPreferences.mpvReplayGain)
 	val loopFilter by rememberPreference(userPreferences, UserPreferences.mpvLoopFilter)
 	val subtitleAssOverride by rememberPreference(userPreferences, UserPreferences.mpvSubtitleAssOverride)
@@ -194,8 +190,13 @@ fun SettingsPlaybackLibMPVScreen() {
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_audio)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_PRESET, audioPreset) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_OUTPUT, audioOutput) }
-		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_CHANNELS, audioChannels) }
-		item { LibMPVChoiceButton(LibMPVChoiceSetting.AUDIO_SPDIF, audioSpdif) }
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.preference_mpv_shared_audio)) },
+				captionContent = { Text(stringResource(R.string.preference_mpv_shared_audio_description)) },
+				onClick = { router.back() },
+			)
+		}
 		item {
 			LibMPVBooleanButton(
 				headingRes = R.string.preference_mpv_audio_pitch_correction,
