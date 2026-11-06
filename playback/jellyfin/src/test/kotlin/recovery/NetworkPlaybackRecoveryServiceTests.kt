@@ -31,6 +31,7 @@ class NetworkPlaybackRecoveryServiceTests : FunSpec({
 		isRecoverablePlaybackError("MPV_HTTP_ERROR") shouldBe true
 		isRecoverablePlaybackError("MPV_ERROR") shouldBe true
 		isRecoverablePlaybackError("LIBVLC_ERROR") shouldBe true
+		isRecoverablePlaybackError("MEDIA_STREAM_NETWORK_ERROR") shouldBe true
 		isRecoverablePlaybackError("ERROR_CODE_DECODING_FAILED") shouldBe false
 		isRecoverablePlaybackError("DOVI_TRANSFORMATION_FAILED_RPU_WRITE_FAILED") shouldBe false
 		isRecoverablePlaybackError("DOVI_TRANSFORMATION_FAILED_UNKNOWN") shouldBe false

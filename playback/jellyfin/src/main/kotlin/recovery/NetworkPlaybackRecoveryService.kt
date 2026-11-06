@@ -14,6 +14,7 @@ import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.matches
 import org.jellyfin.playback.core.model.PositionInfo
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.plugin.PlayerService
@@ -59,7 +60,7 @@ class NetworkPlaybackRecoveryService(
 				startRecovery(
 					entry = entry,
 					reason = "Playback error ${error.codeName}",
-					playWhenReady = state.playState.value.isActivePlayback,
+					playWhenReady = error.codeName == "MEDIA_STREAM_NETWORK_ERROR" || state.playState.value.isActivePlayback,
 				)
 			}
 		})
@@ -222,7 +223,7 @@ class NetworkPlaybackRecoveryService(
 			}
 
 			Timber.i("$reason; reloading playback at ${positionAfterGrace.active}")
-			if (manager.reloadCurrentMediaStream(position = positionAfterGrace.active, playWhenReady = playWhenReady)) {
+			if (manager.reloadCurrentMediaStream(position = entry.startPosition ?: positionAfterGrace.active, playWhenReady = playWhenReady)) {
 				Timber.i("Reloaded playback after error")
 			} else {
 				Timber.w("Unable to reload playback after error")
@@ -305,6 +306,7 @@ internal fun isRecoverablePlaybackError(codeName: String) = doviTransformationFa
 	"MPV_HTTP_ERROR",
 	"MPV_ERROR",
 	"LIBVLC_ERROR",
+	"MEDIA_STREAM_NETWORK_ERROR",
 	-> true
 	else -> false
 }
