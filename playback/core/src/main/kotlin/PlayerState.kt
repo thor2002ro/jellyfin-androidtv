@@ -11,6 +11,8 @@ import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.model.VideoSize
+import org.jellyfin.playback.core.model.DEFAULT_SUBTITLE_TIMING_SPEED
+import org.jellyfin.playback.core.model.coerceSubtitleTimingSpeed
 import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.isDirectPlayLiveTv
 import kotlin.time.Duration
@@ -23,6 +25,9 @@ interface PlayerState {
 	val playbackOrder: StateFlow<PlaybackOrder>
 	val repeatMode: StateFlow<RepeatMode>
 	val scrubbing: StateFlow<Boolean>
+	val subtitleTimingOffset: StateFlow<Duration>
+	val subtitleTimingSpeed: StateFlow<Float>
+	val subtitleTimingOffsetSupported: StateFlow<Boolean>
 
 	/**
 	 * The position information for the currently playing item or [PositionInfo.EMPTY]. This
@@ -50,6 +55,9 @@ interface PlayerState {
 	// Playback properties
 
 	fun setSpeed(speed: Float)
+	fun setSubtitleTiming(offset: Duration, speed: Float)
+	fun adjustSubtitleTimingOffset(amount: Duration) =
+		setSubtitleTiming(subtitleTimingOffset.value + amount, subtitleTimingSpeed.value)
 
 	fun setPlaybackOrder(order: PlaybackOrder)
 
@@ -81,6 +89,14 @@ class MutablePlayerState(
 	private val _scrubbing = MutableStateFlow(false)
 	override val scrubbing: StateFlow<Boolean> get() = _scrubbing.asStateFlow()
 
+	private val _subtitleTimingOffset = MutableStateFlow(Duration.ZERO)
+	override val subtitleTimingOffset: StateFlow<Duration> get() = _subtitleTimingOffset.asStateFlow()
+	private val _subtitleTimingSpeed = MutableStateFlow(DEFAULT_SUBTITLE_TIMING_SPEED)
+	override val subtitleTimingSpeed: StateFlow<Float> get() = _subtitleTimingSpeed.asStateFlow()
+
+	private val _subtitleTimingOffsetSupported = MutableStateFlow(false)
+	override val subtitleTimingOffsetSupported: StateFlow<Boolean> get() = _subtitleTimingOffsetSupported.asStateFlow()
+
 	override val positionInfo: PositionInfo
 		get() = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
 
@@ -103,6 +119,16 @@ class MutablePlayerState(
 				// Note: the QueueService is responsible for changing REPEAT_ENTRY_ONCE to NONE
 				if (_repeatMode.value != RepeatMode.NONE) {
 					backendService.backend?.play()
+				}
+			}
+
+			override fun onSubtitleTimingOffsetSupportChange(supported: Boolean, resetTimingOnUnsupported: Boolean) {
+				_subtitleTimingOffsetSupported.value = supported
+				if (!supported && resetTimingOnUnsupported && (
+					_subtitleTimingOffset.value != Duration.ZERO ||
+					_subtitleTimingSpeed.value != DEFAULT_SUBTITLE_TIMING_SPEED
+				)) {
+					resetSubtitleTiming()
 				}
 			}
 		})
@@ -158,6 +184,16 @@ class MutablePlayerState(
 		backendService.backend?.setSpeed(speed)
 	}
 
+	override fun setSubtitleTiming(offset: Duration, speed: Float) {
+		val coercedSpeed = speed.coerceSubtitleTimingSpeed()
+		if (!_subtitleTimingOffsetSupported.value && (
+			offset != Duration.ZERO || coercedSpeed != DEFAULT_SUBTITLE_TIMING_SPEED
+		)) return
+		_subtitleTimingOffset.value = offset
+		_subtitleTimingSpeed.value = coercedSpeed
+		backendService.backend?.setSubtitleTiming(offset, coercedSpeed)
+	}
+
 	override fun setPlaybackOrder(order: PlaybackOrder) {
 		_playbackOrder.value = order
 	}
@@ -166,3 +202,9 @@ class MutablePlayerState(
 		_repeatMode.value = mode
 	}
 }
+
+fun PlayerState.adjustSubtitleTimingSpeed(amount: Float) =
+	setSubtitleTiming(subtitleTimingOffset.value, subtitleTimingSpeed.value + amount)
+
+fun PlayerState.resetSubtitleTiming() =
+	setSubtitleTiming(Duration.ZERO, DEFAULT_SUBTITLE_TIMING_SPEED)
