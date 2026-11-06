@@ -85,6 +85,7 @@ class LibMPVOptionsTest : StringSpec({
 			"gpu-api" to "auto",
 			"video-sync" to "audio",
 			"framedrop" to "vo",
+			"deinterlace" to "no",
 			"interpolation" to "no",
 			"scale" to "bilinear",
 			"cscale" to "bilinear",
@@ -213,7 +214,7 @@ class LibMPVOptionsTest : StringSpec({
 		).toLibMPVBufferConfiguration(isLiveTv = false) shouldBe LibMPVBufferConfiguration(
 			cacheSeconds = null,
 			initialWaitSeconds = null,
-			rebufferWaitSeconds = 1.0,
+			rebufferWaitSeconds = null,
 		)
 	}
 
@@ -223,16 +224,56 @@ class LibMPVOptionsTest : StringSpec({
 		shouldReadLibMPVStatProperty(lastMissNanos = 100, nowNanos = 110, retryNanos = 10) shouldBe true
 	}
 
+	"MPV byte cache covers the requested duration with bitrate headroom" {
+		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = 512_000_000) shouldBe 375_000_000
+		mpvCacheBytes(cacheSeconds = 240.0, bitrate = 100_000_000, maximum = 256_000_000) shouldBe 256_000_000
+		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 0, maximum = 512_000_000) shouldBe 512_000_000
+		mpvCacheBytes(cacheSeconds = null, bitrate = 20_000_000, maximum = 512_000_000) shouldBe null
+		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = null) shouldBe null
+	}
+
+	"MPV byte cap also limits cache and wait durations" {
+		val cappedSeconds = 128 * 1024 * 1024 * 8.0 / 25_000_000
+
+		LibMPVBufferConfiguration(
+			cacheSeconds = 120.0,
+			initialWaitSeconds = 2.5,
+			rebufferWaitSeconds = 5.0,
+		).cappedToBytes(
+			bitrate = 25_000_000,
+			maximum = 128L * 1024 * 1024,
+		) shouldBe LibMPVBufferConfiguration(
+			cacheSeconds = cappedSeconds,
+			initialWaitSeconds = 2.5,
+			rebufferWaitSeconds = 5.0,
+		)
+
+		LibMPVBufferConfiguration(
+			cacheSeconds = 120.0,
+			initialWaitSeconds = 50.0,
+			rebufferWaitSeconds = 60.0,
+		).cappedToBytes(
+			bitrate = 25_000_000,
+			maximum = 128L * 1024 * 1024,
+		) shouldBe LibMPVBufferConfiguration(
+			cacheSeconds = cappedSeconds,
+			initialWaitSeconds = cappedSeconds,
+			rebufferWaitSeconds = cappedSeconds,
+		)
+	}
+
 	"typed profile and universal controls cannot be replaced by expert overrides" {
 		isLibMPVOptionManagedByJellyfin("speed") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-color") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-margin-y") shouldBe true
 		isLibMPVOptionManagedByJellyfin("cache-pause-wait") shouldBe true
 		isLibMPVOptionManagedByJellyfin("demuxer-readahead-secs") shouldBe true
+		isLibMPVOptionManagedByJellyfin("deinterlace") shouldBe true
 		isLibMPVOptionManagedByJellyfin("vo") shouldBe true
 		isLibMPVOptionManagedByJellyfin("hwdec") shouldBe true
 		isLibMPVOptionManagedByJellyfin("sub-ass-override") shouldBe true
-		isLibMPVOptionManagedByJellyfin("demuxer-max-bytes") shouldBe false
+		isLibMPVOptionManagedByJellyfin("demuxer-max-bytes") shouldBe true
+		isLibMPVOptionManagedByJellyfin("demuxer-max-back-bytes") shouldBe true
 	}
 
 	"MPV buffer details suppress stale speed while idle" {

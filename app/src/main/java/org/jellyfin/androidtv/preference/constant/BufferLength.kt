@@ -4,21 +4,29 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.preference.PreferenceEnum
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+
+private const val MEBIBYTE = 1024L * 1024L
+private val DEFAULT_MIN_BUFFER_DURATION = 50.seconds
+private val DEFAULT_PLAYBACK_BUFFER_DURATION = 1.seconds
+private val DEFAULT_REBUFFER_DURATION = 2.seconds
 
 enum class BufferLength(
 	override val nameRes: Int,
-	val minBufferDuration: Duration? = null,
+	val minBufferDuration: Duration? = DEFAULT_MIN_BUFFER_DURATION,
 	val maxBufferDuration: Duration? = null,
-	val bufferForPlaybackDuration: Duration? = null,
-	val bufferForPlaybackAfterRebufferDuration: Duration? = null,
+	val bufferForPlaybackDuration: Duration? = DEFAULT_PLAYBACK_BUFFER_DURATION,
+	val bufferForPlaybackAfterRebufferDuration: Duration? = DEFAULT_REBUFFER_DURATION,
 	val liveTvBufferDuration: Duration? = null,
+	val maxBufferBytes: Long? = null,
 ) : PreferenceEnum {
 	/**
 	 * Use default buffer durations.
 	 */
-	AUTO(R.string.playback_buffer_auto),
+	AUTO(
+		nameRes = R.string.playback_buffer_auto,
+		liveTvBufferDuration = 2.seconds,
+	),
 
 	/**
 	 * Larger buffer, suitable for moderate or variable connections.
@@ -26,11 +34,11 @@ enum class BufferLength(
 	@Suppress("MagicNumber")
 	LARGE(
 		nameRes = R.string.playback_buffer_large,
-		minBufferDuration = 50.seconds,
 		maxBufferDuration = 120.seconds,
-		bufferForPlaybackDuration = 2500.milliseconds,
+		bufferForPlaybackDuration = 2.5.seconds,
 		bufferForPlaybackAfterRebufferDuration = 5.seconds,
 		liveTvBufferDuration = 5.seconds,
+		maxBufferBytes = 128 * MEBIBYTE,
 	),
 
 	/**
@@ -44,6 +52,7 @@ enum class BufferLength(
 		bufferForPlaybackDuration = 5.seconds,
 		bufferForPlaybackAfterRebufferDuration = 10.seconds,
 		liveTvBufferDuration = 10.seconds,
+		maxBufferBytes = 256 * MEBIBYTE,
 	),
 }
 
@@ -53,4 +62,5 @@ fun BufferLength.toPlaybackBufferOptions() = PlaybackBufferOptions(
 	bufferForPlaybackDuration = bufferForPlaybackDuration,
 	bufferForPlaybackAfterRebufferDuration = bufferForPlaybackAfterRebufferDuration,
 	liveTvBufferDuration = liveTvBufferDuration,
+	maxBufferBytes = maxBufferBytes,
 )

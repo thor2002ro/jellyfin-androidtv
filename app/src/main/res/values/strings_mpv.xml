@@ -61,6 +61,11 @@
 	<string name="preference_mpv_clear_overrides">Clear overrides</string>
 	<string name="preference_mpv_deband">Debanding</string>
 	<string name="preference_mpv_deband_description">Reduce visible color banding with the GPU deband filter.</string>
+	<string name="preference_mpv_deinterlace">Deinterlacing</string>
+	<string name="preference_mpv_deinterlace_auto_description">Deinterlace only frames that the decoder marks as interlaced.</string>
+	<string name="preference_mpv_deinterlace_description">Control conversion of interlaced video for progressive displays.</string>
+	<string name="preference_mpv_deinterlace_disabled_description">Never apply libMPV deinterlacing.</string>
+	<string name="preference_mpv_deinterlace_enabled_description">Force deinterlacing for all video, including content not marked as interlaced.</string>
 	<string name="preference_mpv_decoder">Hardware decoder</string>
 	<string name="preference_mpv_decoder_auto_unsafe">Auto unsafe</string>
 	<string name="preference_mpv_decoder_auto_unsafe_description">Let libMPV try every available hardware decoder, including methods outside its safe whitelist, then fall back to software. This may improve performance or compatibility on some devices but can cause decoding errors, incorrect output, or crashes.</string>
