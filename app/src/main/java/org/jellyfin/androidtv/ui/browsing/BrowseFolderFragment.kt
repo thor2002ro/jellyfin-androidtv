@@ -77,6 +77,7 @@ abstract class BrowseFolderFragment : BrowseSupportFragment(), RowLoader {
 	protected abstract suspend fun setupQueries(rowLoader: RowLoader)
 
 	override fun loadRows(rows: MutableList<BrowseRowDef>) {
+		cancelRowRetrievals()
 		val mutableAdapter = MutableObjectAdapter<Row>(PositionableListRowPresenter()).also {
 			adapter = it
 		}
@@ -100,6 +101,26 @@ abstract class BrowseFolderFragment : BrowseSupportFragment(), RowLoader {
 				Retrieve()
 				mutableAdapter.add(row)
 			}
+		}
+	}
+
+	private fun cancelRowRetrievals() {
+		val rows = adapter ?: return
+		for (index in 0 until rows.size()) {
+			((rows[index] as? ListRow)?.adapter as? ItemRowAdapter)?.cancelRetrieval()
+		}
+	}
+
+	override fun onDestroyView() {
+		cancelRowRetrievals()
+		super.onDestroyView()
+	}
+
+	override fun onResume() {
+		super.onResume()
+		val rows = adapter ?: return
+		for (index in 0 until rows.size()) {
+			((rows[index] as? ListRow)?.adapter as? ItemRowAdapter)?.ReRetrieveIfNeeded()
 		}
 	}
 }
