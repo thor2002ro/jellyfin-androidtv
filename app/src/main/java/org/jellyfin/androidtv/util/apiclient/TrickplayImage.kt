@@ -10,32 +10,35 @@ import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import java.util.UUID
 import kotlin.math.sqrt
 
-const val TRICKPLAY_THUMBNAIL_PIXEL_WIDTH = 320
-const val TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT = 180
 const val TRICKPLAY_SHEET_MAX_BYTES = 30 * 1024 * 1024
 const val TRICKPLAY_DECODE_MAX_BYTES_PER_PIXEL = 4
 private const val TRICKPLAY_SHEET_MAX_PIXELS = TRICKPLAY_SHEET_MAX_BYTES / TRICKPLAY_DECODE_MAX_BYTES_PER_PIXEL
+private const val TRICKPLAY_TARGET_PIXEL_WIDTH = 320
 
 data class TrickplayTileSheet(
 	val url: String,
 	val headers: NetworkHeaders,
 	val columns: Int,
 	val rows: Int,
+	val thumbnailWidth: Int,
+	val thumbnailHeight: Int,
 ) {
 	init {
-		require(columns > 0 && rows > 0)
+		require(columns > 0 && rows > 0 && thumbnailWidth > 0 && thumbnailHeight > 0)
 		require(columns.toLong() * rows <= TRICKPLAY_SHEET_MAX_PIXELS)
+		require(thumbnailWidth.toLong() * columns <= Int.MAX_VALUE)
+		require(thumbnailHeight.toLong() * rows <= Int.MAX_VALUE)
 	}
 
 	private val decodeScale get() = minOf(
 		1.0,
 		sqrt(
 			TRICKPLAY_SHEET_MAX_PIXELS.toDouble() /
-				(TRICKPLAY_THUMBNAIL_PIXEL_WIDTH.toDouble() * TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT * columns * rows)
+				(thumbnailWidth.toDouble() * thumbnailHeight * columns * rows)
 		)
 	)
-	val decodeWidth get() = (TRICKPLAY_THUMBNAIL_PIXEL_WIDTH * decodeScale).toInt().coerceAtLeast(1) * columns
-	val decodeHeight get() = (TRICKPLAY_THUMBNAIL_PIXEL_HEIGHT * decodeScale).toInt().coerceAtLeast(1) * rows
+	val decodeWidth get() = (thumbnailWidth * decodeScale).toInt().coerceAtLeast(1) * columns
+	val decodeHeight get() = (thumbnailHeight * decodeScale).toInt().coerceAtLeast(1) * rows
 }
 
 data class TrickplayImage(
@@ -106,6 +109,8 @@ private fun BaseItemDto.getTrickplayTileSheet(
 		headers = headers,
 		columns = info.tileWidth,
 		rows = info.tileHeight,
+		thumbnailWidth = info.width,
+		thumbnailHeight = info.height,
 	)
 }
 
@@ -117,13 +122,18 @@ private fun BaseItemDto.getTrickplaySource(mediaSourceId: String?): Pair<String?
 		mediaSources?.firstNotNullOfOrNull { mediaSource -> mediaSource.id?.takeIf(trickplayBySource::containsKey) }
 			?: trickplayBySource.keys.firstOrNull()
 	}
-	val info = trickplayBySource[sourceId]?.values?.firstOrNull() ?: return null
-	if (
-		info.interval <= 0 ||
-		!isValidTrickplayGeometry(info.width, info.height, info.tileWidth, info.tileHeight, info.thumbnailCount)
-	) return null
+	val info = selectTrickplayInfo(trickplayBySource[sourceId]?.values.orEmpty()) ?: return null
 
 	return sourceId to info
+}
+
+internal fun selectTrickplayInfo(infos: Collection<TrickplayInfoDto>): TrickplayInfoDto? {
+	val validInfos = infos.filter { info ->
+		info.interval > 0 &&
+			isValidTrickplayGeometry(info.width, info.height, info.tileWidth, info.tileHeight, info.thumbnailCount)
+	}
+	return validInfos.filter { it.width >= TRICKPLAY_TARGET_PIXEL_WIDTH }.minByOrNull { it.width }
+		?: validInfos.maxByOrNull { it.width }
 }
 
 internal fun isValidTrickplayGeometry(
