@@ -11,6 +11,11 @@ abstract class PlayerBackendEventListener {
 	open fun onVideoGeometryChange(geometry: VideoGeometry) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) = Unit
 	open fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) = Unit
+	/** A user request can arrive before the backend acknowledges its new state. */
+	open fun onPlayWhenReadyRequested(playWhenReady: Boolean) = Unit
+	open fun onSeekRequested(position: Duration) = Unit
+	/** Recovery can keep an interrupted stream selected instead of completing its queue entry. */
+	open fun shouldHandleMediaStreamEnd(mediaStream: PlayableMediaStream) = true
 	open fun onTracksChanged() = Unit
 	open fun onSubtitleTimingOffsetSupportChange(
 		supported: Boolean,

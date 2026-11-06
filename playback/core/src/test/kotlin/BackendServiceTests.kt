@@ -4,12 +4,35 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import io.mockk.verify
+import org.jellyfin.playback.core.mediastream.MediaConversionMethod
+import org.jellyfin.playback.core.mediastream.MediaStreamContainer
+import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.VideoAspectRatio
 import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
+import org.jellyfin.playback.core.queue.QueueEntry
 
 class BackendServiceTests : FunSpec({
+	test("only the current stream can complete an entry after a retry replaces it") {
+		val service = BackendService()
+		val entry = QueueEntry()
+		val original = PlayableMediaStream(
+			"episode", MediaConversionMethod.None, MediaStreamContainer("mkv"), emptyList(), entry, "https://example.test/episode",
+		)
+		val replacement = original.copy()
+		val completed = mutableListOf<PlayableMediaStream>()
+		service.addListener(object : PlayerBackendEventListener() {
+			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) { completed += mediaStream }
+		})
+		entry.mediaStream = replacement
+		service.BackendEventListener().onMediaStreamEnd(original)
+		completed shouldBe emptyList()
+		service.BackendEventListener().onMediaStreamEnd(replacement)
+		completed.size shouldBe 1
+	}
+
 	test("identical output transforms are applied once") {
 		val backend = mockk<PlayerBackend>(relaxed = true)
 		val service = BackendService()

@@ -42,6 +42,7 @@ dependencies {
 	testImplementation(libs.kotest.runner.junit5)
 	testImplementation(libs.kotest.assertions)
 	testImplementation(libs.mockk)
+	testImplementation(libs.kotlinx.coroutines.test)
 	testImplementation(projects.playback.jellyfin)
 	testImplementation(libs.jellyfin.sdk)
 	testRuntimeOnly(libs.slf4j.timber)

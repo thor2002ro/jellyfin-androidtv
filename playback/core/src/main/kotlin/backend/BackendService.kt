@@ -2,6 +2,7 @@ package org.jellyfin.playback.core.backend
 
 import androidx.core.view.doOnDetach
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
+import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.VideoOutputTransform
@@ -95,6 +96,14 @@ class BackendService {
 		callListeners { onPlayStateChange(PlayState.ERROR) }
 	}
 
+	internal fun notifyPlayWhenReadyRequested(playWhenReady: Boolean) {
+		callListeners { onPlayWhenReadyRequested(playWhenReady) }
+	}
+
+	internal fun notifySeekRequested(position: Duration) {
+		callListeners { onSeekRequested(position) }
+	}
+
 	fun setVideoOutputTransform(transform: VideoOutputTransform) {
 		if (videoOutputTransform == transform) return
 		videoOutputTransform = transform
@@ -150,6 +159,8 @@ class BackendService {
 		}
 
 		override fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) {
+			if (mediaStream.queueEntry.mediaStream !== mediaStream) return
+			if (callListeners { shouldHandleMediaStreamEnd(mediaStream) }.any { !it }) return
 			callListeners { onMediaStreamEnd(mediaStream, position) }
 		}
 
