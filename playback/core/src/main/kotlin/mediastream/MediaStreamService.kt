@@ -25,6 +25,12 @@ import timber.log.Timber
 import java.io.IOException
 import kotlin.time.Duration
 
+enum class MediaStreamReloadResult {
+	RELOADED,
+	FAILED,
+	SUPERSEDED,
+}
+
 internal class MediaStreamService(
 	private val mediaStreamResolvers: Collection<MediaStreamResolver>,
 	private val preloadDuration: Duration,
@@ -98,21 +104,25 @@ internal class MediaStreamService(
 		)
 	}
 
-	internal suspend fun playEntry(entry: QueueEntry): Boolean {
+	private suspend fun <T> prepareEntry(entry: QueueEntry, action: suspend (Any) -> T): T {
+		val request = Any().also { latestStreamRequest = it }
 		_preparingEntry.value = entry
 		return try {
-			resolveAndPlayEntry(entry)
+			action(request)
 		} finally {
-			_preparingEntry.value = null
+			if (latestStreamRequest === request) _preparingEntry.value = null
 		}
 	}
 
-	private suspend fun resolveAndPlayEntry(entry: QueueEntry): Boolean {
+	internal suspend fun playEntry(entry: QueueEntry): Boolean = prepareEntry(entry) { request ->
+		resolveAndPlayEntry(entry, request)
+	}
+
+	private suspend fun resolveAndPlayEntry(entry: QueueEntry, request: Any): Boolean {
 		val backend = requireNotNull(manager.backend)
 		val queue = requireNotNull(manager.getService<QueueService>())
 		val entryRevision = queue.entryRevision
 		val originalStream = entry.mediaStream
-		val request = Any().also { latestStreamRequest = it }
 		val startPosition = entry.startPosition?.coerceAtLeast(Duration.ZERO)
 		entry.startPosition = startPosition
 		var networkError: IOException? = null
@@ -166,18 +176,26 @@ internal class MediaStreamService(
 	suspend fun reloadCurrentEntry(
 		position: Duration? = null,
 		playWhenReady: Boolean = true,
-	): Boolean {
+	): MediaStreamReloadResult {
+		val entry = manager.queue.entry.value ?: return MediaStreamReloadResult.SUPERSEDED
+		return prepareEntry(entry) { request -> reloadEntry(entry, request, position, playWhenReady) }
+	}
+
+	private suspend fun reloadEntry(
+		entry: QueueEntry,
+		request: Any,
+		position: Duration?,
+		playWhenReady: Boolean,
+	): MediaStreamReloadResult {
 		val queue = requireNotNull(manager.getService<QueueService>())
-		val entry = queue.entry.value ?: return false
 		val entryRevision = queue.entryRevision
 		val originalStream = entry.mediaStream
 		val backend = manager.backend
-		val request = Any().also { latestStreamRequest = it }
 		val newStream = try {
 			entry.resolveMediaStream(startPosition = position)
 		} catch (error: IOException) {
-			return false
-		} ?: return false
+			null
+		}
 		// Resolution suspends for the server: playback may have stopped, changed, or been reloaded meanwhile.
 		if (
 			latestStreamRequest !== request ||
@@ -185,12 +203,13 @@ internal class MediaStreamService(
 			queue.entry.value !== entry ||
 			entry.mediaStream !== originalStream ||
 			manager.backend !== backend
-		) return false
+		) return MediaStreamReloadResult.SUPERSEDED
+		if (newStream == null) return MediaStreamReloadResult.FAILED
 
 		// Reloads can change video dimensions too. Prepare for the new stream before
 		// publishing it or asking the backend to replace the currently playing stream.
 		val preparation = manager.options.beforePlayItem
-		if (preparation?.invoke(newStream) == false) return false
+		if (preparation?.invoke(newStream) == false) return MediaStreamReloadResult.SUPERSEDED
 		// Window preparation suspends too: reject a stopped, replaced, or superseded entry.
 		// The revision also catches stopping and selecting the same QueueEntry again.
 		if (
@@ -200,7 +219,7 @@ internal class MediaStreamService(
 			entry.mediaStream !== originalStream ||
 			manager.backend !== backend ||
 			manager.options.beforePlayItem !== preparation
-		) return false
+		) return MediaStreamReloadResult.SUPERSEDED
 
 		manager.queue.entries.value.forEach { queuedEntry ->
 			if (queuedEntry === entry) return@forEach
@@ -212,7 +231,7 @@ internal class MediaStreamService(
 		entry.startPosition = null
 		if (!playWhenReady) manager.state.pause()
 
-		return true
+		return MediaStreamReloadResult.RELOADED
 	}
 
 	private fun preloadNextEntry() = coroutineScope.launch(Dispatchers.Main) {

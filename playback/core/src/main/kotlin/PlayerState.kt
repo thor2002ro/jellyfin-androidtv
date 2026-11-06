@@ -159,18 +159,20 @@ class MutablePlayerState(
 	}
 
 	override fun play() {
+		backendService.notifyPlayWhenReadyRequested(true)
 		backendService.backend?.play()
 	}
 
 	override fun pause() {
 		if (!canSeek) return
 		// TODO: enqueue action when backend is not set
+		backendService.notifyPlayWhenReadyRequested(false)
 		backendService.backend?.pause()
 	}
 
 	override fun unpause() {
 		if (!canSeek) return
-		backendService.backend?.play()
+		play()
 	}
 
 	override fun stop() {
@@ -198,7 +200,10 @@ class MutablePlayerState(
 		val target = to.coerceAtLeast(Duration.ZERO).let { position ->
 			if (duration > Duration.ZERO) position.coerceAtMost(duration) else position
 		}
-		if (backend.seekTo(target)) _seekRequests.tryEmit(target)
+		if (backend.seekTo(target)) {
+			backendService.notifySeekRequested(target)
+			_seekRequests.tryEmit(target)
+		}
 	}
 
 	override fun fastForward(amount: Duration?) {
