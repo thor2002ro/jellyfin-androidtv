@@ -21,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,8 +75,7 @@ fun AppUpdatePrompt(
 ) {
 	val update by notificationsRepository.appUpdatePrompt.collectAsState()
 	val destination by navigationRepository.currentDestination.collectAsState()
-	val windowInfo = LocalWindowInfo.current
-	val availableUpdate = update?.takeIf { windowInfo.isWindowFocused && !Destinations.isPlayback(destination) } ?: return
+	val availableUpdate = appUpdatePrompt(update, Destinations.isPlayback(destination)) ?: return
 	val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
 	var downloading by remember(availableUpdate) { mutableStateOf(false) }
 	var downloadProgress by remember(availableUpdate) { mutableStateOf<Int?>(null) }
@@ -288,7 +286,7 @@ fun AppUpdateSettings(
 }
 
 @Composable
-private fun UpdatePromptContent(
+internal fun UpdatePromptContent(
 	update: AppUpdate,
 	downloading: Boolean,
 	downloadProgress: Int?,
@@ -407,3 +405,6 @@ private data class InstallOutcome(
 	val message: String,
 	val installerStarted: Boolean = false,
 )
+
+internal fun appUpdatePrompt(update: AppUpdate?, isPlayback: Boolean) =
+	update?.takeUnless { isPlayback }

@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.settings.screen
 
+import android.content.Intent
 import android.text.format.Formatter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -108,6 +109,22 @@ fun SettingsDeveloperScreen() {
 					imageCacheSize = imageLoader.diskCache?.size ?: 0L
 				},
 				modifier = Modifier.focusKey("clear_image_cache")
+			)
+		}
+
+		if (BuildConfig.DEBUG) item {
+			ListButton(
+				headingContent = { Text("GitHub updater tester") },
+				captionContent = { Text("Exercise updater functionality, UI states, and popup stability") },
+				onClick = {
+					context.startActivity(
+						Intent().setClassName(
+							context.packageName,
+							"org.jellyfin.androidtv.test.UpdaterTestActivity",
+						)
+					)
+				},
+				modifier = Modifier.focusKey("github_updater_tester"),
 			)
 		}
 	}
