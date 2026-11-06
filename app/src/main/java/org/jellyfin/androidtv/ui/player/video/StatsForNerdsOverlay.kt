@@ -379,7 +379,7 @@ private object NewPlayerStreamStatusBuilder {
 					externalSubtitle.index == selectedSubtitle?.index
 			}
 		val selectedSubtitleCodec = subtitleCodec(selectedSubtitle, selectedSubtitleStream, selectedExternalSubtitle)
-		val showLibassStats = selectedSubtitle != null && frameStats.libass != null
+		val showAssStats = selectedSubtitle != null && selectedSubtitleCodec.isAssSubtitleCodec()
 		val doviFailure = (stream as? PlayableMediaStream)?.queueEntry?.doviTransformFailure
 
 		return listOf(
@@ -439,7 +439,10 @@ private object NewPlayerStreamStatusBuilder {
 					row("Codec", selectedSubtitleCodec.formatCodec())
 					row("Language", (selectedSubtitle?.language ?: selectedSubtitleStream?.language ?: selectedExternalSubtitle?.language).toIso2LanguageDisplayOrSelf())
 					row("Source", subtitleSource(selectedSubtitleStream, selectedExternalSubtitle, parseSubtitlesDuringExtraction))
-					subtitleDiagnosticValues(frameStats).forEach { (label, value) -> row(label, value) }
+					if (selectedSubtitle != null) {
+						subtitleDiagnosticValues(frameStats, isAssSubtitle = showAssStats)
+							.forEach { (label, value) -> row(label, value) }
+					}
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
 					row(
 						"Timing",
@@ -456,7 +459,7 @@ private object NewPlayerStreamStatusBuilder {
 			PlaybackInfoSection(
 				title = "libass Metrics",
 				rows = rows {
-					if (showLibassStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
+					if (showAssStats) frameStats.libass?.let { stats -> addLibassStats(stats) }
 				},
 			),
 			PlaybackInfoSection(
@@ -938,11 +941,18 @@ private fun PlaybackInfoStaticRow(
 	}
 }
 
-internal fun subtitleDiagnosticValues(stats: PlaybackFrameStats): List<Pair<String, String>> = buildList {
-	stats.subtitleExtractor?.takeIf(String::isNotBlank)?.let { add("Provider" to it) }
-	stats.subtitleRender?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
-	stats.subtitleParser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
-	stats.subtitlePath?.takeIf(String::isNotBlank)?.let { add("Path" to it) }
+internal fun subtitleDiagnosticValues(
+	stats: PlaybackFrameStats,
+	isAssSubtitle: Boolean,
+): List<Pair<String, String>> = buildList {
+	val media3Cues = stats.playerName == "ExoPlayer" && !isAssSubtitle
+	val provider = if (media3Cues) "Media3 default" else stats.subtitleExtractor
+	val renderer = if (media3Cues) "Media3 cues" else stats.subtitleRender
+	val parser = if (media3Cues) "DefaultSubtitleParserFactory" else stats.subtitleParser
+
+	provider?.takeIf(String::isNotBlank)?.let { add("Provider" to it) }
+	renderer?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
+	parser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
 }
 
 internal fun videoDiagnosticValues(
