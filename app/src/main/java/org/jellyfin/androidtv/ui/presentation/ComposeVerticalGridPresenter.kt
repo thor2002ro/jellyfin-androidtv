@@ -203,119 +203,123 @@ class ComposeVerticalGridPresenter : BrowseCardGridPresenter() {
 			}
 		}
 
-		BoxWithConstraints {
-			val verticalPadding = configValue.verticalPadding.toFloat()
-			val viewportHeight = calculateBrowseGridViewportHeight(
-				maxHeight = maxHeight.value,
-			)
+		BrowseHeaderLayout(configValue.headerHeight) {
+			BoxWithConstraints {
+				val verticalPadding = configValue.verticalPadding.toFloat()
+				val viewportHeight = calculateBrowseGridViewportHeight(
+					maxHeight = maxHeight.value,
+				)
 
-			LazyVerticalGrid(
-				columns = GridCells.Fixed(configValue.spanCount),
-				state = gridState,
-				modifier = Modifier
-					.height(viewportHeight.dp)
-					.focusGroup()
-					.focusRestorer(restoreFocusRequester),
-				contentPadding = PaddingValues(
-					horizontal = configValue.paddingStart.dp,
-					vertical = verticalPadding.dp,
-				),
-				horizontalArrangement = Arrangement.spacedBy(configValue.horizontalSpacing.dp),
-				verticalArrangement = Arrangement.spacedBy(configValue.verticalSpacing.dp),
-			) {
-					items(
-						items = packedItems,
-						key = { it.key },
-						contentType = { it.span },
-						span = { GridItemSpan(it.span) },
-					) { entry ->
-						val rowItem = entry.item as? BaseRowItem ?: return@items
-						val requester = remember(entry.key) { FocusRequester() }
-						DisposableEffect(entry.key, requester) {
-							focusRequesters[entry.key] = requester
-							onDispose {
-								if (focusRequesters[entry.key] === requester) focusRequesters.remove(entry.key)
+				LazyVerticalGrid(
+					columns = GridCells.Fixed(configValue.spanCount),
+					state = gridState,
+					modifier = Modifier
+						.height(viewportHeight.dp)
+						.focusGroup()
+						.focusRestorer(restoreFocusRequester),
+					contentPadding = PaddingValues(
+						start = configValue.paddingStart.dp,
+						end = configValue.paddingEnd.dp,
+						top = configValue.headerHeight.dp + verticalPadding.dp,
+						bottom = verticalPadding.dp,
+					),
+					horizontalArrangement = Arrangement.spacedBy(configValue.horizontalSpacing.dp),
+					verticalArrangement = Arrangement.spacedBy(configValue.verticalSpacing.dp),
+				) {
+						items(
+							items = packedItems,
+							key = { it.key },
+							contentType = { it.span },
+							span = { GridItemSpan(it.span) },
+						) { entry ->
+							val rowItem = entry.item as? BaseRowItem ?: return@items
+							val requester = remember(entry.key) { FocusRequester() }
+							DisposableEffect(entry.key, requester) {
+								focusRequesters[entry.key] = requester
+								onDispose {
+									if (focusRequesters[entry.key] === requester) focusRequesters.remove(entry.key)
+								}
 							}
-						}
-						var focused by remember(entry.key) { mutableStateOf(false) }
-						LaunchedEffect(focused, entry.item) {
-							if (focused) select(holder, entry.adapterPosition, entry.item)
-						}
-						val scale = animateFloatAsState(
-							targetValue = if (focused) focusScale else 1f,
-							animationSpec = tween(durationMillis = focusDuration),
-							label = "browse_card_focus",
-						)
+							var focused by remember(entry.key) { mutableStateOf(false) }
+							LaunchedEffect(focused, entry.item) {
+								if (focused) select(holder, entry.adapterPosition, entry.item)
+							}
+							val scale = animateFloatAsState(
+								targetValue = if (focused) focusScale else 1f,
+								animationSpec = tween(durationMillis = focusDuration),
+								label = "browse_card_focus",
+							)
 
-						CardViewHolderContent(
-							item = rowItem,
-							focused = focused,
-							showInfo = false,
-							showBrowserTitle = configValue.showCardTitles,
-							imageType = configValue.imageType,
-							staticHeight = configValue.cardHeight,
-							uniformAspect = true,
-							fillAvailableWidth = true,
-							modifier = Modifier
-								.restoreFocusRequesterWhen(focused, restoreFocusRequester)
-								.focusRequester(requester)
-								.onPreviewKeyEvent { event ->
-									val direction = when (event.key) {
-										Key.DirectionUp -> BrowseGridFocusDirection.UP
-										Key.DirectionDown -> BrowseGridFocusDirection.DOWN
-										Key.DirectionLeft -> BrowseGridFocusDirection.LEFT
-										Key.DirectionRight -> BrowseGridFocusDirection.RIGHT
-										else -> null
-									} ?: return@onPreviewKeyEvent false
-									if (event.type == KeyEventType.KeyDown && focusMovePending) {
-										return@onPreviewKeyEvent true
+							CardViewHolderContent(
+								item = rowItem,
+								focused = focused,
+								showInfo = false,
+								showBrowserTitle = configValue.showCardTitles,
+								imageType = configValue.imageType,
+								staticHeight = configValue.cardHeight,
+								uniformAspect = true,
+								fillAvailableWidth = true,
+								modifier = Modifier
+									.restoreFocusRequesterWhen(focused, restoreFocusRequester)
+									.focusRequester(requester)
+									.onPreviewKeyEvent { event ->
+										val direction = when (event.key) {
+											Key.DirectionUp -> BrowseGridFocusDirection.UP
+											Key.DirectionDown -> BrowseGridFocusDirection.DOWN
+											Key.DirectionLeft -> BrowseGridFocusDirection.LEFT
+											Key.DirectionRight -> BrowseGridFocusDirection.RIGHT
+											else -> null
+										} ?: return@onPreviewKeyEvent false
+										if (event.type == KeyEventType.KeyDown && focusMovePending) {
+											return@onPreviewKeyEvent true
+										}
+										val target = findBrowseGridFocusTarget(packedItems, entry.adapterPosition, direction)
+										val nativeEvent = event.nativeKeyEvent
+										if (
+											shouldForwardVerticalGridKey(target, direction) &&
+											forwardKey(holder.gridView, nativeEvent.keyCode, nativeEvent)
+										) {
+											return@onPreviewKeyEvent true
+										}
+										if (target < 0) {
+											return@onPreviewKeyEvent shouldConsumeMissingBrowseGridTarget(direction)
+										}
+										if (
+											event.type == KeyEventType.KeyDown &&
+											notifyDirectionalKey(event.nativeKeyEvent.eventTime)
+										) {
+											val targetVisualPosition = packedItems.indexOfFirst { it.adapterPosition == target }
+											val targetEntry = packedItems.getOrNull(targetVisualPosition)
+											requestBrowseGridFocus(
+												position = target,
+												directRequest = {
+													targetEntry?.let { focusRequesters[it.key] }?.requestFocus() == true
+												},
+												enqueueRequest = {
+													focusMovePending = true
+													setPosition(it)
+												},
+											)
+										}
+										true
 									}
-									val target = findBrowseGridFocusTarget(packedItems, entry.adapterPosition, direction)
-									val nativeEvent = event.nativeKeyEvent
-									if (
-										shouldForwardVerticalGridKey(target, direction) &&
-										forwardKey(holder.gridView, nativeEvent.keyCode, nativeEvent)
-									) {
-										return@onPreviewKeyEvent true
+									.onFocusChanged { state ->
+										focused = state.isFocused
+										if (state.isFocused) {
+											select(holder, entry.adapterPosition, entry.item)
+										}
 									}
-									if (target < 0) {
-										return@onPreviewKeyEvent shouldConsumeMissingBrowseGridTarget(direction)
-									}
-									if (
-										event.type == KeyEventType.KeyDown &&
-										notifyDirectionalKey(event.nativeKeyEvent.eventTime)
-									) {
-										val targetVisualPosition = packedItems.indexOfFirst { it.adapterPosition == target }
-										val targetEntry = packedItems.getOrNull(targetVisualPosition)
-										requestBrowseGridFocus(
-											position = target,
-											directRequest = {
-												targetEntry?.let { focusRequesters[it.key] }?.requestFocus() == true
-											},
-											enqueueRequest = {
-												focusMovePending = true
-												setPosition(it)
-											},
-										)
-									}
-									true
-								}
-								.onFocusChanged { state ->
-									focused = state.isFocused
-									if (state.isFocused) {
-										select(holder, entry.adapterPosition, entry.item)
-									}
-								}
-								.semantics(mergeDescendants = true) {}
-								.clickable { click(holder, entry.adapterPosition, entry.item) }
-								.zIndex(if (focused) 1f else 0f)
-								.graphicsLayer {
-									compositingStrategy = CompositingStrategy.Offscreen
-									scaleX = scale.value
-									scaleY = scale.value
-								},
-						)
-					}
+									.semantics(mergeDescendants = true) {}
+									.clickable { click(holder, entry.adapterPosition, entry.item) }
+									.zIndex(if (focused) 1f else 0f)
+									.graphicsLayer {
+										compositingStrategy = CompositingStrategy.Offscreen
+										scaleX = scale.value
+										scaleY = scale.value
+									},
+							)
+						}
+				}
 			}
 		}
 	}
