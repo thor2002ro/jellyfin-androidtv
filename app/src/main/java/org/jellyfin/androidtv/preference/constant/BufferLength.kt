@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.preference.constant
 
 import org.jellyfin.androidtv.R
+import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.preference.PreferenceEnum
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -45,3 +46,11 @@ enum class BufferLength(
 		liveTvBufferDuration = 10.seconds,
 	),
 }
+
+fun BufferLength.toPlaybackBufferOptions() = PlaybackBufferOptions(
+	minBufferDuration = minBufferDuration,
+	maxBufferDuration = maxBufferDuration,
+	bufferForPlaybackDuration = bufferForPlaybackDuration,
+	bufferForPlaybackAfterRebufferDuration = bufferForPlaybackAfterRebufferDuration,
+	liveTvBufferDuration = liveTvBufferDuration,
+)
