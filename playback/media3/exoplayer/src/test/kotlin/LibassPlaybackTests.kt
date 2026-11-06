@@ -5,6 +5,10 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 
 class LibassPlaybackTests : FunSpec({
+	test("libass maximum FPS defaults to 35") {
+		ExoPlayerOptions().libassMaxFps shouldBe 35f
+	}
+
 	test("libass disables next item preloading") {
 		canPreloadNextItem(libassEnabled = true) shouldBe false
 		canPreloadNextItem(libassEnabled = false) shouldBe true
