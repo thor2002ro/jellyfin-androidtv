@@ -11,6 +11,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.bitmapConfig
+import coil3.size.Precision
 import coil3.size.Size
 import org.jellyfin.androidtv.util.apiclient.TrickplayImage
 import org.jellyfin.androidtv.util.apiclient.TrickplayTileSheet
@@ -92,7 +93,8 @@ internal fun buildPlayerThumbnailRequest(
 ): ImageRequest = ImageRequest.Builder(context)
 	.data(url)
 	.size(Size(width, height))
-	.bitmapConfig(Bitmap.Config.RGB_565)
+	.precision(Precision.INEXACT)
+	.bitmapConfig(Bitmap.Config.ARGB_8888)
 	.allowHardware(false)
 	.apply { headers?.let(::httpHeaders) }
 	.memoryCachePolicy(CachePolicy.DISABLED)

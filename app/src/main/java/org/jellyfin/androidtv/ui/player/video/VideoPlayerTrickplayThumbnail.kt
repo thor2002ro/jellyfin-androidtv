@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.player.video
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -69,12 +70,14 @@ fun VideoPlayerTrickplayThumbnail(
 		item.getTrickplayImage(api, mediaSourceId, timeMs)
 	} ?: return
 	val thumbnailAspectRatio = trickplayImage.width.toFloat() / trickplayImage.height
+	val thumbnailShape = JellyfinTheme.shapes.medium
 
 	Box(
 		modifier = modifier
 			.width(TrickplayThumbnailWidth)
 			.aspectRatio(thumbnailAspectRatio)
-			.clip(JellyfinTheme.shapes.medium)
+			.border(2.dp, Color.White.copy(alpha = 0.7f), thumbnailShape)
+			.clip(thumbnailShape)
 			.background(Color.Black.copy(alpha = 0.45f))
 	) {
 		VideoPlayerTrickplayImage(
@@ -188,7 +191,7 @@ private fun PlayerTrickplayThumbnail(image: TrickplaySheetCrop?, modifier: Modif
 			srcOffset = IntOffset(image.crop.x, image.crop.y),
 			srcSize = IntSize(image.crop.width, image.crop.height),
 			dstSize = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
-			filterQuality = FilterQuality.Medium,
+			filterQuality = FilterQuality.High,
 		)
 	}
 }
