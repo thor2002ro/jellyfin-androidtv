@@ -98,7 +98,8 @@ class PlaybackLauncher(
 		itemsPosition: Int,
 	): VideoPlayerSelection? {
 		val item = items.getOrNull(itemsPosition) ?: items.firstOrNull() ?: return null
-		val playerPreferences = UserPreferences.playbackPlayerPreferences(item.isHdrVideo)
+		val useHdrPlayer = item.isHdrVideo && userPreferences[UserPreferences.playbackPlayerPreferences(hdr = true).playbackBackend] != PlaybackBackend.SAME_VIDEO_PLAYER
+		val playerPreferences = UserPreferences.playbackPlayerPreferences(useHdrPlayer)
 
 		return when {
 			userPreferences[playerPreferences.useExternalPlayer] && items.all { it.supportsExternalPlayer } ->
