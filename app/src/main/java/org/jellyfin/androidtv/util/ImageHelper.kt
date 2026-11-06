@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.AnyRes
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage
 import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
 import org.jellyfin.androidtv.util.apiclient.channelPrimaryImage
 import org.jellyfin.androidtv.util.apiclient.getUrl
@@ -47,7 +48,9 @@ class ImageHelper(
 		item: BaseItemDto,
 		width: Int? = null,
 		height: Int? = null,
-	): String? = item.itemImages[ImageType.PRIMARY]?.getUrl(api, maxWidth = width, maxHeight = height)
+	): String? = getPrimaryImage(item)?.getUrl(api, maxWidth = width, maxHeight = height)
+
+	fun getPrimaryImage(item: BaseItemDto): JellyfinImage? = item.itemImages[ImageType.PRIMARY]
 
 	fun getChannelPrimaryImageUrl(
 		item: BaseItemDto,
@@ -60,29 +63,28 @@ class ImageHelper(
 		preferParentThumb: Boolean,
 		fillWidth: Int? = null,
 		fillHeight: Int? = null
-	): String? {
-		val image = when {
+	): String? = getPrimaryImage(item, preferParentThumb)?.getUrl(
+		api = api,
+		fillWidth = fillWidth,
+		fillHeight = fillHeight,
+	)
+
+	fun getPrimaryImage(item: BaseItemDto, preferParentThumb: Boolean): JellyfinImage? {
+		return when {
 			preferParentThumb && item.type == BaseItemKind.EPISODE -> item.parentImages[ImageType.THUMB] ?: item.seriesThumbImage
 			item.type == BaseItemKind.SEASON -> item.itemImages[ImageType.PRIMARY] ?: item.seriesPrimaryImage
 			item.type == BaseItemKind.PROGRAM && item.imageTags?.containsKey(ImageType.THUMB) == true -> item.itemImages[ImageType.THUMB]
 			item.type == BaseItemKind.AUDIO -> item.albumPrimaryImage
 			else -> null
 		} ?: item.itemImages[ImageType.PRIMARY]
-
-		return image?.getUrl(
-			api = api,
-			fillWidth = fillWidth,
-			fillHeight = fillHeight,
-		)
 	}
 
 	fun getLogoImageUrl(
 		item: BaseItemDto?,
 		maxWidth: Int? = null
-	): String? {
-		val image = item?.itemImages[ImageType.LOGO] ?: item?.parentImages[ImageType.LOGO]
-		return image?.getUrl(api, maxWidth = maxWidth)
-	}
+	): String? = getLogoImage(item)?.getUrl(api, maxWidth = maxWidth)
+
+	fun getLogoImage(item: BaseItemDto?): JellyfinImage? = item?.itemImages?.get(ImageType.LOGO) ?: item?.parentImages?.get(ImageType.LOGO)
 
 	/**
 	 * A utility to return a URL reference to an image resource

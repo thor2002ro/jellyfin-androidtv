@@ -187,7 +187,7 @@ val BaseItemDto.seriesThumbImage
 				source = JellyfinImageSource.SERIES,
 				type = ImageType.THUMB,
 				tag = seriesThumbImageTag,
-				blurHash = imageBlurHashes?.get(ImageType.PRIMARY)?.get(seriesThumbImageTag),
+				blurHash = imageBlurHashes?.get(ImageType.THUMB)?.get(seriesThumbImageTag),
 				aspectRatio = null,
 				index = null,
 			)

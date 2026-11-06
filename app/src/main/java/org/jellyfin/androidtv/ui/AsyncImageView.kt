@@ -25,9 +25,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.util.BlurHashDecoder
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage
+import org.jellyfin.androidtv.util.apiclient.getUrl
+import org.jellyfin.androidtv.util.createBlurHashRequest
+import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import kotlin.math.round
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -43,6 +46,7 @@ class AsyncImageView @JvmOverloads constructor(
 	private val lifeCycleOwner get() = findViewTreeLifecycleOwner()
 	private val styledAttributes = context.obtainStyledAttributes(attrs, R.styleable.AsyncImageView, defStyleAttr, 0)
 	private val imageLoader by inject<ImageLoader>()
+	private val api by inject<ApiClient>()
 	private var loadJob: Job? = null
 	private var imageRequest: Disposable? = null
 	private var loadRequestId = 0
@@ -58,6 +62,23 @@ class AsyncImageView @JvmOverloads constructor(
 	 * Shape the image to a circle and remove all corners.
 	 */
 	var circleCrop = styledAttributes.getBoolean(R.styleable.AsyncImageView_circleCrop, false)
+
+	fun load(
+		image: JellyfinImage?,
+		placeholder: Drawable? = null,
+		aspectRatio: Double = image?.aspectRatio?.toDouble() ?: 1.0,
+		blurHashResolution: Int = 32,
+		maxWidth: Int? = null,
+		maxHeight: Int? = null,
+		fillWidth: Int? = null,
+		fillHeight: Int? = null,
+	) = load(
+		url = image?.getUrl(api, maxWidth, maxHeight, fillWidth, fillHeight),
+		blurHash = image?.blurHash,
+		placeholder = placeholder,
+		aspectRatio = aspectRatio,
+		blurHashResolution = blurHashResolution,
+	)
 
 	/**
 	 * Load an image from the network using [url]. When the [url] is null or returns a bad response
@@ -106,12 +127,13 @@ class AsyncImageView @JvmOverloads constructor(
 
 				// Only show blurhash if an image is going to be loaded from the network.
 				// Start the real image request first so BlurHash decoding never delays it.
-				if (url != null && blurHash != null && !isLowRamDevice && aspectRatio > 0) {
-					val blurHashDrawable = withContext(Dispatchers.IO) {
+				val blurHashRequest = createBlurHashRequest(url, blurHash, isLowRamDevice, aspectRatio, blurHashResolution)
+				if (blurHashRequest != null) {
+					val blurHashDrawable = withContext(Dispatchers.Default) {
 						BlurHashDecoder.decode(
-							blurHash,
-							if (aspectRatio > 1) round(blurHashResolution * aspectRatio).toInt() else blurHashResolution,
-							if (aspectRatio >= 1) blurHashResolution else round(blurHashResolution / aspectRatio).toInt(),
+							blurHashRequest.blurHash,
+							blurHashRequest.width,
+							blurHashRequest.height,
 						)?.toDrawable(resources)
 					}
 					if (requestId == loadRequestId && imageRequest?.job?.isCompleted == false && blurHashDrawable != null) {
