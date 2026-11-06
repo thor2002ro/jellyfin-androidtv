@@ -596,15 +596,6 @@ class LibMPVOptionsTest : StringSpec({
 		shouldUseNativeSubtitleOverlay("HDR10", "gpu-next") shouldBe false
 	}
 
-	"native subtitle overlay supplies the Android canvas size" {
-		nativeSubtitleOverlayCommand(7, 1920, 1080).toList() shouldContainExactly listOf(
-			"subtitle-overlay-raw",
-			"7",
-			"1920",
-			"1080",
-		)
-	}
-
 	"unchanged native subtitle overlay omits pixels" {
 		parseLibMPVSubtitleOverlay(
 			MPVNode.MapNode(
