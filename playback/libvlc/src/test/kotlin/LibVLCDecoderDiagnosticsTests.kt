@@ -95,10 +95,10 @@ class LibVLCDecoderDiagnosticsTests : StringSpec({
 	}
 
 	"log reader follows only the current app process" {
-		libVLCDecoderLogcatCommand(42) shouldBe listOf(
+		libVLCDecoderLogcatCommand(42, "10-10 21:00:00.000") shouldBe listOf(
 			"logcat",
 			"-T",
-			"1",
+			"10-10 21:00:00.000",
 			"--pid=42",
 			"-v",
 			"brief",
