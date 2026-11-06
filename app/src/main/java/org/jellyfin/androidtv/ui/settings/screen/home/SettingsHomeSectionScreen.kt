@@ -8,6 +8,7 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.HomeSectionType
+import org.jellyfin.androidtv.constant.hasSameHomeContentAs
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -24,10 +25,11 @@ fun SettingsHomeSectionScreen(index: Int) {
 	val router = LocalRouter.current
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
 	val scope = rememberCoroutineScope()
-	val sections = userSettingPreferences.homesections.map(userSettingPreferences::get)
+	val sections = compactHomeSections(userSettingPreferences.homesections.map(userSettingPreferences::get))
 	val activeSections = sections.filterNot { it == HomeSectionType.NONE }
 	val selectedSection = activeSections.getOrNull(index)
 	val addingSection = index == activeSections.size && activeSections.size < sections.size
+	val availableSections = availableHomeSectionTypes(sections, index)
 
 	if (selectedSection == null && !addingSection) {
 		ListMessage {
@@ -91,7 +93,7 @@ fun SettingsHomeSectionScreen(index: Int) {
 			ListSection(headingContent = { Text(stringResource(R.string.home_section_type)) })
 		}
 
-		items(HomeSectionType.entries.filterNot { it == HomeSectionType.NONE }) { entry ->
+		items(availableSections) { entry ->
 			ListButton(
 				headingContent = { Text(stringResource(entry.nameRes)) },
 				trailingContent = { RadioButton(checked = selectedSection == entry) },
@@ -99,9 +101,21 @@ fun SettingsHomeSectionScreen(index: Int) {
 				modifier = Modifier
 					.focusKey(
 						key = "section_type_${entry.name}",
-						initialFocus = addingSection && entry == HomeSectionType.entries.first(),
+						initialFocus = addingSection && entry == availableSections.firstOrNull(),
 					)
 			)
+		}
+	}
+}
+
+internal fun availableHomeSectionTypes(
+	sections: Collection<HomeSectionType>,
+	activeIndex: Int,
+): List<HomeSectionType> {
+	val active = sections.filterNot { it == HomeSectionType.NONE }
+	return HomeSectionType.entries.filter { section ->
+		section != HomeSectionType.NONE && active.withIndex().none { (index, existing) ->
+			index != activeIndex && existing.hasSameHomeContentAs(section)
 		}
 	}
 }

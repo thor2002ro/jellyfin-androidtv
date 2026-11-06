@@ -129,7 +129,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				homesections = homesections,
 				liveTvEnabled = liveTvEnabled,
 				includeRecentlyReleased = userSettingPreferences[UserSettingPreferences.homeRecentlyReleased],
-				includeFavoriteVideos = userSettingPreferences[UserSettingPreferences.homeFavoriteVideos],
 				combineContinueWatchingAndNextUp = userSettingPreferences[UserSettingPreferences.homeCombineContinueWatchingNextUp],
 			)
 
@@ -192,18 +191,21 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		homesections: Collection<HomeSectionType>,
 		liveTvEnabled: Boolean,
 		includeRecentlyReleased: Boolean,
-		includeFavoriteVideos: Boolean,
 		combineContinueWatchingAndNextUp: Boolean,
 	) = buildList {
 		val layout = createHomeSectionLayout(
 			sections = homesections,
 			combineContinueWatchingAndNextUp = combineContinueWatchingAndNextUp,
 		)
+		val userViews = when {
+			layout.sections.any(::homeSectionUsesUserViews) || includeRecentlyReleased -> userViewsRepository.views.first()
+			else -> emptyList()
+		}
 
 		for (section in layout.sections) when (section) {
-			HomeSectionType.LATEST_MEDIA -> add(helper.loadRecentlyAdded(userViewsRepository.views.first()))
-			HomeSectionType.LIBRARY_TILES_SMALL -> add(HomeFragmentViewsRow(small = false))
-			HomeSectionType.LIBRARY_BUTTONS -> add(HomeFragmentViewsRow(small = true))
+			HomeSectionType.LATEST_MEDIA -> add(helper.loadRecentlyAdded(userViews))
+			HomeSectionType.LIBRARY_TILES_SMALL -> add(HomeFragmentViewsRow(small = false, initialViews = userViews))
+			HomeSectionType.LIBRARY_BUTTONS -> add(HomeFragmentViewsRow(small = true, initialViews = userViews))
 			HomeSectionType.RESUME -> add(helper.loadResumeVideo(layout.combineContinueWatchingAndNextUp))
 			HomeSectionType.RESUME_AUDIO -> add(helper.loadResumeAudio())
 			HomeSectionType.RESUME_BOOK -> Unit // Books are not (yet) supported
@@ -218,10 +220,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 
 		if (includeRecentlyReleased) {
-			add(helper.loadRecentlyReleased(userViewsRepository.views.first()))
+			add(helper.loadRecentlyReleased(userViews))
 		}
-
-		addIf(includeFavoriteVideos, helper::loadFavoriteVideos)
 	}
 
 	override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean {
@@ -253,6 +253,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	override fun onPause() {
+		homeRowsDebounceJob?.cancel()
+		homeRowsRefreshJob?.cancel()
 		liveTvActions.dismiss()
 		super.onPause()
 	}
@@ -265,6 +267,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	private fun refreshHomeRows() {
+		homeRowsRefreshJob?.cancel()
 		homeRowsDebounceJob?.cancel()
 		homeRowsDebounceJob = lifecycleScope.launch {
 			delay(HOME_ROWS_REFRESH_DEBOUNCE_MS)
@@ -376,10 +379,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 }
 
-private inline fun MutableList<HomeFragmentRow>.addIf(condition: Boolean, row: () -> HomeFragmentRow) {
-	if (condition) add(row())
-}
-
 private const val HOME_ROWS_REFRESH_DELAY_MS = 3_500L
 private const val HOME_ROWS_REFRESH_DEBOUNCE_MS = 250L
 
@@ -392,3 +391,9 @@ internal fun createHomeCardPresenter(useWideCards: Boolean) = when (useWideCards
 		uniformAspect = false,
 	)
 }
+
+private fun homeSectionUsesUserViews(section: HomeSectionType) = section in setOf(
+	HomeSectionType.LATEST_MEDIA,
+	HomeSectionType.LIBRARY_TILES_SMALL,
+	HomeSectionType.LIBRARY_BUTTONS,
+)

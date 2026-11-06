@@ -8,8 +8,11 @@ import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.ImageType as BaseRowImageType
+import org.jellyfin.androidtv.util.apiclient.JellyfinImageSource
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import java.util.UUID
 
@@ -176,6 +179,82 @@ class BaseItemDtoBaseRowItemTests : FunSpec({
 
 		BaseItemDtoBaseRowItem(item = season, showParentTitle = true) shouldNotBe
 			BaseItemDtoBaseRowItem(item = season, showParentTitle = false)
+	}
+
+	test("wide episode cards prefer the series thumbnail over episode artwork") {
+		val seriesId = UUID.randomUUID()
+		val episode = BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.EPISODE,
+			seriesId = seriesId,
+			seriesThumbImageTag = "series-thumb",
+			seriesPrimaryImageTag = "series-poster",
+			imageTags = mapOf(
+				ImageType.THUMB to "episode-thumb",
+				ImageType.PRIMARY to "episode-primary",
+			),
+		)
+
+		val image = BaseItemDtoBaseRowItem(
+			item = episode,
+			preferParentThumb = true,
+			preferSeriesPoster = true,
+		).getImage(BaseRowImageType.THUMB)
+
+		image?.source shouldBe JellyfinImageSource.SERIES
+		image?.item shouldBe seriesId
+		image?.type shouldBe ImageType.THUMB
+		image?.tag shouldBe "series-thumb"
+	}
+
+	test("wide season cards prefer the series thumbnail over season artwork") {
+		val seriesId = UUID.randomUUID()
+		val season = BaseItemDto(
+			id = UUID.randomUUID(),
+			type = BaseItemKind.SEASON,
+			seriesId = seriesId,
+			seriesThumbImageTag = "series-thumb",
+			seriesPrimaryImageTag = "series-poster",
+			imageTags = mapOf(
+				ImageType.THUMB to "season-thumb",
+				ImageType.PRIMARY to "season-primary",
+			),
+		)
+
+		val image = BaseItemDtoBaseRowItem(
+			item = season,
+			preferParentThumb = true,
+		).getImage(BaseRowImageType.THUMB)
+
+		image?.source shouldBe JellyfinImageSource.SERIES
+		image?.item shouldBe seriesId
+		image?.type shouldBe ImageType.THUMB
+		image?.tag shouldBe "series-thumb"
+	}
+
+	test("wide season cards use the parent series thumbnail returned by latest media") {
+		val seasonId = UUID.randomUUID()
+		val seriesId = UUID.randomUUID()
+		val season = BaseItemDto(
+			id = seasonId,
+			type = BaseItemKind.SEASON,
+			seriesId = seriesId,
+			parentThumbItemId = seriesId,
+			parentThumbImageTag = "parent-series-thumb",
+			seriesPrimaryImageTag = "series-poster",
+			imageTags = mapOf(ImageType.PRIMARY to "season-primary"),
+			primaryImageAspectRatio = 2.0 / 3.0,
+		)
+
+		val image = BaseItemDtoBaseRowItem(
+			item = season,
+			preferParentThumb = true,
+		).getImage(BaseRowImageType.THUMB)
+
+		image?.source shouldBe JellyfinImageSource.PARENT
+		image?.item shouldBe seriesId
+		image?.type shouldBe ImageType.THUMB
+		image?.tag shouldBe "parent-series-thumb"
 	}
 })
 
