@@ -1,7 +1,14 @@
 package org.jellyfin.androidtv.util.profile
 
 import android.content.Context
+import android.media.AudioFormat
+import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.audio.AudioCapabilities
 import org.jellyfin.androidtv.constant.Codec
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.AudioBehavior
@@ -32,6 +39,7 @@ private val supportedAudioCodecs = arrayOf(
 	Codec.Audio.AAC,
 	Codec.Audio.AAC_LATM,
 	Codec.Audio.AC3,
+	Codec.Audio.AC4,
 	Codec.Audio.ALAC,
 	Codec.Audio.DCA,
 	Codec.Audio.DTS,
@@ -127,16 +135,17 @@ fun createDeviceProfile(
 ) = buildDeviceProfile {
 	val allowedAudioCodecs = when {
 		downMixAudio -> downmixSupportedAudioCodecs
-		else -> supportedAudioCodecs
-	}.filter { supportedPassthroughAudioCodecs ->
-		when (supportedPassthroughAudioCodecs) {
-			Codec.Audio.AC3 -> isAC3PrefEnabled
-			Codec.Audio.EAC3 -> isEAC3PrefEnabled
-			Codec.Audio.TRUEHD -> isTrueHDPrefEnabled
-			Codec.Audio.DTS -> isDTSPrefEnabled
-			else -> true
-		}
-	}.toTypedArray()
+		else -> supportedAudioCodecs.filterNot { supportedPassthroughAudioCodecs ->
+			when (supportedPassthroughAudioCodecs) {
+				// Remove codec if false.
+				Codec.Audio.AC3 -> !isAC3PrefEnabled
+				Codec.Audio.EAC3 -> !isEAC3PrefEnabled
+				Codec.Audio.TRUEHD -> !isTrueHDPrefEnabled
+				Codec.Audio.DTS -> !isDTSPrefEnabled
+				else -> false
+			}
+		}.toTypedArray()
+	}
 
 	val supportsHevc = mediaTest.supportsHevc()
 	val supportsHevcMain10 = mediaTest.supportsHevcMain10()
@@ -589,4 +598,30 @@ private fun DeviceProfileBuilder.subtitleProfile(
 	if (external) subtitleProfile(format, SubtitleDeliveryMethod.EXTERNAL)
 	if (hls) subtitleProfile(format, SubtitleDeliveryMethod.HLS)
 	if (encode) subtitleProfile(format, SubtitleDeliveryMethod.ENCODE)
+}
+
+@OptIn(UnstableApi::class)
+fun isPassthroughAudioAvailable(context: Context, mimetype: String): Boolean {
+	// Def audio attributes
+	val audioAttributes = AudioAttributes.Builder()
+		.setUsage(C.USAGE_MEDIA)
+		.setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+		.build()
+	// Get audio capabilities
+	val audioCapabilities = AudioCapabilities.getCapabilities(
+		context,
+		audioAttributes,
+		null,
+		listOf(
+			AudioFormat.CHANNEL_OUT_STEREO,
+			AudioFormat.CHANNEL_OUT_5POINT1 )
+	)
+	// Set audio format for a passthrough audio codec 2.0 check
+	val format = Format.Builder()
+		.setSampleMimeType(mimetype)
+		.setChannelCount(Integer.bitCount(AudioFormat.CHANNEL_OUT_STEREO))
+		.setSampleRate(Format.NO_VALUE)
+		.build()
+	// Test Passthrough Direct Playback
+	return audioCapabilities.isPassthroughPlaybackSupported(format, audioAttributes)
 }
