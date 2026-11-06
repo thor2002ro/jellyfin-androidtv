@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
 	alias(libs.plugins.android.application) apply false
 	alias(libs.plugins.android.library) apply false
@@ -5,56 +7,52 @@ plugins {
 	java
 }
 
+val customMediaOutputDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/OUTPUT").asFile
+
+fun customMediaOutputProperty(fileName: String, propertyName: String): String {
+	val file = customMediaOutputDir.resolve(fileName)
+	if (!file.isFile) {
+		throw GradleException("Missing custom Media3 metadata at $file; run dependencies/jellyfin-androidx-media/build.bat")
+	}
+	val properties = Properties()
+	file.inputStream().use { properties.load(it) }
+	return requireNotNull(properties.getProperty(propertyName)) {
+		"Missing $propertyName in $file"
+	}
+}
+
 val customMedia3FfmpegDecoderAarFile = run {
-	val outputDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/OUTPUT").asFile
-	val files = outputDir.listFiles { file ->
+	val files = customMediaOutputDir.listFiles { file ->
 		file.isFile && file.name.matches(Regex("""media3-ffmpeg-decoder-.+\.aar"""))
 	}.orEmpty()
 
 	require(files.size == 1) {
-		"Expected exactly one custom Media3 FFmpeg decoder AAR in $outputDir, found ${files.size}"
+		"Expected exactly one custom Media3 FFmpeg decoder AAR in $customMediaOutputDir, found ${files.size}"
 	}
 	files.single()
 }
-val customMedia3Version = run {
-	val mediaVersionFile = listOf(
-		layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/constants.gradle").asFile,
-		layout.projectDirectory.file("dependencies/jellyfin-androidx-media/media/gradle/libs.versions.toml").asFile,
-	).first { it.isFile }
-	val releaseVersion = requireNotNull(Regex("""releaseVersion\s*=\s*['"]([^'"]+)['"]""").find(mediaVersionFile.readText())) {
-		"Could not read Media3 releaseVersion from $mediaVersionFile"
-	}.groupValues[1]
-	val mediaDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/media").asFile.absolutePath
-	val commit = providers.exec {
-		commandLine("git", "-c", "safe.directory=$mediaDir", "-C", mediaDir, "rev-parse", "--short", "HEAD")
-	}.standardOutput.asText.get().trim()
-
-	"$releaseVersion+$commit"
-}
+val customMedia3Version = customMediaOutputProperty("version-media3.txt", "source_version")
+val customMedia3MavenVersion = customMediaOutputProperty("version-media3.txt", "maven_version")
 val customMedia3FfmpegDecoderVersion = customMedia3Version
-val customFfmpegVersion = run {
-	val releaseVersion = layout.projectDirectory.file("dependencies/jellyfin-androidx-media/ffmpeg/RELEASE").asFile.readText().trim()
-	val ffmpegDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/ffmpeg").asFile.absolutePath
-	val commit = providers.exec {
-		commandLine("git", "-c", "safe.directory=$ffmpegDir", "-C", ffmpegDir, "rev-parse", "--short", "HEAD")
-	}.standardOutput.asText.get().trim()
-
-	"$releaseVersion+$commit"
-}
+val customFfmpegVersion = customMediaOutputProperty("version-ffmpeg.txt", "version")
 val customLibyuvVersion = run {
-	val libyuvDir = layout.projectDirectory.dir("dependencies/jellyfin-androidx-media/build/libyuv").asFile.absolutePath
-	val branch = providers.exec {
-		commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "branch", "--show-current")
-	}.standardOutput.asText.get().trim().ifBlank { "unknown" }
-	val commit = providers.exec {
-		commandLine("git", "-c", "safe.directory=$libyuvDir", "-C", libyuvDir, "rev-parse", "--short", "HEAD")
-	}.standardOutput.asText.get().trim()
-
-	"$branch+$commit"
+	val version = customMediaOutputProperty("version-libyuv.txt", "version")
+	val sourceRevision = customMediaOutputProperty("version-libyuv.txt", "source_revision")
+	"$version+$sourceRevision"
 }
 
 if (!customMedia3FfmpegDecoderAarFile.isFile || customMedia3FfmpegDecoderAarFile.length() == 0L) {
 	throw GradleException("Missing custom Media3 FFmpeg decoder at $customMedia3FfmpegDecoderAarFile")
+}
+val customMedia3MavenAarFile = customMediaOutputDir.resolve(
+	"maven/androidx/media3/media3-extractor/$customMedia3MavenVersion/" +
+		"media3-extractor-$customMedia3MavenVersion.aar"
+)
+if (!customMedia3MavenAarFile.isFile || customMedia3MavenAarFile.length() == 0L) {
+	throw GradleException(
+		"Missing custom Media3 Maven repository at $customMedia3MavenAarFile; " +
+			"run dependencies/jellyfin-androidx-media/build.bat"
+	)
 }
 
 extra["customMedia3FfmpegDecoderAarFile"] = customMedia3FfmpegDecoderAarFile
@@ -112,9 +110,18 @@ tasks.withType<Test> {
 }
 
 subprojects {
-	tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-		compilerOptions {
-			freeCompilerArgs.add("-opt-in=androidx.media3.common.util.UnstableApi")
+	val media3ConsumerProjects = setOf(
+		":app",
+		":playback:core",
+		":playback:media3:exoplayer",
+		":playback:media3:session",
+	)
+
+	if (path in media3ConsumerProjects) {
+		tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+			compilerOptions {
+				freeCompilerArgs.add("-opt-in=androidx.media3.common.util.UnstableApi")
+			}
 		}
 	}
 }
