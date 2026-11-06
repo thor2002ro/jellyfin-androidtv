@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -19,10 +20,16 @@ import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.design.Tokens
 
 @Composable
-fun SettingsColumn(content: LazyListScope.() -> Unit) {
+fun SettingsColumn(
+	initialFirstVisibleItemIndex: Int? = null,
+	content: LazyListScope.() -> Unit,
+) {
 	val router = LocalRouter.current
 	val routeContext = LocalRouteContext.current
 	var restoredKey by remember(routeContext) { mutableStateOf<Long?>(null) }
+	val listState = rememberLazyListState(
+		initialFirstVisibleItemIndex = initialFirstVisibleItemIndex ?: routeContext?.initialFocusIndex ?: 0,
+	)
 
 	CompositionLocalProvider(
 		LocalListButtonFocusHandler provides { key: Long, focusRequester: FocusRequester, focused: Boolean ->
@@ -38,6 +45,7 @@ fun SettingsColumn(content: LazyListScope.() -> Unit) {
 		}
 	) {
 		LazyColumn(
+			state = listState,
 			modifier = Modifier
 				.focusGroup()
 				.padding(horizontal = Tokens.Space.spaceMd, vertical = Tokens.Space.spaceSm),

@@ -6,6 +6,7 @@ import org.jellyfin.androidtv.ui.navigation.RouteComposable
 import org.jellyfin.androidtv.ui.settings.screen.SettingsDeveloperScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsDebugCapabilitiesScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsMainScreen
+import org.jellyfin.androidtv.ui.settings.screen.SettingsSearchScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsTelemetryScreen
 import org.jellyfin.androidtv.ui.settings.screen.about.SettingsAboutScreen
 import org.jellyfin.androidtv.ui.settings.screen.authentication.SettingsAuthenticationAutoSignInScreen
@@ -77,6 +78,7 @@ import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 
 object Routes {
 	const val MAIN = "/"
+	const val SEARCH = "/search"
 	const val AUTHENTICATION = "/authentication"
 	const val AUTHENTICATION_FROM_LOGIN = "/authentication+login"
 	const val AUTHENTICATION_SERVER = "/authentication/server/{serverId}"
@@ -148,6 +150,9 @@ object Routes {
 val routes = mapOf<String, RouteComposable>(
 	Routes.MAIN to {
 		SettingsMainScreen()
+	},
+	Routes.SEARCH to {
+		SettingsSearchScreen()
 	},
 	Routes.AUTHENTICATION to {
 		SettingsAuthenticationScreen(false)

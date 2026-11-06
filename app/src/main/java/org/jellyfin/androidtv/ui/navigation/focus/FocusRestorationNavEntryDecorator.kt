@@ -9,6 +9,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.navigation3.runtime.NavEntryDecorator
 import org.jellyfin.androidtv.ui.navigation.RouteContext
 
+internal const val INITIAL_FOCUS_KEY_METADATA = "initialFocusKey"
+
 @Composable
 fun rememberFocusRestorationNavEntryDecorator(): NavEntryDecorator<RouteContext> {
 	val savedFocusKeys = rememberSaveable { mutableMapOf<Any, String?>() }
@@ -27,7 +29,8 @@ fun rememberFocusRestorationNavEntryDecorator(): NavEntryDecorator<RouteContext>
 				}
 
 				LaunchedEffect(key) {
-					focusPersistManager.restore(savedFocusKeys[key])
+					val focusKey = if (savedFocusKeys.containsKey(key)) savedFocusKeys[key] else entry.metadata[INITIAL_FOCUS_KEY_METADATA] as? String
+					focusPersistManager.restore(focusKey)
 				}
 
 				DisposableEffect(key) {

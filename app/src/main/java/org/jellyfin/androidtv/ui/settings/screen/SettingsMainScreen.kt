@@ -1,14 +1,37 @@
 package org.jellyfin.androidtv.ui.settings.screen
 
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.currentCompositeKeyHashCode
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Icon
+import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
+import org.jellyfin.androidtv.ui.base.list.LocalListButtonFocusHandler
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
@@ -25,14 +48,49 @@ import org.koin.compose.koinInject
 fun SettingsMainScreen() {
 	val router = LocalRouter.current
 	val context = LocalContext.current
+	val searchFocusRequester = remember { FocusRequester() }
+	var searchFocused by remember { mutableStateOf(false) }
+	val searchWidth by animateFloatAsState(if (searchFocused) 1f else 0.25f, label = "settingsSearchWidth")
+	val searchColors = if (searchFocused) {
+		JellyfinTheme.colorScheme.inputFocused to JellyfinTheme.colorScheme.onInputFocused
+	} else {
+		JellyfinTheme.colorScheme.input to JellyfinTheme.colorScheme.onInput
+	}
 
 	SettingsColumn {
 		item {
-			ListSection(
-				overlineContent = { Text(stringResource(R.string.app_name).uppercase()) },
-				headingContent = { Text(stringResource(R.string.settings)) },
-				captionContent = { Text(stringResource(R.string.settings_description)) },
-			)
+			val searchFocusKey = currentCompositeKeyHashCode
+			val searchFocusHandler = LocalListButtonFocusHandler.current
+			LaunchedEffect(searchFocusKey, searchFocusRequester, searchFocused, searchFocusHandler) {
+				searchFocusHandler?.invoke(searchFocusKey, searchFocusRequester, searchFocused)
+			}
+
+			Box(Modifier.fillMaxWidth()) {
+				ListSection(
+					overlineContent = { Text(stringResource(R.string.app_name).uppercase()) },
+					headingContent = { Text(stringResource(R.string.settings)) },
+					captionContent = { Text(stringResource(R.string.settings_description)) },
+				)
+				Row(
+					verticalAlignment = Alignment.CenterVertically,
+					modifier = Modifier
+						.align(Alignment.CenterEnd)
+						.fillMaxWidth(searchWidth)
+						.background(JellyfinTheme.colorScheme.surface, RoundedCornerShape(percent = 30))
+						.border(2.dp, searchColors.first, RoundedCornerShape(percent = 30))
+						.padding(12.dp)
+						.onFocusChanged { searchFocused = it.isFocused }
+						.focusKey(Routes.SEARCH, searchFocusRequester)
+						.clickable { router.push(Routes.SEARCH) },
+				) {
+					Icon(
+						painterResource(R.drawable.ic_search),
+						contentDescription = stringResource(R.string.settings_search),
+						tint = searchColors.second,
+					)
+					Spacer(Modifier.width(12.dp))
+				}
+			}
 		}
 
 		item {
@@ -108,7 +166,7 @@ fun SettingsMainScreen() {
 		item {
 			ListButton(
 				leadingContent = { Icon(painterResource(R.drawable.ic_upload), contentDescription = null) },
-				headingContent = { Text("App updates") },
+				headingContent = { Text(stringResource(R.string.app_updates)) },
 				onClick = { router.push(Routes.APP_UPDATES) }
 			)
 		}

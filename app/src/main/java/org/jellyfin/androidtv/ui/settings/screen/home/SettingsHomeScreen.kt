@@ -19,6 +19,7 @@ import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListSection
 import org.jellyfin.androidtv.ui.home.effectiveHomeRowItemLimit
+import org.jellyfin.androidtv.ui.navigation.LocalRouteContext
 import org.jellyfin.androidtv.ui.navigation.LocalRouter
 import org.jellyfin.androidtv.ui.navigation.focus.focusKey
 import org.jellyfin.androidtv.ui.settings.Routes
@@ -33,8 +34,16 @@ fun SettingsHomeScreen() {
 	val customMessageRepository = koinInject<CustomMessageRepository>()
 	val sections = compactHomeSections(userSettingPreferences.homesections.map(userSettingPreferences::get))
 	val activeSections = sections.filterNot { it == HomeSectionType.NONE }
+	val additionalRowsSectionIndex = 1 + activeSections.size + if (activeSections.size < sections.size) 1 else 0
+	val initialIndex = when (LocalRouteContext.current?.initialFocusKey) {
+		"home_recently_released" -> additionalRowsSectionIndex + 1
+		"home_wide_cards" -> additionalRowsSectionIndex + 3
+		"home_combine_continue_watching_next_up" -> additionalRowsSectionIndex + 6
+		"home_next_up_rewatching" -> additionalRowsSectionIndex + 7
+		else -> null
+	}
 
-	SettingsColumn {
+	SettingsColumn(initialFirstVisibleItemIndex = initialIndex) {
 		item {
 			ListSection(
 				overlineContent = { Text(stringResource(R.string.pref_customization).uppercase()) },
