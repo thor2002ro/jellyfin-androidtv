@@ -202,6 +202,7 @@ private data class LibMPVTrack(
 	val ffIndex: Int?,
 	val isExternal: Boolean,
 	val externalFilename: String?,
+	val sourceChannels: Int?,
 )
 
 class LibMPVBackend(
@@ -466,6 +467,8 @@ class LibMPVBackend(
 			.onFailure { error -> Timber.w(error, "Unable to destroy previous MPV instance cleanly") }
 
 		player = replacement
+		surroundBoostFilter = null
+		surroundBoostRequest = null
 		playerObserver = null
 		appliedInstanceOptions = LinkedHashMap(desiredOptions)
 		appliedGpuApi = requestedGpuApi
@@ -495,12 +498,41 @@ class LibMPVBackend(
 	}
 
 	private fun observeProperties(target: MPV) {
+		target.observeProperty("audio-out-params", MPV.mpvFormat.MPV_FORMAT_NODE)
+		target.observeProperty("audio-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("pause", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("paused-for-cache", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("seeking", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("hwdec-current", MPV.mpvFormat.MPV_FORMAT_STRING)
+	}
+
+	private var surroundBoostFilter: String? = null
+	private var surroundBoostRequest: String? = null
+
+	private fun updateSurroundVolumeBoost() {
+		if (playbackOptions.surroundVolumeBoost <= 0 || !fileLoaded || terminalState != null) {
+			setSurroundBoostFilter(null)
+			return
+		}
+		val format = runCatching { player.getPropertyString("audio-out-params/format") }.getOrNull()
+		val channels = tracks.firstOrNull { it.type == TrackType.AUDIO && it.isSelected }?.sourceChannels?.takeIf { it > 0 }
+			?: runCatching { player.getPropertyNode("audio-params")?.get("channel-count")?.asInt()?.toInt() }.getOrNull()
+		val desired = mpvSurroundBoostFilter(playbackOptions.surroundVolumeBoost, channels, format)
+		setSurroundBoostFilter(desired)
+	}
+
+	private fun setSurroundBoostFilter(filter: String?) {
+		if (filter == surroundBoostRequest) return
+		surroundBoostRequest = filter
+		if (filter == surroundBoostFilter) return
+		val changed = if (filter == null) {
+			runCommand("af", "remove", "@jellyfin-surround-boost")
+		} else {
+			runCommand("af", "add", filter)
+		}
+		if (changed) surroundBoostFilter = filter
 	}
 
 	override fun supportsStream(stream: MediaStream): PlaySupportReport = object : PlaySupportReport {
@@ -835,6 +867,7 @@ class LibMPVBackend(
 	}
 
 	override fun stop() {
+		setSurroundBoostFilter(null)
 		doviRequestSession.clear()
 		handler.removeCallbacks(tick)
 		clearVideoGeometry()
@@ -1071,13 +1104,20 @@ class LibMPVBackend(
 			putAll(fallbackOptions)
 		}
 		runtimeOptions.forEach { (name, value) ->
-			if (setOption(name, value) && name in fallbackOptions) appliedNvidiaFallbackOptions += name
+			if (setOption(name, value)) {
+				if (name in fallbackOptions) appliedNvidiaFallbackOptions += name
+				if (name == "af") {
+					surroundBoostFilter = null
+					surroundBoostRequest = null
+				}
+			}
 		}
 
 		appliedPresetOptions.clear()
 		appliedPresetOptions += presetOptions.keys
 		appliedCustomOptions.clear()
 		appliedCustomOptions += customOptions.keys
+		updateSurroundVolumeBoost()
 	}
 
 	private fun currentPresetOptions() = playbackOptions.presetOptions(presetDirectory)
@@ -1354,6 +1394,7 @@ class LibMPVBackend(
 
 	private fun handleEventProperty(generation: Long, property: String, value: MPVNode) = onPlayerEvent(generation) {
 		when (property) {
+			"audio-out-params", "audio-params" -> updateSurroundVolumeBoost()
 			"track-list" -> {
 				updateTracks(value)
 				applyInitialTrackSelection()
@@ -1365,6 +1406,7 @@ class LibMPVBackend(
 	private fun handleEvent(generation: Long, eventId: Int, data: MPVNode) = onPlayerEvent(generation) {
 		when (eventId) {
 			MPV.mpvEvent.MPV_EVENT_START_FILE -> {
+				setSurroundBoostFilter(null)
 				clearVideoGeometry()
 				cancelNvidiaFallbackResync(restorePlayback = false)
 				frameStatPropertyMisses.clear()
@@ -1392,6 +1434,7 @@ class LibMPVBackend(
 				applyPlaybackSpeed()
 				updateNativeSubtitleOverlayMode()
 				refreshVideoGeometry()
+				updateSurroundVolumeBoost()
 				publishPlayState(force = true)
 			}
 			MPV.mpvEvent.MPV_EVENT_VIDEO_RECONFIG -> {
@@ -1399,6 +1442,7 @@ class LibMPVBackend(
 				refreshVideoGeometry()
 				updateNativeSubtitleOverlayMode()
 			}
+			MPV.mpvEvent.MPV_EVENT_AUDIO_RECONFIG -> updateSurroundVolumeBoost()
 			MPV.mpvEvent.MPV_EVENT_SEEK -> {
 				playbackRestarted = false
 				seeking = true
@@ -1483,6 +1527,7 @@ class LibMPVBackend(
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		fileLoaded = false
 		scrubbing.reset()
+		setSurroundBoostFilter(null)
 		if (reason != "redirect") shieldFallback = null
 		playbackRestarted = false
 		pausedForCache = false
@@ -1510,6 +1555,7 @@ class LibMPVBackend(
 	}
 
 	private fun handlePlaybackError(message: String, codeName: String = "MPV_ERROR") {
+		setSurroundBoostFilter(null)
 		doviRequestSession.clear()
 		Timber.e("MPV playback error: %s", message)
 		handler.removeCallbacks(tick)
@@ -1636,7 +1682,11 @@ class LibMPVBackend(
 
 	private fun updateTracks(node: MPVNode, notify: Boolean = true) {
 		val updatedTracks = parseTracks(node)
+		val audioChanged = updatedTracks.firstOrNull { it.type == TrackType.AUDIO && it.isSelected }?.id !=
+			tracks.firstOrNull { it.type == TrackType.AUDIO && it.isSelected }?.id
+		if (audioChanged) setSurroundBoostFilter(null)
 		tracks = updatedTracks
+		if (!audioChanged) updateSurroundVolumeBoost()
 		updateNativeSubtitleOverlayMode()
 		if (notify && updatedTracks != notifiedTracks) {
 			notifiedTracks = updatedTracks
@@ -1662,6 +1712,7 @@ class LibMPVBackend(
 			ffIndex = map["ff-index"]?.asInt()?.toInt(),
 			isExternal = map["external"]?.asBoolean() == true,
 			externalFilename = map["external-filename"]?.asString(),
+			sourceChannels = map["demux-channel-count"]?.asInt()?.toInt(),
 		)
 	}
 

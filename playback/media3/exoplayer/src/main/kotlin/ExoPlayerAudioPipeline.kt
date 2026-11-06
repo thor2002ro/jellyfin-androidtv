@@ -5,6 +5,13 @@ import timber.log.Timber
 
 class ExoPlayerAudioPipeline {
 	private var loudnessEnhancer: LoudnessEnhancer? = null
+	var surroundGain: Int = 0
+		set(value) {
+			field = value
+			applyGain()
+		}
+	internal val targetGainMillibels: Int
+		get() = (((normalizationGain ?: 0f).takeIf { it.isFinite() } ?: 0f) + surroundGain).times(100f).toInt()
 	var normalizationGain: Float? = null
 		set(value) {
 			Timber.d("Normalization gain changed to $value")
@@ -31,13 +38,7 @@ class ExoPlayerAudioPipeline {
 			return
 		}
 
-		val targetGain = normalizationGain
-			// Convert to millibels
-			?.times(100f)
-			// Round to integer
-			?.toInt()
-			// Ignore if zero (so the enhancer will be disabled)
-			?.takeIf { it != 0 }
+		val targetGain = targetGainMillibels.takeIf { it != 0 }
 
 		Timber.d("Applying gain (targetGain=$targetGain)")
 		runCatching {
@@ -48,5 +49,10 @@ class ExoPlayerAudioPipeline {
 			Timber.e(error, "Failed to apply gain of $targetGain")
 			loudnessEnhancer?.setEnabled(false)
 		}
+	}
+
+	fun release() {
+		loudnessEnhancer?.release()
+		loudnessEnhancer = null
 	}
 }
