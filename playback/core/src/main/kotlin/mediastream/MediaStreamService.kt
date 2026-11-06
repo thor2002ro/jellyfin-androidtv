@@ -10,6 +10,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.resetSubtitleTiming
+import org.jellyfin.playback.core.backend.PlaybackError
+import org.jellyfin.playback.core.backend.activate
+import org.jellyfin.playback.core.backend.createPlaybackErrorOrigin
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
@@ -19,6 +22,7 @@ import org.jellyfin.playback.core.timedevent.TimedEvent
 import org.jellyfin.playback.core.timedevent.addTimedEvent
 import org.jellyfin.playback.core.timedevent.timedEvents
 import timber.log.Timber
+import java.io.IOException
 import kotlin.time.Duration
 
 internal class MediaStreamService(
@@ -28,7 +32,7 @@ internal class MediaStreamService(
 	private companion object {
 		private const val TIMED_EVENT_PRELOAD = "MediaStreamServicePreloadNext"
 	}
-	private var latestReloadRequest: Any? = null
+	private var latestStreamRequest: Any? = null
 	private val _preparingEntry = MutableStateFlow<QueueEntry?>(null)
 	val preparingEntry = _preparingEntry.asStateFlow()
 
@@ -55,17 +59,26 @@ internal class MediaStreamService(
 
 	private suspend fun QueueEntry.resolveMediaStream(
 		startPosition: Duration? = null,
-	): PlayableMediaStream? = mediaStreamResolvers.firstNotNullOfOrNull { resolver ->
-		try {
-			withContext(Dispatchers.IO) {
-				resolver.getStream(this@resolveMediaStream, startPosition)
+	): PlayableMediaStream? {
+		var networkError: IOException? = null
+		val stream = mediaStreamResolvers.firstNotNullOfOrNull { resolver ->
+			try {
+				withContext(Dispatchers.IO) {
+					resolver.getStream(this@resolveMediaStream, startPosition)
+				}
+			} catch (error: CancellationException) {
+				throw error
+			} catch (error: Exception) {
+				Timber.e(error, "Media stream resolver failed for $this")
+				// SDKs wrap timeouts and connection failures; preserve them for playback recovery.
+				generateSequence<Throwable>(error) { it.cause }.filterIsInstance<IOException>().firstOrNull()?.let {
+					networkError = it
+				}
+				null
 			}
-		} catch (error: CancellationException) {
-			throw error
-		} catch (error: Exception) {
-			Timber.e(error, "Media stream resolver failed for $this")
-			null
 		}
+		if (stream == null) networkError?.let { throw it }
+		return stream
 	}
 
 	private fun QueueEntry.ensurePreloadTimedEvent() {
@@ -98,21 +111,31 @@ internal class MediaStreamService(
 		val backend = requireNotNull(manager.backend)
 		val queue = requireNotNull(manager.getService<QueueService>())
 		val entryRevision = queue.entryRevision
+		val originalStream = entry.mediaStream
+		val request = Any().also { latestStreamRequest = it }
 		val startPosition = entry.startPosition?.coerceAtLeast(Duration.ZERO)
 		entry.startPosition = startPosition
-		val hasMediaStream = entry.ensureMediaStream(startPosition)
+		var networkError: IOException? = null
+		val resolvedStream = try {
+			originalStream ?: entry.resolveMediaStream(startPosition)
+		} catch (error: IOException) {
+			networkError = error
+			null
+		}
+		// A late failure must not stop or recover a different queue selection or backend.
+		if (latestStreamRequest !== request || entry.mediaStream !== originalStream ||
+			queue.entry.value !== entry || queue.entryRevision != entryRevision || manager.backend !== backend
+		) return false
 
-		if (hasMediaStream) {
-			val stream = requireNotNull(entry.mediaStream)
-			// Stream resolution can outlive the queue selection or the selected backend.
-			if (queue.entry.value !== entry || queue.entryRevision != entryRevision || manager.backend !== backend) return false
+		if (resolvedStream != null) {
+			val stream = resolvedStream.also { entry.mediaStream = it }
 			// Opening the decoder must follow display preparation. Publishing the stream
 			// alone is insufficient: a UI effect reacting to it can run after playItem().
 			val preparation = manager.options.beforePlayItem
 			if (preparation?.invoke(stream) == false) return false
 			// The wait also gives the user time to stop, switch players, or leave the screen.
 			// Callback identity detects a screen replacement even if the queue stayed the same.
-			if (queue.entry.value !== entry || queue.entryRevision != entryRevision ||
+			if (latestStreamRequest !== request || queue.entry.value !== entry || queue.entryRevision != entryRevision ||
 				manager.backend !== backend || entry.mediaStream !== stream ||
 				manager.options.beforePlayItem !== preparation
 			) return false
@@ -122,6 +145,12 @@ internal class MediaStreamService(
 			return true
 		} else {
 			Timber.e("Unable to resolve stream for entry $entry")
+			if (networkError != null) {
+				backend.stop()
+				val origin = entry.createPlaybackErrorOrigin("stream-resolution").also { it.activate() }
+				manager.backendService.reportPlaybackError(PlaybackError("MEDIA_STREAM_NETWORK_ERROR", origin = origin))
+				return false
+			}
 
 			// TODO: Somehow notify the user that we skipped an unplayable entry
 			if (manager.queue.peekNext() != null) {
@@ -143,11 +172,15 @@ internal class MediaStreamService(
 		val entryRevision = queue.entryRevision
 		val originalStream = entry.mediaStream
 		val backend = manager.backend
-		val request = Any().also { latestReloadRequest = it }
-		val newStream = entry.resolveMediaStream(startPosition = position) ?: return false
+		val request = Any().also { latestStreamRequest = it }
+		val newStream = try {
+			entry.resolveMediaStream(startPosition = position)
+		} catch (error: IOException) {
+			return false
+		} ?: return false
 		// Resolution suspends for the server: playback may have stopped, changed, or been reloaded meanwhile.
 		if (
-			latestReloadRequest !== request ||
+			latestStreamRequest !== request ||
 			queue.entryRevision != entryRevision ||
 			queue.entry.value !== entry ||
 			entry.mediaStream !== originalStream ||
@@ -161,7 +194,7 @@ internal class MediaStreamService(
 		// Window preparation suspends too: reject a stopped, replaced, or superseded entry.
 		// The revision also catches stopping and selecting the same QueueEntry again.
 		if (
-			latestReloadRequest !== request ||
+			latestStreamRequest !== request ||
 			queue.entryRevision != entryRevision ||
 			queue.entry.value !== entry ||
 			entry.mediaStream !== originalStream ||
@@ -189,7 +222,11 @@ internal class MediaStreamService(
 		val nextItem = manager.queue.peekNext() ?: return@launch
 
 		// Preload media stream information
-		val hasMediaStream = nextItem.ensureMediaStream()
+		val hasMediaStream = try {
+			nextItem.ensureMediaStream()
+		} catch (error: IOException) {
+			return@launch
+		}
 
 		if (hasMediaStream) {
 			// Preload media in backend
