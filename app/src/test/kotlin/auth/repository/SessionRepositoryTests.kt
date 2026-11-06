@@ -16,6 +16,15 @@ import org.jellyfin.sdk.model.DeviceInfo
 import java.util.UUID
 
 class SessionRepositoryTests : FunSpec({
+	test("startup stays pending until saved session restoration has run") {
+		val repository = SessionRepositoryImpl(
+			authenticationPreferences = mockk(), authenticationStore = mockk(), userApiClient = mockk(),
+			preferencesRepository = mockk(), defaultDeviceInfo = mockk(), userRepository = mockk(),
+			serverRepository = mockk(), telemetryPreferences = mockk(),
+		)
+		repository.state.value shouldBe SessionRepositoryState.RESTORING_SESSION
+	}
+
 	test("ending a session clears active API credentials without touching saved authentication") {
 		val authenticationPreferences = mockk<AuthenticationPreferences>()
 		val authenticationStore = mockk<AuthenticationStore>()

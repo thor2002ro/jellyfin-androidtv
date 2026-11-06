@@ -33,9 +33,12 @@ import kotlin.time.Duration
 @Suppress("TooManyFunctions")
 class RewriteMediaManager(
 	private val api: ApiClient,
-	private val playbackManager: PlaybackManager,
+	private val playbackManagerDelegate: Lazy<PlaybackManager>,
 ) : MediaManager {
-	override fun hasAudioQueueItems(): Boolean = playbackManager.queue.estimatedSize > 0 && currentAudioItem != null
+	private val playbackManager: PlaybackManager
+		get() = playbackManagerDelegate.value.also { startAudioListeners() }
+
+	override fun hasAudioQueueItems(): Boolean = playbackManagerDelegate.isInitialized() && playbackManager.queue.estimatedSize > 0 && currentAudioItem != null
 
 	override val currentAudioQueueSize: Int
 		get() = playbackManager.queue.estimatedSize
@@ -77,8 +80,11 @@ class RewriteMediaManager(
 
 	override fun addAudioEventListener(listener: AudioEventListener) {
 		audioListeners.add(listener)
+		startAudioListeners()
+	}
 
-		if (audioListenersJob == null) {
+	private fun startAudioListeners() {
+		if (audioListeners.isNotEmpty() && audioListenersJob == null && playbackManagerDelegate.isInitialized()) {
 			audioListenersJob = ProcessLifecycleOwner.get().lifecycleScope.launch {
 				watchPlaybackStateChanges()
 			}
@@ -140,7 +146,7 @@ class RewriteMediaManager(
 	}
 
 	override fun clearAudioQueue() {
-		playbackManager.state.stop()
+		if (playbackManagerDelegate.isInitialized()) playbackManager.state.stop()
 	}
 
 	override fun addToAudioQueue(items: List<BaseItemDto>) {
@@ -204,7 +210,7 @@ class RewriteMediaManager(
 	}
 
 	override fun stopAudio(releasePlayer: Boolean) {
-		playbackManager.state.stop()
+		clearAudioQueue()
 	}
 
 	override fun rewind() {

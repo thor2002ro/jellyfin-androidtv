@@ -25,14 +25,14 @@ class PreferencesRepository(
 		return store
 	}
 
-	suspend fun onSessionChanged() {
+	suspend fun onSessionChanged(liveTvEnabled: Boolean) {
 		// Note: Do not run parallel as the server can't deal with that
 		// Relevant server issue: https://github.com/jellyfin/jellyfin/issues/5261
 		liveTvPreferences.clearCache()
 		userSettingPreferences.clearCache()
 		libraryPreferences.clear()
 
-		liveTvPreferences.update()
+		if (liveTvEnabled) liveTvPreferences.update()
 		userSettingPreferences.update()
 	}
 }

@@ -55,10 +55,38 @@ class DisplayPreferencesStoreFailureTests : FunSpec({
 			userSettingPreferences.update() shouldBe true
 			userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled] shouldBe false
 
-			repository.onSessionChanged()
+			repository.onSessionChanged(liveTvEnabled = true)
 
 			userSettingPreferences[UserSettingPreferences.seriesThumbnailsEnabled] shouldBe true
 			userSettingPreferences.shouldUpdate shouldBe true
+		}
+	}
+
+	test("users without Live TV access load Home settings without requesting Live TV settings") {
+		runBlocking {
+			val api = mockk<ApiClient>()
+			val displayPreferenceApi = mockk<DisplayPreferenceApi>()
+			every { api.getOrCreateApi(DisplayPreferenceApi::class, any()) } returns displayPreferenceApi
+			val requested = mutableListOf<String>()
+			coEvery { displayPreferenceApi.getDisplayPreferences(any(), any(), any()) } coAnswers {
+				requested.add(firstArg())
+				Response(displayPreferences(seriesThumbnailsEnabled = false).copy(
+					customPrefs = mapOf("livetv-favoritechannelsattop" to "false", "pref_enable_series_thumbnails" to "false"),
+				), 200, emptyMap())
+			}
+			val liveTv = LiveTvPreferences(api)
+			val home = UserSettingPreferences(api)
+			val repository = PreferencesRepository(api, liveTv, home)
+			liveTv.update() shouldBe true
+			liveTv[LiveTvPreferences.favsAtTop] shouldBe false
+			requested.clear()
+
+			repository.onSessionChanged(liveTvEnabled = false)
+
+			requested shouldBe listOf("usersettings")
+			home[UserSettingPreferences.seriesThumbnailsEnabled] shouldBe false
+			liveTv.shouldUpdate shouldBe true
+			liveTv[LiveTvPreferences.favsAtTop] shouldBe true
 		}
 	}
 

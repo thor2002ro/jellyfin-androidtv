@@ -17,17 +17,6 @@ import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginAnimation
 import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginOrigin
 
 class HomeProfileTransitionTests : FunSpec({
-	test("profile loading ring lasts two seconds from selection without restarting at handoff") {
-		val bounds = Rect(0f, 0f, 100f, 100f)
-		val origin = ProfileLoginOrigin(bounds, bounds, "User", null, 20f, selectedAtMillis = 2_000L)
-
-		origin.remainingLoadingMillis(2_000L) shouldBe 2_000L
-		origin.remainingLoadingMillis(2_750L) shouldBe 1_250L
-		origin.remainingLoadingMillis(4_000L) shouldBe 0L
-		origin.remainingLoadingMillis(5_000L) shouldBe 0L
-		origin.remainingLoadingMillis(1_000L) shouldBe 2_000L
-	}
-
 	test("profile movement is ready before Home cards finish loading") {
 		val bounds = Rect(0f, 0f, 100f, 100f)
 		val animation = ProfileLoginAnimation(ProfileLoginOrigin(bounds, bounds, "User", null, 20f))

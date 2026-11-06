@@ -2,13 +2,14 @@ package org.jellyfin.androidtv.ui.home
 
 import android.content.Context
 import androidx.leanback.widget.HeaderItem
-import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Row
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import org.jellyfin.androidtv.ui.presentation.OrderedListRow
+import org.jellyfin.androidtv.ui.presentation.addOrderedRow
 import org.jellyfin.sdk.model.api.BaseItemDto
 
 class HomeFragmentViewsRow(
@@ -20,16 +21,21 @@ class HomeFragmentViewsRow(
 		val largeCardPresenter = CardPresenter(false, 96)
 	}
 
-	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
+	override fun addToRowsAdapter(
+		context: Context,
+		cardPresenter: CardPresenter,
+		rowsAdapter: MutableObjectAdapter<Row>,
+		rowOrder: Double,
+	) {
 		val presenter = if (small) smallCardPresenter else largeCardPresenter
 		val rowAdapter = ItemRowAdapter(context, GetUserViewsRequest, presenter, rowsAdapter).apply {
 			initialUserViews = initialViews
 		}
 
 		val header = HeaderItem(context.getString(R.string.lbl_my_media))
-		val row = ListRow(header, rowAdapter)
-		rowAdapter.setRow(row, rowsAdapter.size().toDouble())
-		rowsAdapter.add(row)
+		val row = OrderedListRow(header, rowAdapter, rowOrder)
+		rowAdapter.setRow(row, rowOrder)
+		rowsAdapter.addOrderedRow(row)
 		rowAdapter.Retrieve()
 	}
 }
