@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.CustomMessage
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
@@ -14,14 +16,22 @@ import org.jellyfin.androidtv.ui.navigation.focus.focusKey
 import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 
 @Composable
-internal fun HomeCombineContinueWatchingNextUpPreference(userSettingPreferences: UserSettingPreferences) {
-	var combineRows by rememberPreference(userSettingPreferences, UserSettingPreferences.homeCombineContinueWatchingNextUp)
+internal fun HomeCombineContinueWatchingNextUpPreference(
+	userSettingPreferences: UserSettingPreferences,
+	customMessageRepository: CustomMessageRepository,
+) {
+	var combineRows by rememberPreference(
+		userSettingPreferences,
+		UserSettingPreferences.homeCombineContinueWatchingNextUp,
+	) { customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration) }
 
 	ListButton(
 		headingContent = { Text(stringResource(R.string.home_combine_continue_watching_next_up)) },
 		captionContent = { Text(stringResource(R.string.home_combine_continue_watching_next_up_description)) },
 		trailingContent = { Checkbox(checked = combineRows) },
-		onClick = { combineRows = !combineRows },
+		onClick = {
+			combineRows = !combineRows
+		},
 		modifier = Modifier.focusKey("home_combine_continue_watching_next_up")
 	)
 }
