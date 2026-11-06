@@ -7,6 +7,8 @@ import androidx.leanback.widget.Presenter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import io.mockk.every
+import io.mockk.verify
 import org.jellyfin.androidtv.data.model.FilterOptions
 import org.jellyfin.androidtv.data.model.PlaybackFilter
 import org.jellyfin.androidtv.data.repository.ItemRepository
@@ -23,6 +25,29 @@ import org.jellyfin.sdk.model.api.SortOrder
 import java.util.UUID
 
 class BrowseGridFragmentTests : FunSpec({
+	test("vertical counter rotates within its bottom right corner and resets for horizontal view") {
+		val counter = mockk<View>(relaxed = true)
+		every { counter.width } returns 120
+		every { counter.height } returns 40
+		BrowseGridFragment.configureFooterRotation(counter, true, 0)
+		verify {
+			counter.rotation = 90f
+			counter.pivotX = 120f
+			counter.pivotY = 0f
+			counter.translationY = 40f
+		}
+		BrowseGridFragment.configureFooterRotation(counter, true, 16)
+		verify { counter.translationY = 24f }
+		BrowseGridFragment.configureFooterRotation(counter, false, 16)
+		verify {
+			counter.rotation = 0f
+			counter.translationY = 0f
+		}
+	}
+	test("rotated status fits between the toolbar and counter") {
+		BrowseGridFragment.getVerticalStatusWidth(400, 1080, 120, 16) shouldBe 528
+		BrowseGridFragment.getVerticalStatusWidth(400, 480, 120, 16) shouldBe 0
+	}
 	test("selecting active sort reverses its direction") {
 		selectSort(
 			LibrarySortState(ItemSortBy.SORT_NAME, SortOrder.ASCENDING),
@@ -122,12 +147,12 @@ class BrowseGridFragmentTests : FunSpec({
 	}
 
 	test("vertical browse keeps the alphabet rail compact while horizontal stays edge aligned") {
-		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.VERTICAL) shouldBe 20
+		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.VERTICAL) shouldBe 14
 		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.HORIZONTAL) shouldBe 0
 	}
 
-	test("vertical browse gives the customization rail extra clearance") {
-		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.VERTICAL) shouldBe 28
+	test("vertical browse keeps the customization rail compact") {
+		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.VERTICAL) shouldBe 18
 		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.HORIZONTAL) shouldBe 0
 	}
 
@@ -141,8 +166,8 @@ class BrowseGridFragmentTests : FunSpec({
 	}
 
 	test("browse grid keeps the appropriate bottom control band clear of cards") {
-		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.HORIZONTAL) shouldBe 35
-		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.VERTICAL) shouldBe 24
+		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.HORIZONTAL) shouldBe 32
+		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.VERTICAL) shouldBe 0
 	}
 
 	test("alphabet rail follows the grid direction without a sort gate") {
