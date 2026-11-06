@@ -137,12 +137,15 @@ class DestinationFragmentView @JvmOverloads constructor(
 		// Create if there is no existing fragment
 		if (fragment == null) {
 			fragment = fragmentManager.fragmentFactory.instantiate(context.classLoader, entry.name.name).apply {
+				// A new, unattached fragment can receive arguments even after state was saved.
+				// Otherwise commitAllowingStateLoss() below could open it without its item ID.
+				arguments = entry.arguments
 				setInitialSavedState(entry.savedState)
 			}
 			entry.fragment = fragment
 		}
 
-		// Update arguments
+		// Existing fragments may only have their arguments updated before state is saved.
 		if (!fragmentManager.isStateSaved) {
 			fragment.arguments = entry.arguments
 		}
