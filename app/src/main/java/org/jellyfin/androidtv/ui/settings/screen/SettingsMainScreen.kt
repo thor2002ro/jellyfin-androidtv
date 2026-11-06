@@ -16,6 +16,7 @@ import org.jellyfin.androidtv.ui.navigation.focus.focusKey
 import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButton
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
+import org.jellyfin.androidtv.util.AppLogging
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.systemApi
 import org.koin.compose.koinInject
@@ -87,11 +88,12 @@ fun SettingsMainScreen() {
 				headingContent = { Text(stringResource(R.string.pref_upload_logs_title)) },
 				captionContent = { Text(stringResource(R.string.pref_upload_logs_summary)) },
 				action = {
+					val memoryLogs = AppLogging.dumpMemoryLogs()
 					val logs = ProcessBuilder("logcat", "-d", "-v", "threadtime")
 						.redirectErrorStream(true)
 						.start()
 						.inputStream.bufferedReader().use { it.readText() }
-					val response by api.systemApi.logFile(logs)
+					val response by api.systemApi.logFile("=== App RAM logs ===\n$memoryLogs\n=== Logcat ===\n$logs")
 					response
 				},
 				onSuccess = { result ->
