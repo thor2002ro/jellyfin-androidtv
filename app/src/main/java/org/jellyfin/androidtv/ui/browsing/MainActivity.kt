@@ -34,6 +34,7 @@ import org.jellyfin.androidtv.ui.background.AppBackground
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.ProvideLocalInteractionTracker
 import org.jellyfin.androidtv.ui.composable.compat.AppNavigationHost
+import org.jellyfin.androidtv.ui.home.HomeFragment
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.MediaManager
@@ -48,6 +49,7 @@ import org.jellyfin.androidtv.util.applyTheme
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import timber.log.Timber
+import kotlin.reflect.KClass
 
 class MainActivity : FragmentActivity() {
 	private val navigationRepository by inject<NavigationRepository>()
@@ -93,7 +95,7 @@ class MainActivity : FragmentActivity() {
 					interactionTracker = { interactionTrackerViewModel.notifyInteraction(false, userInitiated = true) }
 				) {
 					val destination by navigationRepository.currentDestination.collectAsState()
-					if (destination.fragment != Destinations.home.fragment) AppBackground()
+					if (shouldDrawActivityBackground(destination.fragment)) AppBackground()
 					Box(Modifier.fillMaxSize()) {
 						AppNavigationHost(navigationRepository = navigationRepository)
 					}
@@ -197,3 +199,6 @@ class MainActivity : FragmentActivity() {
 	override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean =
 		onKeyEvent(keyCode, event) || super.onKeyUp(keyCode, event)
 }
+
+internal fun shouldDrawActivityBackground(fragment: KClass<out Fragment>): Boolean =
+	fragment != HomeFragment::class && fragment != BrowseGridFragment::class
