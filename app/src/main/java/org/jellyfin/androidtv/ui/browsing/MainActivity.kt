@@ -6,6 +6,13 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -30,6 +37,9 @@ import org.jellyfin.androidtv.ui.playback.MediaManager
 import org.jellyfin.androidtv.ui.screensaver.InAppScreensaver
 import org.jellyfin.androidtv.ui.settings.compat.MainActivitySettings
 import org.jellyfin.androidtv.ui.startup.StartupActivity
+import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginAnimation
+import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginOrigin
+import org.jellyfin.androidtv.ui.shared.transition.ProfileLoginOverlay
 import org.jellyfin.androidtv.updater.AppUpdatePrompt
 import org.jellyfin.androidtv.util.applyTheme
 import org.koin.android.ext.android.inject
@@ -44,6 +54,8 @@ class MainActivity : FragmentActivity() {
 	private val mediaManager by inject<MediaManager>()
 	private val workManager by inject<WorkManager>()
 	private var authenticationRedirectStarted = false
+	internal var profileLoginAnimation by mutableStateOf<ProfileLoginAnimation?>(null)
+		private set
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		applyTheme()
@@ -61,6 +73,10 @@ class MainActivity : FragmentActivity() {
 			}.launchIn(lifecycleScope)
 
 		if (savedInstanceState == null && navigationRepository.canGoBack) navigationRepository.reset(clearHistory = true)
+		// A screen recreation or a deep link opens normally; this motion belongs only to the login-to-Home handoff.
+		if (savedInstanceState == null && navigationRepository.currentDestination.value == Destinations.home) {
+			profileLoginAnimation = ProfileLoginOrigin.readFrom(intent)?.let(::ProfileLoginAnimation)
+		}
 
 		navigationRepository.currentAction
 			.flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
@@ -74,12 +90,15 @@ class MainActivity : FragmentActivity() {
 					interactionTracker = { interactionTrackerViewModel.notifyInteraction(false, userInitiated = true) }
 				) {
 					AppBackground()
-					AppNavigationHost(
-						navigationRepository = navigationRepository,
-					)
+					Box(Modifier.fillMaxSize().graphicsLayer { alpha = profileLoginAnimation?.progress ?: 1f }) {
+						AppNavigationHost(navigationRepository = navigationRepository)
+					}
 					InAppScreensaver()
 					MainActivitySettings()
 					AppUpdatePrompt()
+					profileLoginAnimation?.let { animation ->
+						ProfileLoginOverlay(animation) { profileLoginAnimation = null }
+					}
 				}
 			}
 		}
