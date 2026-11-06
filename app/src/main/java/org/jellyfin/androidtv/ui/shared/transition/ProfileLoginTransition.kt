@@ -2,15 +2,18 @@ package org.jellyfin.androidtv.ui.shared.transition
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
@@ -35,8 +38,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import org.jellyfin.androidtv.ui.base.CircularProgressIndicator
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.ProfilePicture
 import org.jellyfin.androidtv.ui.base.Text
@@ -45,9 +50,11 @@ import org.jellyfin.androidtv.util.Utils
 import kotlin.math.roundToInt
 
 private const val EXTRA_PROFILE_LOGIN = "profile_login_transition"
+private const val PROFILE_LOADING_DURATION_MS = 2_000L
 private const val ANIMATION_DURATION_MS = 700
+private const val HOME_REVEAL_DURATION_MS = 200
 // Fall back to Home if its toolbar or rows cannot finish preparing.
-private const val HOME_READY_TIMEOUT_MS = 2_000L
+private const val HOME_READY_TIMEOUT_MS = 5_000L
 
 internal data class ProfileLoginOrigin(
 	val avatarBounds: Rect,
@@ -55,7 +62,11 @@ internal data class ProfileLoginOrigin(
 	val name: String,
 	val imageUrl: String?,
 	val nameFontSizePx: Float,
+	val selectedAtMillis: Long = 0L,
 ) {
+	internal fun remainingLoadingMillis(nowMillis: Long): Long =
+		(PROFILE_LOADING_DURATION_MS - (nowMillis - selectedAtMillis)).coerceIn(0L, PROFILE_LOADING_DURATION_MS)
+
 	val isUsable: Boolean get() = avatarBounds.isUsable && nameBounds.isUsable &&
 		name.isNotBlank() && nameFontSizePx.isFinite() && nameFontSizePx > 0f
 
@@ -67,6 +78,7 @@ internal data class ProfileLoginOrigin(
 			putString("name", name)
 			putString("image", imageUrl)
 			putFloat("font_size", nameFontSizePx)
+			putLong("selected_at", selectedAtMillis)
 		})
 	}
 
@@ -79,6 +91,7 @@ internal data class ProfileLoginOrigin(
 				name = data.getString("name") ?: return null,
 				imageUrl = data.getString("image"),
 				nameFontSizePx = data.getFloat("font_size"),
+				selectedAtMillis = data.getLong("selected_at"),
 			).takeIf { it.isUsable }
 		}
 	}
@@ -95,8 +108,9 @@ internal class ProfileLoginAnimation(val origin: ProfileLoginOrigin) {
 	var nameTarget by mutableStateOf<Rect?>(null)
 	var nameFontSizeTargetPx by mutableFloatStateOf(0f)
 	var progress by mutableFloatStateOf(0f)
+	var homeRevealProgress by mutableFloatStateOf(0f)
 	var homeRowsReady by mutableStateOf(false)
-	val isReady: Boolean get() = homeRowsReady && avatarTarget?.isUsable == true && nameTarget?.isUsable == true &&
+	val isReady: Boolean get() = avatarTarget?.isUsable == true && nameTarget?.isUsable == true &&
 		nameFontSizeTargetPx.isFinite() && nameFontSizeTargetPx > 0f
 }
 
@@ -106,6 +120,7 @@ internal fun ProfileLoginOverlay(animation: ProfileLoginAnimation, onFinished: (
 	val context = LocalContext.current
 	val accent = remember(context.theme) { Color(Utils.getThemeColor(context, android.R.attr.colorAccent)) }
 	var windowOffset by remember { mutableStateOf(Offset.Zero) }
+	var loading by remember(animation) { mutableStateOf(true) }
 	val origin = animation.origin
 	val progress = animation.progress
 	val avatar = lerp(origin.avatarBounds, animation.avatarTarget ?: origin.avatarBounds, progress).translate(-windowOffset)
@@ -113,14 +128,21 @@ internal fun ProfileLoginOverlay(animation: ProfileLoginAnimation, onFinished: (
 	val fontSize = origin.nameFontSizePx + (animation.nameFontSizeTargetPx - origin.nameFontSizePx) * progress
 	val sourceScale = origin.avatarBounds.width / with(density) { UserCardView.AVATAR_SIZE.toPx() }
 
-	// Start after native row setup; its requests keep loading while the profile moves.
+	// Finish the selection ring before moving; Home requests continue behind the cover.
 	LaunchedEffect(animation) {
 		try {
 			val ready = withTimeoutOrNull(HOME_READY_TIMEOUT_MS) { snapshotFlow { animation.isReady }.first { it } }
 			if (ready == true) {
+				delay(origin.remainingLoadingMillis(SystemClock.elapsedRealtime()))
+				loading = false
 				Animatable(0f).animateTo(1f, tween(ANIMATION_DURATION_MS, easing = FastOutSlowInEasing)) {
 					animation.progress = value
 				}
+			}
+			animation.progress = 1f
+			withTimeoutOrNull(HOME_READY_TIMEOUT_MS) { snapshotFlow { animation.homeRowsReady }.first { it } }
+			Animatable(0f).animateTo(1f, tween(HOME_REVEAL_DURATION_MS)) {
+				animation.homeRevealProgress = value
 			}
 		} finally {
 			onFinished()
@@ -137,12 +159,22 @@ internal fun ProfileLoginOverlay(animation: ProfileLoginAnimation, onFinished: (
 				.size(with(density) { avatar.width.toDp() }, with(density) { avatar.height.toDp() })
 				.clip(CircleShape)
 				.background(JellyfinTheme.colorScheme.surface.copy(alpha = 1f - progress))
-				.border(UserCardView.FOCUS_BORDER_WIDTH * sourceScale, accent.copy(alpha = 1f - progress), CircleShape)
+				.border(
+					UserCardView.FOCUS_BORDER_WIDTH * sourceScale,
+					accent.copy(alpha = (if (loading) 0.2f else 1f) * (1f - progress)),
+					CircleShape,
+				)
 		) {
 			ProfilePicture(
 				url = origin.imageUrl,
 				iconPadding = PaddingValues(UserCardView.USER_ICON_PADDING * sourceScale * (1f - progress)),
 				modifier = Modifier.fillMaxSize(),
+			)
+			if (loading) CircularProgressIndicator(
+				modifier = Modifier.matchParentSize()
+					.padding(UserCardView.FOCUS_BORDER_WIDTH * sourceScale / 2)
+					.progressSemantics(),
+				color = accent,
 			)
 		}
 		Text(
