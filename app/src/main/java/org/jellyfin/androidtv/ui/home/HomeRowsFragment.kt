@@ -322,7 +322,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		if (itemId == currentBackgroundItemId) return
 
 		backgroundUpdateJob = lifecycleScope.launch {
-			delay(250)
+			delay(HOME_BACKGROUND_UPDATE_DELAY_MS)
 
 			if (item?.baseItem == null) {
 				currentBackgroundItemId = null
@@ -384,6 +384,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 private const val HOME_ROWS_REFRESH_DELAY_MS = 3_500L
 private const val HOME_ROWS_REFRESH_DEBOUNCE_MS = 250L
+private const val HOME_BACKGROUND_UPDATE_DELAY_MS = 1_500L
 
 internal fun createHomeCardPresenter(useWideCards: Boolean) = when (useWideCards) {
 	false -> CardPresenter()
