@@ -425,6 +425,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     @Override
     public void onDestroyView() {
+        if (mAdapter != null) mAdapter.cancelRetrieval();
         if (mAlphabetPickerController != null) mAlphabetPickerController.cancel();
         releaseGrid();
         super.onDestroyView();
@@ -1078,6 +1079,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void buildAdapter() {
+        if (mAdapter != null) mAdapter.cancelRetrieval();
         mCardPresenter = new CardPresenter(
                 false,
                 mImageType,
