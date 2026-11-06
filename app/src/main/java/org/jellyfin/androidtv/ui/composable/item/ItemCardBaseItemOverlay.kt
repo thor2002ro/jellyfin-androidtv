@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.jellyfin.androidtv.R
@@ -67,8 +72,11 @@ import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.UserDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import kotlin.math.roundToLong
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 @Stable
@@ -85,8 +93,9 @@ fun ItemCardBaseItemOverlay(
 	val badgeSize = (minOf(maxWidth, maxHeight) * 0.09f).coerceAtMost(9.dp)
 	val progress = rememberItemCardProgressInfo(item)
 	val context = LocalContext.current
-	val progressColor = remember(context.theme) {
-		Color(Utils.getThemeColor(context, android.R.attr.colorAccent)).copy(alpha = 0.65f)
+	val progressOpacity = if (item.isLiveTvCard) 0.35f else 0.65f
+	val progressColor = remember(context.theme, progressOpacity) {
+		Color(Utils.getThemeColor(context, android.R.attr.colorAccent)).copy(alpha = progressOpacity)
 	}
 	Box(
 		Modifier
@@ -152,7 +161,7 @@ private fun TopEndIndicator(
 	showRemainingTimeBadge: Boolean,
 	modifier: Modifier = Modifier,
 ) {
-	val remainingTimeText = if (showRemainingTimeBadge) {
+	val remainingTimeText = if (showRemainingTimeBadge || item.isLiveTvCard) {
 		val text by remember(item, progress) {
 			derivedStateOf { item.remainingPlaybackTimeText(progress.progress.value, progress.duration) }
 		}
@@ -553,10 +562,54 @@ internal fun BaseItemDto.remainingPlaybackTimeText(progress: Float?, duration: D
 private fun Float.validPlaybackProgress() =
 	takeIf { it.isFinite() && it >= 0f && it <= 1f }
 
+private val BaseItemDto.isLiveTvCard: Boolean
+	get() = when (type) {
+		BaseItemKind.TV_CHANNEL, BaseItemKind.LIVE_TV_CHANNEL,
+		BaseItemKind.PROGRAM, BaseItemKind.TV_PROGRAM, BaseItemKind.LIVE_TV_PROGRAM -> true
+		else -> false
+	}
+
+@Composable
+private fun rememberLiveTvCardProgress(item: BaseItemDto): ItemCardProgress {
+	// Use the program already loaded with the card; ticking the countdown needs no server requests.
+	val program = when (item.type) {
+		BaseItemKind.TV_CHANNEL, BaseItemKind.LIVE_TV_CHANNEL -> item.currentProgram
+		else -> item
+	}
+	val start = program?.startDate
+	val end = program?.endDate
+	val duration = remember(start, end) {
+		if (start != null && end != null && end.isAfter(start)) {
+			ChronoUnit.MILLIS.between(start, end).takeIf { it > 0 }?.milliseconds
+		} else null
+	}
+	val owner = LocalLifecycleOwner.current
+	val progress = produceState<Float?>(null, start, end, owner) {
+		value = null
+		if (start == null || end == null || duration == null) return@produceState
+		// Pause the clock while the screen is inactive and read the current time when it returns.
+		owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+			while (true) {
+				val now = LocalDateTime.now()
+				value = if (!now.isBefore(start) && now.isBefore(end)) {
+					ChronoUnit.MILLIS.between(start, now).toFloat() / duration.inWholeMilliseconds
+				} else null
+				// Hide ended programs until the normal card refresh supplies the next program.
+				if (!now.isBefore(end)) break
+				delay(1000)
+			}
+		}
+	}
+	return remember(progress, duration) { ItemCardProgress(progress, duration) }
+}
+
 @Composable
 private fun rememberItemCardProgressInfo(
 	item: BaseItemDto,
 ): ItemCardProgress {
+	// Live TV follows the broadcast schedule, even when playback is paused or behind live.
+	if (item.isLiveTvCard) return rememberLiveTvCardProgress(item)
+
 	val playbackManager = koinInject<PlaybackManager>()
 	val playState by playbackManager.state.playState.collectAsState()
 	val currentQueueEntry by rememberQueueEntry(playbackManager)
