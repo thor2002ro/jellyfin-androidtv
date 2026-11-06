@@ -10,6 +10,7 @@ abstract class PlayerBackendEventListener {
 	open fun onVideoSizeChange(width: Int, height: Int) = Unit
 	open fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) = Unit
 	open fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) = Unit
+	open fun onTracksChanged() = Unit
 	open fun onSubtitleTimingOffsetSupportChange(
 		supported: Boolean,
 		resetTimingOnUnsupported: Boolean = true,

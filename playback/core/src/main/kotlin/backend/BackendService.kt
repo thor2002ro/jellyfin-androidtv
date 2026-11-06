@@ -111,6 +111,10 @@ class BackendService {
 			callListeners { onMediaStreamReplaced(mediaStream, position) }
 		}
 
+		override fun onTracksChanged() {
+			callListeners { onTracksChanged() }
+		}
+
 		override fun onSubtitleTimingOffsetSupportChange(supported: Boolean, resetTimingOnUnsupported: Boolean) {
 			callListeners { onSubtitleTimingOffsetSupportChange(supported, resetTimingOnUnsupported) }
 		}

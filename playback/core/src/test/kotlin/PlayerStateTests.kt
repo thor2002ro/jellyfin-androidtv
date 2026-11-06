@@ -153,6 +153,15 @@ class PlayerStateTests : FunSpec({
 		state.subtitleTimingOffset.value shouldBe Duration.ZERO
 		state.subtitleTimingSpeed.value shouldBe 1f
 	}
+
+	test("backend track changes update shared player state") {
+		val backendService = BackendService()
+		val state = playerState(backend(), QueueEntry(), backendService = backendService)
+
+		backendService.BackendEventListener().onTracksChanged()
+
+		state.trackRevision.value shouldBe 1L
+	}
 })
 
 private fun playerState(

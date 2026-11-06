@@ -33,6 +33,7 @@ interface PlayerState {
 	val subtitleTimingOffset: StateFlow<Duration>
 	val subtitleTimingSpeed: StateFlow<Float>
 	val subtitleTimingOffsetSupported: StateFlow<Boolean>
+	val trackRevision: StateFlow<Long>
 
 	/**
 	 * The position information for the currently playing item or [PositionInfo.EMPTY]. This
@@ -104,6 +105,9 @@ class MutablePlayerState(
 	private val _subtitleTimingOffsetSupported = MutableStateFlow(false)
 	override val subtitleTimingOffsetSupported: StateFlow<Boolean> get() = _subtitleTimingOffsetSupported.asStateFlow()
 
+	private val _trackRevision = MutableStateFlow(0L)
+	override val trackRevision: StateFlow<Long> get() = _trackRevision.asStateFlow()
+
 	override val positionInfo: PositionInfo
 		get() = backendService.backend?.getPositionInfo() ?: PositionInfo.EMPTY
 
@@ -133,6 +137,10 @@ class MutablePlayerState(
 
 			override fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) {
 				_backendEvents.tryEmit(PlayerBackendEvent.MediaStreamReplaced(mediaStream, position))
+			}
+
+			override fun onTracksChanged() {
+				_trackRevision.value++
 			}
 
 			override fun onSubtitleTimingOffsetSupportChange(supported: Boolean, resetTimingOnUnsupported: Boolean) {

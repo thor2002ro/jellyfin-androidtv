@@ -7,6 +7,10 @@ abstract class BasePlayerBackend : PlayerBackend {
 	private var _listener: PlayerBackendEventListener? = null
 	protected val listener: PlayerBackendEventListener? get() = _listener
 
+	protected fun notifyTracksChanged() {
+		listener?.onTracksChanged()
+	}
+
 	override fun setListener(eventListener: PlayerBackendEventListener?) {
 		_listener = eventListener
 	}

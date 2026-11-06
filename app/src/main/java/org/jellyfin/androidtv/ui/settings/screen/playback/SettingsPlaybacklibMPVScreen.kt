@@ -48,6 +48,7 @@ import org.jellyfin.androidtv.preference.mpvReplayGain
 import org.jellyfin.androidtv.preference.mpvScaler
 import org.jellyfin.androidtv.preference.mpvSubtitleAssOverride
 import org.jellyfin.androidtv.preference.mpvSubtitleUseMargins
+import org.jellyfin.androidtv.preference.mpvSoftwareDecodingForLiveTv
 import org.jellyfin.androidtv.preference.mpvToneMapping
 import org.jellyfin.androidtv.preference.mpvVideoOutput
 import org.jellyfin.androidtv.preference.mpvVideoSync
@@ -95,6 +96,7 @@ fun SettingsPlaybackLibMPVScreen() {
 	var deband by rememberPreference(userPreferences, UserPreferences.mpvDeband)
 	var audioPitchCorrection by rememberPreference(userPreferences, UserPreferences.mpvAudioPitchCorrection)
 	var subtitleUseMargins by rememberPreference(userPreferences, UserPreferences.mpvSubtitleUseMargins)
+	var softwareDecodingForLiveTv by rememberPreference(userPreferences, UserPreferences.mpvSoftwareDecodingForLiveTv)
 	var decoderThreads by rememberPreference(userPreferences, UserPreferences.mpvDecoderThreads)
 	var optionOverrides by rememberPreference(userPreferences, UserPreferences.mpvOptionOverrides)
 	val overrideCount = remember(optionOverrides) {
@@ -117,6 +119,18 @@ fun SettingsPlaybackLibMPVScreen() {
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_general)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.DECODER, decoder) }
+		item {
+			LibMPVBooleanButton(
+				headingRes = R.string.preference_mpv_software_decoding_livetv,
+				captionRes = R.string.preference_mpv_software_decoding_livetv_description,
+				checked = softwareDecodingForLiveTv,
+				defaultValue = false,
+				onClick = {
+					softwareDecodingForLiveTv = !softwareDecodingForLiveTv
+					backendSettings.applyPreferences()
+				},
+			)
+		}
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.VIDEO_OUTPUT, videoOutput) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.GPU_CONTEXT, gpuContext) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.GPU_API, gpuApi) }
