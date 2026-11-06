@@ -63,7 +63,7 @@ import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlaybackFrameStats
 import org.jellyfin.playback.core.model.PlaybackLibassStats
 import org.jellyfin.playback.core.model.PositionInfo
-import org.jellyfin.playback.core.model.VideoSize
+import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.jellyfin.playback.jellyfin.queue.forceTranscoding
@@ -73,11 +73,13 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.TranscodingInfo
 import org.jellyfin.sdk.model.api.VideoRangeType
 import org.koin.compose.koinInject
+import java.util.Locale
 import kotlin.time.Duration
 
 @Composable
 fun PlaybackInfoOverlay(
 	playbackManager: PlaybackManager,
+	zoomStatus: String,
 	modifier: Modifier = Modifier,
 ) {
 	val context = LocalContext.current
@@ -94,7 +96,7 @@ fun PlaybackInfoOverlay(
 	val isQualityForcedTranscode = entry?.forceTranscoding == true
 	val forceTranscodingSourceBitrate = entry?.forceTranscodingSourceBitrate
 	val speed by playbackManager.state.speed.collectAsState()
-	val playerVideoSize by playbackManager.state.videoSize.collectAsState()
+	val playerVideoSize by playbackManager.state.videoGeometry.collectAsState()
 	val subtitleOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
 	val subtitleSpeed by playbackManager.state.subtitleTimingSpeed.collectAsState()
 	val subtitleOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
@@ -169,6 +171,7 @@ fun PlaybackInfoOverlay(
 		frameStats,
 		refreshTick,
 		displayHdrModes,
+		zoomStatus,
 	) {
 		NewPlayerStreamStatusBuilder.build(
 			playbackManager = playbackManager,
@@ -185,6 +188,7 @@ fun PlaybackInfoOverlay(
 			isQualityForcedTranscode = isQualityForcedTranscode,
 			clientWorkaroundInfo = clientWorkaroundInfo,
 			displayHdrModes = displayHdrModes,
+			zoomStatus = zoomStatus,
 		)
 	}
 
@@ -332,7 +336,7 @@ private object NewPlayerStreamStatusBuilder {
 		playbackManager: PlaybackManager,
 		stream: MediaStream,
 		speed: Float,
-		playerVideoSize: VideoSize,
+		playerVideoSize: VideoGeometry,
 		subtitleOffset: Duration,
 		subtitleSpeed: Float,
 		subtitleOffsetSupported: Boolean,
@@ -343,6 +347,7 @@ private object NewPlayerStreamStatusBuilder {
 		isQualityForcedTranscode: Boolean,
 		clientWorkaroundInfo: String?,
 		displayHdrModes: String,
+		zoomStatus: String,
 	): List<PlaybackInfoSection> {
 		val videoTrack = stream.tracks.filterIsInstance<MediaStreamVideoTrack>().firstOrNull()
 		val trackSelection = playbackManager.trackSelection
@@ -388,7 +393,8 @@ private object NewPlayerStreamStatusBuilder {
 			PlaybackInfoSection(
 				title = "Streaming Info",
 				rows = rows {
-					row("Player resolution", playerVideoSize.resolution())
+					videoDiagnosticValues(playerVideoSize, zoomStatus)
+						.forEach { (label, value) -> row(label, value) }
 					row("Video decoder", frameStats.videoDecoderLabel())
 					row("Dropped frames", frameStats.droppedFrames.toString())
 					row("Corrupted frames", frameStats.corruptedFrames.toString())
@@ -701,8 +707,6 @@ private object NewPlayerStreamStatusBuilder {
 		else -> null
 	}
 
-	private fun VideoSize.resolution() = resolution(width, height)
-
 	private fun Int.formatBitrate() = when {
 		this >= 1_000_000 -> "%.2f Mbps".format(this / 1_000_000.0)
 		else -> "%.0f Kbps".format(coerceAtLeast(0) / 1_000.0)
@@ -922,6 +926,19 @@ internal fun subtitleDiagnosticValues(stats: PlaybackFrameStats): List<Pair<Stri
 	stats.subtitleRender?.takeIf(String::isNotBlank)?.let { add("Renderer" to it) }
 	stats.subtitleParser?.takeIf(String::isNotBlank)?.let { add("Parser" to it) }
 	stats.subtitlePath?.takeIf(String::isNotBlank)?.let { add("Path" to it) }
+}
+
+internal fun videoDiagnosticValues(
+	geometry: VideoGeometry,
+	zoomStatus: String,
+): List<Pair<String, String>> = buildList {
+	if (geometry.frameWidth > 0 && geometry.frameHeight > 0) {
+		add("Frame" to "${geometry.frameWidth}x${geometry.frameHeight}")
+	}
+	geometry.videoAspectRatio
+		.takeIf { it.isFinite() && it > 0f }
+		?.let { aspect -> add("Aspect" to String.format(Locale.ROOT, "%.4f:1", aspect)) }
+	add("Zoom" to zoomStatus)
 }
 
 private data class PlaybackInfoSection(
