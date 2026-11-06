@@ -3,6 +3,7 @@ package org.jellyfin.playback.media3.exoplayer
 import androidx.media3.common.C
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import io.kotest.core.spec.style.FunSpec
@@ -10,6 +11,144 @@ import io.kotest.matchers.shouldBe
 import kotlin.time.Duration.Companion.seconds
 
 class VideoDecoderTests : FunSpec({
+	test("audio fallback disables the failed renderer once and restores it for later playback") {
+		val rendererChanges = mutableListOf<Pair<Int, Boolean>>()
+		var prepareCount = 0
+		val fallback = AudioDecoderFallbackController(
+			setRendererDisabled = { rendererIndex, disabled -> rendererChanges += rendererIndex to disabled },
+			prepare = { prepareCount++ },
+		)
+
+		fallback.tryFallback(
+			errorCode = PlaybackException.ERROR_CODE_DECODING_FAILED,
+			rendererIndex = 3,
+			isMediaCodecAudioRenderer = true,
+			isFfmpegFormatSupported = true,
+		) shouldBe true
+		fallback.tryFallback(
+			errorCode = PlaybackException.ERROR_CODE_DECODING_FAILED,
+			rendererIndex = 3,
+			isMediaCodecAudioRenderer = true,
+			isFfmpegFormatSupported = true,
+		) shouldBe false
+		rendererChanges shouldBe listOf(3 to true)
+		prepareCount shouldBe 1
+
+		fallback.reset()
+		rendererChanges shouldBe listOf(3 to true, 3 to false)
+	}
+
+	test("MediaCodec audio decoder failures select FFmpeg fallback when supported") {
+		listOf(
+			PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+			PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+			PlaybackException.ERROR_CODE_DECODING_FAILED,
+			PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+			PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+			PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
+		).forEach { errorCode ->
+			shouldFallbackToFfmpegAudio(
+				errorCode = errorCode,
+				isMediaCodecAudioRenderer = true,
+				isFfmpegFormatSupported = true,
+				fallbackAttempted = false,
+			) shouldBe true
+		}
+	}
+
+	test("audio fallback requires the MediaCodec renderer, FFmpeg format support, and no prior attempt") {
+		listOf(
+			Triple(false, true, false),
+			Triple(true, false, false),
+			Triple(true, true, true),
+		).forEach { (isMediaCodecAudioRenderer, isFfmpegFormatSupported, fallbackAttempted) ->
+			shouldFallbackToFfmpegAudio(
+				errorCode = PlaybackException.ERROR_CODE_DECODING_FAILED,
+				isMediaCodecAudioRenderer = isMediaCodecAudioRenderer,
+				isFfmpegFormatSupported = isFfmpegFormatSupported,
+				fallbackAttempted = fallbackAttempted,
+			) shouldBe false
+		}
+	}
+
+	test("audio output failures do not retry the same sink through FFmpeg") {
+		listOf(
+			PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+			PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
+			PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_INIT_FAILED,
+			PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_WRITE_FAILED,
+		).forEach { errorCode ->
+			shouldFallbackToFfmpegAudio(
+				errorCode = errorCode,
+				isMediaCodecAudioRenderer = true,
+				isFfmpegFormatSupported = true,
+				fallbackAttempted = false,
+			) shouldBe false
+		}
+	}
+
+	test("stalled MediaCodec audio retries with FFmpeg after input advances without output") {
+		val rendererChanges = mutableListOf<Pair<Int, Boolean>>()
+		var prepareCount = 0
+		val fallback = AudioDecoderFallbackController(
+			setRendererDisabled = { rendererIndex, disabled -> rendererChanges += rendererIndex to disabled },
+			prepare = { prepareCount++ },
+		)
+
+		fallback.tryFallbackAfterStall(
+			rendererIndex = 3,
+			isMediaCodecAudioRenderer = true,
+			isFfmpegFormatSupported = true,
+			decoderStalled = hasAudioDecoderStalled(10, 5, false, 11, 5),
+		) shouldBe true
+		fallback.tryFallbackAfterStall(
+			rendererIndex = 3,
+			isMediaCodecAudioRenderer = true,
+			isFfmpegFormatSupported = true,
+			decoderStalled = true,
+		) shouldBe false
+
+		rendererChanges shouldBe listOf(3 to true)
+		prepareCount shouldBe 1
+	}
+
+	test("audio stall fallback requires decoder input without output and FFmpeg support") {
+		listOf(
+			Triple(false, true, true),
+			Triple(true, false, true),
+			Triple(true, true, false),
+		).forEach { (isMediaCodecAudioRenderer, isFfmpegFormatSupported, decoderStalled) ->
+			val fallback = AudioDecoderFallbackController(
+				setRendererDisabled = { _, _ -> error("renderer must remain enabled") },
+				prepare = { error("player must not prepare") },
+			)
+
+			fallback.tryFallbackAfterStall(
+				rendererIndex = 3,
+				isMediaCodecAudioRenderer = isMediaCodecAudioRenderer,
+				isFfmpegFormatSupported = isFfmpegFormatSupported,
+				decoderStalled = decoderStalled,
+			) shouldBe false
+		}
+
+		hasAudioDecoderStalled(10, 5, false, 10, 5) shouldBe false
+		hasAudioDecoderStalled(10, 5, false, 11, 6) shouldBe false
+		hasAudioDecoderStalled(10, 5, true, 11, 5) shouldBe false
+	}
+
+	test("audio sink veto and watchdog expiry use one atomic observation state") {
+		val observation = AudioDecoderStallObservation()
+
+		observation.arm()
+		observation.onSinkBufferAttempt()
+		observation.expireWithSinkBufferAttempted() shouldBe true
+
+		observation.arm()
+		observation.expireWithSinkBufferAttempted() shouldBe false
+		observation.onSinkBufferAttempt()
+		observation.expireWithSinkBufferAttempted() shouldBe false
+	}
+
 	test("video color info is exposed as player metrics") {
 		val format = Format.Builder()
 			.setColorInfo(
@@ -127,6 +266,16 @@ class VideoDecoderTests : FunSpec({
 		shouldWatchVideoDecoderStall(true, Player.STATE_BUFFERING) shouldBe true
 		shouldWatchVideoDecoderStall(false, Player.STATE_READY) shouldBe false
 		shouldWatchVideoDecoderStall(true, Player.STATE_IDLE) shouldBe false
+	}
+
+	test("audio stall checks only watch an active native decoder") {
+		shouldWatchAudioDecoderStall(true, Player.STATE_READY, "c2.android.aac.decoder", false) shouldBe true
+		shouldWatchAudioDecoderStall(true, Player.STATE_BUFFERING, "OMX.google.aac.decoder", false) shouldBe true
+		shouldWatchAudioDecoderStall(false, Player.STATE_READY, "c2.android.aac.decoder", false) shouldBe false
+		shouldWatchAudioDecoderStall(true, Player.STATE_IDLE, "c2.android.aac.decoder", false) shouldBe false
+		shouldWatchAudioDecoderStall(true, Player.STATE_READY, "ffmpegaudiodec", false) shouldBe false
+		shouldWatchAudioDecoderStall(true, Player.STATE_READY, null, false) shouldBe false
+		shouldWatchAudioDecoderStall(true, Player.STATE_READY, "c2.android.aac.decoder", true) shouldBe false
 	}
 
 	test("Amlogic devices are matched from Android build fields") {
