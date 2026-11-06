@@ -7,9 +7,11 @@ import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.text.TextRenderer
 import androidx.media3.extractor.text.SubtitleParser
+import org.jellyfin.playback.media3.exoplayer.AudioPassthroughPolicyAudioSink
 
 @UnstableApi
 @OptIn(ExperimentalApi::class)
@@ -17,7 +19,16 @@ class SubtitleTimingOffsetRenderersFactory(
 	context: Context,
 	private val offsetState: SubtitleTimingOffsetState,
 	private val subtitleParserFactory: SubtitleParser.Factory,
+	private val isAudioPassthroughEnabled: (String) -> Boolean = { true },
 ) : DefaultRenderersFactory(context) {
+	override fun buildAudioSink(
+		context: Context,
+		enableFloatOutput: Boolean,
+		enableAudioOutputPlaybackParams: Boolean,
+	): AudioSink? = super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams)?.let { sink ->
+		AudioPassthroughPolicyAudioSink(sink, isAudioPassthroughEnabled)
+	}
+
 	override fun buildTextRenderers(
 		context: Context,
 		output: TextOutput,
