@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.auth.model.Server
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.BackdropBehavior
@@ -82,7 +83,7 @@ class BackgroundService(
 			.map { it.getUrl(api, maxWidth = BACKDROP_MAX_WIDTH) }
 			.toSet()
 
-		loadBackgrounds(backdropUrls)
+		loadBackgrounds(backdropUrls, 250.milliseconds)
 	}
 
 	/**
@@ -107,7 +108,7 @@ class BackgroundService(
 		loadBackgrounds(setOf(splashscreenUrl))
 	}
 
-	private fun loadBackgrounds(backdropUrls: Set<String>) {
+	private fun loadBackgrounds(backdropUrls: Set<String>, debounce: Duration = Duration.ZERO) {
 		if (backdropUrls.isEmpty()) return clearBackgrounds()
 		if (backdropUrls == requestedBackdropUrls) return
 
@@ -117,16 +118,20 @@ class BackgroundService(
 
 		// Cancel current loading job
 		loadBackgroundsJob?.cancel()
-		loadBackgroundsJob = scope.launch(Dispatchers.IO) {
-			_backgrounds = backdropUrls.mapNotNull { url ->
-				backgroundCache[url] ?: imageLoader.execute(
-					request = ImageRequest.Builder(context)
-						.data(url)
-						.memoryCachePolicy(CachePolicy.ENABLED)
-						.diskCachePolicy(CachePolicy.ENABLED)
-						.build()
-				).image?.toBitmap()?.asImageBitmap()?.also { backgroundCache[url] = it }
+		loadBackgroundsJob = scope.launch {
+			delay(debounce)
+			val backgrounds = backdropUrls.mapNotNull { url ->
+				backgroundCache[url] ?: withContext(Dispatchers.IO) {
+					imageLoader.execute(
+						request = ImageRequest.Builder(context)
+							.data(url)
+							.memoryCachePolicy(CachePolicy.ENABLED)
+							.diskCachePolicy(CachePolicy.ENABLED)
+							.build()
+					).image?.toBitmap()?.asImageBitmap()
+				}?.also { backgroundCache[url] = it }
 			}
+			_backgrounds = backgrounds
 
 			// Go to first background
 			_currentIndex = 0

@@ -140,4 +140,9 @@ class FavoritesRowsFragment : RowsSupportFragment() {
 		super.onResume()
 		rowAdapters.forEach(ItemRowAdapter::ReRetrieveIfNeeded)
 	}
+
+	override fun onDestroyView() {
+		rowAdapters.forEach(ItemRowAdapter::cancelRetrieval)
+		super.onDestroyView()
+	}
 }
