@@ -47,6 +47,21 @@ class ImageHelperTests : FunSpec({
 		image?.blurHash shouldBe "logo-hash"
 	}
 
+	test("logo selection uses the primary image for Live TV channels") {
+		val channelId = UUID.randomUUID()
+		val item = BaseItemDto(
+			id = channelId,
+			type = BaseItemKind.TV_CHANNEL,
+			imageTags = mapOf(ImageType.PRIMARY to "channel-tag"),
+		)
+
+		val image = imageHelper.getLogoImage(item)
+
+		image?.item shouldBe channelId
+		image?.type shouldBe ImageType.PRIMARY
+		image?.tag shouldBe "channel-tag"
+	}
+
 	test("series thumbnail selection uses thumbnail BlurHash metadata") {
 		val seriesId = UUID.randomUUID()
 		val item = BaseItemDto(
