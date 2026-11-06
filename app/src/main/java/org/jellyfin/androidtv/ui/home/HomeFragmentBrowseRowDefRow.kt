@@ -1,24 +1,26 @@
 package org.jellyfin.androidtv.ui.home
 
 import android.content.Context
+import android.view.View
 import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Row
 import org.jellyfin.androidtv.constant.QueryType
+import org.jellyfin.androidtv.constant.ImageType
+import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
-import org.jellyfin.androidtv.ui.card.ChannelCardView
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
-import org.jellyfin.androidtv.ui.presentation.ChannelCardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import org.jellyfin.androidtv.util.dimenDp
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 class HomeFragmentBrowseRowDefRow(
 	private val browseRowDef: BrowseRowDef,
-	private val channelCardLongClick: ((item: Any?, cardView: ChannelCardView) -> Boolean)? = null,
+	private val channelCardLongClick: ((item: Any?, view: View) -> Boolean)? = null,
 ) : HomeFragmentRow, KoinComponent {
 	private val userPreferences by inject<UserPreferences>()
 
@@ -37,7 +39,7 @@ class HomeFragmentBrowseRowDefRow(
 			QueryType.LiveTvProgram -> ItemRowAdapter(
 				context,
 				browseRowDef.programQuery,
-				if (browseRowDef.useChannelCards) ChannelCardPresenter(onLongClick = channelCardLongClick) else cardPresenter,
+				if (browseRowDef.useChannelCards) CardPresenter(false, ImageType.THUMB, context.dimenDp(R.dimen.live_tv_card_height), channelCardLongClick) else cardPresenter,
 				rowsAdapter,
 				browseRowDef.liveTvProgramSelectAction,
 			)
