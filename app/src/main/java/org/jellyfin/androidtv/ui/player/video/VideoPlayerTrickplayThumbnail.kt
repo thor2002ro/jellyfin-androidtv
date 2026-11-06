@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.player.video
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -19,11 +20,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.toBitmap
@@ -42,6 +46,11 @@ import org.koin.compose.koinInject
 import kotlin.time.Duration
 
 internal val TrickplayThumbnailWidth = 180.dp
+
+private data class TrickplaySheetCrop(
+	val sheet: ImageBitmap,
+	val crop: TrickplayThumbnailCrop,
+)
 
 @Composable
 fun VideoPlayerTrickplayThumbnail(
@@ -97,7 +106,7 @@ internal fun VideoPlayerTrickplayImage(
 ) {
 	val context = LocalContext.current
 	val latestTrickplayImage by rememberUpdatedState(trickplayImage)
-	var image by remember(lastSuccessKey) { mutableStateOf<ImageBitmap?>(null) }
+	var image by remember(lastSuccessKey) { mutableStateOf<TrickplaySheetCrop?>(null) }
 
 	LaunchedEffect(imageLoader, lastSuccessKey) {
 		var loadedKey: Any? = null
@@ -111,20 +120,26 @@ internal fun VideoPlayerTrickplayImage(
 
 			runCatching {
 				withContext(Dispatchers.IO) {
-					PlayerThumbnailMemoryCache.getThumbnail(nextImage) ?: run {
+					val sheet = PlayerThumbnailMemoryCache.get(nextImage.sheet.url) ?: run {
 						val bitmap = imageLoader.execute(
 							nextImage.sheet.buildPlayerThumbnailRequest(context)
 						).image?.toBitmap() ?: return@withContext null
-						PlayerThumbnailMemoryCache.put(nextImage.sheet, bitmap)
-						PlayerThumbnailMemoryCache.getThumbnail(nextImage)
+						PlayerThumbnailMemoryCache.put(nextImage.sheet, bitmap)?.asImageBitmap()
+							?: return@withContext null
 					}
+					TrickplaySheetCrop(
+						sheet = sheet,
+						crop = calculateTrickplayThumbnailCrop(nextImage, sheet.width, sheet.height),
+					)
 				}
-			}.getOrNull()?.let { image = it }
+			}.getOrNull()
+				?.takeIf { latestTrickplayImage == nextImage }
+				?.let { image = it }
 			loadedKey = nextKey
 		}
 	}
 
-	PlayerThumbnail(image, modifier)
+	PlayerTrickplayThumbnail(image, modifier)
 }
 
 @Composable
@@ -159,6 +174,21 @@ private fun PlayerThumbnail(image: ImageBitmap?, modifier: Modifier) {
 			contentDescription = null,
 			contentScale = ContentScale.Crop,
 			modifier = modifier,
+		)
+	}
+}
+
+@Composable
+private fun PlayerTrickplayThumbnail(image: TrickplaySheetCrop?, modifier: Modifier) {
+	if (image == null) return
+
+	Canvas(modifier) {
+		drawImage(
+			image = image.sheet,
+			srcOffset = IntOffset(image.crop.x, image.crop.y),
+			srcSize = IntSize(image.crop.width, image.crop.height),
+			dstSize = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
+			filterQuality = FilterQuality.Medium,
 		)
 	}
 }

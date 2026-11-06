@@ -128,7 +128,8 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
         zoomAction.dismissPopup();
 
         if (mThumbnailPreviewHandler != null) {
-            mThumbnailPreviewHandler.hideThumbnailPreview();
+            mThumbnailPreviewHandler.dispose();
+            mThumbnailPreviewHandler = null;
         }
 
         super.onDetachedFromHost();
@@ -201,7 +202,7 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
                 ComposeView thumbnailPreview = rootView.findViewById(R.id.thumbnail_preview);
                 if (thumbnailPreview == null) return;
 
-                mThumbnailPreviewHandler = new ThumbnailPreviewHandler(getSeekProvider(), thumbnailPreview);
+                mThumbnailPreviewHandler = new ThumbnailPreviewHandler(getPlayerAdapter(), thumbnailPreview);
             }
 
             @Override
@@ -209,6 +210,7 @@ public class CustomPlaybackTransportControlGlue extends PlaybackTransportControl
                 super.onUnbindRowViewHolder(vh);
                 vh.setOnKeyListener(null);
                 mSeekBar = null;
+                if (mThumbnailPreviewHandler != null) mThumbnailPreviewHandler.dispose();
                 mThumbnailPreviewHandler = null;
             }
         };

@@ -9,14 +9,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.leanback.app.PlaybackSupportFragment;
 
-import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.UserSettingPreferences;
 import org.jellyfin.androidtv.ui.playback.CustomPlaybackOverlayFragment;
 import org.jellyfin.androidtv.ui.playback.PlaybackController;
 import org.jellyfin.androidtv.ui.playback.PlaybackControllerContainer;
-import org.jellyfin.sdk.api.client.ApiClient;
-
-import coil3.ImageLoader;
 import kotlin.Lazy;
 import timber.log.Timber;
 
@@ -27,9 +23,6 @@ public class LeanbackOverlayFragment extends PlaybackSupportFragment {
     private boolean subtitleOffsetMode = false;
     private Lazy<PlaybackControllerContainer> playbackControllerContainer = inject(PlaybackControllerContainer.class);
     private final Lazy<UserSettingPreferences> userSettingPreferences = inject(UserSettingPreferences.class);
-    private Lazy<ImageLoader> imageLoader = inject(ImageLoader.class);
-    private Lazy<ApiClient> api = inject(ApiClient.class);
-    private Lazy<UserPreferences> userPreferences = inject(UserPreferences.class);
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -118,6 +111,7 @@ public class LeanbackOverlayFragment extends PlaybackSupportFragment {
     }
 
     public void mediaInfoChanged() {
+        playerGlue.hideThumbnailPreview();
         org.jellyfin.sdk.model.api.BaseItemDto currentlyPlayingItem = playbackControllerContainer.getValue().getPlaybackController().getCurrentlyPlayingItem();
         if (currentlyPlayingItem == null) return;
 
@@ -127,15 +121,8 @@ public class LeanbackOverlayFragment extends PlaybackSupportFragment {
         long skipForwardLength = userSettingPreferences.getValue().get(UserSettingPreferences.Companion.getSkipForwardLength()).longValue();
         long skipBackLength = userSettingPreferences.getValue().get(UserSettingPreferences.Companion.getSkipBackLength()).longValue();
         long interval = Math.min(skipForwardLength, skipBackLength);
-        boolean enableTrickPlay = userPreferences.getValue().get(UserPreferences.Companion.getTrickPlayEnabled());
-
         if (playerAdapter.canSeek()) {
-            CustomSeekProvider seekProvider = new CustomSeekProvider(playerAdapter, imageLoader.getValue(), api.getValue(), requireContext(), enableTrickPlay, interval);
-            playerGlue.setSeekProvider(seekProvider);
-
-            if (enableTrickPlay) {
-                seekProvider.prefetchTileSheet(playerAdapter.getCurrentPosition());
-            }
+            playerGlue.setSeekProvider(new CustomSeekProvider(playerAdapter, interval));
         } else {
             playerGlue.setSeekProvider(null);
         }
