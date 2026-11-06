@@ -18,46 +18,69 @@ internal data class LibVLCDecoderInfo(
 internal data class LibVLCDecoderDiagnostics(
 	val video: LibVLCDecoderInfo? = null,
 	val audio: LibVLCDecoderInfo? = null,
+	val output: LibVLCAudioOutput? = null,
 )
+
+internal data class LibVLCAudioOutput(val format: String, val sampleRate: Int, val channels: Int?)
 
 internal fun libVLCDecoderSessionMarker(sessionId: String) = "$LIBVLC_DECODER_SESSION_PREFIX$sessionId"
 
 internal class LibVLCDecoderLogParser {
-	private var expectedMarker: String? = null
 	private var accepting = false
 	private var video: LibVLCDecoderInfo? = null
 	private var audio: LibVLCDecoderInfo? = null
 	private var pendingVideoComponent: String? = null
 	private var pendingAudioComponent: String? = null
+	private var output: LibVLCAudioOutput? = null
+	private var sessionId: String? = null
 
 	@Synchronized
 	fun beginSession(sessionId: String) {
-		expectedMarker = libVLCDecoderSessionMarker(sessionId)
+		this.sessionId = sessionId
 		accepting = false
 		clearEvidence()
 	}
 
 	@Synchronized
 	fun endSession() {
-		expectedMarker = null
+		sessionId = null
 		accepting = false
 		clearEvidence()
 	}
 
 	@Synchronized
-	fun accept(line: String) {
-		if (acceptSessionMarker(line)) return
-		if (!accepting) return
-		if (acceptDecoderModule(line)) return
+	fun accept(line: String): Pair<String, LibVLCAudioOutput?>? {
+		if (acceptSessionMarker(line)) return if (accepting && line.substringAfter(LIBVLC_DECODER_SESSION_PREFIX).trim() == sessionId) sessionId?.let { it to output } else null
+		if (!accepting) return null
+		val match = audioOutputPattern.find(line)
+		if (match != null) {
+			val format = match.groupValues[1].lowercase()
+			val bytesPerSample = when (format) {
+				"s8", "u8" -> 1
+				"s16l", "s16b", "s16n" -> 2
+				"s24l", "s24b" -> 3
+				"s32l", "s32b", "f32l", "f32b" -> 4
+				"f64l", "f64b" -> 8
+				else -> null
+			}
+			val samples = match.groupValues[3].toIntOrNull() ?: 0
+			val bytes = match.groupValues[4].toIntOrNull() ?: 0
+			val frameBytes = bytesPerSample?.let { it.toLong() * samples } ?: 0
+			val channels = if (frameBytes > 0 && bytes > 0 && bytes % frameBytes == 0L) (bytes / frameBytes).toInt().takeIf { it in 1..32 } else null
+			output = LibVLCAudioOutput(format, match.groupValues[2].toIntOrNull() ?: 0, channels)
+			return sessionId?.let { it to output }
+		}
+		if (acceptDecoderModule(line)) return null
 		acceptAndroidDecoderComponent(line)
+		return null
 	}
 
 	@Synchronized
-	fun snapshot() = LibVLCDecoderDiagnostics(video = video, audio = audio)
+	fun snapshot() = LibVLCDecoderDiagnostics(video = video, audio = audio, output = output)
 
 	private fun acceptSessionMarker(line: String): Boolean {
 		if (LIBVLC_DECODER_SESSION_PREFIX !in line) return false
-		if (line.contains(expectedMarker ?: return true)) {
+		if (sessionId != null && line.substringAfter(LIBVLC_DECODER_SESSION_PREFIX).trim() == sessionId) {
 			accepting = true
 			clearEvidence()
 		}
@@ -104,6 +127,7 @@ internal class LibVLCDecoderLogParser {
 	}
 
 	private fun clearEvidence() {
+		output = null
 		video = null
 		audio = null
 		pendingVideoComponent = null
@@ -133,6 +157,7 @@ internal class LibVLCDecoderLogReader(
 	},
 	private val markerWriter: (String) -> Unit = { marker -> Log.i(LIBVLC_DECODER_LOG_TAG, marker) },
 	private val logSink: (String) -> Unit = {},
+	private val onAudioOutputChanged: (String, LibVLCAudioOutput?) -> Unit = { _, _ -> },
 ) : AutoCloseable {
 	@Volatile
 	private var closed = false
@@ -173,7 +198,7 @@ internal class LibVLCDecoderLogReader(
 				runCatching {
 					runningProcess.inputStream.bufferedReader().useLines { lines ->
 						lines.forEach { line ->
-							parser.accept(line)
+							parser.accept(line)?.let { (session, output) -> onAudioOutputChanged(session, output) }
 							val tag = line.substringAfter('/').substringBefore('(').trim()
 							if (tag == "VLC" || tag == "VLC-std" || tag.startsWith("VLC/")) logSink(line)
 						}
@@ -191,6 +216,9 @@ internal class LibVLCDecoderLogReader(
 }
 
 private enum class DecoderKind { VIDEO, AUDIO }
+
+// Read the negotiated output, not the decoder input or the format VLC merely requested.
+private val audioOutputPattern = Regex("""audio output:\s+output '([^']+)'\s+(\d+) Hz .*?frame=(\d+) samples/(\d+) bytes""", RegexOption.IGNORE_CASE)
 
 private val decoderModulePattern = Regex(
 	"""using\s+(video|audio)\s+decoder\s+module\s+[\"']([^\"']+)[\"']""",
