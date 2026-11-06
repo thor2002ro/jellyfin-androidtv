@@ -13,12 +13,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import org.jellyfin.playback.core.backend.PlayerBackend
+import org.jellyfin.playback.core.backend.PlaybackError
+import org.jellyfin.playback.core.backend.PlayerBackendEventListener
+import org.jellyfin.playback.core.backend.matches
+import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStreamContainer
 import org.jellyfin.playback.core.mediastream.MediaStreamResolver
 import org.jellyfin.playback.core.mediastream.MediaStreamService
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.startPosition
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.supplier.QueueSupplier
@@ -37,10 +42,129 @@ import org.jellyfin.sdk.model.deviceprofile.buildDeviceProfile
 import org.jellyfin.sdk.model.api.MediaType
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.UUID
+import java.net.SocketTimeoutException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class MediaStreamServiceTests : FunSpec({
+	test("a wrapped startup timeout preserves the entry and reports a current recoverable error") {
+		val resolver = mockk<MediaStreamResolver>()
+		coEvery { resolver.getStream(any(), any()) } throws IllegalStateException("SDK timeout", SocketTimeoutException())
+		val fixture = ReloadFixture(resolver)
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		val errors = mutableListOf<PlaybackError>()
+		fixture.manager.addBackendEventListener(object : PlayerBackendEventListener() {
+			override fun onPlaybackError(error: PlaybackError) { errors += error }
+		})
+
+		fixture.service.playEntry(fixture.first) shouldBe false
+
+		fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
+		fixture.manager.state.playState.value shouldBe PlayState.ERROR
+		fixture.manager.preparingEntry?.value shouldBe null
+		errors.single().codeName shouldBe "MEDIA_STREAM_NETWORK_ERROR"
+		errors.single().origin?.matches(fixture.first) shouldBe true
+		verify(exactly = 1) { fixture.backend.stop() }
+		verify(exactly = 0) { fixture.backend.playItem(any()) }
+	}
+
+	test("a late startup timeout cannot stop the newly selected entry") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		val errors = mutableListOf<PlaybackError>()
+		fixture.manager.addBackendEventListener(object : PlayerBackendEventListener() {
+			override fun onPlaybackError(error: PlaybackError) { errors += error }
+		})
+		coroutineScope {
+			val startup = async(start = CoroutineStart.UNDISPATCHED) { fixture.service.playEntry(fixture.first) }
+			fixture.resolver.started.await()
+			fixture.queue.setIndex(1)
+			fixture.resolver.response.completeExceptionally(SocketTimeoutException())
+			startup.await() shouldBe false
+		}
+		fixture.queue.entry.value shouldBeSameInstanceAs fixture.second
+		errors shouldBe emptyList()
+		verify(exactly = 0) { fixture.backend.stop() }
+	}
+
+	test("recovery can retry an unresolved entry after another timeout without losing its resume position") {
+		val resolver = mockk<MediaStreamResolver>()
+		val requests = AtomicInteger()
+		coEvery { resolver.getStream(any(), any()) } coAnswers {
+			if (requests.incrementAndGet() <= 2) throw SocketTimeoutException()
+			stream(firstArg(), "recovered")
+		}
+		val fixture = ReloadFixture(resolver)
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		fixture.first.startPosition = 30.seconds
+		fixture.service.playEntry(fixture.first) shouldBe false
+		fixture.first.startPosition shouldBe 30.seconds
+		fixture.manager.reloadCurrentMediaStream(30.seconds) shouldBe false
+		fixture.manager.state.playState.value shouldBe PlayState.ERROR
+		fixture.manager.reloadCurrentMediaStream(30.seconds) shouldBe true
+		fixture.first.mediaStream?.identifier shouldBe "recovered"
+		verify(exactly = 1) { fixture.backend.replaceItem(fixture.first) }
+	}
+
+	test("a late startup timeout cannot stop a successful reload of the same entry") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		val errors = mutableListOf<PlaybackError>()
+		fixture.manager.addBackendEventListener(object : PlayerBackendEventListener() {
+			override fun onPlaybackError(error: PlaybackError) { errors += error }
+		})
+		coroutineScope {
+			val startup = async(start = CoroutineStart.UNDISPATCHED) { fixture.service.playEntry(fixture.first) }
+			fixture.resolver.started.await()
+			val reload = async(start = CoroutineStart.UNDISPATCHED) { fixture.manager.reloadCurrentMediaStream() }
+			fixture.resolver.secondStarted.await()
+			fixture.resolver.secondResponse.complete(fixture.reloadedStream)
+			reload.await() shouldBe true
+			fixture.resolver.response.completeExceptionally(SocketTimeoutException())
+			startup.await() shouldBe false
+		}
+		fixture.first.mediaStream shouldBeSameInstanceAs fixture.reloadedStream
+		errors shouldBe emptyList()
+		verify(exactly = 0) { fixture.backend.stop() }
+		verify(exactly = 1) { fixture.backend.replaceItem(fixture.first) }
+	}
+
+	test("stopping while resolution is pending prevents a late timeout from starting recovery") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		val errors = mutableListOf<PlaybackError>()
+		fixture.manager.addBackendEventListener(object : PlayerBackendEventListener() {
+			override fun onPlaybackError(error: PlaybackError) { errors += error }
+		})
+		coroutineScope {
+			val startup = async(start = CoroutineStart.UNDISPATCHED) { fixture.service.playEntry(fixture.first) }
+			fixture.resolver.started.await()
+			fixture.manager.state.stop()
+			fixture.resolver.response.completeExceptionally(SocketTimeoutException())
+			startup.await() shouldBe false
+		}
+		fixture.manager.state.playState.value shouldBe PlayState.STOPPED
+		errors shouldBe emptyList()
+		verify(exactly = 1) { fixture.backend.stop() }
+	}
+
+	test("a genuinely unsupported item still advances the queue without network recovery") {
+		val resolver = mockk<MediaStreamResolver>()
+		coEvery { resolver.getStream(any(), any()) } returns null
+		val fixture = ReloadFixture(resolver)
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		fixture.service.playEntry(fixture.first) shouldBe false
+		fixture.queue.entry.value shouldBeSameInstanceAs fixture.second
+		fixture.manager.state.playState.value shouldBe PlayState.STOPPED
+		verify(exactly = 0) { fixture.backend.stop() }
+	}
+
 	test("startup loading covers stream resolution and display preparation and clears on cancellation") {
 		val fixture = ReloadFixture()
 		fixture.selectFirst()
