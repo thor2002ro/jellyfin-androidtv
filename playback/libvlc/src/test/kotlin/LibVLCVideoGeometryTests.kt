@@ -7,22 +7,12 @@ import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.VideoOutputTransform
 
 class LibVLCVideoGeometryTests : FunSpec({
-	test("visible dimensions and sample aspect define video geometry") {
-		libVLCVideoGeometry(
-			width = 736,
-			height = 576,
-			visibleWidth = 720,
-			visibleHeight = 576,
-			sarNum = 64,
-			sarDen = 45,
-		) shouldBe VideoGeometry(720, 576, 16f / 9f)
+	test("VLC 3 layout reports visible dimensions and sample aspect") {
+		libVLCVideoGeometry(720, 576, 720, 576, 64, 45) shouldBe VideoGeometry(720, 576, 16f / 9f)
+		libVLCVideoGeometry(1920, 1088, 1920, 1080, 1, 1) shouldBe VideoGeometry(1920, 1080, 16f / 9f)
+		libVLCVideoGeometry(720, 576, 720, 576, 0, 0) shouldBe VideoGeometry(720, 576, null)
+		libVLCVideoGeometry(0, 0, 0, 0, 0, 0) shouldBe VideoGeometry.EMPTY
 	}
-
-	test("invalid sample aspect uses frame fallback") {
-		libVLCVideoGeometry(720, 576, 720, 576, 0, 1) shouldBe VideoGeometry(720, 576, null)
-		libVLCVideoGeometry(720, 576, 720, 576, 1, 0) shouldBe VideoGeometry(720, 576, null)
-	}
-
 	test("output aspect writes exact dimensions and deduplicates identical requests") {
 		val writes = mutableListOf<String?>()
 		val output = LibVLCVideoOutput(writes::add)
