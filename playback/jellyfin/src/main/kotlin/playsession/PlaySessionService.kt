@@ -308,7 +308,7 @@ class PlaySessionService(
 		val audioStreamIndex = getSelectedAudioStreamIndex()
 		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
 		val repeatMode = state.repeatMode.value.remoteRepeatMode
-		val canSeek = state.canSeek
+		val canSeek = withContext(Dispatchers.Main) { state.canSeek }
 		val playbackOrder = when (state.playbackOrder.value) {
 			org.jellyfin.playback.core.model.PlaybackOrder.DEFAULT -> PlaybackOrder.DEFAULT
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
@@ -376,7 +376,7 @@ class PlaySessionService(
 		val audioStreamIndex = getSelectedAudioStreamIndex()
 		val subtitleStreamIndex = getSelectedSubtitleStreamIndex()
 		val repeatMode = state.repeatMode.value.remoteRepeatMode
-		val canSeek = state.canSeek
+		val canSeek = withContext(Dispatchers.Main) { state.canSeek }
 		val playbackOrder = when (state.playbackOrder.value) {
 			org.jellyfin.playback.core.model.PlaybackOrder.DEFAULT -> PlaybackOrder.DEFAULT
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
