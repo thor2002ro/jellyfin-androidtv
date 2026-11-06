@@ -1,0 +1,245 @@
+package org.jellyfin.playback.core.queue
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import org.jellyfin.playback.core.PlaybackManager
+import org.jellyfin.playback.core.backend.PlayerBackendEvent
+import org.jellyfin.playback.core.model.PlaybackOrder
+import org.jellyfin.playback.core.model.RepeatMode
+import org.jellyfin.playback.core.plugin.PlayerService
+import org.jellyfin.playback.core.queue.order.DefaultOrderIndexProvider
+import org.jellyfin.playback.core.queue.order.OrderIndexProvider
+import org.jellyfin.playback.core.queue.order.RandomOrderIndexProvider
+import org.jellyfin.playback.core.queue.order.ShuffleOrderIndexProvider
+import org.jellyfin.playback.core.queue.supplier.QueueSupplier
+import kotlin.math.max
+import kotlin.time.Duration
+
+class QueueService internal constructor() : PlayerService(), Queue {
+	private val suppliers = mutableListOf<QueueSupplier>()
+	private var currentSupplierIndex = 0
+	private var currentSupplierEntryIndex = 0
+	private val fetchedEntries: MutableList<QueueEntry> = mutableListOf()
+	private var removedEntries = 0
+
+	private var defaultOrderIndexProvider = DefaultOrderIndexProvider()
+	private var orderIndexProvider: OrderIndexProvider = defaultOrderIndexProvider
+	private var currentQueueIndicesPlayed = mutableListOf<Int>()
+	private var entryChangePredicate: (suspend (QueueEntry) -> Boolean)? = null
+
+	override val estimatedSize get() = max(fetchedEntries.size, suppliers.sumOf { it.size } - removedEntries)
+
+	private val _entryIndex = MutableStateFlow(Queue.INDEX_NONE)
+	override val entryIndex: StateFlow<Int> get() = _entryIndex.asStateFlow()
+
+	private val _entry = MutableStateFlow<QueueEntry?>(null)
+	override val entry: StateFlow<QueueEntry?> get() = _entry.asStateFlow()
+
+	private val _entries = MutableStateFlow<List<QueueEntry>>(emptyList())
+	override val entries: StateFlow<List<QueueEntry>> get() = _entries.asStateFlow()
+
+	fun setEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
+		entryChangePredicate = predicate
+	}
+
+	fun clearEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
+		if (entryChangePredicate === predicate) entryChangePredicate = null
+	}
+
+	// Entry management
+
+	override fun addSupplier(supplier: QueueSupplier, startIndex: Int) {
+		suppliers.add(supplier)
+
+		if (_entryIndex.value == Queue.INDEX_NONE) {
+			coroutineScope.launch {
+				val requestedIndex = startIndex.coerceAtLeast(0)
+				if (setIndex(requestedIndex) == null && requestedIndex != 0) {
+					setIndex(0)
+				}
+			}
+		}
+	}
+
+	override fun getSuppliers(): Collection<QueueSupplier> {
+		return suppliers.toList()
+	}
+
+	private suspend fun getOrSupplyEntry(index: Int): QueueEntry? {
+		// Fetch additional entries from suppliers until we reach the desired index
+		var entriesChanged = false
+		while (index >= fetchedEntries.size) {
+			// No more suppliers to try
+			if (currentSupplierIndex >= suppliers.size) break
+
+			val supplier = suppliers[currentSupplierIndex]
+			val nextEntry = supplier.getItem(currentSupplierEntryIndex)
+
+			if (nextEntry != null) {
+				// Add entry to cache and increase entry index
+				fetchedEntries.add(nextEntry)
+				entriesChanged = true
+				currentSupplierEntryIndex++
+			} else {
+				// Move to the next supplier if current one is exhausted
+				currentSupplierIndex++
+				currentSupplierEntryIndex = 0
+			}
+		}
+		if (entriesChanged) _entries.value = fetchedEntries.toList()
+
+		// Return entry or null if not found
+		return if (index >= 0 && index < fetchedEntries.size) fetchedEntries[index]
+		else null
+	}
+
+	override fun indexOf(entry: QueueEntry): Int? {
+		return fetchedEntries.indexOf(entry).takeIf { index -> index != -1 }
+	}
+
+	override suspend fun removeEntry(entry: QueueEntry) {
+		val index = indexOf(entry) ?: return
+
+		// Add to removed list
+		removedEntries++
+
+		// Remove from fetched list
+		fetchedEntries.removeAt(index)
+
+		// Update indices
+		currentQueueIndicesPlayed.removeAll { it == index }
+		currentQueueIndicesPlayed.replaceAll { if (it > index) it - 1 else it }
+		if (_entryIndex.value >= index) _entryIndex.value -= 1
+
+		orderIndexProvider.notifyRemoved(index)
+
+		// Play next entry if the removed entry is currently the active one
+		if (_entry.value == entry) next(usePlaybackOrder = true, useRepeatMode = false)
+
+		// Update emitted entries
+		_entries.value = fetchedEntries.toList()
+	}
+
+	override fun clear() {
+		suppliers.clear()
+		currentSupplierIndex = 0
+		currentSupplierEntryIndex = 0
+		fetchedEntries.clear()
+		_entries.value = emptyList()
+		_entry.value = null
+		_entryIndex.value = Queue.INDEX_NONE
+		currentQueueIndicesPlayed.clear()
+	}
+
+	// Preloading
+
+	private fun getNextIndices(amount: Int, usePlaybackOrder: Boolean, useRepeatMode: Boolean): Collection<Int> {
+		val provider = if (usePlaybackOrder) orderIndexProvider else defaultOrderIndexProvider
+		val repeatMode = if (useRepeatMode) state.repeatMode.value else RepeatMode.NONE
+
+		return when (repeatMode) {
+			RepeatMode.NONE -> provider.provideIndices(amount, estimatedSize, currentQueueIndicesPlayed, _entryIndex.value)
+
+			RepeatMode.REPEAT_ENTRY_ONCE -> buildList(amount) {
+				add(_entryIndex.value)
+				addAll(provider.provideIndices(amount - 1, estimatedSize, currentQueueIndicesPlayed, _entryIndex.value))
+			}.take(amount)
+
+			RepeatMode.REPEAT_ENTRY_INFINITE -> List(amount) { _entryIndex.value }
+		}
+	}
+
+	// Jumping
+
+	override suspend fun previous(): QueueEntry? = currentQueueIndicesPlayed.removeLastOrNull()?.let {
+		setIndex(it)
+	}
+
+	override suspend fun next(usePlaybackOrder: Boolean, useRepeatMode: Boolean): QueueEntry? {
+		val index = getNextIndices(1, usePlaybackOrder, useRepeatMode).firstOrNull() ?: return null
+
+		val provider = if (usePlaybackOrder) orderIndexProvider else defaultOrderIndexProvider
+		val repeatMode = if (useRepeatMode) state.repeatMode.value else RepeatMode.NONE
+
+		// Automatically set repeat mode back to none when using the ONCE option
+		if (repeatMode == RepeatMode.REPEAT_ENTRY_ONCE && index == this._entryIndex.value) {
+			state.setRepeatMode(RepeatMode.NONE)
+		} else if (repeatMode == RepeatMode.NONE) {
+			provider.useNextIndex()
+		}
+
+		return setIndex(index, true)
+	}
+
+	override suspend fun setIndex(index: Int, saveHistory: Boolean): QueueEntry? {
+		if (index < 0 && index != Queue.INDEX_NONE) return null
+
+		val currentEntry = getOrSupplyEntry(index)
+		if (currentEntry != null && entryChangePredicate?.invoke(currentEntry) == false) return null
+
+		// Save previous index
+		if (saveHistory && _entryIndex.value != Queue.INDEX_NONE) {
+			currentQueueIndicesPlayed.add(_entryIndex.value)
+		}
+
+		// Set new index
+		_entryIndex.value = if (currentEntry == null) Queue.INDEX_NONE else index
+		_entry.value = currentEntry
+
+		return currentEntry
+	}
+
+	// Peeking
+
+	override suspend fun peekPrevious(): QueueEntry? = currentQueueIndicesPlayed.lastOrNull()?.let {
+		getOrSupplyEntry(it)
+	}
+
+	override fun peekPreviousCached(): QueueEntry? = currentQueueIndicesPlayed.lastOrNull()?.let(fetchedEntries::getOrNull)
+
+	override suspend fun peekNext(
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): QueueEntry? = peekNext(1, usePlaybackOrder, useRepeatMode).firstOrNull()
+
+	override fun peekNextCached(
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): QueueEntry? = peekNextCached(1, usePlaybackOrder, useRepeatMode).firstOrNull()
+
+	override suspend fun peekNext(
+		amount: Int,
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): Collection<QueueEntry> {
+		return getNextIndices(amount, usePlaybackOrder, useRepeatMode)
+			.mapNotNull { index -> getOrSupplyEntry(index) }
+	}
+
+	override fun peekNextCached(
+		amount: Int,
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): Collection<QueueEntry> {
+		if (amount <= 0) return emptyList()
+
+		return getNextIndices(amount, usePlaybackOrder, useRepeatMode)
+			.mapNotNull(fetchedEntries::getOrNull)
+	}
+
+	override fun hasNext(
+		usePlaybackOrder: Boolean,
+		useRepeatMode: Boolean,
+	): Boolean {
+		return _entryIndex.value != Queue.INDEX_NONE && getNextIndices(1, usePlaybackOrder, useRepeatMode).isNotEmpty()
+	}
+}
+
+val PlaybackManager.queue: Queue get() = requireNotNull(getService<QueueService>())

@@ -113,7 +113,6 @@
     <string name="msg_burn_sub_warning">Ghi phụ đề. Điều này có thể mất một vài giây…</string>
     <string name="msg_unable_load_subs">Không thể tải phụ đề</string>
     <string name="msg_subtitles_loading">Đang tải phụ đề…</string>
-    <string name="lbl_filters">Bộ lọc TV trực tiếp</string>
     <string name="lbl_ended">ĐÃ HẾT</string>
     <string name="lbl__continuing">ĐANG TIẾP TỤC</string>
     <string name="lbl_display_preferences">Tùy chọn hiển thị</string>
@@ -168,7 +167,6 @@
     <string name="no_program_data">Không có dữ liệu chương trình</string>
     <string name="msg_record_entire_series">Ghi lại toàn bộ loạt phim truyền hình\?</string>
     <string name="lbl_just_this_once">Chỉ lần này thôi</string>
-    <string name="lbl_select_date">Chọn ngày</string>
     <string name="lbl_in_x_days">Trong %d ngày</string>
     <string name="desc_premieres">Hiển thị một loạt các thử nghiệm tập mới cho bất kỳ bộ phim nào bạn xem</string>
     <string name="lbl_show_premieres">Hiển thị các mùa công chiếu</string>
@@ -204,9 +202,6 @@
     <string name="subtitle_error">Không thể chọn phụ đề</string>
     <string name="too_many_errors">Có quá nhiều lỗi. Từ bỏ</string>
     <string name="player_error">Đã gặp lỗi trình phát. Sẽ thử lại…</string>
-    <string name="msg_live_tv_prev">Tải về trước %1$d giờ?</string>
-    <string name="msg_live_tv_next">Tải kế tiếp %1$d giờ?</string>
-    <string name="lbl_load_guide_data">Tải dữ liệu hướng dẫn</string>
     <string name="episode_missing_message_2">Tập này bị thiếu trong thư viện của bạn. Phát lại sẽ dừng.</string>
     <string name="episode_missing_message">Tập này bị thiếu trong thư viện của bạn. Bạn có muốn bỏ qua nó và tiếp tục phần tiếp theo không\?</string>
     <string name="episode_missing">Tập bị thiếu</string>
@@ -246,8 +241,6 @@
     <string name="lbl_colored_backgrounds">Nền được mã hóa màu</string>
     <string name="lbl_direct_stream_live">Luồng phát TV trực tiếp</string>
     <string name="lbl_album">Album</string>
-    <string name="lbl_tv_filter_status">trong %1$d giờ tiếp theo</string>
-    <string name="lbl_tv_channel_status">%1$d trong số %2$d kênh</string>
     <string name="lbl_subtitle_track">Chọn bản phụ đề</string>
     <string name="lbl_audio_track">Chọn bản âm thanh</string>
     <string name="lbl_pause">Tạm dừng</string>

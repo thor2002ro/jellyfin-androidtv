@@ -80,9 +80,6 @@
     <string name="too_many_errors">Превише грешака. Одустајем</string>
     <string name="player_error">Дошло је до грешке плејера. Покушаћу поново…</string>
     <string name="seek_error">Немогућа је претрага</string>
-    <string name="msg_live_tv_prev">Учитај претходних %1$d сати?</string>
-    <string name="msg_live_tv_next">Учитај следећих %1$d сати?</string>
-    <string name="lbl_load_guide_data">Учитајте податке водича</string>
     <string name="episode_missing_message_2">Ова епизода недостаје у вашој библиотеци. Репродукција ће се зауставити.</string>
     <string name="episode_missing_message">Ова епизода недостаје у вашој библиотеци. Да ли бисте желели да га прескочите и наставите на следећи\?</string>
     <string name="episode_missing">Недостаје епизода</string>
@@ -117,8 +114,6 @@
     <string name="lbl_live_broadcasts">Емитовање уживо</string>
     <string name="lbl_repeat_episodes">Понови епизоде</string>
     <string name="lbl_premieres">Премијере</string>
-    <string name="lbl_tv_channel_status">%1$d од %2$d канала</string>
-    <string name="lbl_tv_filter_status">за следећих %1$d сати</string>
     <string name="lbl_new_only">Само нове</string>
     <string name="lbl_new_episodes">Нове епизоде</string>
     <string name="lbl_news">Нове</string>
@@ -150,7 +145,6 @@
     <string name="no_program_data">Подаци о програму нису доступни</string>
     <string name="msg_record_entire_series">Снимити целу серију\?</string>
     <string name="lbl_just_this_once">Само овај пут</string>
-    <string name="lbl_select_date">Изаберите датум</string>
     <string name="lbl_in_x_days">За %d дана</string>
     <string name="desc_premieres">Покажите ред нових пилота епизода за било коју серију коју гледате</string>
     <string name="lbl_show_premieres">Прикажите премијере сезоне</string>
@@ -198,7 +192,6 @@
     <string name="msg_burn_sub_warning">Спајање титлова са видеом. Ово може потрајати неколико секунди…</string>
     <string name="msg_unable_load_subs">Није могуће учитати титл</string>
     <string name="msg_subtitles_loading">Учитавам титлове…</string>
-    <string name="lbl_filters">Филтери</string>
     <string name="lbl_ended">ЗАВРШЕНА</string>
     <string name="lbl__continuing">НАСТАВЉА СЕ</string>
     <string name="lbl_display_preferences">Поставке приказа</string>

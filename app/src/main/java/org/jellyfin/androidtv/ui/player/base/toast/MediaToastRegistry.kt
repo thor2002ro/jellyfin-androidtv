@@ -27,8 +27,6 @@ class MediaToastRegistry(
 	}
 
 	fun emit(data: MediaToastData, duration: kotlin.time.Duration) {
-		if (current.value == data) return
-
 		_current.value = data
 
 		unsetJob?.cancel()

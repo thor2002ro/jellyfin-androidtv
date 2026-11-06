@@ -107,9 +107,6 @@
     <string name="too_many_errors">பல பிழைகள். விடப்பட்டது</string>
     <string name="player_error">பிளேயர் பிழை ஏற்பட்டது. மீண்டும் முயற்சி…</string>
     <string name="seek_error">தேட முடியவில்லை</string>
-    <string name="msg_live_tv_prev">முந்தைய %1$d மணிநேரத்தை ஏற்றவா?</string>
-    <string name="msg_live_tv_next">அடுத்த %1$d மணிநேரத்தை ஏற்றவா?</string>
-    <string name="lbl_load_guide_data">வழிகாட்டி தரவை ஏற்றவும்</string>
     <string name="episode_missing_message_2">இந்த அத்தியாயம் உங்கள் நூலகத்தில் இல்லை. பின்னணி நிறுத்தப்படும்.</string>
     <string name="episode_missing_message">இந்த அத்தியாயம் உங்கள் நூலகத்தில் இல்லை. அதைத் தவிர்த்துவிட்டு அடுத்ததைத் தொடர விரும்புகிறீர்களா\?</string>
     <string name="episode_missing">அத்தியாயம் காணவில்லை</string>
@@ -175,7 +172,6 @@
     <string name="no_program_data">நிரல் தரவு கிடைக்கவில்லை</string>
     <string name="msg_record_entire_series">முழு தொடரையும் பதிவு செய்யவா\?</string>
     <string name="lbl_just_this_once">ஒரு முறை</string>
-    <string name="lbl_select_date">தேதி தேர்ந்தெடு</string>
     <string name="lbl_in_x_days">%d நாட்களில்</string>
     <string name="desc_premieres">நீங்கள் பார்க்கும் எந்தத் தொடருக்கும் புதிய எபிசோட் விமானிகளின் வரிசையைக் காட்டு</string>
     <string name="lbl_show_premieres">சீசன் பிரீமியர்களைக் காட்டு</string>
@@ -221,7 +217,6 @@
     <string name="msg_burn_sub_warning">வசன வரிகள் பதிக்க சில நிமிடங்கள் ஆகலாம்…</string>
     <string name="msg_unable_load_subs">வசனத்தை ஏற்ற முடியவில்லை</string>
     <string name="msg_subtitles_loading">வசன வரிகள் ஏற்றுதல்…</string>
-    <string name="lbl_filters">நேரலை டிவி வடிப்பான்கள்</string>
     <string name="lbl_ended">முடிந்தது</string>
     <string name="lbl__continuing">தொடர்கிறது</string>
     <string name="lbl_display_preferences">காட்சி விருப்பத்தேர்வுகள்</string>
@@ -251,8 +246,6 @@
     <string name="lbl_program_ended">நிரல் முடிந்தது</string>
     <string name="lbl_begin_padding">திணிப்பு தொடங்குங்கள்</string>
     <string name="msg_will_record">பதிவு செய்யப்படும்</string>
-    <string name="lbl_tv_filter_status">அடுத்த %1$d மணிநேரங்களுக்கு</string>
-    <string name="lbl_tv_channel_status">%2$d சேனல்களில் %1$d</string>
     <string name="lbl_subtitle_track">வசனத் தடத்தைத் தேர்ந்தெடுக்கவும்</string>
     <string name="lbl_audio_track">ஆடியோ டிராக்கைத் தேர்ந்தெடுக்கவும்</string>
     <string name="lbl_pause">இடைநிறுத்தம்</string>

@@ -130,7 +130,6 @@
     <string name="lbl_display_preferences">顯示偏好設定</string>
     <string name="lbl__continuing">連載緊</string>
     <string name="lbl_ended">完結咗</string>
-    <string name="lbl_filters">直播電視篩選</string>
     <string name="msg_subtitles_loading">載入緊字幕…</string>
     <string name="lbl_end_padding">結束緩衝時間</string>
     <string name="lbl_similar_items_library">媒體櫃入面嘅相似項目</string>
@@ -195,7 +194,6 @@
     <string name="lbl_show_premieres">顯示季度首播</string>
     <string name="desc_premieres">顯示你睇開嘅劇集最新一集試播</string>
     <string name="lbl_in_x_days">%d 日後</string>
-    <string name="lbl_select_date">揀日期</string>
     <string name="lbl_just_this_once">就呢一次</string>
     <string name="msg_record_entire_series">錄製成套劇集？</string>
     <string name="no_program_data">冇節目資料</string>
@@ -228,8 +226,6 @@
     <string name="lbl_next_episode">下一集</string>
     <string name="lbl_album_name">專輯名</string>
     <string name="lbl_song_title">歌名</string>
-    <string name="lbl_tv_channel_status">第 %1$d 條（共 %2$d 條頻道）</string>
-    <string name="lbl_tv_filter_status">之後 %1$d 個鐘</string>
     <string name="lbl_news">新聞</string>
     <string name="lbl_new_only">只限新集數</string>
     <string name="lbl_subtitle_delay">字幕延遲</string>
@@ -272,9 +268,6 @@
     <string name="episode_missing">搵唔到呢集</string>
     <string name="episode_missing_message">你個媒體櫃搵唔到呢集。你想唔想跳過佢，直接播下一集？</string>
     <string name="episode_missing_message_2">你個媒體櫃搵唔到呢集，播放將會停止。</string>
-    <string name="lbl_load_guide_data">載入節目表資料</string>
-    <string name="msg_live_tv_next">載入之後 %1$d 個鐘嘅資料？</string>
-    <string name="msg_live_tv_prev">載入之前 %1$d 個鐘嘅資料？</string>
     <string name="seek_error">跳轉唔到</string>
     <string name="player_error">播放器出咗錯，試緊重新連線…</string>
     <string name="too_many_errors">出太多錯喇，放棄嘗試</string>

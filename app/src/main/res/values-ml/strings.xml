@@ -22,11 +22,7 @@
     <string name="server_connection_failed">സെർവറിലേക്ക് കണക്റ്റുചെയ്യാനായില്ല</string>
     <string name="lbl_playback_control_ends">%1$s ൽ അവസാനിക്കുന്നു</string>
     <string name="audio_error">%1$s ഓഡിയോ പ്ലേ ചെയ്യാൻ കഴിയില്ല</string>
-    <string name="msg_live_tv_prev">മുമ്പത്തെ %1$d മണിക്കൂർ ലോഡുചെയ്യണോ?</string>
-    <string name="msg_live_tv_next">അടുത്ത %1$d മണിക്കൂർ ലോഡുചെയ്യണോ?</string>
     <string name="lbl_unknown_key">അജ്ഞാതം (%1s)</string>
-    <string name="lbl_tv_filter_status">അടുത്മ %1$d ണിക്കൂർ</string>
-    <string name="lbl_tv_channel_status">%1$d ഡി %2$d ചാനലുകൾ</string>
     <string name="lbl_resume_from">%1$s ൽ നിന്ന് ആരംഭിക്കുക</string>
     <string name="lbl_in_x_days">%d ദിവസങ്ങളിൽ</string>
     <string name="lbl_now_playing_album">%1$s മുതൽ</string>
@@ -93,7 +89,6 @@
     <string name="subtitle_error">ഉപശീർഷകം തിരഞ്ഞെടുക്കാനായില്ല</string>
     <string name="too_many_errors">വളരെയധികം പിശകുകൾ. ഉപേക്ഷിക്കുന്നു</string>
     <string name="seek_error">അന്വേഷിക്കാൻ കഴിയുന്നില്ല</string>
-    <string name="lbl_load_guide_data">ഗൈഡ് ഡാറ്റ ലോഡുചെയ്യുക</string>
     <string name="episode_missing_message_2">ഈ എപ്പിസോഡ് നിങ്ങളുടെ ലൈബ്രറിയിൽ കാണുന്നില്ല. പ്ലേബാക്ക് നിർത്തും.</string>
     <string name="episode_missing_message">ഈ എപ്പിസോഡ് നിങ്ങളുടെ ലൈബ്രറിയിൽ കാണുന്നില്ല. ഇത് ഒഴിവാക്കി അടുത്തതിലേക്ക് തുടരാൻ നിങ്ങൾ ആഗ്രഹിക്കുന്നുണ്ടോ\?</string>
     <string name="episode_missing">എപ്പിസോഡ് കാണുന്നില്ല</string>
@@ -152,7 +147,6 @@
     <string name="no_program_data">&lt;പ്രോഗ്രാം ഡാറ്റയൊന്നും ലഭ്യമല്ല&gt;</string>
     <string name="msg_record_entire_series">മുഴുവൻ സീരീസും റെക്കോർഡുചെയ്യണോ\?</string>
     <string name="lbl_just_this_once">ഇത് ഒരിക്കൽ മാത്രം</string>
-    <string name="lbl_select_date">തീയതി തിരഞ്ഞെടുക്കുക</string>
     <string name="desc_premieres">നിങ്ങൾ കാണുന്ന ഏത് സീരീസിനും പുതിയ എപ്പിസോഡ് പൈലറ്റുമാരുടെ ഒരു വരി കാണിക്കുക</string>
     <string name="lbl_show_premieres">ബ്രൗസുചെയ്യുമ്പോൾ സീസൺ പ്രീമിയറുകൾ കാണിക്കുക</string>
     <string name="lbl_refresh_switching">നിരക്ക് മാറുന്നത് പുതുക്കുക</string>
@@ -194,7 +188,6 @@
     <string name="lbl_recorded_tv">റെക്കോർഡുചെയ്‌ത ടിവി</string>
     <string name="lbl_live_tv_guide">തത്സമയ ടിവി ഗൈഡ്</string>
     <string name="msg_unable_load_subs">സബ്‌ടൈറ്റിൽ ലോഡുചെയ്യാനായില്ല</string>
-    <string name="lbl_filters">തത്സമയ ടി വി ഫിൽട്ടറുകൾ</string>
     <string name="lbl_ended">അവസാനിച്ചു</string>
     <string name="lbl__continuing">തുടരുന്നു</string>
     <string name="lbl_display_preferences">പ്രദർശന മുൻ‌ഗണനകൾ</string>

@@ -84,7 +84,6 @@
     <string name="lbl_mark_unplayed">Märgi mitteesitatuks</string>
     <string name="msg_no_playable_items">Esitatavaid pole</string>
     <string name="lbl__continuing">JÄTKUB</string>
-    <string name="lbl_filters">Telekanalite filtrid</string>
     <string name="msg_unable_load_subs">Subtiitrite laadimine nurjus</string>
     <string name="lbl_songs">Lood</string>
     <string name="lbl_episodes">Episoodid</string>
@@ -159,7 +158,6 @@
     <string name="msg_item_added">" -üksus lisati"</string>
     <string name="lbl_delete">Kustuta</string>
     <string name="msg_settings_updated">Eelistused uuendatud</string>
-    <string name="lbl_tv_channel_status">%1$d / %2$d kanalist</string>
     <string name="episode_missing_message">See episood puudub su meediakogust. Kas soovid selle vahele jätta ja jätkata järgmisega?</string>
     <string name="pref_next_up_timeout_summary">Ooteaeg enne järgmise üksuse esitamist</string>
     <string name="pref_app_theme">Rakenduse teema</string>
@@ -175,9 +173,7 @@
     <string name="watch_now">Vaata nüüd</string>
     <string name="pref_next_up_behavior_title">Kuva järgmise video teave</string>
     <string name="bitrate_kbit">%1$,.0f Kbit/s</string>
-    <string name="msg_live_tv_next">Lae järgmised %1$d tundi?</string>
     <string name="mark_watched">Märgi vaadatuks</string>
-    <string name="msg_live_tv_prev">Lae eelmised %1$d tundi?</string>
     <string name="too_many_errors">Liiga palju vigu. Annan alla</string>
     <string name="lbl_by_letter">Tähthaaval</string>
     <string name="lbl_directed_by">Lavastaja</string>
@@ -206,7 +202,6 @@
     <string name="lbl_playback_speed">Taasesituse kiirus</string>
     <string name="lbl_play_next_up">Esita järgmine</string>
     <string name="no_program_data">Saateinfo pole saadaval</string>
-    <string name="lbl_select_date">Vali kuupäev</string>
     <string name="lbl_on_schedule">Õigeaegselt</string>
     <string name="lbl_guest_stars">Külalistähed</string>
     <string name="lbl_show_indicators">Kuva indikaatoreid</string>
@@ -257,13 +252,11 @@
     <string name="lbl_show_premieres">Kuva hooaja pilootosad</string>
     <string name="desc_premieres">Kuva kõigi vaadatavate sarjade jaoks uute pilootosade rida</string>
     <string name="lbl_in_x_days">%d päeva jooksul</string>
-    <string name="lbl_tv_filter_status">järgmised %1$d tundi</string>
     <string name="lbl_news">Uudised</string>
     <string name="pref_device_model">Seadme mudel</string>
     <string name="grid_direction">Ruudustiku suund</string>
     <string name="grid_direction_vertical">Vertikaalne</string>
     <string name="episode_missing_message_2">See episood puudub su meediakogust. Taasesitus peatub.</string>
-    <string name="lbl_load_guide_data">Lae kava andmed</string>
     <string name="msg_no_items">Puuduvad üksused</string>
     <string name="lbl_latest_in">Uusimad: %1$s</string>
     <string name="because_you_watched">Sest sa vaatasid %1$s</string>
