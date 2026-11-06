@@ -3,6 +3,7 @@ package org.jellyfin.playback.core
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.StateFlow
 import org.jellyfin.playback.core.backend.BackendService
 import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
@@ -10,6 +11,7 @@ import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.mediastream.MediaStreamService
 import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.plugin.PlayerService
+import org.jellyfin.playback.core.queue.QueueEntry
 import timber.log.Timber
 import kotlin.reflect.KClass
 import kotlin.time.Duration
@@ -28,6 +30,8 @@ class PlaybackManager internal constructor(
 	private val job = SupervisorJob(parentJob)
 	val backend: PlayerBackend get() = requireNotNull(backendService.backend)
 	val activeBackends: List<PlayerBackend> get() = backendService.activeBackends
+	/** The entry resolving its stream or preparing the display before backend playback starts. */
+	val preparingEntry: StateFlow<QueueEntry?>? get() = mediaStreamService()?.preparingEntry
 	val state: PlayerState = MutablePlayerState(
 		options = options,
 		backendService = backendService,
