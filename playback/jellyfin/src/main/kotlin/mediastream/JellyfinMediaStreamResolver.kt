@@ -193,7 +193,19 @@ class JellyfinMediaStreamResolver(
 
 			val acceptedMediaSourceId = mediaInfo.mediaSource.id
 			val acceptedLiveStreamId = mediaInfo.mediaSource.liveStreamId
+			val acceptedSource = mediaInfo.mediaSource
 			stream?.copy(onAccepted = {
+				// Track selection must use the probed source that produced this stream.
+				// Preserve VOD versions in order; old opened Live TV sources are obsolete.
+				queueEntry.baseItem = queueEntry.baseItem?.let { item ->
+					val sources = item.mediaSources.orEmpty()
+					val updatedSources = when {
+						isLiveTv -> listOf(acceptedSource)
+						sources.any { it.id == acceptedMediaSourceId } -> sources.map { if (it.id == acceptedMediaSourceId) acceptedSource else it }
+						else -> sources + acceptedSource
+					}
+					item.copy(mediaSources = updatedSources)
+				}
 				queueEntry.mediaSourceId = acceptedMediaSourceId
 				queueEntry.liveStreamId = acceptedLiveStreamId
 				if (preferDirectPlay) {
