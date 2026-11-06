@@ -95,6 +95,7 @@ fun PlaybackInfoOverlay(
 	val speed by playbackManager.state.speed.collectAsState()
 	val playerVideoSize by playbackManager.state.videoSize.collectAsState()
 	val subtitleOffset by playbackManager.state.subtitleTimingOffset.collectAsState()
+	val subtitleSpeed by playbackManager.state.subtitleTimingSpeed.collectAsState()
 	val subtitleOffsetSupported by playbackManager.state.subtitleTimingOffsetSupported.collectAsState()
 	val softwareCodecsEnabled = userPreferences[UserPreferences.softwareCodecsEnabled]
 	val parseSubtitlesDuringExtraction = userPreferences[UserPreferences.libassParseSubtitlesDuringExtraction]
@@ -157,6 +158,7 @@ fun PlaybackInfoOverlay(
 		speed,
 		playerVideoSize,
 		subtitleOffset,
+		subtitleSpeed,
 		subtitleOffsetSupported,
 		parseSubtitlesDuringExtraction,
 		transcodingInfo,
@@ -172,6 +174,7 @@ fun PlaybackInfoOverlay(
 			speed = speed,
 			playerVideoSize = playerVideoSize,
 			subtitleOffset = subtitleOffset,
+			subtitleSpeed = subtitleSpeed,
 			subtitleOffsetSupported = subtitleOffsetSupported,
 			parseSubtitlesDuringExtraction = parseSubtitlesDuringExtraction,
 			positionInfo = positionInfo,
@@ -309,6 +312,7 @@ private object NewPlayerStreamStatusBuilder {
 		speed: Float,
 		playerVideoSize: VideoSize,
 		subtitleOffset: Duration,
+		subtitleSpeed: Float,
 		subtitleOffsetSupported: Boolean,
 		parseSubtitlesDuringExtraction: Boolean,
 		positionInfo: PositionInfo,
@@ -406,7 +410,16 @@ private object NewPlayerStreamStatusBuilder {
 						row("ASS path", frameStats.subtitlePath)
 					}
 					row("Flags", subtitleFlags(selectedSubtitleStream, selectedExternalSubtitle))
-					row("Offset", subtitleOffsetInfo(selectedSubtitle, selectedSubtitleStream, subtitleOffset, subtitleOffsetSupported))
+					row(
+						"Timing",
+						subtitleTimingInfo(
+							selectedSubtitle,
+							selectedSubtitleStream,
+							subtitleOffset,
+							subtitleSpeed,
+							subtitleOffsetSupported,
+						),
+					)
 				},
 			),
 			PlaybackInfoSection(
@@ -542,14 +555,16 @@ private object NewPlayerStreamStatusBuilder {
 		if (externalSubtitle?.isForced == true) appendInline("Forced")
 	}.takeIf { it.isNotBlank() }
 
-	private fun subtitleOffsetInfo(
+	private fun subtitleTimingInfo(
 		track: PlayerTrack?,
 		stream: MediaStreamSubtitleTrack?,
 		offset: Duration,
+		speed: Float,
 		supported: Boolean,
 	): String? = when {
 		track == null && stream == null -> null
-		else -> "${offset.formatSignedSeconds()} ${if (supported) "supported" else "unsupported"}"
+		else -> "${offset.formatSignedSeconds()} @ ${"%.3f".format(speed)}x " +
+			if (supported) "supported" else "unsupported"
 	}
 
 	private fun streamBitrate(
