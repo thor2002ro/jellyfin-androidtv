@@ -79,6 +79,7 @@ public class ItemRowAdapter extends MutableObjectAdapter<Object> {
     private FilterOptions mFilters;
 
     private EmptyResponse mRetrieveFinishedListener;
+    private Runnable mRetrieveFinishedRunnable;
 
     private ChangeTriggerType[] reRetrieveTriggers = new ChangeTriggerType[]{};
     private Instant lastFullRetrieve;
@@ -718,10 +719,17 @@ public class ItemRowAdapter extends MutableObjectAdapter<Object> {
             if (exception == null) mRetrieveFinishedListener.onResponse();
             else mRetrieveFinishedListener.onError(exception);
         }
+        if (exception == null && mRetrieveFinishedRunnable != null) {
+            mRetrieveFinishedRunnable.run();
+        }
     }
 
     public void setRetrieveFinishedListener(EmptyResponse response) {
         this.mRetrieveFinishedListener = response;
+    }
+
+    public void setRetrieveFinishedListener(Runnable response) {
+        this.mRetrieveFinishedRunnable = response;
     }
 
     private void notifyRetrieveStarted() {

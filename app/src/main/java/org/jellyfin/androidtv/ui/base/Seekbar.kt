@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -35,6 +37,7 @@ data class SeekbarColors(
 	val bufferColor: Color,
 	val progressColor: Color,
 	val knobColor: Color,
+	val markerColor: Color,
 )
 
 object SeekbarDefaults {
@@ -45,11 +48,13 @@ object SeekbarDefaults {
 		bufferColor: Color = JellyfinTheme.colorScheme.seekbarBuffer,
 		progressColor: Color = JellyfinTheme.colorScheme.rangeControlFill,
 		knobColor: Color = JellyfinTheme.colorScheme.rangeControlKnob,
+		markerColor: Color = JellyfinTheme.colorScheme.rangeControlKnob.copy(alpha = 0.75f),
 	) = SeekbarColors(
 		backgroundColor = backgroundColor,
 		bufferColor = bufferColor,
 		progressColor = progressColor,
 		knobColor = knobColor,
+		markerColor = markerColor,
 	)
 }
 
@@ -66,12 +71,19 @@ fun Seekbar(
 	onSeek: ((progress: Duration) -> Unit)? = null,
 	enabled: Boolean = true,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
+	markers: List<Duration> = emptyList(),
 ) {
 	val durationMs = duration.inWholeMilliseconds.toFloat().coerceAtLeast(1f)
 	val progressPercentage = progress.inWholeMilliseconds.toFloat() / durationMs
 	val bufferPercentage = buffer.inWholeMilliseconds.toFloat() / durationMs
 	val seekForwardPercentage = seekForwardAmount.inWholeMilliseconds.toFloat() / durationMs
 	val seekRewindPercentage = seekRewindAmount.inWholeMilliseconds.toFloat() / durationMs
+	val markerPercentages = remember(markers, duration) {
+		markers
+			.filter { marker -> marker > Duration.ZERO && marker < duration }
+			.distinct()
+			.map { marker -> marker.inWholeMilliseconds.toFloat() / durationMs }
+	}
 
 	Seekbar(
 		modifier = modifier,
@@ -84,6 +96,7 @@ fun Seekbar(
 		onSeek = if (onSeek == null) null else { progress -> onSeek(progress.toDouble() * duration) },
 		enabled = enabled,
 		colors = colors,
+		markers = markerPercentages,
 	)
 }
 
@@ -99,6 +112,7 @@ fun Seekbar(
 	onSeek: ((progress: Float) -> Unit)? = null,
 	enabled: Boolean = true,
 	colors: SeekbarColors = SeekbarDefaults.colors(),
+	markers: List<Float> = emptyList(),
 ) {
 	val coroutineScope = rememberCoroutineScope()
 	val focused by interactionSource.collectIsFocusedAsState()
@@ -106,6 +120,11 @@ fun Seekbar(
 	val visibleProgress = progressOverride ?: progress
 	val knobAlpha by animateFloatAsState(if (focused) 1f else 0f)
 	var scrubCancelJob by remember { mutableStateOf<Job?>(null) }
+	val markerPercentages = remember(markers) {
+		markers
+			.filter { marker -> marker > 0f && marker < 1f }
+			.distinct()
+	}
 
 	Box(
 		modifier = modifier
@@ -175,6 +194,24 @@ fun Seekbar(
 						),
 						cornerRadius = barCornerRadius,
 					)
+				}
+
+				// Chapter/segment markers
+				if (size.width > 0f) {
+					markerPercentages.forEach { marker ->
+						val markerWidth = (size.minDimension * 0.55f)
+							.coerceAtLeast(2f)
+							.coerceAtMost(size.width)
+						val markerStart = (marker.coerceIn(0f, 1f) * size.width - markerWidth / 2)
+							.coerceIn(0f, size.width - markerWidth)
+
+						drawRoundRect(
+							color = colors.markerColor,
+							topLeft = Offset(markerStart, 0f),
+							size = Size(markerWidth, size.height),
+							cornerRadius = barCornerRadius,
+						)
+					}
 				}
 
 				// Progress knob

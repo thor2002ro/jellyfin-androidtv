@@ -628,15 +628,6 @@
     <string name="backdrop_behavior_with_blur">Fundal cu blur</string>
     <string name="backdrop_behavior_without_blur">Fundal fără blur</string>
     <string name="playback_info">Informații redare</string>
-    <string name="playback_info_play_method">Metoda redare: %1$s</string>
-    <string name="playback_info_transcoding">Transcodare</string>
-    <string name="playback_info_container">Container: %1$s</string>
-    <string name="playback_info_codec">Codec: %1$s</string>
-    <string name="playback_info_resolution">Rezoluție: %1$d%2$d</string>
-    <string name="playback_info_bitrate">Rată de biți: %1$s</string>
-    <string name="playback_info_channels">Canale audio: %1$d</string>
-    <string name="playback_info_transcoding_note">Serverul transcodează acest fișier</string>
-    <string name="playback_info_video_range">Gamă dinamică: %1$s</string>
     <string name="playback_buffer_length">Dimensiune buffer redare</string>
     <string name="playback_buffer_auto">Automat</string>
     <string name="playback_buffer_large">Mare</string>

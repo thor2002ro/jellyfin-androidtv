@@ -15,6 +15,7 @@ import org.jellyfin.androidtv.integration.dream.model.DreamContent
 @Composable
 fun DreamView(
 	content: DreamContent,
+	pausedContent: DreamContent.NowPlaying?,
 	showClock: Boolean,
 ) = Box(
 	modifier = Modifier
@@ -37,5 +38,9 @@ fun DreamView(
 	// Header overlay
 	DreamHeader(
 		showClock = showClock,
+	)
+
+	DreamPausedNowPlayingBadge(
+		content = pausedContent,
 	)
 }

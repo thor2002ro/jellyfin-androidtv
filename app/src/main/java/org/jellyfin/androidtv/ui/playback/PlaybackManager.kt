@@ -103,6 +103,7 @@ class PlaybackManager(
 					mediaSourceId = options.mediaSourceId,
 					startTimeTicks = startTimeTicks,
 					deviceProfile = options.profile,
+					maxStreamingBitrate = options.profile?.maxStreamingBitrate,
 					enableDirectStream = options.enableDirectStream,
 					enableDirectPlay = options.enableDirectPlay,
 					maxAudioChannels = options.maxAudioChannels,

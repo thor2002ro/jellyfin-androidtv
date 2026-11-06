@@ -14,9 +14,11 @@ fun DreamHost() {
 	val viewModel = koinViewModel<DreamViewModel>()
 	val userPreferences = koinInject<UserPreferences>()
 	val content by viewModel.content.collectAsState()
+	val pausedContent by viewModel.pausedContent.collectAsState()
 
 	DreamView(
 		content = content,
+		pausedContent = pausedContent,
 		showClock = when (userPreferences[UserPreferences.clockBehavior]) {
 			ClockBehavior.ALWAYS, ClockBehavior.IN_MENUS -> true
 			else -> false
