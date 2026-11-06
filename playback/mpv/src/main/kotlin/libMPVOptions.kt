@@ -353,6 +353,7 @@ internal val MPV_INTERNAL_OPTIONS = setOf(
 	"cache-pause-wait",
 	"demuxer-max-bytes",
 	"demuxer-max-back-bytes",
+	"demuxer-hysteresis-bytes",
 	"demuxer-readahead-secs",
 	"aid",
 	"sid",
