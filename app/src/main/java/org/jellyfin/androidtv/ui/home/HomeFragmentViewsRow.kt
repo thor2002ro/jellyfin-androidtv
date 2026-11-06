@@ -24,7 +24,7 @@ class HomeFragmentViewsRow(
 
 		val header = HeaderItem(context.getString(R.string.lbl_my_media))
 		val row = ListRow(header, rowAdapter)
-		rowAdapter.setRow(row)
+		rowAdapter.setRow(row, rowsAdapter.size().toDouble())
 		rowAdapter.Retrieve()
 		rowsAdapter.add(row)
 	}
