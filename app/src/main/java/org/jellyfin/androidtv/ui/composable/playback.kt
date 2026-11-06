@@ -14,7 +14,7 @@ import androidx.compose.runtime.remember
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.queue.queue
 import org.koin.compose.koinInject
@@ -35,7 +35,7 @@ fun rememberPlayerPositionInfo(
 	precision: Duration = 1.seconds
 ): MutableState<PositionInfo> {
 	val playState by playbackManager.state.playState.collectAsState()
-	val playing = playState == PlayState.PLAYING
+	val playing = playState.isActivePlayback
 
 	val positionInfo = remember { mutableStateOf(playbackManager.state.positionInfo) }
 
@@ -61,7 +61,7 @@ fun rememberPlayerProgress(
 	val duration = playbackManager.state.positionInfo.duration
 
 	return rememberPlayerProgress(
-		playing = playState == PlayState.PLAYING,
+		playing = playState.isActivePlayback,
 		active = active,
 		duration = duration,
 	)

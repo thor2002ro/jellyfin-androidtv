@@ -17,6 +17,7 @@ import org.jellyfin.androidtv.auth.model.ApiClientErrorLoginState
 import org.jellyfin.androidtv.auth.model.AuthenticatedState
 import org.jellyfin.androidtv.auth.model.AuthenticatingState
 import org.jellyfin.androidtv.auth.model.ConnectedQuickConnectState
+import org.jellyfin.androidtv.auth.model.ErrorQuickConnectState
 import org.jellyfin.androidtv.auth.model.PendingQuickConnectState
 import org.jellyfin.androidtv.auth.model.RequireSignInState
 import org.jellyfin.androidtv.auth.model.ServerUnavailableState
@@ -26,6 +27,7 @@ import org.jellyfin.androidtv.auth.model.UnknownQuickConnectState
 import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.databinding.FragmentUserLoginQuickConnectBinding
 import org.jellyfin.androidtv.ui.startup.UserLoginViewModel
+import org.jellyfin.androidtv.util.getConnectionErrorMessage
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
 
 class UserLoginQuickConnectFragment : Fragment() {
@@ -59,7 +61,16 @@ class UserLoginQuickConnectFragment : Fragment() {
 							binding.loading.isVisible = false
 						}
 
-						UnavailableQuickConnectState,
+						is UnavailableQuickConnectState -> {
+							binding.loading.isVisible = false
+							binding.error.setText(R.string.login_server_unavailable)
+						}
+
+						is ErrorQuickConnectState -> {
+							binding.loading.isVisible = false
+							binding.error.text = state.error.getConnectionErrorMessage(requireContext())
+						}
+
 						UnknownQuickConnectState,
 						ConnectedQuickConnectState -> binding.loading.isVisible = true
 					}
@@ -78,8 +89,9 @@ class UserLoginQuickConnectFragment : Fragment() {
 
 						AuthenticatingState -> binding.error.setText(R.string.login_authenticating)
 						RequireSignInState -> binding.error.setText(R.string.login_invalid_credentials)
-						ServerUnavailableState,
-						is ApiClientErrorLoginState -> binding.error.setText(R.string.login_server_unavailable)
+						is ServerUnavailableState -> binding.error.text = state.error?.getConnectionErrorMessage(requireContext())
+							?: getString(R.string.login_server_unavailable)
+						is ApiClientErrorLoginState -> binding.error.text = state.error.getConnectionErrorMessage(requireContext())
 						// Do nothing because the activity will respond to the new session
 						AuthenticatedState -> Unit
 						// Not initialized
@@ -93,6 +105,7 @@ class UserLoginQuickConnectFragment : Fragment() {
 	override fun onDestroyView() {
 		super.onDestroyView()
 
+		userLoginViewModel.cancelQuickConnect()
 		_binding = null
 	}
 

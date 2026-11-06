@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui.player.video
 
 import android.view.KeyEvent
+import android.widget.ImageView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -28,20 +30,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListControlDefaults
+import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
+import org.jellyfin.androidtv.util.ImageHelper
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
@@ -55,9 +62,11 @@ import timber.log.Timber
 import java.time.LocalDateTime
 import java.util.UUID
 
-private const val GuideProgramLimitEachDirection = 5
 private const val GuideTimeStepMinutes = 30L
-private const val GuideProgramWindowSize = GuideProgramLimitEachDirection * 2 + 1
+private const val GuideProgramWindowBeforeMinutes = GuideTimeStepMinutes
+private const val GuideProgramWindowAfterMinutes = GuideTimeStepMinutes * 6
+private val ChannelIconWidth = 56.dp
+private val ChannelIconHeight = 36.dp
 
 @Composable
 fun LiveTvGuideOverlay(
@@ -68,6 +77,7 @@ fun LiveTvGuideOverlay(
 	liveTvChannelNavigator: LiveTvChannelNavigator = rememberLiveTvChannelNavigator(),
 	onRemoteKeyEventHandlerChanged: (((KeyEvent) -> Boolean)?) -> Unit = {},
 	api: ApiClient = koinInject(),
+	imageHelper: ImageHelper = koinInject(),
 ) {
 	val context = LocalContext.current
 	val timeFormatter = remember(context) { context.getTimeFormatter() }
@@ -84,7 +94,7 @@ fun LiveTvGuideOverlay(
 	BackHandler(onBack = onDismiss)
 
 	LaunchedEffect(liveTvChannelNavigator) {
-		channels = liveTvChannelNavigator.getChannels()
+		channels = liveTvChannelNavigator.getChannels().sortedByChannelName()
 	}
 
 	LaunchedEffect(focusRequester, channels) {
@@ -94,6 +104,7 @@ fun LiveTvGuideOverlay(
 	LaunchedEffect(channels, currentChannelId) {
 		val loadedChannels = channels.orEmpty()
 		if (loadedChannels.isEmpty()) return@LaunchedEffect
+		guideProgramsByChannel = loadedChannels.currentProgramsByChannel()
 
 		selectedChannelIndex = loadedChannels
 			.indexOfFirst { channel -> channel.liveTvChannelId() == currentChannelId }
@@ -103,8 +114,9 @@ fun LiveTvGuideOverlay(
 	}
 
 	LaunchedEffect(api, channels) {
-		val channelIds = channels
-			.orEmpty()
+		val loadedChannels = channels.orEmpty()
+		val currentProgramsByChannel = loadedChannels.currentProgramsByChannel()
+		val channelIds = loadedChannels
 			.mapNotNull { channel -> channel.liveTvChannelId() }
 
 		if (channelIds.isEmpty()) {
@@ -113,33 +125,20 @@ fun LiveTvGuideOverlay(
 		}
 
 		val referenceTime = LocalDateTime.now().withSecond(0).withNano(0)
-		val queryLimit = channelIds.size * GuideProgramWindowSize
+		val startTime = referenceTime.minusMinutes(GuideProgramWindowBeforeMinutes)
+		val endTime = referenceTime.plusMinutes(GuideProgramWindowAfterMinutes)
 
-		guideProgramsByChannel = null
 		guideProgramsByChannel = runCatching {
 			withContext(Dispatchers.IO) {
-				// LiveTv/Programs only supports a global limit, so fetch bounded
-				// previous/next batches and trim each channel locally below.
-				val previousPrograms = api.liveTvApi.getLiveTvPrograms(
-					channelIds = channelIds,
-					enableImages = false,
-					sortBy = setOf(ItemSortBy.START_DATE),
-					sortOrder = setOf(SortOrder.DESCENDING),
-					maxStartDate = referenceTime,
-					limit = queryLimit,
-					enableTotalRecordCount = false,
-				).content.items
-				val nextPrograms = api.liveTvApi.getLiveTvPrograms(
+				api.liveTvApi.getLiveTvPrograms(
 					channelIds = channelIds,
 					enableImages = false,
 					sortBy = setOf(ItemSortBy.START_DATE),
 					sortOrder = setOf(SortOrder.ASCENDING),
-					minEndDate = referenceTime,
-					limit = queryLimit,
+					maxStartDate = endTime,
+					minEndDate = startTime,
 					enableTotalRecordCount = false,
 				).content.items
-
-				(previousPrograms + nextPrograms).distinctBy { program -> program.id }
 			}
 		}.onFailure { error ->
 			Timber.e(error, "Unable to load Live TV guide programs")
@@ -147,12 +146,13 @@ fun LiveTvGuideOverlay(
 			.groupBy { program -> program.liveTvChannelId() }
 			.mapNotNull { (channelId, programs) ->
 				if (channelId != null) {
-					channelId to programs.limitAround(referenceTime)
+					channelId to programs
 				} else {
 					null
 				}
 			}
 			.toMap()
+			.mergeWith(currentProgramsByChannel)
 			.also { programsByChannel ->
 				programsByChannel.guideTimeRange()?.let { range ->
 					guideTime = guideTime.coerceIn(range.first, range.second)
@@ -329,6 +329,7 @@ fun LiveTvGuideOverlay(
 							selected = index == selectedChannelIndex,
 							current = channel.liveTvChannelId() == currentChannelId,
 							enabled = !switchingChannel,
+							imageHelper = imageHelper,
 							onClick = {
 								selectedChannelIndex = index
 								selectChannel(channel)
@@ -349,6 +350,7 @@ private fun LiveTvGuideChannelRow(
 	selected: Boolean,
 	current: Boolean,
 	enabled: Boolean,
+	imageHelper: ImageHelper,
 	onClick: () -> Unit,
 ) {
 	val heading = listOfNotNull(
@@ -381,6 +383,9 @@ private fun LiveTvGuideChannelRow(
 				)
 			}
 		},
+		leadingContent = {
+			ChannelIcon(channel, imageHelper)
+		},
 		captionContent = {
 			Text(
 				text = if (loadingProgram) stringResource(R.string.loading) else program.guideCaption(),
@@ -391,36 +396,55 @@ private fun LiveTvGuideChannelRow(
 	)
 }
 
-private fun Collection<BaseItemDto>.limitAround(
-	referenceTime: LocalDateTime,
-): List<BaseItemDto> {
-	val sortedPrograms = sortedBy { program -> program.startDate ?: LocalDateTime.MIN }
-	if (sortedPrograms.isEmpty()) return emptyList()
+@Composable
+private fun ChannelIcon(
+	channel: BaseItemDto,
+	imageHelper: ImageHelper,
+) {
+	val imageUrl = remember(channel.id, channel.imageTags) {
+		imageHelper.getPrimaryImageUrl(channel, height = ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT)
+	}
 
-	val referenceIndex = sortedPrograms.referenceIndex(referenceTime)
-	val startIndex = (referenceIndex - GuideProgramLimitEachDirection).coerceAtLeast(0)
-	val endIndex = (referenceIndex + GuideProgramLimitEachDirection + 1).coerceAtMost(sortedPrograms.size)
-
-	return sortedPrograms.subList(startIndex, endIndex)
+	if (imageUrl != null) {
+		AsyncImage(
+			url = imageUrl,
+			aspectRatio = 16f / 9f,
+			scaleType = ImageView.ScaleType.FIT_CENTER,
+			modifier = Modifier.size(ChannelIconWidth, ChannelIconHeight),
+		)
+	} else {
+		Box(
+			contentAlignment = Alignment.Center,
+			modifier = Modifier.size(ChannelIconWidth, ChannelIconHeight),
+		) {
+			Icon(
+				imageVector = ImageVector.vectorResource(R.drawable.ic_tv),
+				contentDescription = null,
+				tint = Color.White.copy(alpha = 0.72f),
+				modifier = Modifier.size(ChannelIconHeight),
+			)
+		}
+	}
 }
 
-private fun List<BaseItemDto>.referenceIndex(
-	referenceTime: LocalDateTime,
-): Int {
-	val currentProgramIndex = indexOfFirst { program ->
-		val start = program.startDate
-		val end = program.endDate
+private fun List<BaseItemDto>.sortedByChannelName(): List<BaseItemDto> = sortedWith(
+	compareBy<BaseItemDto, String>(String.CASE_INSENSITIVE_ORDER) { channel -> channel.name.orEmpty() }
+		.thenBy(String.CASE_INSENSITIVE_ORDER) { channel -> channel.number.orEmpty() }
+)
 
-		start != null && end != null && !start.isAfter(referenceTime) && end.isAfter(referenceTime)
-	}
-	if (currentProgramIndex >= 0) return currentProgramIndex
+private fun List<BaseItemDto>.currentProgramsByChannel(): Map<UUID, List<BaseItemDto>> = mapNotNull { channel ->
+	val channelId = channel.liveTvChannelId()
+	val currentProgram = channel.currentProgram
+	if (channelId != null && currentProgram != null) channelId to listOf(currentProgram)
+	else null
+}.toMap()
 
-	val nextProgramIndex = indexOfFirst { program ->
-		program.startDate?.isAfter(referenceTime) == true
-	}
-	if (nextProgramIndex >= 0) return nextProgramIndex
-
-	return lastIndex
+private fun Map<UUID, List<BaseItemDto>>.mergeWith(
+	other: Map<UUID, List<BaseItemDto>>,
+): Map<UUID, List<BaseItemDto>> = (keys + other.keys).associateWith { channelId ->
+	(get(channelId).orEmpty() + other[channelId].orEmpty())
+		.distinctBy { program -> program.id }
+		.sortedBy { program -> program.startDate ?: LocalDateTime.MIN }
 }
 
 private fun Collection<BaseItemDto>.programAt(
@@ -438,14 +462,16 @@ private fun Collection<BaseItemDto>.programAt(
 	?: firstOrNull()
 
 private fun Map<UUID, List<BaseItemDto>>.guideTimeRange(): Pair<LocalDateTime, LocalDateTime>? {
-	val startDates = values
+	val programs = values
 		.asSequence()
 		.flatten()
-		.mapNotNull { program -> program.startDate }
 		.toList()
-	if (startDates.isEmpty()) return null
+	if (programs.isEmpty()) return null
 
-	return startDates.minOrNull()!! to startDates.maxOrNull()!!
+	val start = programs.mapNotNull { program -> program.startDate }.minOrNull() ?: return null
+	val end = programs.mapNotNull { program -> program.endDate ?: program.startDate }.maxOrNull() ?: return null
+
+	return start to end
 }
 
 private fun LocalDateTime.coerceIn(

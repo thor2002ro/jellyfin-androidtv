@@ -99,7 +99,6 @@
     <string name="msg_subtitles_loading">자막 로딩 중…</string>
     <string name="msg_unable_load_subs">자막 로드 불가</string>
     <string name="msg_burn_sub_warning">자막을 굽는 중입니다. 잠시 시간이 소요될 수 있습니다…</string>
-    <string name="lbl_no_recordings">녹화 없음</string>
     <string name="lbl_live_tv_guide">실시간TV 편성표</string>
     <string name="lbl_recorded_tv">녹화된 TV</string>
     <string name="pref_live_tv_cat">실시간 TV</string>
@@ -372,7 +371,6 @@
     <string name="color_cyan">청록색</string>
     <string name="server_issue_unable_to_connect">연결할 수 없음</string>
     <string name="server_issue_unsupported_version">서버가 지원되지 않는 %1$s 버전을 사용하고 있습니다</string>
-    <string name="server_issue_ssl_handshake">SSL 핸드셰이크 실패</string>
     <string name="pref_browsing">둘러보기</string>
     <string name="pref_theme">테마</string>
     <string name="pref_login">로그인</string>

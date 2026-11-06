@@ -10,7 +10,7 @@ import org.jellyfin.androidtv.ui.base.SeekbarColors
 import org.jellyfin.androidtv.ui.base.SeekbarDefaults
 import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
+import org.jellyfin.playback.core.model.isActivePlayback
 import org.koin.compose.koinInject
 import kotlin.time.Duration
 import kotlin.time.times
@@ -26,7 +26,7 @@ fun PlayerSeekbar(
 	val playState by playbackManager.state.playState.collectAsState()
 	val positionInfo = playbackManager.state.positionInfo
 	val animatedProgress by rememberPlayerProgress(
-		playing = playState == PlayState.PLAYING,
+		playing = playState.isActivePlayback,
 		active = positionInfo.active,
 		duration = positionInfo.duration,
 	)

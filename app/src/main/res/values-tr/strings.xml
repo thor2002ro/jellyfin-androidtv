@@ -56,7 +56,6 @@
     <string name="pref_live_tv_cat">Canlı TV</string>
     <string name="lbl_recorded_tv">Kaydedilmiş TV</string>
     <string name="lbl_live_tv_guide">Canlı TV Rehberi</string>
-    <string name="lbl_no_recordings">Mevcut kayıt yok</string>
     <string name="msg_burn_sub_warning">Altyazılar gömülüyor. Bu işlem birkaç saniye sürebilir…</string>
     <string name="msg_unable_load_subs">Altyazı yüklenemedi</string>
     <string name="msg_subtitles_loading">Altyazılar yükleniyor…</string>
@@ -408,7 +407,6 @@
     <string name="image_size_xlarge">Ekstra Büyük</string>
     <string name="sort_accounts_by">Hesapları sırala</string>
     <string name="lbl_quality_profile">Kalite profili</string>
-    <string name="server_issue_ssl_handshake">SSL el sıkışması başarısız oldu</string>
     <string name="image_size_smallest">En Küçük</string>
     <string name="pref_home_description">Gösterilen bölümleri yapılandırın</string>
     <string name="pref_customization_description">Tema, ana ekran, yeniden eşleştirme</string>

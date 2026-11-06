@@ -1,99 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/popup_menu_back">
+    android:background="@drawable/program_detail_popup_back"
+    android:clipToPadding="false"
+    android:orientation="vertical"
+    android:paddingStart="28dp"
+    android:paddingTop="24dp"
+    android:paddingEnd="28dp"
+    android:paddingBottom="22dp">
 
     <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
         android:id="@+id/title"
-        android:textSize="25sp"
-        android:layout_marginEnd="20sp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:ellipsize="end"
-        android:maxLines="1"
-        android:layout_marginStart="20sp"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="10sp"
-        android:fontFamily="sans-serif-light" />
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:maxLines="2"
+        android:textColor="@color/white"
+        android:textSize="24sp" />
 
     <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="20sp"
-        android:layout_alignParentEnd="false"
-        android:layout_below="@+id/title"
         android:id="@+id/infoRow"
-        android:layout_marginStart="20sp"
-        android:gravity="center"
-        android:layout_marginTop="10sp" />
-
-    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:minHeight="20dp"
+        android:orientation="horizontal" />
+
+    <TextView
         android:id="@+id/summary"
-        android:textSize="16sp"
-        android:layout_marginEnd="30sp"
-        android:layout_below="@+id/infoRow"
-        android:layout_marginBottom="10sp"
-        android:layout_marginTop="10sp"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1"
         android:ellipsize="end"
-        android:maxLines="8"
-        android:layout_marginStart="30sp"
-        android:minHeight="150sp"
+        android:fontFamily="sans-serif"
         android:gravity="center_vertical"
-        android:fontFamily="sans-serif-light" />
+        android:maxLines="6"
+        android:textColor="@color/button_default_normal_text"
+        android:textSize="15sp" />
 
     <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="fill_parent"
-        android:layout_height="25sp"
-        android:layout_below="@+id/summary"
-        android:layout_alignStart="@+id/summary"
         android:id="@+id/timeline"
-        android:layout_marginTop="5sp"
-        android:showDividers="middle"
+        android:layout_width="match_parent"
+        android:layout_height="24dp"
+        android:layout_marginTop="12dp"
         android:divider="@drawable/blank10x10"
-        android:gravity="center"/>
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:showDividers="middle" />
 
     <TextView
+        android:id="@+id/recordLine"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:id="@+id/recordLine"
-        android:maxLines="1"
-        android:layout_below="@+id/timeline"
-        android:layout_marginTop="10sp"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
         android:gravity="center"
-        android:textColor="@android:color/holo_red_light" />
+        android:maxLines="1"
+        android:minHeight="22dp"
+        android:textColor="@android:color/holo_red_light"
+        android:textSize="14sp" />
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/buttonRow"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
     <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="fill_parent"
-        android:layout_height="50sp"
-        android:id="@+id/buttonRow"
-        android:layout_marginTop="15sp"
-        android:showDividers="middle"
-        android:divider="@drawable/blank10x10"
-        android:layout_alignParentBottom="false"
-        android:layout_below="@+id/recordLine"
-        android:gravity="center" />
-
-    <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
-        android:layout_alignParentBottom="true"
-        android:layout_alignStart="@+id/buttonRow"
-        android:layout_below="@+id/buttonRow"
         android:id="@+id/similarRow"
-        android:layout_marginTop="10sp">
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/lbl_similar_items_library"
             android:gravity="center"
+            android:text="@string/lbl_similar_items_library"
             android:visibility="gone" />
     </LinearLayout>
 
-</RelativeLayout>
+</LinearLayout>

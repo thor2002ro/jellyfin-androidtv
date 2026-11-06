@@ -151,7 +151,6 @@
     <string name="pref_live_tv_cat">TV în Direct</string>
     <string name="lbl_recorded_tv">Înregistrări TV</string>
     <string name="lbl_live_tv_guide">Ghid TV Live</string>
-    <string name="lbl_no_recordings">Nu există înregistrări disponibile</string>
     <string name="msg_burn_sub_warning">Subtitrările se încorporează în video. Poate dura câteva secunde…</string>
     <string name="msg_unable_load_subs">Nu s-a putut încărca subtitrarea</string>
     <string name="msg_subtitles_loading">Se încarcă subtitrările…</string>
@@ -347,7 +346,6 @@
     <string name="pref_accounts">Conturi</string>
     <string name="sort_accounts_by">Sorteaza conturi după</string>
     <string name="pref_customization">Personalizare</string>
-    <string name="server_issue_ssl_handshake">Handshake-ul SSL a eșuat</string>
     <string name="server_issue_timeout">Conexiunea a expirat</string>
     <string name="server_issue_outdated_version">Serverul folosește o versiune neacceptată %1$s. Te rugăm să actualizezi la %2$s sau mai nouă</string>
     <string name="server_issue_unsupported_version">Serverul utilizează versiunea %1$s care nu este suportată</string>

@@ -217,7 +217,6 @@
     <string name="color_pink">Розева</string>
     <string name="server_issue_unable_to_connect">Поврзувањето е неуспешно</string>
     <string name="server_issue_invalid_product">Софтверот на серверот не е компатибилен</string>
-    <string name="server_issue_ssl_handshake">SSL ракувањето е неуспешно</string>
     <string name="sort_accounts_by">Сортирај сметки по</string>
     <string name="pref_libraries">Библиотеки</string>
     <string name="pref_audio">Звук</string>
@@ -364,7 +363,6 @@
     <string name="home_section_livetv">ТВ во живо</string>
     <string name="lbl_rating">Оценка</string>
     <string name="lbl_display_preferences">Поставки за приказ</string>
-    <string name="lbl_no_recordings">Нема достапни снимки</string>
     <string name="lbl_prev_item">Претходна ставка</string>
     <string name="lbl_use_series_thumbnails">Претпочитајте сликички од сериите</string>
     <string name="lbl_showing">Се прикажува</string>

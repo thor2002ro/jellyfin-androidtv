@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Lade Untertitel…</string>
     <string name="msg_unable_load_subs">Untertitel konnten nicht geladen werden</string>
     <string name="msg_burn_sub_warning">Untertitel werden eingebrannt. Dies kann ein paar Sekunden dauern…</string>
-    <string name="lbl_no_recordings">Keine Aufnahmen verfügbar</string>
     <string name="lbl_live_tv_guide">Aktuelles Fernsehprogramm</string>
     <string name="lbl_recorded_tv">Fernsehaufnahmen</string>
     <string name="pref_live_tv_cat">Live-TV</string>
@@ -391,7 +390,6 @@
     <string name="pref_accounts">Konten</string>
     <string name="sort_accounts_by">Konten sortieren nach</string>
     <string name="pref_customization">Personalisierung</string>
-    <string name="server_issue_ssl_handshake">SSL-Handshake fehlgeschlagen</string>
     <string name="server_issue_timeout">Zeitüberschreitung der Verbindung</string>
     <string name="server_issue_outdated_version">Server verwendet nicht unterstützte Version %1$s. Bitte auf %2$s oder neuer aktualisieren</string>
     <string name="server_issue_unsupported_version">Server verwendet Version %1$s, die nicht unterstützt wird</string>

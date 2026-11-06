@@ -138,7 +138,6 @@
     <string name="msg_error_live_stream">خطا در پخش تلویزیون زنده. دوباره تلاش خواهیم کرد…</string>
     <string name="pref_live_tv_cat">تلویزیون زنده</string>
     <string name="lbl_recorded_tv">برنامه های تلویزیونی ضبط شده</string>
-    <string name="lbl_no_recordings">هیچ ضبطی در دسترس نمی‌باشد</string>
     <string name="msg_burn_sub_warning">چسباندن زیرنویس میتوانید تا چند دقیقه به طول بیانجامد. لطفاً صبور باشید…</string>
     <string name="msg_unable_load_subs">نمایش زیرنویس امکان پذیر نیست</string>
     <string name="msg_subtitles_loading">درحال بارگذاری زیرنویس ها…</string>
@@ -230,7 +229,6 @@
     <string name="pref_accounts">حساب ها</string>
     <string name="sort_accounts_by">مرتب سازی حساب ها بر اساس</string>
     <string name="pref_customization">سفارشی سازی</string>
-    <string name="server_issue_ssl_handshake">تبادل اطلاعات با SSL با شکست مواجه شد</string>
     <string name="server_issue_timeout">اتصال منقضی شد</string>
     <string name="server_issue_outdated_version">سرور از نسخه %1$s استفاده میکند ولی به نسخه %2$s یا جدید تر نیاز دارد</string>
     <string name="server_issue_unsupported_version">سرور از نسخه %1$s استفاده میکند که پشتیبانی نمیشود</string>

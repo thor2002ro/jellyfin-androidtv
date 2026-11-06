@@ -80,7 +80,7 @@ class HomeFragmentHelper(
 			limit = ITEM_LIMIT_ON_NOW
 		)
 
-		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_on_now), query))
+		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_on_now), query, true))
 	}
 
 	companion object {

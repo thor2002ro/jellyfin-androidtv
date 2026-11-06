@@ -66,12 +66,12 @@ class PlaySessionService(
 		state.backendEvents.onEach { event ->
 			when (event) {
 				is PlayerBackendEvent.PlayStateChanged -> when (event.state) {
-					PlayState.PLAYING, PlayState.PAUSED -> {
+					PlayState.PLAYING, PlayState.BUFFERING, PlayState.PAUSED -> {
 						val stream = event.stream ?: return@onEach
 						if (manager.queue.entry.value?.mediaStream !== stream) return@onEach
 						sendStreamStart()
 						startProgressReports(
-							if (event.state == PlayState.PLAYING) PROGRESS_REPORTING_INTERVAL else PAUSED_REPORTING_INTERVAL,
+							if (event.state != PlayState.PAUSED) PROGRESS_REPORTING_INTERVAL else PAUSED_REPORTING_INTERVAL,
 						)
 					}
 
@@ -215,6 +215,7 @@ class PlaySessionService(
 				delay(interval)
 				when (state.playState.value) {
 					PlayState.PLAYING,
+					PlayState.BUFFERING,
 					PlayState.PAUSED -> sendStreamUpdate()
 
 					PlayState.STOPPED,
@@ -310,7 +311,7 @@ class PlaySessionService(
 					canSeek = true,
 					isMuted = state.volume.muted,
 					volumeLevel = (state.volume.volume * 100).roundToInt(),
-					isPaused = state.playState.value != PlayState.PLAYING,
+					isPaused = state.playState.value == PlayState.PAUSED,
 					aspectRatio = state.videoSize.value.aspectRatio.toString(),
 					positionTicks = reporting.positionTicks,
 					playMethod = playMethod,
@@ -380,7 +381,7 @@ class PlaySessionService(
 			org.jellyfin.playback.core.model.PlaybackOrder.RANDOM -> PlaybackOrder.SHUFFLE
 			org.jellyfin.playback.core.model.PlaybackOrder.SHUFFLE -> PlaybackOrder.SHUFFLE
 		}
-		val isPaused = state.playState.value != PlayState.PLAYING
+		val isPaused = state.playState.value == PlayState.PAUSED
 
 		runCatching {
 			api.playStateApi.reportPlaybackProgress(

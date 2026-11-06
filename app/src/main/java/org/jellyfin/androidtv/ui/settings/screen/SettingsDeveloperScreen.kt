@@ -72,7 +72,7 @@ fun SettingsDeveloperScreen() {
 				onClick = {
 					val enabled = !verboseLoggingEnabled
 					verboseLoggingEnabled = enabled
-					AppLogging.setVerboseLogging(context, enabled)
+					AppLogging.setVerboseLogging(enabled)
 				}
 			)
 		}

@@ -124,7 +124,6 @@
     <string name="msg_subtitles_loading">Chargement des sous-titres…</string>
     <string name="msg_unable_load_subs">Impossible de charger les sous-titres</string>
     <string name="msg_burn_sub_warning">L\'incrustation des sous-titres peut prendre quelques minutes. Merci de patienter…</string>
-    <string name="lbl_no_recordings">Aucun enregistrement disponible</string>
     <string name="lbl_live_tv_guide">Guide des programmes TV</string>
     <string name="lbl_recorded_tv">TV enregistrée</string>
     <string name="pref_live_tv_cat">TV EN DIRECT</string>
@@ -377,7 +376,6 @@
     <string name="home_sections">Accueil</string>
     <string name="server_connection_failed_candidates">Impossible de se connecter au serveur : %1$s</string>
     <string name="lbl_playback_speed">Vitesse de lecture</string>
-    <string name="server_issue_ssl_handshake">La négociation SSL a échoué</string>
     <string name="server_issue_timeout">Délais de connexion dépassé</string>
     <string name="server_issue_outdated_version">Le serveur utilise une version %2$s non supportée. Veuillez faire une mise à jour vers une version %1$s ou supérieure</string>
     <string name="server_issue_unsupported_version">La version du serveur : %1$s n\'est pas compatible</string>
