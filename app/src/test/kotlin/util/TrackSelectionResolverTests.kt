@@ -73,11 +73,64 @@ class TrackSelectionResolverTests : FunSpec({
 			videoQueueManager = videoQueueManager,
 		) shouldBe -1
 	}
+
+	test("Live TV selections wait for tracks before validation") {
+		val videoQueueManager = VideoQueueManager()
+		val item = liveTvItem()
+		val selectedSource = source(
+			stream(index = 2, language = "jpn", type = MediaStreamType.AUDIO, codec = "aac"),
+			stream(index = 4, language = "spa", type = MediaStreamType.SUBTITLE, codec = "ass"),
+		)
+		TrackSelectionResolver.storeSelectedAudioTrack(item, selectedSource, videoQueueManager, 2)
+		TrackSelectionResolver.storeSelectedSubtitleTrack(item, selectedSource, videoQueueManager, 4)
+
+		TrackSelectionResolver.resolvePlaybackAudioStreamIndex(item, source(), videoQueueManager) shouldBe 2
+		TrackSelectionResolver.resolvePlaybackSubtitleStreamIndex(item, source(), videoQueueManager) shouldBe 4
+	}
+
+	test("stale Live TV audio selection falls back to its saved language") {
+		val videoQueueManager = VideoQueueManager()
+		val item = liveTvItem()
+		TrackSelectionResolver.storeSelectedAudioTrack(
+			item,
+			source(stream(index = 8, language = "jpn", type = MediaStreamType.AUDIO, codec = "aac")),
+			videoQueueManager,
+			8,
+		)
+
+		TrackSelectionResolver.resolvePlaybackAudioStreamIndex(
+			item,
+			source(stream(index = 2, language = "jpn", type = MediaStreamType.AUDIO, codec = "aac")),
+			videoQueueManager,
+		) shouldBe 2
+	}
+
+	test("stale Live TV subtitle selection falls back to its saved language") {
+		val videoQueueManager = VideoQueueManager()
+		val item = liveTvItem()
+		TrackSelectionResolver.storeSelectedSubtitleTrack(
+			item,
+			source(stream(index = 8, language = "spa", type = MediaStreamType.SUBTITLE, codec = "ass")),
+			videoQueueManager,
+			8,
+		)
+
+		TrackSelectionResolver.resolvePlaybackSubtitleStreamIndex(
+			item,
+			source(stream(index = 4, language = "spa", type = MediaStreamType.SUBTITLE, codec = "ass")),
+			videoQueueManager,
+		) shouldBe 4
+	}
 })
 
 private fun item() = BaseItemDto(
 	id = UUID.randomUUID(),
 	type = BaseItemKind.MOVIE,
+)
+
+private fun liveTvItem() = BaseItemDto(
+	id = UUID.randomUUID(),
+	type = BaseItemKind.TV_CHANNEL,
 )
 
 private fun source(vararg streams: MediaStream) = MediaSourceInfo(
