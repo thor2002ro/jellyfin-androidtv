@@ -13,6 +13,7 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.ImageLoader
 import coil3.asImage
+import coil3.request.Disposable
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.request.target
@@ -43,6 +44,8 @@ class AsyncImageView @JvmOverloads constructor(
 	private val styledAttributes = context.obtainStyledAttributes(attrs, R.styleable.AsyncImageView, defStyleAttr, 0)
 	private val imageLoader by inject<ImageLoader>()
 	private var loadJob: Job? = null
+	private var imageRequest: Disposable? = null
+	private var loadRequestId = 0
 
 	/**
 	 * The duration of the crossfade when changing switching the images of the url, blurhash and
@@ -67,46 +70,61 @@ class AsyncImageView @JvmOverloads constructor(
 		placeholder: Drawable? = null,
 		aspectRatio: Double = 1.0,
 		blurHashResolution: Int = 32,
-	) = doOnAttach {
+	) {
+		val requestId = ++loadRequestId
 		// Cancel the previous load if still running
-		loadJob?.cancel()
+		cancelLoad()
 
-		loadJob = lifeCycleOwner?.lifecycleScope?.launch(Dispatchers.IO) {
-			var placeholderOrBlurHash = placeholder
+		doOnAttach {
+			if (requestId != loadRequestId) return@doOnAttach
 
-			// Only show blurhash if an image is going to be loaded from the network
-			val isLowRamDevice = context.getSystemService<ActivityManager>()?.isLowRamDevice == true
-			if (url != null && blurHash != null && !isLowRamDevice && aspectRatio > 0) withContext(Dispatchers.IO) {
-				val blurHashBitmap = BlurHashDecoder.decode(
-					blurHash,
-					if (aspectRatio > 1) round(blurHashResolution * aspectRatio).toInt() else blurHashResolution,
-					if (aspectRatio >= 1) blurHashResolution else round(blurHashResolution / aspectRatio).toInt(),
-				)
-				if (blurHashBitmap != null) placeholderOrBlurHash = blurHashBitmap.toDrawable(resources)
+			loadJob = lifeCycleOwner?.lifecycleScope?.launch {
+				var placeholderOrBlurHash = placeholder
+
+				// Only show blurhash if an image is going to be loaded from the network
+				val isLowRamDevice = context.getSystemService<ActivityManager>()?.isLowRamDevice == true
+				if (url != null && blurHash != null && !isLowRamDevice && aspectRatio > 0) withContext(Dispatchers.IO) {
+					val blurHashBitmap = BlurHashDecoder.decode(
+						blurHash,
+						if (aspectRatio > 1) round(blurHashResolution * aspectRatio).toInt() else blurHashResolution,
+						if (aspectRatio >= 1) blurHashResolution else round(blurHashResolution / aspectRatio).toInt(),
+					)
+					if (blurHashBitmap != null) placeholderOrBlurHash = blurHashBitmap.toDrawable(resources)
+				}
+
+				if (requestId != loadRequestId) return@launch
+
+				// Start loading image or placeholder
+				val request = if (url == null) {
+					ImageRequest.Builder(context).apply {
+						target(this@AsyncImageView)
+						data(placeholder)
+						if (circleCrop) transformations(CircleCropTransformation())
+					}.build()
+				} else {
+					ImageRequest.Builder(context).apply {
+						val crossFadeDurationMs = crossFadeDuration.inWholeMilliseconds.toInt()
+						if (crossFadeDurationMs > 0) crossfade(crossFadeDurationMs)
+						else crossfade(false)
+
+						target(this@AsyncImageView)
+						data(url)
+						placeholder(placeholderOrBlurHash?.asImage())
+						if (circleCrop) transformations(CircleCropTransformation())
+						error(placeholder?.asImage())
+					}.build()
+				}
+
+				imageRequest = imageLoader.enqueue(request)
+				imageRequest?.job?.await()
 			}
-
-			// Start loading image or placeholder
-			val request = if (url == null) {
-				ImageRequest.Builder(context).apply {
-					target(this@AsyncImageView)
-					data(placeholder)
-					if (circleCrop) transformations(CircleCropTransformation())
-				}.build()
-			} else {
-				ImageRequest.Builder(context).apply {
-					val crossFadeDurationMs = crossFadeDuration.inWholeMilliseconds.toInt()
-					if (crossFadeDurationMs > 0) crossfade(crossFadeDurationMs)
-					else crossfade(false)
-
-					target(this@AsyncImageView)
-					data(url)
-					placeholder(placeholderOrBlurHash?.asImage())
-					if (circleCrop) transformations(CircleCropTransformation())
-					error(placeholder?.asImage())
-				}.build()
-			}
-
-			imageLoader.enqueue(request).job.await()
 		}
+	}
+
+	private fun cancelLoad() {
+		loadJob?.cancel()
+		loadJob = null
+		if (imageRequest?.isDisposed == false) imageRequest?.dispose()
+		imageRequest = null
 	}
 }
