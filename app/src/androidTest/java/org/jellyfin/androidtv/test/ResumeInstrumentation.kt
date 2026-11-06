@@ -63,6 +63,9 @@ class PlaybackTestInstrumentation : Instrumentation() {
 		if (Timber.treeCount == 0) Timber.plant(Timber.DebugTree())
 		val results = mutableListOf<PlaybackTestResult>()
 		try {
+			if ("updater" in arguments.suites) {
+				results += UpdaterUiSuite(this).run(arguments.scenario)
+			}
 			if (arguments.suites.any { it == "resume" || it == "recovery" }) {
 				video = File(targetContext.cacheDir, "resume-test.mp4")
 				context.assets.open("silent-black-25s.mp4").use { input -> video.outputStream().use(input::copyTo) }
