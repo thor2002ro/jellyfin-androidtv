@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import `is`.xyz.mpv.BuildConfig as LibMPVBuildConfig
+import `is`.xyz.mpv.Utils
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Icon
@@ -60,6 +62,22 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 		}
 
 		item {
+			val heading = "Main library versions"
+			val caption = mainLibraryVersionsCaption(
+				libdoviAndroidVersion = BuildConfig.LIBDOVI_ANDROID_VERSION,
+				libdoviVersion = BuildConfig.LIBDOVI_VERSION,
+				libMpvAndroidVersion = LibMPVBuildConfig.VERSION,
+				libMpvVersion = Utils.VERSIONS.mpv,
+			)
+			ListButton(
+				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },
+				headingContent = { Text(heading) },
+				captionContent = { Text(caption) },
+				onClick = copyAction(ClipData.newPlainText(heading, caption)),
+			)
+		}
+
+		item {
 			ListButton(
 				leadingContent = { Icon(painterResource(R.drawable.ic_guide), contentDescription = null) },
 				headingContent = { Text(stringResource(R.string.licenses_link)) },
@@ -78,3 +96,22 @@ fun SettingsAboutScreen(launchedFromLogin: Boolean = false) {
 		}
 	}
 }
+
+internal fun mainLibraryVersionsCaption(
+	libdoviAndroidVersion: String,
+	libdoviVersion: String,
+	libMpvAndroidVersion: String,
+	libMpvVersion: String,
+) = listOf(
+	"Media3 ${BuildConfig.MEDIA3_VERSION}",
+	"Media3 FFmpeg decoder ${BuildConfig.MEDIA3_FFMPEG_DECODER_VERSION}",
+	"FFmpeg ${BuildConfig.FFMPEG_VERSION}",
+	"libyuv ${BuildConfig.LIBYUV_VERSION}",
+	"libdovi-android $libdoviAndroidVersion",
+	"libdovi $libdoviVersion",
+	"libass-android ${BuildConfig.LIBASS_ANDROID_VERSION}",
+	"libass ${BuildConfig.LIBASS_VERSION}",
+	"libVLC ${BuildConfig.LIBVLC_VERSION}",
+	"mpv-android-lib $libMpvAndroidVersion",
+	"libMPV $libMpvVersion",
+).joinToString("\n")
