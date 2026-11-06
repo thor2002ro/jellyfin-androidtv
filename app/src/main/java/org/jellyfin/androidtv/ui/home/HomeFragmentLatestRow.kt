@@ -16,6 +16,7 @@ import org.jellyfin.sdk.model.api.request.GetLatestMediaRequest
 class HomeFragmentLatestRow(
 	private val userRepository: UserRepository,
 	private val userViews: Collection<BaseItemDto>,
+	private val itemLimit: Int,
 ) : HomeFragmentRow {
 	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
 		// Get configuration (to find excluded items)
@@ -32,7 +33,7 @@ class HomeFragmentLatestRow(
 					imageTypeLimit = 1,
 					parentId = item.id,
 					groupItems = true,
-					limit = ITEM_LIMIT,
+					limit = effectiveHomeRowItemLimit(itemLimit, ITEM_LIMIT),
 				)
 
 				val title = context.getString(R.string.lbl_latest_in, item.name)

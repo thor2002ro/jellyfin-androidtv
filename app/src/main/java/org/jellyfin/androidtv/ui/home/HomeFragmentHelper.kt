@@ -17,17 +17,29 @@ import org.jellyfin.sdk.model.api.request.GetRecordingsRequest
 import org.jellyfin.sdk.model.api.request.GetResumeItemsRequest
 import java.time.LocalDateTime
 
+private const val ITEM_LIMIT_NEXT_UP = 50
+
 class HomeFragmentHelper(
 	private val context: Context,
 	private val userRepository: UserRepository,
+	private val itemLimit: Int,
+	private val includeNextUpRewatching: Boolean,
 ) {
 	fun loadRecentlyAdded(userViews: Collection<BaseItemDto>): HomeFragmentRow {
-		return HomeFragmentLatestRow(userRepository, userViews)
+		return HomeFragmentLatestRow(userRepository, userViews, itemLimit)
+	}
+
+	fun loadRecentlyReleased(userViews: Collection<BaseItemDto>): HomeFragmentRow {
+		return HomeFragmentRecentlyReleasedRow(userRepository, userViews, itemLimit)
+	}
+
+	fun loadFavoriteVideos(): HomeFragmentRow {
+		return HomeFragmentFavoriteVideosRow(itemLimit)
 	}
 
 	fun loadResume(title: String, includeMediaTypes: Collection<MediaType>): HomeFragmentRow {
 		val query = GetResumeItemsRequest(
-			limit = ITEM_LIMIT_RESUME,
+			limit = effectiveHomeRowItemLimit(itemLimit, ITEM_LIMIT_RESUME),
 			fields = if (MediaType.VIDEO in includeMediaTypes) ItemRepository.streamBadgeFields else ItemRepository.browseFields,
 			imageTypeLimit = 1,
 			enableTotalRecordCount = false,
@@ -38,8 +50,23 @@ class HomeFragmentHelper(
 		return HomeFragmentBrowseRowDefRow(BrowseRowDef(title, query, 0, false, true, arrayOf(ChangeTriggerType.TvPlayback, ChangeTriggerType.MoviePlayback)))
 	}
 
-	fun loadResumeVideo(): HomeFragmentRow {
-		return loadResume(context.getString(R.string.lbl_continue_watching), listOf(MediaType.VIDEO))
+	fun loadResumeVideo(combineWithNextUp: Boolean = false): HomeFragmentRow {
+		if (!combineWithNextUp) {
+			return loadResume(context.getString(R.string.lbl_continue_watching), listOf(MediaType.VIDEO))
+		}
+
+		val query = createHomeNextUpRequest(
+			itemLimit = itemLimit,
+			includeRewatching = includeNextUpRewatching,
+			includeResumable = true,
+		)
+		return HomeFragmentBrowseRowDefRow(
+			BrowseRowDef(
+				context.getString(R.string.home_combined_continue_watching_next_up),
+				query,
+				arrayOf(ChangeTriggerType.TvPlayback, ChangeTriggerType.MoviePlayback),
+			)
+		)
 	}
 
 	fun loadResumeAudio(): HomeFragmentRow {
@@ -50,18 +77,16 @@ class HomeFragmentHelper(
 		val query = GetRecordingsRequest(
 			fields = ItemRepository.itemFields,
 			enableImages = true,
-			limit = ITEM_LIMIT_RECORDINGS
+			limit = effectiveHomeRowItemLimit(itemLimit, ITEM_LIMIT_RECORDINGS)
 		)
 
 		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_recordings), query))
 	}
 
 	fun loadNextUp(): HomeFragmentRow {
-		val query = GetNextUpRequest(
-			imageTypeLimit = 1,
-			limit = ITEM_LIMIT_NEXT_UP,
-			enableResumable = false,
-			fields = ItemRepository.streamBadgeFields,
+		val query = createHomeNextUpRequest(
+			itemLimit = itemLimit,
+			includeRewatching = includeNextUpRewatching,
 		)
 
 		return HomeFragmentBrowseRowDefRow(BrowseRowDef(context.getString(R.string.lbl_next_up), query, arrayOf(ChangeTriggerType.TvPlayback)))
@@ -73,7 +98,7 @@ class HomeFragmentHelper(
 			fields = ItemRepository.itemFields,
 			imageTypeLimit = 1,
 			enableTotalRecordCount = false,
-			limit = ITEM_LIMIT_ON_NOW
+			limit = effectiveHomeRowItemLimit(itemLimit, ITEM_LIMIT_ON_NOW)
 		)
 
 		return HomeFragmentBrowseRowDefRow(
@@ -86,10 +111,24 @@ class HomeFragmentHelper(
 		// Maximum amount of items loaded for a row
 		private const val ITEM_LIMIT_RESUME = 50
 		private const val ITEM_LIMIT_RECORDINGS = 40
-		private const val ITEM_LIMIT_NEXT_UP = 50
 		private const val ITEM_LIMIT_ON_NOW = 20
 	}
 }
+
+internal fun effectiveHomeRowItemLimit(configuredLimit: Int, maximum: Int) =
+	configuredLimit.coerceIn(minimumValue = 5, maximumValue = maximum)
+
+internal fun createHomeNextUpRequest(
+	itemLimit: Int,
+	includeRewatching: Boolean,
+	includeResumable: Boolean = false,
+) = GetNextUpRequest(
+	imageTypeLimit = 1,
+	limit = effectiveHomeRowItemLimit(itemLimit, maximum = ITEM_LIMIT_NEXT_UP),
+	enableResumable = includeResumable,
+	enableRewatching = includeRewatching,
+	fields = ItemRepository.streamBadgeFields,
+)
 
 internal fun GetNextUpRequest.withHomeNextUpCutoff(
 	maxDays: Int,
