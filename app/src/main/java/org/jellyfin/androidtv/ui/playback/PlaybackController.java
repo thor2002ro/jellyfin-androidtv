@@ -352,11 +352,14 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         mLiveTvRetryRunnable = null;
     }
 
-    private void setPlaybackDisplayMode(MediaStream videoStream) {
-        if (videoStream == null || mFragment == null) return;
-        PlaybackDisplayMode.apply(mFragment.requireActivity(), videoStream.getWidth(), videoStream.getHeight(),
+    private long setPlaybackDisplayMode(MediaStream videoStream) {
+        if (videoStream == null || mFragment == null) return 0;
+        int currentModeId = mFragment.requireActivity().getWindowManager().getDefaultDisplay().getMode().getModeId();
+        int requestedModeId = PlaybackDisplayMode.apply(mFragment.requireActivity(), videoStream.getWidth(), videoStream.getHeight(),
                 PlaybackDisplayMode.frameRateForDisplay(videoStream.getRealFrameRate(), videoStream.isInterlaced()),
                 refreshRateSwitchingEnabled, resolutionSwitchingEnabled, mOriginalDisplayMode);
+        return PlaybackDisplayMode.delayMillisForModeChange(currentModeId, requestedModeId,
+                userPreferences.getValue().get(UserPreferences.Companion.getDisplayChangeDelaySeconds()));
     }
 
     // central place to update mCurrentPosition
@@ -658,9 +661,8 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         Long mbPos = position * 10000;
 
         // Apply resolution and refresh preferences independently.
-        if (refreshRateSwitchingEnabled || resolutionSwitchingEnabled) {
-            setPlaybackDisplayMode(JavaCompat.getVideoStream(response.getMediaSource()));
-        }
+        long displayChangeDelay = refreshRateSwitchingEnabled || resolutionSwitchingEnabled
+                ? setPlaybackDisplayMode(JavaCompat.getVideoStream(response.getMediaSource())) : 0;
 
         // set playback speed to user selection, or 1 if we're watching live-tv
         if (mVideoManager != null)
@@ -675,6 +677,7 @@ public class PlaybackController implements PlaybackControllerNotifiable {
         PlaybackControllerHelperKt.applyMediaSegments(this, item, () -> {
             // Set video start delay
             long videoStartDelay = userPreferences.getValue().get(UserPreferences.Companion.getVideoStartDelay());
+            videoStartDelay = Math.max(videoStartDelay, displayChangeDelay);
             if (isLiveTv && mVideoManager != null) videoStartDelay = Math.max(videoStartDelay, mVideoManager.getLiveTvBufferMs());
             if (videoStartDelay > 0) {
                 mHandler.postDelayed(new Runnable() {
