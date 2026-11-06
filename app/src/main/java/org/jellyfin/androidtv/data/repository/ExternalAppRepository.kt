@@ -30,7 +30,11 @@ class ExternalAppRepository(
 		// Hide apps with priority below zero (system stubs)
 		.filter { it.priority >= 0 }
 
-	fun getCurrentExternalPlayerApp(context: Context, hdr: Boolean = false): ActivityInfo? {
+	fun getCurrentExternalPlayerApp(
+		context: Context,
+		hdr: Boolean = false,
+		externalApps: List<ResolveInfo>? = null,
+	): ActivityInfo? {
 		val playerPreferences = UserPreferences.playbackPlayerPreferences(hdr)
 
 		// Validate if external app should be used at all
@@ -38,22 +42,22 @@ class ExternalAppRepository(
 		if (!useExternalPlayer) return null
 
 		// Resolve external app information
-		val resolvedInfo = userPreferences[playerPreferences.externalPlayerComponentName]
+		val apps = externalApps ?: getExternalPlayerApps(context)
+		val configuredComponent = userPreferences[playerPreferences.externalPlayerComponentName]
 			.takeIf { it.isNotEmpty() }
 			?.let(ComponentName::unflattenFromString)
-			?.runCatching { context.packageManager.getActivityInfo(this, 0) }
-			?.getOrNull()
+		val resolvedInfo = apps
+			.firstOrNull { it.activityInfo.componentName == configuredComponent }
+			?.activityInfo
 		if (resolvedInfo != null) return resolvedInfo
 
 		// Fallback in case the app is uninstalled or unavailable for some other reason
-		val externalApps = getExternalPlayerApps(context)
+		val fallback = apps
+			.let { compatibleApps -> compatibleApps.find { it.isDefault } ?: compatibleApps.firstOrNull() }
+			?.activityInfo
 
-		// System default
-		val systemDefault = externalApps.find { it.isDefault }?.activityInfo
-		if (systemDefault != null) return systemDefault
-
-		// First compatible, or none
-		return externalApps.firstOrNull()?.activityInfo
+		setExternalPlayerapp(fallback, hdr)
+		return fallback
 	}
 
 	fun setExternalPlayerapp(activityInfo: ActivityInfo?, hdr: Boolean = false) {
