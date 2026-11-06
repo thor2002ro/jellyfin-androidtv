@@ -36,10 +36,12 @@ import androidx.media3.exoplayer.DecoderCounters
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioCapabilitiesReceiver
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -206,6 +208,52 @@ internal fun hasDecoderStalled(
 internal fun shouldWatchVideoDecoderStall(playWhenReady: Boolean, playbackState: Int) =
 	playWhenReady && (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING)
 
+internal fun shouldWatchAudioDecoderStall(
+	playWhenReady: Boolean,
+	playbackState: Int,
+	decoderName: String?,
+	isLoading: Boolean,
+) = shouldWatchVideoDecoderStall(playWhenReady, playbackState) &&
+	decoderName?.startsWith("ffmpeg", ignoreCase = true) == false &&
+	!isLoading
+
+internal fun hasAudioDecoderStalled(
+	queuedInputBufferCount: Int,
+	renderedOutputBufferCount: Int,
+	sinkBufferAttempted: Boolean,
+	currentQueuedInputBufferCount: Int,
+	currentRenderedOutputBufferCount: Int,
+) = hasDecoderStalled(
+	queuedInputBufferCount,
+	renderedOutputBufferCount,
+	currentQueuedInputBufferCount,
+	currentRenderedOutputBufferCount,
+) && !sinkBufferAttempted
+
+internal class AudioDecoderStallObservation {
+	private sealed interface State
+	private data object Idle : State
+	private class Armed : State
+	private data object SinkBufferAttempted : State
+
+	private val state = AtomicReference<State>(Idle)
+
+	fun arm() {
+		state.set(Armed())
+	}
+
+	fun cancel() {
+		state.set(Idle)
+	}
+
+	fun onSinkBufferAttempt() {
+		val armed = state.get() as? Armed ?: return
+		state.compareAndSet(armed, SinkBufferAttempted)
+	}
+
+	fun expireWithSinkBufferAttempted() = state.getAndSet(Idle) === SinkBufferAttempted
+}
+
 internal fun targetLiveTvBufferDuration(
 	liveStreamOffset: Duration?,
 	configuredOffset: Duration?,
@@ -304,6 +352,75 @@ internal fun doviVideoDecoderPlaybackErrorCode(
 	}
 }
 
+internal fun shouldFallbackToFfmpegAudio(
+	errorCode: Int,
+	isMediaCodecAudioRenderer: Boolean,
+	isFfmpegFormatSupported: Boolean,
+	fallbackAttempted: Boolean,
+): Boolean {
+	if (!isMediaCodecAudioRenderer || !isFfmpegFormatSupported || fallbackAttempted) return false
+	return errorCode in setOf(
+		PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+		PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+		PlaybackException.ERROR_CODE_DECODING_FAILED,
+		PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+		PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+		PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
+	)
+}
+
+internal class AudioDecoderFallbackController(
+	private val setRendererDisabled: (rendererIndex: Int, disabled: Boolean) -> Unit,
+	private val prepare: () -> Unit,
+) {
+	private var disabledRendererIndex: Int? = null
+
+	fun tryFallback(
+		errorCode: Int,
+		rendererIndex: Int,
+		isMediaCodecAudioRenderer: Boolean,
+		isFfmpegFormatSupported: Boolean,
+		onFallback: () -> Unit = {},
+	): Boolean {
+		if (!shouldFallbackToFfmpegAudio(
+				errorCode = errorCode,
+				isMediaCodecAudioRenderer = isMediaCodecAudioRenderer,
+				isFfmpegFormatSupported = isFfmpegFormatSupported,
+				fallbackAttempted = disabledRendererIndex != null,
+			)
+		) return false
+		return performFallback(rendererIndex, onFallback)
+	}
+
+	fun tryFallbackAfterStall(
+		rendererIndex: Int,
+		isMediaCodecAudioRenderer: Boolean,
+		isFfmpegFormatSupported: Boolean,
+		decoderStalled: Boolean,
+		onFallback: () -> Unit = {},
+	): Boolean {
+		if (!isMediaCodecAudioRenderer || !isFfmpegFormatSupported || !decoderStalled || disabledRendererIndex != null) return false
+		return performFallback(rendererIndex, onFallback)
+	}
+
+	private fun performFallback(rendererIndex: Int, onFallback: () -> Unit): Boolean {
+		disabledRendererIndex = rendererIndex
+		onFallback()
+		setRendererDisabled(rendererIndex, true)
+		prepare()
+		return true
+	}
+
+	fun reset() {
+		disabledRendererIndex?.let { rendererIndex -> setRendererDisabled(rendererIndex, false) }
+		disabledRendererIndex = null
+	}
+
+	fun clear() {
+		disabledRendererIndex = null
+	}
+}
+
 internal data class PlaybackMediaItemTag(
 	val queueEntry: QueueEntry,
 	val errorOrigin: PlaybackErrorOrigin?,
@@ -356,6 +473,7 @@ class ExoPlayerBackend(
 		private const val LIVE_START_TIMEOUT_MS = 15_000L
 		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 2_000L
 		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 3_000L
+		private const val AUDIO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
 
 		private fun QueueEntry.liveTvTsExtractorFlags(hardwareVideoDecoding: Boolean): Int {
@@ -436,6 +554,7 @@ class ExoPlayerBackend(
 	private val videoFirstFrameHandler = Handler(Looper.getMainLooper())
 	private val videoBufferingHandler = Handler(Looper.getMainLooper())
 	private val videoRendererSwitchHandler = Handler(Looper.getMainLooper())
+	private val audioDecoderStallHandler = Handler(Looper.getMainLooper())
 	private var pendingLiveStartStream: PlayableMediaStream? = null
 	private var pendingInitialTrackSelection: PendingInitialTrackSelection? = null
 	private var pendingInitialTrackSelectionRetryCount = 0
@@ -491,6 +610,16 @@ class ExoPlayerBackend(
 	private var audioDecoderType: String? = null
 	private var audioDecoderCounters: DecoderCounters? = null
 	private var audioInputFormat: Format? = null
+	private val audioDecoderStallObservation = AudioDecoderStallObservation()
+	private var ffmpegAudioRenderer: FfmpegAudioRenderer? = null
+	private val audioDecoderFallback = AudioDecoderFallbackController(
+		setRendererDisabled = { rendererIndex, disabled ->
+			trackSelector.setParameters(
+				trackSelector.buildUponParameters().setRendererDisabled(rendererIndex, disabled)
+			)
+		},
+		prepare = { exoPlayer.prepare() },
+	)
 	private var audioPassthroughSupported: Boolean? = null
 	private var audioPassthroughSupportDirty = true
 	private var audioCapabilities: AudioCapabilities? = null
@@ -619,6 +748,7 @@ class ExoPlayerBackend(
 
 	private fun resetPlaybackStats() {
 		resetVideoDecoderFallback()
+		resetAudioDecoderFallback()
 		videoDecoderName = null
 		videoDecoderType = null
 		videoInputFormat = null
@@ -647,6 +777,11 @@ class ExoPlayerBackend(
 			)
 		}
 		disabledHardwareVideoRendererIndex = null
+	}
+
+	private fun resetAudioDecoderFallback() {
+		cancelAudioDecoderStallCheck()
+		audioDecoderFallback.reset()
 	}
 
 	private fun rendererPreferences() = FfmpegRendererPreferences(
@@ -795,6 +930,98 @@ class ExoPlayerBackend(
 			if (restartPlayback) exoPlayer.prepare()
 		}
 		return true
+	}
+
+	private fun isMediaCodecAudioRenderer(rendererIndex: Int) =
+		rendererIndex in 0 until exoPlayer.rendererCount &&
+			exoPlayer.getRendererType(rendererIndex) == C.TRACK_TYPE_AUDIO &&
+			exoPlayer.getRenderer(rendererIndex) is MediaCodecAudioRenderer
+
+	private fun mediaCodecAudioRendererIndex() = (0 until exoPlayer.rendererCount)
+		.firstOrNull(::isMediaCodecAudioRenderer)
+
+	private fun isFfmpegAudioFormatSupported(format: Format?) = format != null &&
+		ffmpegAudioRenderer?.let { renderer ->
+			RendererCapabilities.getFormatSupport(renderer.supportsFormat(format)) == C.FORMAT_HANDLED
+		} == true
+
+	private fun shouldWatchAudioDecoderStall() = shouldWatchAudioDecoderStall(
+		playWhenReady = exoPlayer.playWhenReady,
+		playbackState = exoPlayer.playbackState,
+		decoderName = audioDecoderName,
+		isLoading = exoPlayer.isLoading,
+	)
+
+	private fun cancelAudioDecoderStallCheck() {
+		audioDecoderStallObservation.cancel()
+		audioDecoderStallHandler.removeCallbacksAndMessages(null)
+	}
+
+	private fun scheduleAudioDecoderStallFallback() {
+		cancelAudioDecoderStallCheck()
+		val decoderName = audioDecoderName
+		if (!shouldWatchAudioDecoderStall()) return
+
+		val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
+		val counters = audioDecoderCounters ?: return
+		audioDecoderStallObservation.arm()
+		counters.ensureUpdated()
+		val queuedInputBufferCount = counters.queuedInputBufferCount
+		val renderedOutputBufferCount = counters.renderedOutputBufferCount
+		audioDecoderStallHandler.postDelayed({
+			val sinkBufferAttempted = audioDecoderStallObservation.expireWithSinkBufferAttempted()
+			if (!shouldWatchAudioDecoderStall()) return@postDelayed
+			if (audioDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) return@postDelayed
+			counters.ensureUpdated()
+			if (!hasAudioDecoderStalled(
+					queuedInputBufferCount,
+					renderedOutputBufferCount,
+					sinkBufferAttempted,
+					counters.queuedInputBufferCount,
+					counters.renderedOutputBufferCount,
+				)
+			) return@postDelayed
+
+			val rendererIndex = mediaCodecAudioRendererIndex() ?: return@postDelayed
+			val format = audioInputFormat
+			audioDecoderFallback.tryFallbackAfterStall(
+				rendererIndex = rendererIndex,
+				isMediaCodecAudioRenderer = true,
+				isFfmpegFormatSupported = isFfmpegAudioFormatSupported(format),
+				decoderStalled = true,
+				onFallback = {
+					Timber.w(
+						"MediaCodec audio decoder accepted input without rendering output for %dms; " +
+							"retrying with FFmpeg mediaId=%s format=%s queuedInputs=%d renderedOutputs=%d",
+						AUDIO_DECODER_STALL_TIMEOUT_MS,
+						mediaId,
+						format?.sampleMimeType ?: "unknown",
+						counters.queuedInputBufferCount,
+						counters.renderedOutputBufferCount,
+					)
+				},
+			)
+		}, AUDIO_DECODER_STALL_TIMEOUT_MS)
+	}
+
+	private fun fallbackToFfmpegAudio(error: ExoPlaybackException): Boolean {
+		val rendererIndex = error.rendererIndex
+		val format = error.rendererFormat ?: audioInputFormat
+		cancelAudioDecoderStallCheck()
+		return audioDecoderFallback.tryFallback(
+			errorCode = error.errorCode,
+			rendererIndex = rendererIndex,
+			isMediaCodecAudioRenderer = isMediaCodecAudioRenderer(rendererIndex),
+			isFfmpegFormatSupported = isFfmpegAudioFormatSupported(format),
+			onFallback = {
+				Timber.w(
+					"MediaCodec audio renderer failed with %s; retrying with FFmpeg mediaId=%s format=%s",
+					error.errorCodeName,
+					exoPlayer.currentMediaItem?.mediaId,
+					format?.sampleMimeType ?: "unknown",
+				)
+			},
+		)
 	}
 
 	private fun reportDoviVideoDecoderFailure(reason: String) {
@@ -1043,12 +1270,16 @@ class ExoPlayerBackend(
 
 			if (forcedVideoDecoder == null && rendererPreferences.video) preferFfmpeg(C.TRACK_TYPE_VIDEO)
 			if (rendererPreferences.audio) preferFfmpeg(C.TRACK_TYPE_AUDIO)
+			ffmpegAudioRenderer = renderers.filterIsInstance<FfmpegAudioRenderer>().firstOrNull()
 			renderers.toTypedArray()
 		}
 
 		val normalExtractorsFactory = createExtractorsFactory()
 		val liveTvExtractorsFactory = createExtractorsFactory(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
 		val amlogicH264LiveTvExtractorsFactory = createExtractorsFactory(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+		val onAudioSinkBufferAttempt: () -> Unit = {
+			audioDecoderStallObservation.onSinkBufferAttempt()
+		}
 
 		fun createLiveTvMediaSourceFactory(
 			subtitleParserFactory: SubtitleParser.Factory,
@@ -1086,6 +1317,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = subtitleParserFactory,
 				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
 				downmixToStereo = exoPlayerOptions.downmixToStereo,
+				onAudioSinkBufferAttempt = onAudioSinkBufferAttempt,
 			).apply {
 				setEnableDecoderFallback(true)
 				setMediaCodecSelector(mediaCodecSelector)
@@ -1101,6 +1333,7 @@ class ExoPlayerBackend(
 				subtitleParserFactory = defaultSubtitleParserFactory,
 				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
 				downmixToStereo = exoPlayerOptions.downmixToStereo,
+				onAudioSinkBufferAttempt = onAudioSinkBufferAttempt,
 			).apply {
 				setEnableDecoderFallback(true)
 				setMediaCodecSelector(mediaCodecSelector)
@@ -1177,6 +1410,7 @@ class ExoPlayerBackend(
 
 	private fun applyRendererPreferences() {
 		if (!rendererPreferencesDirty && !loadControlDirty) return
+		cancelAudioDecoderStallCheck()
 		if (exoPlayerDelegate.isInitialized()) {
 			subtitleTimingRendererInvalidator.cancel()
 			if (exoPlayerOptions.enableLibass) assHandler.reset()
@@ -1184,6 +1418,8 @@ class ExoPlayerBackend(
 		}
 		trackSelectorDelegate = lazy(::createTrackSelector)
 		exoPlayerDelegate = lazy(::createExoPlayer)
+		ffmpegAudioRenderer = null
+		audioDecoderFallback.clear()
 		appliedRendererPreferences = null
 		rendererPreferencesDirty = false
 		loadControlDirty = false
@@ -1310,6 +1546,7 @@ class ExoPlayerBackend(
 		) {
 			audioDecoderName = decoderName
 			audioDecoderType = decoderType(decoderName, audioInputFormat)
+			scheduleAudioDecoderStallFallback()
 		}
 
 		override fun onAudioDecoderReleased(
@@ -1317,6 +1554,7 @@ class ExoPlayerBackend(
 			decoderName: String,
 		) {
 			if (audioDecoderName == decoderName) {
+				cancelAudioDecoderStallCheck()
 				audioDecoderName = null
 				audioDecoderType = null
 			}
@@ -1343,6 +1581,7 @@ class ExoPlayerBackend(
 			decoderCounters: DecoderCounters,
 		) {
 			if (audioDecoderCounters === decoderCounters) {
+				cancelAudioDecoderStallCheck()
 				audioDecoderName = null
 				audioDecoderType = null
 				audioDecoderCounters = null
@@ -1392,9 +1631,10 @@ class ExoPlayerBackend(
 
 		override fun onPlayerError(error: PlaybackException) {
 			val doviErrorCode = error.doviTransformationPlaybackErrorCode()
-			val rendererIndex = (error as? ExoPlaybackException)
+			val rendererError = (error as? ExoPlaybackException)
 				?.takeIf { playbackError -> playbackError.type == ExoPlaybackException.TYPE_RENDERER }
-				?.rendererIndex
+			if (rendererError?.let(::fallbackToFfmpegAudio) == true) return
+			val rendererIndex = rendererError?.rendererIndex
 			val isVideoRendererError = rendererIndex != null &&
 				rendererIndex in 0 until exoPlayer.rendererCount &&
 				exoPlayer.getRendererType(rendererIndex) == C.TRACK_TYPE_VIDEO
@@ -1446,10 +1686,19 @@ class ExoPlayerBackend(
 		override fun onPlaybackStateChanged(playbackState: Int) {
 			if (shouldWatchVideoDecoderStall(exoPlayer.playWhenReady, playbackState)) scheduleVideoDecoderStallFallback()
 			else videoBufferingHandler.removeCallbacksAndMessages(null)
+			if (playbackState == Player.STATE_BUFFERING) scheduleAudioDecoderStallFallback()
+			else if (!shouldWatchAudioDecoderStall()) {
+				cancelAudioDecoderStallCheck()
+			}
 			onIsPlayingChanged(exoPlayer.isPlaying)
 			if (playbackState == Player.STATE_ENDED) {
 				reportCurrentMediaStreamEnd("playback-state-ended")
 			}
+		}
+
+		override fun onIsLoadingChanged(isLoading: Boolean) {
+			if (isLoading) cancelAudioDecoderStallCheck()
+			else scheduleAudioDecoderStallFallback()
 		}
 
 		override fun onTracksChanged(tracks: Tracks) {
@@ -1469,6 +1718,11 @@ class ExoPlayerBackend(
 			}
 			if (shouldWatchVideoDecoderStall(playWhenReady, exoPlayer.playbackState)) scheduleVideoDecoderStallFallback()
 			else videoBufferingHandler.removeCallbacksAndMessages(null)
+			if (shouldWatchAudioDecoderStall()) {
+				scheduleAudioDecoderStallFallback()
+			} else {
+				cancelAudioDecoderStallCheck()
+			}
 			onIsPlayingChanged(exoPlayer.isPlaying)
 		}
 
@@ -1477,6 +1731,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+			cancelAudioDecoderStallCheck()
 			listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 			val queueEntry = mediaItem?.queueEntryTag
 			audioPipeline.normalizationGain = queueEntry?.normalizationGain
@@ -1491,6 +1746,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+			cancelAudioDecoderStallCheck()
 			timedEventState.onSeek(oldPosition.positionMs.milliseconds, newPosition.positionMs.milliseconds, lastKnownDuration ?: Duration.ZERO)
 		}
 	}
@@ -1757,6 +2013,7 @@ class ExoPlayerBackend(
 
 	override fun pause() {
 		clearPendingLiveStart()
+		cancelAudioDecoderStallCheck()
 		exoPlayer.pause()
 	}
 
@@ -1788,6 +2045,7 @@ class ExoPlayerBackend(
 		videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		videoBufferingHandler.removeCallbacksAndMessages(null)
 		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
+		cancelAudioDecoderStallCheck()
 		setListener(null)
 		setSurfaceView(null)
 		setSubtitleView(null)
@@ -1825,6 +2083,7 @@ class ExoPlayerBackend(
 			return false
 		}
 
+		cancelAudioDecoderStallCheck()
 		exoPlayer.seekTo(position.inWholeMilliseconds)
 		return true
 	}

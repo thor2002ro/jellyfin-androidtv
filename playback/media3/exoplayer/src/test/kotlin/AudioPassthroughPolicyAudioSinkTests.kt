@@ -89,6 +89,25 @@ class AudioPassthroughPolicyAudioSinkTests : FunSpec({
 		enabled = true
 		sink.supportsFormat(ac3) shouldBe true
 	}
+
+	test("sink telemetry reports buffer attempts before delegate acceptance") {
+		val delegate = mockk<AudioSink> {
+			every { configure(any<AudioSinkConfig>()) } returns Unit
+			every { handleBuffer(any(), any(), any()) } returns false
+		}
+		var bufferAttempts = 0
+		val sink = AudioPassthroughPolicyAudioSink(
+			delegate,
+			isPassthroughEnabled = { true },
+			onBufferAttempt = { bufferAttempts++ },
+		)
+		val pcm = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).build()
+
+		sink.configure(AudioSinkConfig.Builder(pcm).build())
+		sink.handleBuffer(ByteBuffer.allocateDirect(0), 0, 1) shouldBe false
+
+		bufferAttempts shouldBe 1
+	}
 })
 
 private fun supportingAudioSink() = mockk<AudioSink> {
