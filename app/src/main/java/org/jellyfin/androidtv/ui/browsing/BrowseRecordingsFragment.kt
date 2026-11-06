@@ -10,9 +10,8 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Row
 import androidx.lifecycle.Lifecycle
 import org.jellyfin.androidtv.R
-import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
-import org.jellyfin.androidtv.ui.presentation.GridButtonPresenter
+import org.jellyfin.androidtv.ui.presentation.ActionButtonPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.sdk.model.api.BaseItemDto
 import timber.log.Timber
@@ -72,9 +71,9 @@ class BrowseRecordingsFragment : EnhancedBrowseFragment() {
 	override fun addAdditionalRows(rowAdapter: MutableObjectAdapter<Row>) {
 		val gridHeader = HeaderItem(rowAdapter.size().toLong(), getString(R.string.lbl_views))
 
-		val gridRowAdapter = ArrayObjectAdapter(GridButtonPresenter())
-		gridRowAdapter.add(GridButton(SCHEDULE, getString(R.string.lbl_schedule)))
-		gridRowAdapter.add(GridButton(SERIES, getString(R.string.lbl_series_recordings)))
+		val gridRowAdapter = ArrayObjectAdapter(ActionButtonPresenter())
+		gridRowAdapter.add(createViewButton(SCHEDULE, R.string.lbl_schedule))
+		gridRowAdapter.add(createViewButton(SERIES, R.string.lbl_series_recordings))
 		rowAdapter.add(ListRow(gridHeader, gridRowAdapter))
 	}
 }
