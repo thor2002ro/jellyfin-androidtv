@@ -214,7 +214,6 @@
     <string name="lbl_at_any_time">任何時間</string>
     <string name="lbl_on_schedule">跟排程</string>
     <string name="lbl_guest_stars">客串明星</string>
-    <string name="lbl_premiere">首播</string>
     <string name="lbl_sort_by">排序依據</string>
     <string name="lbl_show_indicators">顯示標示項目</string>
     <string name="lbl_guide_option_played">上次播放</string>

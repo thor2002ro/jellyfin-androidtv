@@ -13,6 +13,7 @@ import org.jellyfin.sdk.model.api.HardwareAccelerationType
 import org.jellyfin.sdk.model.api.SessionInfoDto
 import org.jellyfin.sdk.model.api.TranscodeReason
 import org.jellyfin.sdk.model.api.TranscodingInfo
+import timber.log.Timber
 import java.util.UUID
 import kotlin.math.max
 
@@ -54,13 +55,17 @@ class TranscodingStatusRepository(
 		val now = System.currentTimeMillis()
 		if (now - cachedAtMillis < SESSION_CACHE_MS) return@withLock cachedSessions
 
-		cachedSessions = withContext(Dispatchers.IO) {
-			api.sessionApi.getSessions(
-				deviceId = api.deviceInfo.id,
-				activeWithinSeconds = ACTIVE_WITHIN_SECONDS,
-			).content
-		}
 		cachedAtMillis = now
+		cachedSessions = runCatching {
+			withContext(Dispatchers.IO) {
+				api.sessionApi.getSessions(
+					deviceId = api.deviceInfo.id,
+					activeWithinSeconds = ACTIVE_WITHIN_SECONDS,
+				).content
+			}
+		}.onFailure { error ->
+			Timber.w(error, "Unable to fetch transcoding status sessions")
+		}.getOrDefault(cachedSessions)
 		cachedSessions
 	}
 
