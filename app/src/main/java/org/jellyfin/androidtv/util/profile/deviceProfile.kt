@@ -21,6 +21,8 @@ import org.jellyfin.androidtv.preference.constant.HdrOverrideMode
 import org.jellyfin.androidtv.preference.constant.PlaybackBackend
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.androidtv.preference.isAudioPassthroughEnabled
+import org.jellyfin.androidtv.preference.managedAudioPassthroughMimeTypes
+import org.jellyfin.androidtv.preference.constant.mpvAudioPolicy
 import org.jellyfin.androidtv.preference.playbackBackend
 import org.jellyfin.androidtv.preference.preferExoPlayerFfmpegVideo
 import org.jellyfin.playback.dovi.DoviRoute
@@ -134,7 +136,12 @@ internal fun createDeviceProfile(
 	mediaTest: MediaCodecCapabilitiesTest = MediaCodecCapabilitiesTest(softwareCodecsEnabled),
 ): DeviceProfile {
 	val audioBehavior = userPreferences[UserPreferences.audioBehaviour]
-	val supportedPassthroughAudioMimes = if (enableMpvAudio) {
+	val allowPassthrough = audioBehavior != AudioBehavior.DOWNMIX_TO_STEREO && if (enableMpvAudio) {
+		userPreferences.mpvAudioPolicy(managedAudioPassthroughMimeTypes).audioSpdif.isNotEmpty()
+	} else {
+		BitstreamAudioFormat.entries.any { userPreferences.isAudioPassthroughEnabled(it.mimeType) }
+	}
+	val supportedPassthroughAudioMimes = if (!allowPassthrough) emptySet() else if (enableMpvAudio) {
 		getSupportedMPVPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
 	} else {
 		getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
@@ -155,8 +162,8 @@ internal fun createDeviceProfile(
 		forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE),
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
-		passthroughAudioCodecs = userPreferences.profilePassthroughAudioCodecs(supportedPassthroughAudioMimes),
-		transcodeToPassthrough = audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH,
+		passthroughAudioCodecs = if (allowPassthrough) userPreferences.profilePassthroughAudioCodecs(supportedPassthroughAudioMimes) else emptySet(),
+		transcodeToPassthrough = allowPassthrough && audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH,
 		supportsDtsHdPassthrough = MimeTypes.AUDIO_DTS_HD in supportedPassthroughAudioMimes,
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,

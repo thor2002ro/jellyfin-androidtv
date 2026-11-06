@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.util.profile
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -11,7 +12,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 
 private const val MINIMUM_BUFFER_DURATION_MS = 75
-private const val CARRIER_PROBE_CACHE_DURATION_MS = 2_000L
+private const val FAILED_CARRIER_RETRY_DELAY_MS = 2_000L
 
 internal data class MPVIec61937Carrier(val sampleRate: Int, val channelMask: Int) {
 	val frameSizeBytes: Int get() = Integer.bitCount(channelMask) * 2
@@ -20,7 +21,8 @@ internal data class MPVIec61937Carrier(val sampleRate: Int, val channelMask: Int
 private data class CarrierProbeCache(
 	val routeSupportedMimes: Set<String>,
 	val supportedCarriers: Set<MPVIec61937Carrier>,
-	val expiresAt: Long,
+	val outputDeviceIds: Set<Int>,
+	val retryAfter: Long,
 )
 
 private val carrierProbeLock = Any()
@@ -47,11 +49,25 @@ private val mpvIec61937Carriers: Map<String, Set<MPVIec61937Carrier>> = run {
 	)
 }
 
+private val digitalOutputTypes = setOf(
+	AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_LINE_DIGITAL,
+)
+
+@OptIn(UnstableApi::class)
+private val mpvEncodedOutputFormats = mpvIec61937Carriers.keys.map { MimeTypes.getEncoding(it, null) }.toSet() +
+	AudioFormat.ENCODING_IEC61937
+
 @OptIn(UnstableApi::class)
 fun getSupportedMPVPassthroughAudioMimes(context: Context, mimeTypes: Collection<String>): Set<String> {
-	val routeSupportedMimes = getSupportedPassthroughAudioMimes(context, mimeTypes)
-	val supportedCarriers = getSupportedCarriers(routeSupportedMimes)
-	return filterMPVPassthroughAudioMimes(routeSupportedMimes, supportedCarriers)
+	// Profile and player callers request different subsets; probe one shared route capability set.
+	val routeSupportedMimes = getSupportedPassthroughAudioMimes(context, mpvIec61937Carriers.keys)
+	val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+	val outputDeviceIds = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+		.filter { device ->
+			device.type in digitalOutputTypes || device.encodings.any { it in mpvEncodedOutputFormats }
+		}.mapTo(mutableSetOf()) { it.id }
+	val supportedCarriers = getSupportedCarriers(routeSupportedMimes, outputDeviceIds, audioManager.isMusicActive)
+	return filterMPVPassthroughAudioMimes(routeSupportedMimes.intersect(mimeTypes.toSet()), supportedCarriers)
 }
 
 @OptIn(UnstableApi::class)
@@ -74,17 +90,30 @@ internal fun probeMPVIec61937Carriers(
 	return results.filterValues { it }.keys
 }
 
-private fun getSupportedCarriers(routeSupportedMimes: Set<String>): Set<MPVIec61937Carrier> = synchronized(carrierProbeLock) {
+private fun getSupportedCarriers(
+	routeSupportedMimes: Set<String>,
+	outputDeviceIds: Set<Int>,
+	isAudioActive: Boolean,
+): Set<MPVIec61937Carrier> = synchronized(carrierProbeLock) {
+	// An active player can occupy the direct output. Reprobing between items would mistake
+	// that temporary allocation failure for lost codec support and remove surround conversion.
+	val cache = carrierProbeCache?.takeIf { cache ->
+		cache.routeSupportedMimes == routeSupportedMimes && cache.outputDeviceIds == outputDeviceIds
+	}
 	val now = SystemClock.elapsedRealtime()
-	carrierProbeCache?.takeIf { cache ->
-		cache.routeSupportedMimes == routeSupportedMimes && now < cache.expiresAt
-	}?.let { cache -> return@synchronized cache.supportedCarriers }
+	val knownCarriers = cache?.supportedCarriers.orEmpty()
+	val missingMimes = routeSupportedMimes - filterMPVPassthroughAudioMimes(routeSupportedMimes, knownCarriers)
+	if (cache != null && (missingMimes.isEmpty() || isAudioActive || now < cache.retryAfter)) {
+		return@synchronized knownCarriers
+	}
 
-	val supportedCarriers = probeMPVIec61937Carriers(routeSupportedMimes, ::canOpenIec61937AudioTrack)
+	// Preserve successful carriers and retry only missing formats while the output is idle.
+	val supportedCarriers = knownCarriers + probeMPVIec61937Carriers(missingMimes, ::canOpenIec61937AudioTrack)
 	carrierProbeCache = CarrierProbeCache(
 		routeSupportedMimes = routeSupportedMimes,
 		supportedCarriers = supportedCarriers,
-		expiresAt = now + CARRIER_PROBE_CACHE_DURATION_MS,
+		outputDeviceIds = outputDeviceIds,
+		retryAfter = now + FAILED_CARRIER_RETRY_DELAY_MS,
 	)
 	supportedCarriers
 }
