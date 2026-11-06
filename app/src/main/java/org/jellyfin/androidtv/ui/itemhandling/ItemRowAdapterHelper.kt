@@ -5,6 +5,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,6 +27,13 @@ import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.BrowseGridFragment.SortOption
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
+import org.jellyfin.androidtv.util.sdk.hasLanguageBadge
+import org.jellyfin.androidtv.util.sdk.hasLanguageBadgeStreams
+import org.jellyfin.androidtv.util.sdk.hasVideoBadgeMetadata
+import org.jellyfin.androidtv.util.sdk.languageBadgeText
+import org.jellyfin.androidtv.util.sdk.streamBadgeItemTypes
+import org.jellyfin.androidtv.util.sdk.videoBadgeCodecText
+import org.jellyfin.androidtv.util.sdk.videoBadgeResolutionText
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.InvalidStatusException
@@ -67,6 +76,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private const val LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT = 300
 
@@ -110,8 +120,10 @@ internal fun areAdapterItemsTheSame(old: Any, new: Any): Boolean {
 	return old == new
 }
 
-private fun BaseRowItem.resumeSignature() = listOf(
+internal fun BaseRowItem.resumeSignature() = listOf(
 	itemId,
+	showRemainingTimeBadge,
+	baseItem?.runTimeTicks,
 	baseItem?.userData?.played,
 	baseItem?.userData?.playedPercentage,
 	baseItem?.userData?.playbackPositionTicks,
@@ -138,6 +150,8 @@ private fun BaseRowItem.liveTvProgramSignature() = listOf(
 	baseItem?.endDate,
 )
 
+internal fun GetItemsRequest.showsRemainingTimeBadges() = filters?.contains(ItemFilter.IS_RESUMABLE) == true
+
 private fun ItemRowAdapter.replaceIfChanged(items: List<BaseRowItem>, signature: (BaseRowItem) -> List<Any?>) {
 	val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
 	if (oldItems.map { it?.let(signature) } != items.map(signature)) replaceAll(items)
@@ -154,10 +168,10 @@ fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequ
 			}
 
 			val items = response.items.map {
-				BaseItemDtoBaseRowItem(
-					it,
-					preferParentThumb,
-					isStaticHeight
+				it.toBaseItemRowItem(
+					preferParentThumb = preferParentThumb,
+					staticHeight = isStaticHeight,
+					showRemainingTimeBadge = true,
 				)
 			}
 
@@ -226,7 +240,12 @@ fun ItemRowAdapter.retrieveNextUpItems(api: ApiClient, query: GetNextUpRequest) 
 			onSuccess = {
 				notifyRetrieveFinished()
 				if (displayedItems.isNotEmpty()) {
-					refreshCurrentStreamBadges(api, displayedItems, "Unable to refresh next up stream badges") { apiClient ->
+					refreshCurrentStreamBadges(
+						api = api,
+						items = displayedItems,
+						errorMessage = "Unable to refresh next up stream badges",
+						shouldRefresh = BaseItemDto::needsDirectStreamBadgeSource,
+					) { apiClient ->
 						withDirectStreamBadges(apiClient)
 					}
 				}
@@ -258,10 +277,13 @@ fun ItemRowAdapter.retrieveLatestMedia(api: ApiClient, query: GetLatestMediaRequ
 }
 
 private fun ItemRowAdapter.refreshLatestStreamBadges(api: ApiClient, items: List<BaseItemDto>) {
+	val badgeItems = items.streamBadgeItems(BaseItemDto::needsStreamBadgeSource)
+	if (badgeItems.isEmpty()) return
+
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		val enriched = try {
 			withContext(Dispatchers.IO) {
-				items.withLatestStreamBadges(api)
+				badgeItems.withLatestStreamBadges(api)
 			}
 		} catch (error: CancellationException) {
 			throw error
@@ -270,7 +292,7 @@ private fun ItemRowAdapter.refreshLatestStreamBadges(api: ApiClient, items: List
 			return@launch
 		}
 
-		if (enriched != items) replaceBaseItemRows(enriched)
+		if (enriched != badgeItems) replaceBaseItemRows(enriched)
 	}
 }
 
@@ -299,12 +321,16 @@ private fun ItemRowAdapter.refreshCurrentStreamBadges(
 	api: ApiClient,
 	items: List<BaseItemDto>,
 	errorMessage: String,
+	shouldRefresh: (BaseItemDto) -> Boolean = BaseItemDto::needsStreamBadgeSource,
 	enrich: suspend List<BaseItemDto>.(ApiClient) -> List<BaseItemDto>,
 ) {
+	val badgeItems = items.streamBadgeItems(shouldRefresh)
+	if (badgeItems.isEmpty()) return
+
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		val enriched = try {
 			withContext(Dispatchers.IO) {
-				items.enrich(api)
+				badgeItems.enrich(api)
 			}
 		} catch (error: CancellationException) {
 			throw error
@@ -313,9 +339,15 @@ private fun ItemRowAdapter.refreshCurrentStreamBadges(
 			return@launch
 		}
 
-		if (enriched != items) replaceBaseItemRows(enriched)
+		if (enriched != badgeItems) replaceBaseItemRows(enriched)
 	}
 }
+
+private fun Collection<BaseItemDto>.streamBadgeItems(shouldRefresh: (BaseItemDto) -> Boolean) =
+	filter { item -> item.type in streamBadgeItemTypes && shouldRefresh(item) }
+
+private fun BaseItemDto.needsStreamBadgeSource() =
+	needsDirectStreamBadgeSource() || needsSeriesOrSeasonStreamBadgeSource()
 
 private fun ItemRowAdapter.replaceBaseItemRows(items: List<BaseItemDto>) {
 	val itemsById = items.associateBy { it.id }
@@ -324,17 +356,14 @@ private fun ItemRowAdapter.replaceBaseItemRows(items: List<BaseItemDto>) {
 		val currentItem = oldItem.baseItem ?: continue
 		val itemId = oldItem.itemId ?: continue
 		val mediaSources = itemsById[itemId]?.mediaSources ?: continue
-		if (mediaSources == oldItem.streamBadgeMediaSources || mediaSources == currentItem.mediaSources) continue
+		val streamBadgeMediaSources = mediaSources.takeUnless { it == currentItem.mediaSources }
+		if (streamBadgeMediaSources == oldItem.streamBadgeMediaSources) continue
 
 		set(
 			index = index,
-			element = BaseItemDtoBaseRowItem(
+			element = oldItem.copyWithItem(
 				item = currentItem,
-				preferParentThumb = oldItem.preferParentThumb,
-				staticHeight = oldItem.staticHeight,
-				selectAction = oldItem.selectAction,
-				preferSeriesPoster = oldItem.preferSeriesPoster,
-				streamBadgeMediaSources = mediaSources,
+				streamBadgeMediaSources = streamBadgeMediaSources,
 			),
 		)
 	}
@@ -347,9 +376,23 @@ private suspend fun List<BaseItemDto>.withDirectStreamBadges(api: ApiClient): Li
 		.toList()
 	if (ids.isEmpty()) return this
 
-	val items = try {
+	val sourceItems = associateBy { it.id }
+	val cachedItems = ids.mapNotNull { id ->
+		DirectStreamBadgeCache.get(id)?.let { mediaSources ->
+			val type = sourceItems[id]?.type ?: return@mapNotNull null
+			id to BaseItemDto(
+				id = id,
+				type = type,
+				mediaSources = mediaSources,
+			)
+		}
+	}.toMap()
+	val missingIds = ids.filterNot(cachedItems::containsKey)
+	if (missingIds.isEmpty()) return withDirectStreamBadgeSources(cachedItems)
+
+	val fetchedItems = try {
 		api.itemsApi.getItems(GetItemsRequest(
-			ids = ids,
+			ids = missingIds,
 			fields = STREAM_BADGE_FIELDS,
 			enableImages = false,
 			enableTotalRecordCount = false,
@@ -359,10 +402,14 @@ private suspend fun List<BaseItemDto>.withDirectStreamBadges(api: ApiClient): Li
 		throw error
 	} catch (error: Exception) {
 		Timber.w(error, "Unable to load stream badges for latest media")
-		emptyMap()
+		return withDirectStreamBadgeSources(cachedItems)
 	}
 
-	return withDirectStreamBadgeSources(items)
+	missingIds.forEach { id ->
+		DirectStreamBadgeCache.save(id, fetchedItems[id]?.mediaSources.orEmpty())
+	}
+
+	return withDirectStreamBadgeSources(cachedItems + fetchedItems)
 }
 
 internal fun List<BaseItemDto>.withDirectStreamBadgeSources(items: Map<UUID, BaseItemDto>): List<BaseItemDto> = map { item ->
@@ -370,20 +417,96 @@ internal fun List<BaseItemDto>.withDirectStreamBadgeSources(items: Map<UUID, Bas
 		?.mediaSources
 		?.takeIf { sources -> sources.any { it.hasBadgeStreams() } }
 
-	if (item.needsDirectStreamBadgeSource() && mediaSources != null) item.copy(mediaSources = mediaSources)
+	if (item.needsDirectStreamBadgeSource() && mediaSources != null) {
+		item.copy(mediaSources = mediaSources.withFallbackBadgeSources(item.mediaSources.orEmpty()))
+	}
 	else item
 }
 
+private fun List<MediaSourceInfo>.withFallbackBadgeSources(fallback: List<MediaSourceInfo>): List<MediaSourceInfo> {
+	if (fallback.isEmpty()) return this
+
+	val summary = badgeStreamSummary()
+	val fallbackSummary = fallback.badgeStreamSummary()
+	return if (summary.covers(fallbackSummary)) this else this + fallback.filterNot(::contains)
+}
+
 private fun BaseItemDto.needsDirectStreamBadgeSource() =
-	type in DIRECT_STREAM_BADGE_TYPES && mediaSources?.any { it.hasBadgeStreams() } != true
+	type in DIRECT_STREAM_BADGE_TYPES && mediaSources?.hasCompleteRefreshBadgeStreams() != true
 
 private fun MediaSourceInfo.hasBadgeStreams() =
-	mediaStreams.orEmpty().any { it.type == MediaStreamType.AUDIO || it.type == MediaStreamType.SUBTITLE }
+	hasLanguageBadgeStreams() || hasVideoBadgeStreams()
+
+private fun List<MediaSourceInfo>.hasCompleteRefreshBadgeStreams() =
+	badgeStreamSummary(collectAll = false).isRefreshComplete
+
+private fun List<MediaSourceInfo>.hasCacheableBadgeStreams() =
+	any { it.hasBadgeStreams() }
+
+private fun MediaSourceInfo.hasVideoBadgeStreams() =
+	mediaStreams.orEmpty().any { it.type == MediaStreamType.VIDEO && it.hasVideoBadgeMetadata() }
+
+private data class BadgeStreamSummary(
+	val audioBadges: Set<String> = emptySet(),
+	val subtitleBadges: Set<String> = emptySet(),
+	val videoResolutions: Set<String> = emptySet(),
+	val videoCodecs: Set<String> = emptySet(),
+) {
+	val isRefreshComplete get() =
+		(audioBadges.isNotEmpty() || subtitleBadges.isNotEmpty()) &&
+			videoResolutions.isNotEmpty() &&
+			videoCodecs.isNotEmpty()
+
+	fun covers(fallback: BadgeStreamSummary) =
+		audioBadges.containsAll(fallback.audioBadges) &&
+			subtitleBadges.containsAll(fallback.subtitleBadges) &&
+			videoResolutions.containsAll(fallback.videoResolutions) &&
+			videoCodecs.containsAll(fallback.videoCodecs)
+}
+
+private fun List<MediaSourceInfo>.badgeStreamSummary(collectAll: Boolean = true): BadgeStreamSummary {
+	val audioBadges = mutableSetOf<String>()
+	val subtitleBadges = mutableSetOf<String>()
+	val videoResolutions = mutableSetOf<String>()
+	val videoCodecs = mutableSetOf<String>()
+
+	for (source in this) {
+		for (stream in source.mediaStreams.orEmpty()) {
+			when (stream.type) {
+				MediaStreamType.AUDIO ->
+					stream.languageBadgeText(MediaStreamType.AUDIO)?.let(audioBadges::add)
+
+				MediaStreamType.SUBTITLE ->
+					stream.languageBadgeText(MediaStreamType.SUBTITLE)?.let(subtitleBadges::add)
+
+				MediaStreamType.VIDEO -> {
+					stream.videoBadgeResolutionText()?.let(videoResolutions::add)
+					stream.videoBadgeCodecText()?.let(videoCodecs::add)
+				}
+
+				else -> Unit
+			}
+		}
+
+		val hasCompleteBadgeSummary = (audioBadges.isNotEmpty() || subtitleBadges.isNotEmpty()) &&
+			videoResolutions.isNotEmpty() &&
+			videoCodecs.isNotEmpty()
+		if (!collectAll && hasCompleteBadgeSummary) break
+	}
+
+	return BadgeStreamSummary(
+		audioBadges = audioBadges,
+		subtitleBadges = subtitleBadges,
+		videoResolutions = videoResolutions,
+		videoCodecs = videoCodecs,
+	)
+}
 
 private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	api: ApiClient,
 ): List<BaseItemDto> = coroutineScope {
-	val seasonSamples = ConcurrentHashMap<UUID, List<BaseItemDto>>()
+	val seasonSamples = ConcurrentHashMap<UUID, Deferred<List<BaseItemDto>>>()
+	val scope = this
 	val sampleItems = asSequence()
 		.filter { it.needsSeriesOrSeasonStreamBadgeSource() }
 		.distinctBy { it.id }
@@ -394,7 +517,7 @@ private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	val samples = sampleItems.map { item ->
 		async {
 			parallelism.withPermit {
-				item.id to item.loadStreamBadgeSamples(api, seasonSamples)
+				item.id to item.loadStreamBadgeSamples(api, seasonSamples, scope)
 			}
 		}
 	}.awaitAll().toMap()
@@ -403,25 +526,45 @@ private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 
 private suspend fun BaseItemDto.loadStreamBadgeSamples(
 	api: ApiClient,
-	seasonSamples: MutableMap<UUID, List<BaseItemDto>>,
+	seasonSamples: ConcurrentHashMap<UUID, Deferred<List<BaseItemDto>>>,
+	scope: CoroutineScope,
 ): List<BaseItemDto> = try {
 	when (type) {
-		BaseItemKind.SERIES -> api.tvShowsApi.getSeasons(
-			seriesId = id,
-			fields = STREAM_BADGE_FIELDS,
-			isMissing = false,
-			enableImages = false,
-			enableUserData = false,
-		).content.items.map { season ->
-			val episodes = seasonSamples[season.id]
-				?: api.loadCachedSeasonStreamBadgeSamples(id, season.id, seasonSamples)
+		BaseItemKind.SERIES -> {
+			val seasons = api.tvShowsApi.getSeasons(
+				seriesId = id,
+				fields = STREAM_BADGE_FIELDS,
+				isMissing = false,
+				enableImages = false,
+				enableUserData = false,
+			).content.items
 
-			season.withSeriesStreamBadgeSource(episodes)
+			val sampledSeasonIds = seasons
+				.filterNot { season -> season.mediaSources.orEmpty().hasCompleteRefreshBadgeStreams() }
+				.spreadSeriesStreamBadgeSampleIds(SERIES_STREAM_BADGE_SEASON_SAMPLE_SIZE)
+			val samples = mutableListOf<BaseItemDto>()
+			for (season in seasons) {
+				val seasonSample = if (season.mediaSources.orEmpty().hasCompleteRefreshBadgeStreams()) {
+					season
+				} else if (season.id !in sampledSeasonIds) {
+					season.takeIf { it.mediaSources.orEmpty().hasCacheableBadgeStreams() } ?: continue
+				} else {
+					val episodes = seasonSamples.getOrLoad(season.id, scope) {
+						api.loadCachedSeasonStreamBadgeSamples(id, season.id)
+					}
+
+					season.withSeriesStreamBadgeSource(episodes)
+				}
+
+				samples += seasonSample
+			}
+			samples
 		}
 
 		BaseItemKind.SEASON -> seriesId?.let { seriesId ->
-			seasonSamples[id]
-				?: api.loadCachedSeasonStreamBadgeSamples(seriesId, id, seasonSamples)
+			seasonSamples.getOrLoad(id, scope) {
+				api.loadCachedSeasonStreamBadgeSamples(seriesId, id)
+			}
 		}
 
 		else -> null
@@ -433,35 +576,56 @@ private suspend fun BaseItemDto.loadStreamBadgeSamples(
 	emptyList()
 }
 
+internal fun List<BaseItemDto>.spreadSeriesStreamBadgeSampleIds(limit: Int): Set<UUID> {
+	if (limit <= 0) return emptySet()
+	if (limit == 1) return firstOrNull()?.let { setOf(it.id) }.orEmpty()
+	if (size <= limit) return map { it.id }.toSet()
+
+	val lastIndex = lastIndex
+	return (0 until limit)
+		.map { sample -> get((sample * lastIndex.toFloat() / (limit - 1)).roundToInt()).id }
+		.toSet()
+}
+
+private suspend fun ConcurrentHashMap<UUID, Deferred<List<BaseItemDto>>>.getOrLoad(
+	seasonId: UUID,
+	scope: CoroutineScope,
+	load: suspend () -> List<BaseItemDto>,
+): List<BaseItemDto> = computeIfAbsent(seasonId) {
+	scope.async { load() }
+}.await()
+
 private suspend fun ApiClient.loadCachedSeasonStreamBadgeSamples(
 	seriesId: UUID,
 	seasonId: UUID,
-	seasonSamples: MutableMap<UUID, List<BaseItemDto>>,
 ): List<BaseItemDto> {
-	SeriesStreamBadgeCache.get(seasonId)?.let { cached ->
-		seasonSamples[seasonId] = cached
-		return cached
-	}
+	SeriesStreamBadgeCache.get(seasonId)?.let { cached -> return cached }
 
 	return loadSeasonStreamBadgeSamples(seriesId, seasonId).also { samples ->
-		seasonSamples[seasonId] = samples
 		if (samples.isNotEmpty()) SeriesStreamBadgeCache.save(seriesId, seasonId, samples)
 	}
 }
 
 private suspend fun ApiClient.loadSeasonStreamBadgeSamples(seriesId: UUID, seasonId: UUID): List<BaseItemDto> {
 	var lastError: Exception? = null
-	for (startIndex in 0 until SERIES_STREAM_BADGE_EPISODE_ATTEMPTS) {
+	val samples = mutableListOf<BaseItemDto>()
+	var remainingAttempts = SERIES_STREAM_BADGE_EPISODE_ATTEMPTS
+	while (remainingAttempts-- > 0) {
 		try {
-			return tvShowsApi.getEpisodes(
+			val startIndex = samples.size
+			val items = tvShowsApi.getEpisodes(
 				seriesId = seriesId,
 				seasonId = seasonId,
 				fields = STREAM_BADGE_FIELDS,
 				isMissing = false,
-				limit = if (startIndex == 0) SERIES_STREAM_BADGE_SAMPLE_SIZE else 1,
+				limit = if (samples.isEmpty()) SERIES_STREAM_BADGE_SAMPLE_SIZE else 1,
 				startIndex = startIndex,
 				sortBy = ItemSortBy.DATE_CREATED,
 			).content.items
+			if (items.isEmpty()) break
+
+			samples += items
+			if (samples.hasCompleteSeriesStreamBadgeSource(seasonId)) return samples
 		} catch (error: CancellationException) {
 			throw error
 		} catch (error: Exception) {
@@ -469,9 +633,17 @@ private suspend fun ApiClient.loadSeasonStreamBadgeSamples(seriesId: UUID, seaso
 		}
 	}
 
+	if (samples.isNotEmpty()) return samples
 	Timber.w(lastError, "Unable to load stream badge sample for season $seasonId")
 	return emptyList()
 }
+
+private fun List<BaseItemDto>.hasCompleteSeriesStreamBadgeSource(seasonId: UUID) =
+	BaseItemDto(id = seasonId, type = BaseItemKind.SEASON)
+		.withSeriesStreamBadgeSource(this)
+		.mediaSources
+		.orEmpty()
+		.hasCompleteRefreshBadgeStreams()
 
 internal fun List<BaseItemDto>.withSeriesStreamBadgeSources(
 	samples: Map<UUID, List<BaseItemDto>>,
@@ -485,20 +657,25 @@ internal fun List<BaseItemDto>.withSeriesStreamBadgeSources(
 
 private fun BaseItemDto.needsSeriesOrSeasonStreamBadgeSource() =
 	(type == BaseItemKind.SERIES || type == BaseItemKind.SEASON) &&
-		mediaSources?.any { it.hasBadgeStreams() } != true
+		mediaSources?.hasCompleteRefreshBadgeStreams() != true
 
 internal fun BaseItemDto.withSeriesStreamBadgeSource(episodes: List<BaseItemDto>): BaseItemDto {
 	val sources = episodes
 		.asSequence()
-		.mapNotNull { episode -> episode.mediaSources?.firstOrNull { it.hasBadgeStreams() } }
+		.flatMap { episode -> episode.mediaSources.orEmpty().asSequence() }
+		.filter { it.hasBadgeStreams() }
 		.toList()
 	val source = sources.firstOrNull() ?: return this
-	val audio = sources.aggregateStreams(MediaStreamType.AUDIO)
-	val subtitle = sources.aggregateStreams(MediaStreamType.SUBTITLE)
+	val badgeSources = sources.withFallbackBadgeSources(mediaSources.orEmpty())
+	val audio = badgeSources.aggregateStreams(MediaStreamType.AUDIO)
+	val subtitle = badgeSources.aggregateStreams(MediaStreamType.SUBTITLE)
+	val video = badgeSources.aggregateVideoStreams()
+	val streams = video + audio.streams + subtitle.streams
+	if (streams.isEmpty()) return this
 
 	return copy(
 		mediaSources = listOf(source.copy(
-			mediaStreams = audio.streams + subtitle.streams,
+			mediaStreams = streams,
 			defaultAudioStreamIndex = audio.defaultIndex,
 			defaultSubtitleStreamIndex = subtitle.defaultIndex ?: -1,
 		))
@@ -512,15 +689,16 @@ private data class AggregateStreams(
 
 private fun List<MediaSourceInfo>.aggregateStreams(type: MediaStreamType): AggregateStreams {
 	val representative = representativeStream(type)
+	val representativeBadge = representative?.languageBadgeText(type)
 	val streams = asSequence()
 		.flatMap { it.mediaStreams.orEmpty().asSequence() }
-		.filter { it.type == type }
-		.distinctBy { it.language?.lowercase(Locale.ROOT) }
-		.sortedByDescending { stream -> representative != null && stream.language.equals(representative.language, ignoreCase = true) }
-		.mapIndexed { index, stream ->
+		.mapNotNull { stream -> stream.languageBadgeText(type)?.let { badge -> stream to badge } }
+		.distinctBy { (_, badge) -> badge }
+		.sortedByDescending { (_, badge) -> representativeBadge != null && badge == representativeBadge }
+		.mapIndexed { index, (stream, badge) ->
 			stream.copy(
 				index = index,
-				isDefault = representative != null && stream.language.equals(representative.language, ignoreCase = true),
+				isDefault = representativeBadge != null && badge == representativeBadge,
 			)
 		}
 		.toList()
@@ -528,13 +706,22 @@ private fun List<MediaSourceInfo>.aggregateStreams(type: MediaStreamType): Aggre
 	return AggregateStreams(streams, streams.firstOrNull { it.isDefault }?.index)
 }
 
+private fun List<MediaSourceInfo>.aggregateVideoStreams(): List<MediaStream> = asSequence()
+	.flatMap { it.mediaStreams.orEmpty().asSequence() }
+	.filter { it.type == MediaStreamType.VIDEO }
+	.filter { it.hasVideoBadgeMetadata() }
+	.distinctBy { stream -> listOf(stream.videoBadgeResolutionText(), stream.videoBadgeCodecText()) }
+	.mapIndexed { index, stream -> stream.copy(index = index) }
+	.toList()
+
 private fun List<MediaSourceInfo>.representativeStream(type: MediaStreamType): MediaStream? {
 	val streams = mapNotNull { it.selectedStream(type) }
-	return streams.maxByOrNull { stream -> streams.count { it.language.equals(stream.language, ignoreCase = true) } }
+	val counts = streams.groupingBy { it.languageBadgeText(type) }.eachCount()
+	return streams.maxByOrNull { stream -> counts[stream.languageBadgeText(type)] ?: 0 }
 }
 
 private fun MediaSourceInfo.selectedStream(type: MediaStreamType): MediaStream? {
-	val streams = mediaStreams.orEmpty()
+	val streams = mediaStreams.orEmpty().filter { stream -> stream.hasLanguageBadge(type) }
 	if (type == MediaStreamType.SUBTITLE && defaultSubtitleStreamIndex == -1) return null
 
 	val defaultIndex = when (type) {
@@ -543,9 +730,9 @@ private fun MediaSourceInfo.selectedStream(type: MediaStreamType): MediaStream? 
 		else -> null
 	}
 
-	return defaultIndex?.let { index -> streams.firstOrNull { it.type == type && it.index == index } }
-		?: streams.firstOrNull { it.type == type && it.isDefault }
-		?: streams.firstOrNull { it.type == type }
+	return defaultIndex?.let { index -> streams.firstOrNull { it.index == index } }
+		?: streams.firstOrNull { it.isDefault }
+		?: streams.firstOrNull()
 }
 
 internal object SeriesStreamBadgeCache {
@@ -582,7 +769,7 @@ internal object SeriesStreamBadgeCache {
 	fun get(seasonId: UUID): List<BaseItemDto>? {
 		val now = System.currentTimeMillis()
 		val cached = badges[seasonId] ?: return null
-		if (cached.isExpired(now)) {
+		if (cached.isExpired(now) || !cached.mediaSources.hasCacheableBadgeStreams()) {
 			badges.remove(seasonId)
 			store?.remove(seasonId)
 			return null
@@ -600,7 +787,7 @@ internal object SeriesStreamBadgeCache {
 			.withSeriesStreamBadgeSource(samples)
 			.mediaSources
 			.orEmpty()
-		if (mediaSources.isEmpty()) return
+		if (!mediaSources.hasCacheableBadgeStreams()) return
 
 		val cached = CachedSeasonBadge(
 			createdAtMillis = System.currentTimeMillis(),
@@ -651,7 +838,11 @@ internal object SeriesStreamBadgeCache {
 
 				val badge = (value as? String)
 					?.let { storedValue -> runCatching { json.decodeFromString<CachedSeasonBadge>(storedValue) }.getOrNull() }
-					?.takeIf { cachedBadge -> cachedBadge.seriesId != null && cachedBadge.mediaSources.isNotEmpty() && !cachedBadge.isExpired(now) }
+					?.takeIf { cachedBadge ->
+						cachedBadge.seriesId != null &&
+							cachedBadge.mediaSources.hasCacheableBadgeStreams() &&
+							!cachedBadge.isExpired(now)
+					}
 
 				if (badge == null) {
 					staleKeys.add(seasonId)
@@ -699,10 +890,51 @@ internal object SeriesStreamBadgeCache {
 	}
 }
 
-private val DIRECT_STREAM_BADGE_TYPES = setOf(BaseItemKind.MOVIE, BaseItemKind.EPISODE, BaseItemKind.VIDEO)
+internal object DirectStreamBadgeCache {
+	private val CACHE_TTL_MS = TimeUnit.DAYS.toMillis(7)
+	private val EMPTY_CACHE_TTL_MS = TimeUnit.HOURS.toMillis(1)
+	private val badges = ConcurrentHashMap<UUID, CachedDirectBadge>()
+
+	private data class CachedDirectBadge(
+		val createdAtMillis: Long,
+		val mediaSources: List<MediaSourceInfo>,
+	)
+
+	fun get(itemId: UUID): List<MediaSourceInfo>? {
+		val now = System.currentTimeMillis()
+		val cached = badges[itemId] ?: return null
+		if (cached.isExpired(now)) {
+			badges.remove(itemId)
+			return null
+		}
+
+		return cached.mediaSources
+	}
+
+	fun save(itemId: UUID, mediaSources: List<MediaSourceInfo>) {
+		badges[itemId] = CachedDirectBadge(
+			createdAtMillis = System.currentTimeMillis(),
+			mediaSources = mediaSources,
+		)
+	}
+
+	fun remove(itemIds: Set<UUID>) {
+		itemIds.forEach(badges::remove)
+	}
+
+	fun clear() {
+		badges.clear()
+	}
+
+	private fun CachedDirectBadge.isExpired(now: Long) =
+		now - createdAtMillis > if (mediaSources.isEmpty()) EMPTY_CACHE_TTL_MS else CACHE_TTL_MS
+}
+
+private val DIRECT_STREAM_BADGE_TYPES = streamBadgeItemTypes - setOf(BaseItemKind.SERIES, BaseItemKind.SEASON)
 private val STREAM_BADGE_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS)
 private const val SERIES_STREAM_BADGE_EPISODE_ATTEMPTS = 3
 private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 2
+private const val SERIES_STREAM_BADGE_SEASON_SAMPLE_SIZE = 6
 private const val SERIES_STREAM_BADGE_PARALLELISM = 8
 
 fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsRequest) {
@@ -788,7 +1020,12 @@ fun ItemRowAdapter.retrieveSeasons(api: ApiClient, query: GetSeasonsRequest) {
 			onSuccess = {
 				notifyRetrieveFinished()
 				if (items.isNotEmpty()) {
-					refreshCurrentStreamBadges(api, items, "Unable to refresh season stream badges") { apiClient ->
+					refreshCurrentStreamBadges(
+						api = api,
+						items = items,
+						errorMessage = "Unable to refresh season stream badges",
+						shouldRefresh = BaseItemDto::needsSeriesOrSeasonStreamBadgeSource,
+					) { apiClient ->
 						withSeriesOrSeasonStreamBadges(apiClient)
 					}
 				}
@@ -1180,14 +1417,15 @@ fun ItemRowAdapter.retrieveItems(
 				return@runCatching
 			}
 			streamBadgeItems = response.items
+			val showRemainingTimeBadge = query.showsRemainingTimeBadges()
 
 			setItems(
 				items = response.items,
 				transform = { item, _ ->
-					BaseItemDtoBaseRowItem(
-						item,
-						preferParentThumb,
-						isStaticHeight,
+					item.toBaseItemRowItem(
+						preferParentThumb = preferParentThumb,
+						staticHeight = isStaticHeight,
+						showRemainingTimeBadge = showRemainingTimeBadge,
 					)
 				},
 			)
@@ -1327,14 +1565,7 @@ fun ItemRowAdapter.refreshItem(
 
 				set(
 					index = index,
-					element = BaseItemDtoBaseRowItem(
-						item = refreshedBaseItem,
-						preferParentThumb = currentBaseRowItem.preferParentThumb,
-						staticHeight = currentBaseRowItem.staticHeight,
-						selectAction = currentBaseRowItem.selectAction,
-						preferSeriesPoster = currentBaseRowItem.preferSeriesPoster,
-						streamBadgeMediaSources = currentBaseRowItem.streamBadgeMediaSources,
-					)
+					element = currentBaseRowItem.copyWithItem(refreshedBaseItem)
 				)
 			},
 			onFailure = { err ->
