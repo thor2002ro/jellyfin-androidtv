@@ -162,7 +162,7 @@ val appModule = module {
 	single { DataRefreshService() }
 	single { PlaybackControllerContainer() }
 	single { TranscodingStatusRepository(get()) }
-	single { InteractionTrackerViewModel(get(), get(), get()) }
+	single { InteractionTrackerViewModel(get(), get()) }
 	single {
 		AppUpdater(
 			context = androidContext(),
