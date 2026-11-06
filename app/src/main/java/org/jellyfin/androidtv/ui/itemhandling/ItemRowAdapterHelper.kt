@@ -69,37 +69,43 @@ import java.time.LocalDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import kotlin.math.min
 
 private const val LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT = 300
 
+internal fun <T> mergeRetrievedItems(
+	existingItems: List<T>,
+	itemsLoaded: Int,
+	newItems: List<T>,
+	identity: (T) -> Any? = { it },
+): List<T> = buildList {
+	val seen = mutableSetOf<Any>()
+	(existingItems.take(itemsLoaded) + newItems).forEach { item ->
+		val key = identity(item)
+		if (key == null || seen.add(key)) add(item)
+	}
+}
+
 fun <T : Any> ItemRowAdapter.setItems(
 	items: Collection<T>,
+	startIndex: Int = itemsRetrieved,
+	retrievedCount: Int = items.size,
 	transform: (T, Int) -> BaseRowItem?,
 ) {
 	Timber.d("Creating items from $itemsLoaded existing and ${items.size} new, adapter size is ${size()}")
 
-	val allItems = buildList {
-		// Add current items before loaded items
-		repeat(itemsLoaded) {
-			this@setItems.get(it)?.let(::add)
-		}
-
-		// Add loaded items
-		val mappedItems = items.mapIndexedNotNull { index, item ->
-			transform(item, itemsLoaded + index)
-		}
-		mappedItems.forEach { add(it) }
-
-		// Add current items after loaded items
-		repeat(min(totalItems, size()) - itemsLoaded - mappedItems.size) {
-			this@setItems.get(it + itemsLoaded + mappedItems.size)?.let(::add)
-		}
+	val mappedItems = items.mapIndexedNotNull { index, item ->
+		transform(item, itemsLoaded + index)
 	}
+	val allItems = mergeRetrievedItems(
+		existingItems = toList(),
+		itemsLoaded = itemsLoaded,
+		newItems = mappedItems,
+		identity = { item -> (item as? BaseRowItem)?.itemId },
+	)
 
 	replaceAll(allItems, areItemsTheSame = ::areAdapterItemsTheSame)
+	recordItemsRetrieved(startIndex, retrievedCount)
 	itemsLoaded = allItems.size
 	addRowToParentIfResultsReceived()
 }
@@ -274,23 +280,15 @@ fun ItemRowAdapter.retrieveLatestMedia(api: ApiClient, query: GetLatestMediaRequ
 }
 
 private fun ItemRowAdapter.refreshLatestStreamBadges(api: ApiClient, items: List<BaseItemDto>) {
-	val badgeItems = items.streamBadgeItems(BaseItemDto::needsStreamBadgeSource)
-	if (badgeItems.isEmpty()) return
-
-	ProcessLifecycleOwner.get().lifecycleScope.launch {
-		val enriched = try {
-			withContext(Dispatchers.IO) {
-				badgeItems.withLatestStreamBadges(api)
-			}
-		} catch (error: CancellationException) {
-			throw error
-		} catch (error: Exception) {
-			Timber.w(error, "Unable to refresh latest media stream badges")
-			return@launch
-		}
-
-		if (enriched != badgeItems) replaceBaseItemRows(enriched)
+	refreshCurrentStreamBadges(
+		api = api,
+		items = items,
+		errorMessage = "Unable to refresh latest media stream badges",
+		shouldRefresh = BaseItemDto::needsDirectStreamBadgeSource,
+	) { apiClient ->
+		withDirectStreamBadges(apiClient)
 	}
+	refreshSeriesStreamBadges(api, items)
 }
 
 private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto>) {
@@ -316,14 +314,11 @@ internal fun latestMediaRowItem(
 	showParentTitle = true,
 )
 
-private suspend fun List<BaseItemDto>.withLatestStreamBadges(api: ApiClient): List<BaseItemDto> =
-	withDirectStreamBadges(api).withSeriesOrSeasonStreamBadges(api)
-
 private fun ItemRowAdapter.refreshCurrentStreamBadges(
 	api: ApiClient,
 	items: List<BaseItemDto>,
 	errorMessage: String,
-	shouldRefresh: (BaseItemDto) -> Boolean = BaseItemDto::needsStreamBadgeSource,
+	shouldRefresh: (BaseItemDto) -> Boolean,
 	enrich: suspend List<BaseItemDto>.(ApiClient) -> List<BaseItemDto>,
 ) {
 	val badgeItems = items.streamBadgeItems(shouldRefresh)
@@ -345,11 +340,22 @@ private fun ItemRowAdapter.refreshCurrentStreamBadges(
 	}
 }
 
+private fun ItemRowAdapter.refreshSeriesStreamBadges(api: ApiClient, items: List<BaseItemDto>) {
+	val candidates = items.seriesOrSeasonStreamBadgeCandidates()
+	if (candidates.isEmpty()) return
+
+	refreshCurrentStreamBadges(
+		api = api,
+		items = candidates,
+		errorMessage = "Unable to refresh series stream badges",
+		shouldRefresh = BaseItemDto::needsSeriesOrSeasonStreamBadgeSource,
+	) { apiClient ->
+		withSeriesOrSeasonStreamBadges(apiClient)
+	}
+}
+
 private fun Collection<BaseItemDto>.streamBadgeItems(shouldRefresh: (BaseItemDto) -> Boolean) =
 	filter { item -> item.type in streamBadgeItemTypes && shouldRefresh(item) }
-
-private fun BaseItemDto.needsStreamBadgeSource() =
-	needsDirectStreamBadgeSource() || needsSeriesOrSeasonStreamBadgeSource()
 
 private fun ItemRowAdapter.replaceBaseItemRows(items: List<BaseItemDto>) {
 	val itemsById = items.associateBy { it.id }
@@ -507,10 +513,7 @@ private fun List<MediaSourceInfo>.badgeStreamSummary(collectAll: Boolean = true)
 private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	api: ApiClient,
 ): List<BaseItemDto> = coroutineScope {
-	val sampleItems = asSequence()
-		.filter { it.needsSeriesOrSeasonStreamBadgeSource() }
-		.distinctBy { it.id }
-		.toList()
+	val sampleItems = seriesOrSeasonStreamBadgeCandidates()
 	if (sampleItems.isEmpty()) return@coroutineScope this@withSeriesOrSeasonStreamBadges
 
 	val parallelism = Semaphore(SERIES_STREAM_BADGE_PARALLELISM)
@@ -523,6 +526,11 @@ private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	}.awaitAll().toMap()
 	withSeriesStreamBadgeSources(samples)
 }
+
+internal fun List<BaseItemDto>.seriesOrSeasonStreamBadgeCandidates(): List<BaseItemDto> = asSequence()
+	.filter { it.needsSeriesOrSeasonStreamBadgeSource() }
+	.distinctBy { it.id }
+	.toList()
 
 private suspend fun BaseItemDto.loadStreamBadgeSamples(
 	api: ApiClient,
@@ -673,7 +681,7 @@ internal object SeriesStreamBadgeCache {
 		encodeDefaults = true
 		ignoreUnknownKeys = true
 	}
-	private val badges = ConcurrentHashMap<UUID, CachedSeasonBadge>()
+	private val badges = LinkedHashMap<UUID, CachedSeasonBadge>(16, 0.75f, true)
 
 	@Volatile
 	private var store: Store? = null
@@ -691,16 +699,18 @@ internal object SeriesStreamBadgeCache {
 			if (store != null) return
 
 			store = Store(context.applicationContext).also { badgeStore ->
-				badges.putAll(badgeStore.load(System.currentTimeMillis()))
+				synchronized(badges) {
+					badges.putAll(badgeStore.load(System.currentTimeMillis()))
+				}
 			}
 		}
 	}
 
 	fun get(seasonId: UUID): List<BaseItemDto>? {
 		val now = System.currentTimeMillis()
-		val cached = badges[seasonId] ?: return null
+		val cached = synchronized(badges) { badges[seasonId] } ?: return null
 		if (cached.isExpired(now) || !cached.mediaSources.hasCacheableBadgeStreams()) {
-			badges.remove(seasonId)
+			synchronized(badges) { badges.remove(seasonId) }
 			store?.remove(seasonId)
 			return null
 		}
@@ -725,29 +735,33 @@ internal object SeriesStreamBadgeCache {
 			sampleIds = samples.map { sample -> sample.id.toString() },
 			mediaSources = mediaSources,
 		)
-		badges[seasonId] = cached
+		val evicted = synchronized(badges) {
+			badges[seasonId] = cached
+			badges.removeEldestKeys(STREAM_BADGE_CACHE_MAX_ENTRIES)
+		}
 		store?.save(seasonId, cached)
+		if (evicted.isNotEmpty()) store?.remove(evicted)
 	}
 
 	fun remove(itemIds: Set<UUID>) {
 		if (itemIds.isEmpty()) return
 
 		val itemIdStrings = itemIds.map(UUID::toString).toSet()
-		val seasonIds = badges
-			.filter { (seasonId, badge) ->
+		val seasonIds = synchronized(badges) {
+			badges.filter { (seasonId, badge) ->
 				seasonId in itemIds ||
 					badge.seriesId in itemIdStrings ||
 					badge.sampleIds.any { sampleId -> sampleId in itemIdStrings }
-			}
-			.keys
+			}.keys.toSet()
+		}
 		if (seasonIds.isEmpty()) return
 
-		seasonIds.forEach(badges::remove)
+		synchronized(badges) { seasonIds.forEach(badges::remove) }
 		store?.remove(seasonIds)
 	}
 
 	fun clear() {
-		badges.clear()
+		synchronized(badges) { badges.clear() }
 		store?.clear()
 	}
 
@@ -759,7 +773,7 @@ internal object SeriesStreamBadgeCache {
 
 		fun load(now: Long): Map<UUID, CachedSeasonBadge> {
 			val staleKeys = mutableListOf<String>()
-			val cached = preferences.all.mapNotNull { (seasonId, value) ->
+			val decoded = preferences.all.mapNotNull { (seasonId, value) ->
 				val id = runCatching { UUID.fromString(seasonId) }.getOrNull()
 				if (id == null) {
 					staleKeys.add(seasonId)
@@ -781,6 +795,12 @@ internal object SeriesStreamBadgeCache {
 					id to badge
 				}
 			}.toMap()
+			val cached = decoded.entries
+				.sortedByDescending { (_, badge) -> badge.createdAtMillis }
+				.take(STREAM_BADGE_CACHE_MAX_ENTRIES)
+				.sortedBy { (_, badge) -> badge.createdAtMillis }
+				.associate { it.toPair() }
+			staleKeys += (decoded.keys - cached.keys).map(UUID::toString)
 
 			if (staleKeys.isNotEmpty()) {
 				preferences.edit().apply {
@@ -823,7 +843,7 @@ internal object SeriesStreamBadgeCache {
 internal object DirectStreamBadgeCache {
 	private val CACHE_TTL_MS = TimeUnit.DAYS.toMillis(7)
 	private val EMPTY_CACHE_TTL_MS = TimeUnit.HOURS.toMillis(1)
-	private val badges = ConcurrentHashMap<UUID, CachedDirectBadge>()
+	private val badges = LinkedHashMap<UUID, CachedDirectBadge>(16, 0.75f, true)
 
 	private data class CachedDirectBadge(
 		val createdAtMillis: Long,
@@ -832,9 +852,9 @@ internal object DirectStreamBadgeCache {
 
 	fun get(itemId: UUID): List<MediaSourceInfo>? {
 		val now = System.currentTimeMillis()
-		val cached = badges[itemId] ?: return null
+		val cached = synchronized(badges) { badges[itemId] } ?: return null
 		if (cached.isExpired(now)) {
-			badges.remove(itemId)
+			synchronized(badges) { badges.remove(itemId) }
 			return null
 		}
 
@@ -842,18 +862,21 @@ internal object DirectStreamBadgeCache {
 	}
 
 	fun save(itemId: UUID, mediaSources: List<MediaSourceInfo>) {
-		badges[itemId] = CachedDirectBadge(
-			createdAtMillis = System.currentTimeMillis(),
-			mediaSources = mediaSources,
-		)
+		synchronized(badges) {
+			badges[itemId] = CachedDirectBadge(
+				createdAtMillis = System.currentTimeMillis(),
+				mediaSources = mediaSources,
+			)
+			badges.removeEldestKeys(STREAM_BADGE_CACHE_MAX_ENTRIES)
+		}
 	}
 
 	fun remove(itemIds: Set<UUID>) {
-		itemIds.forEach(badges::remove)
+		synchronized(badges) { itemIds.forEach(badges::remove) }
 	}
 
 	fun clear() {
-		badges.clear()
+		synchronized(badges) { badges.clear() }
 	}
 
 	private fun CachedDirectBadge.isExpired(now: Long) =
@@ -864,6 +887,16 @@ private val DIRECT_STREAM_BADGE_TYPES = streamBadgeItemTypes - setOf(BaseItemKin
 private val STREAM_BADGE_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS)
 private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 6
 private const val SERIES_STREAM_BADGE_PARALLELISM = 4
+private const val STREAM_BADGE_CACHE_MAX_ENTRIES = 512
+
+private fun <K, V> LinkedHashMap<K, V>.removeEldestKeys(maxSize: Int): List<K> = buildList {
+	while (this@removeEldestKeys.size > maxSize) {
+		val iterator = this@removeEldestKeys.entries.iterator()
+		val eldest = iterator.next().key
+		iterator.remove()
+		add(eldest)
+	}
+}
 
 fun ItemRowAdapter.retrieveSpecialFeatures(api: ApiClient, query: GetSpecialsRequest) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
@@ -947,16 +980,7 @@ fun ItemRowAdapter.retrieveSeasons(api: ApiClient, query: GetSeasonsRequest) {
 		}.fold(
 			onSuccess = {
 				notifyRetrieveFinished()
-				if (items.isNotEmpty()) {
-					refreshCurrentStreamBadges(
-						api = api,
-						items = items,
-						errorMessage = "Unable to refresh season stream badges",
-						shouldRefresh = BaseItemDto::needsSeriesOrSeasonStreamBadgeSource,
-					) { apiClient ->
-						withSeriesOrSeasonStreamBadges(apiClient)
-					}
-				}
+				if (items.isNotEmpty()) refreshSeriesStreamBadges(api, items)
 			},
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
 		)
@@ -1215,6 +1239,8 @@ fun ItemRowAdapter.retrieveLiveTvChannels(
 			totalItems = if (reachedOlderItems) startIndex + items.size else response.totalRecordCount
 			setItems(
 				items = items,
+				startIndex = startIndex,
+				retrievedCount = response.items.size,
 				transform = { item, _ ->
 					BaseItemDtoBaseRowItem(
 						item,
@@ -1250,7 +1276,8 @@ fun ItemRowAdapter.retrieveAlbumArtists(
 	api: ApiClient,
 	query: GetAlbumArtistsRequest,
 	startIndex: Int,
-	batchSize: Int
+	batchSize: Int,
+	queryVersion: Int = currentQueryVersion(),
 ) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		runCatching {
@@ -1263,22 +1290,30 @@ fun ItemRowAdapter.retrieveAlbumArtists(
 				).content
 			}
 
-			totalItems = response.totalRecordCount
-			setItems(
-				items = response.items,
-				transform = { item, _ ->
-					BaseItemDtoBaseRowItem(
-						item,
-						preferParentThumb,
-						isStaticHeight,
-					)
-				},
-			)
+			applyIfQueryCurrent(queryVersion) {
+				totalItems = response.totalRecordCount
+				setItems(
+					items = response.items,
+					startIndex = startIndex,
+					transform = { item, _ ->
+						BaseItemDtoBaseRowItem(
+							item,
+							preferParentThumb,
+							isStaticHeight,
+						)
+					},
+				)
 
-			if (response.items.isEmpty()) removeRow()
+				if (itemsLoaded == 0) removeRow()
+			}
 		}.fold(
-			onSuccess = { notifyRetrieveFinished() },
-			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
+			onSuccess = { applied ->
+				if (applied) notifyRetrieveFinished() else notifyObsoleteRetrieveFinished()
+			},
+			onFailure = { error ->
+				if (queryVersion == currentQueryVersion()) notifyRetrieveFinished(error as? Exception)
+				else notifyObsoleteRetrieveFinished()
+			}
 		)
 	}
 }
@@ -1287,7 +1322,8 @@ fun ItemRowAdapter.retrieveArtists(
 	api: ApiClient,
 	query: GetArtistsRequest,
 	startIndex: Int,
-	batchSize: Int
+	batchSize: Int,
+	queryVersion: Int = currentQueryVersion(),
 ) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		runCatching {
@@ -1300,22 +1336,30 @@ fun ItemRowAdapter.retrieveArtists(
 				).content
 			}
 
-			totalItems = response.totalRecordCount
-			setItems(
-				items = response.items,
-				transform = { item, _ ->
-					BaseItemDtoBaseRowItem(
-						item,
-						preferParentThumb,
-						isStaticHeight,
-					)
-				},
-			)
+			applyIfQueryCurrent(queryVersion) {
+				totalItems = response.totalRecordCount
+				setItems(
+					items = response.items,
+					startIndex = startIndex,
+					transform = { item, _ ->
+						BaseItemDtoBaseRowItem(
+							item,
+							preferParentThumb,
+							isStaticHeight,
+						)
+					},
+				)
 
-			if (response.items.isEmpty()) removeRow()
+				if (itemsLoaded == 0) removeRow()
+			}
 		}.fold(
-			onSuccess = { notifyRetrieveFinished() },
-			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
+			onSuccess = { applied ->
+				if (applied) notifyRetrieveFinished() else notifyObsoleteRetrieveFinished()
+			},
+			onFailure = { error ->
+				if (queryVersion == currentQueryVersion()) notifyRetrieveFinished(error as? Exception)
+				else notifyObsoleteRetrieveFinished()
+			}
 		)
 	}
 }
@@ -1324,7 +1368,8 @@ fun ItemRowAdapter.retrieveItems(
 	api: ApiClient,
 	query: GetItemsRequest,
 	startIndex: Int,
-	batchSize: Int
+	batchSize: Int,
+	queryVersion: Int = currentQueryVersion(),
 ) {
 	ProcessLifecycleOwner.get().lifecycleScope.launch {
 		var streamBadgeItems = emptyList<BaseItemDto>()
@@ -1338,37 +1383,51 @@ fun ItemRowAdapter.retrieveItems(
 				).content
 			}
 
-			totalItems = response.totalRecordCount
-			val initialSelectedPosition = getPendingInitialSelectedPosition()
-			if (initialSelectedPosition != null && totalItems <= initialSelectedPosition) {
-				removeRow()
-				return@runCatching
-			}
-			streamBadgeItems = response.items
-			val showRemainingTimeBadge = query.showsRemainingTimeBadges()
+			applyIfQueryCurrent(queryVersion) {
+				totalItems = response.totalRecordCount
+				val initialSelectedPosition = getPendingInitialSelectedPosition()
+				if (initialSelectedPosition != null && totalItems <= initialSelectedPosition) {
+					removeRow()
+				} else {
+					streamBadgeItems = response.items
+					val showRemainingTimeBadge = query.showsRemainingTimeBadges()
 
-			setItems(
-				items = response.items,
-				transform = { item, _ ->
-					item.toBaseItemRowItem(
-						preferParentThumb = preferParentThumb,
-						staticHeight = isStaticHeight,
-						showRemainingTimeBadge = showRemainingTimeBadge,
+					setItems(
+						items = response.items,
+						startIndex = startIndex,
+						transform = { item, _ ->
+							item.toBaseItemRowItem(
+								preferParentThumb = preferParentThumb,
+								staticHeight = isStaticHeight,
+								showRemainingTimeBadge = showRemainingTimeBadge,
+							)
+						},
 					)
-				},
-			)
 
-			if (itemsLoaded == 0) removeRow()
-		}.fold(
-			onSuccess = {
-				notifyRetrieveFinished()
-				if (streamBadgeItems.isNotEmpty()) {
-					refreshCurrentStreamBadges(api, streamBadgeItems, "Unable to refresh item stream badges") { apiClient ->
-						withLatestStreamBadges(apiClient)
-					}
+					if (itemsLoaded == 0) removeRow()
 				}
+			}
+		}.fold(
+			onSuccess = { applied ->
+				if (applied) {
+					notifyRetrieveFinished()
+					if (streamBadgeItems.isNotEmpty()) {
+						refreshCurrentStreamBadges(
+							api = api,
+							items = streamBadgeItems,
+							errorMessage = "Unable to refresh item stream badges",
+							shouldRefresh = BaseItemDto::needsDirectStreamBadgeSource,
+						) { apiClient ->
+							withDirectStreamBadges(apiClient)
+						}
+						refreshSeriesStreamBadges(api, streamBadgeItems)
+					}
+				} else notifyObsoleteRetrieveFinished()
 			},
-			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
+			onFailure = { error ->
+				if (queryVersion == currentQueryVersion()) notifyRetrieveFinished(error as? Exception)
+				else notifyObsoleteRetrieveFinished()
+			}
 		)
 	}
 }
@@ -1440,13 +1499,6 @@ fun setAlbumArtistsFilter(
 
 fun setArtistsFilter(
 	request: GetArtistsRequest,
-	filters: Collection<ItemFilter>?,
-) = request.copy(
-	filters = filters,
-)
-
-fun setItemsFilter(
-	request: GetItemsRequest,
 	filters: Collection<ItemFilter>?,
 ) = request.copy(
 	filters = filters,
