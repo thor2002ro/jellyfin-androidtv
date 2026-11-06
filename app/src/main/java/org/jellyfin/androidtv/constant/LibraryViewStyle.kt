@@ -8,4 +8,5 @@ enum class LibraryViewStyle(
 ) : PreferenceEnum {
 	CARDS(R.string.library_view_style_cards),
 	DENSE_LIST(R.string.library_view_style_dense_list),
+	KALEIDESCAPE_STYLE(R.string.library_view_style_kaleidescape_style),
 }
