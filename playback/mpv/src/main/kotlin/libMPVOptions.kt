@@ -52,6 +52,7 @@ data class LibMPVPlaybackOptions(
 	val subtitleAssOverride: String = "no",
 	val subtitleUseMargins: Boolean = true,
 	val softwareDecodingForLiveTv: Boolean = false,
+	val nvidiaShieldWorkarounds: Boolean = true,
 	val videoPreset: LibMPVVideoPreset = LibMPVVideoPreset.OFF,
 	val audioPreset: LibMPVAudioPreset = LibMPVAudioPreset.OFF,
 	val customOptions: Map<String, String> = emptyMap(),
