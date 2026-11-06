@@ -935,6 +935,13 @@ class LibMPVBackend(
 		return performSeek(scrubbing.seek(position))
 	}
 
+	override fun seekToLiveEdge(): Boolean {
+		val stream = currentStream ?: return false
+		// Refresh the live playlist using the same server session; paused duration can be stale.
+		setMedia(stream)
+		return terminalState != PlayState.ERROR
+	}
+
 	private fun performSeek(request: LibMPVSeekRequest): Boolean {
 		val previous = if (request.precision == LibMPVSeekPrecision.EXACT) getPositionInfo() else null
 		val targetSeconds = request.position.inWholeMilliseconds.coerceAtLeast(0) / 1_000.0
@@ -1250,7 +1257,7 @@ class LibMPVBackend(
 			cacheEndSeconds = player.getPropertyDouble("demuxer-cache-time"),
 			cacheDurationSeconds = player.getPropertyDouble("demuxer-cache-duration"),
 			fallback = lastPositionInfo,
-		).also { lastPositionInfo = it }
+		).copy(isSeekable = player.getPropertyBoolean("seekable") == true).also { lastPositionInfo = it }
 	}
 
 	override fun getFrameStats(): PlaybackFrameStats {

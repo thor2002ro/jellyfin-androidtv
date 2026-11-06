@@ -17,6 +17,7 @@ data class PositionInfo(
 	 * The maximum position.
 	 */
 	val duration: Duration,
+	val isSeekable: Boolean = duration > Duration.ZERO,
 ) {
 	companion object {
 		val EMPTY = PositionInfo(Duration.ZERO, Duration.ZERO, Duration.ZERO)
