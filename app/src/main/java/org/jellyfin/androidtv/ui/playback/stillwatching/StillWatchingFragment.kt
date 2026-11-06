@@ -53,8 +53,6 @@ import org.jellyfin.androidtv.ui.composable.FixedMotionDurationScale
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
-import org.jellyfin.androidtv.util.apiclient.getUrl
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -67,7 +65,6 @@ val TIMEOUT_IN_MS = 10.seconds.inWholeMilliseconds.toInt()
 fun StillWatchingScreen(
 	itemId: UUID,
 ) {
-	val api = koinInject<ApiClient>()
 	val context = LocalContext.current
 	val navigationRepository = koinInject<NavigationRepository>()
 	val playbackLauncher = koinInject<PlaybackLauncher>()
@@ -110,8 +107,7 @@ fun StillWatchingScreen(
 					.align(Alignment.TopStart)
 					.overscan()
 					.height(75.dp),
-				url = logo.getUrl(api),
-				blurHash = logo.blurHash,
+				image = logo,
 				aspectRatio = logo.aspectRatio ?: 1f,
 			)
 		}
@@ -139,7 +135,6 @@ fun StillWatchingOverlay(
 	onConfirm: () -> Unit,
 	onCancel: () -> Unit,
 ) = ProvideTextStyle(JellyfinTheme.typography.default.copy(color = Color.White)) {
-	val api = koinInject<ApiClient>()
 	val endWatchingTimer = remember { Animatable(0f) }
 	LaunchedEffect(item) {
 		withContext(FixedMotionDurationScale) {
@@ -188,8 +183,7 @@ fun StillWatchingOverlay(
 						.height(145.dp)
 						.aspectRatio(thumbnail.aspectRatio ?: 1f)
 						.clip(JellyfinTheme.shapes.extraSmall),
-					url = thumbnail.getUrl(api),
-					blurHash = thumbnail.blurHash,
+					image = thumbnail,
 					aspectRatio = thumbnail.aspectRatio ?: 1f,
 				)
 			}

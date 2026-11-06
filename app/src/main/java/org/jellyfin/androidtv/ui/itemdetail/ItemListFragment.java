@@ -42,6 +42,7 @@ import org.jellyfin.androidtv.ui.playback.MediaManager;
 import org.jellyfin.androidtv.ui.playback.PlaybackController;
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher;
 import org.jellyfin.androidtv.util.ImageHelper;
+import org.jellyfin.androidtv.util.apiclient.JellyfinImage;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
 import org.jellyfin.androidtv.util.PlaybackHelper;
 import org.jellyfin.androidtv.util.Utils;
@@ -310,9 +311,9 @@ public class ItemListFragment extends Fragment implements View.OnKeyListener {
         mSummary.setText(mBaseItem.getOverview());
 
         Double aspect = imageHelper.getValue().getImageAspectRatio(item, false);
-        String primaryImageUrl = imageHelper.getValue().getPrimaryImageUrl(item, null, ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT);
+        JellyfinImage primaryImage = imageHelper.getValue().getPrimaryImage(item);
         mPoster.setPadding(0, 0, 0, 0);
-        mPoster.load(primaryImageUrl, null, ContextCompat.getDrawable(requireContext(), R.drawable.ic_album), aspect, 0);
+        mPoster.load(primaryImage, ContextCompat.getDrawable(requireContext(), R.drawable.ic_album), aspect, 32, null, ImageHelper.MAX_PRIMARY_IMAGE_HEIGHT, null, null);
 
         ItemListFragmentHelperKt.getPlaylist(this, mBaseItem, itemResponse);
     }
