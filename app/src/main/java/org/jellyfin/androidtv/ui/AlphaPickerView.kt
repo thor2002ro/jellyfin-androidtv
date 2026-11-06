@@ -23,6 +23,7 @@ class AlphaPickerView @JvmOverloads constructor(
 	private val buttons = mutableListOf<Button>()
 	private var vertical = false
 	private var gridFocusTargetId = View.NO_ID
+	private var letters = "#${resources.getString(R.string.byletter_letters)}"
 
 	init {
 		isFocusable = false
@@ -41,6 +42,12 @@ class AlphaPickerView @JvmOverloads constructor(
 		updateGridFocusTargets()
 	}
 
+	fun setLetters(value: String) {
+		if (value == letters || value.isEmpty()) return
+		letters = value
+		rebuild()
+	}
+
 	private fun updateGridFocusTargets() {
 		if (gridFocusTargetId == View.NO_ID) return
 		buttons.forEach { button ->
@@ -50,13 +57,13 @@ class AlphaPickerView @JvmOverloads constructor(
 	}
 
 	private fun rebuild() {
+		val focusedLetter = buttons.firstOrNull { it.hasFocus() }?.text?.singleOrNull()
 		buttons.clear()
 		removeAllViews()
 		val layout = LinearLayout(context).apply {
 			orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
 		}
 
-		val letters = "#${resources.getString(R.string.byletter_letters)}"
 		letters.forEach { letter ->
 			val binding = ViewButtonAlphaPickerBinding.inflate(LayoutInflater.from(context), this, false)
 			binding.button.apply {
@@ -109,11 +116,11 @@ class AlphaPickerView @JvmOverloads constructor(
 			}
 		}
 		addView(scrollView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+		focusedLetter?.let { focus(it) }
 	}
 
 	fun focus(letter: Char) {
-		buttons
-			.firstOrNull { it.text == letter.toString() }
+		(buttons.firstOrNull { it.text.toString().equals(letter.toString(), ignoreCase = true) } ?: buttons.firstOrNull())
 			?.requestFocus()
 	}
 }

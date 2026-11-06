@@ -45,6 +45,7 @@ import org.jellyfin.androidtv.constant.LibraryViewStyle;
 import org.jellyfin.androidtv.constant.PosterSize;
 import org.jellyfin.androidtv.constant.QueryType;
 import org.jellyfin.androidtv.data.model.FilterOptions;
+import org.jellyfin.androidtv.data.model.DataRefreshService;
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest;
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository;
 import org.jellyfin.androidtv.data.service.BackgroundService;
@@ -119,6 +120,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     private HorizontalGridBrowseBinding binding;
     private ItemRowAdapter mAdapter;
+    private AlphabetPickerController mAlphabetPickerController;
     private Presenter mGridPresenter;
     private Presenter.ViewHolder mGridViewHolder;
     private View mGridView;
@@ -136,6 +138,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     private final Lazy<ItemLauncher> itemLauncher = inject(ItemLauncher.class);
     private final Lazy<KeyProcessor> keyProcessor = inject(KeyProcessor.class);
     private final Lazy<ApiClient> api = inject(ApiClient.class);
+    private final Lazy<DataRefreshService> dataRefreshService = inject(DataRefreshService.class);
     private final Lazy<ImageLoader> imageLoader = inject(ImageLoader.class);
 
     private int mCardsScreenEst = 0;
@@ -322,6 +325,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
     }
 
     private void updateAlphabetPickerVisibility() {
+        if (binding == null) return;
         binding.alphaPickerHorizontal.setVisibility(
                 shouldShowAlphabetPicker(GridDirection.HORIZONTAL, getNavigationControlsDirection()) ? View.VISIBLE : View.GONE
         );
@@ -329,6 +333,11 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
                 shouldShowAlphabetPicker(GridDirection.VERTICAL, getNavigationControlsDirection()) ? View.VISIBLE : View.GONE
         );
         updateNavigationControlsSpacing();
+        if (mAdapter != null) {
+            if (mAlphabetPickerController == null) mAlphabetPickerController = new AlphabetPickerController(api.getValue(), dataRefreshService.getValue());
+            mAlphabetPickerController.update(getViewLifecycleOwner(), mAdapter, "#" + getString(R.string.byletter_letters),
+                    binding.alphaPickerHorizontal, binding.alphaPickerVertical);
+        }
     }
 
     private void updateNavigationControlsSpacing() {
@@ -402,6 +411,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
 
     @Override
     public void onDestroyView() {
+        if (mAlphabetPickerController != null) mAlphabetPickerController.cancel();
         releaseGrid();
         super.onDestroyView();
 
@@ -968,6 +978,8 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             return;
         }
 
+        if (mAlphabetPickerController != null) mAlphabetPickerController.cancel();
+
         PosterSize posterSizeSetting = libraryPreferences.get(LibraryPreferences.Companion.getPosterSize());
         ImageType imageType = libraryPreferences.get(LibraryPreferences.Companion.getImageType());
         GridDirection gridDirection = libraryPreferences.get(LibraryPreferences.Companion.getGridDirection());
@@ -1024,6 +1036,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         } else {
             justLoaded = false;
         }
+        updateAlphabetPickerVisibility();
         restoreOverlayFocus();
     }
 
@@ -1156,6 +1169,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
             applyPendingSelectedPosition();
             keepGridFocused();
         }
+        updateAlphabetPickerVisibility();
     }
 
     private ImageButton mSortButton;
@@ -1286,6 +1300,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         mAdapter.setFilters(filters);
         if (mFilterButton != null) mFilterButton.setActivated(!filters.isEmpty());
         mAdapter.Retrieve();
+        updateAlphabetPickerVisibility();
         updateDisplayPrefs();
     }
 
@@ -1317,6 +1332,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (mCurrentItem == null) return;
         Timber.d("Refresh item \"%s\"", mCurrentItem.getFullName(requireContext()));
         ItemRowAdapterHelperKt.refreshItem(mAdapter, api.getValue(), this, mCurrentItem, refreshedItem -> {
+            updateAlphabetPickerVisibility();
             //Now - if filtered make sure we still pass
             FilterOptions filters = mAdapter.getFilters();
             if (filters == null || refreshedItem == null) return Unit.INSTANCE;
