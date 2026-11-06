@@ -369,8 +369,10 @@ private fun ItemRowAdapter.refreshCurrentStreamBadges(
 	items: List<BaseItemDto>,
 	errorMessage: String,
 	shouldRefresh: (BaseItemDto) -> Boolean,
+	queryVersion: Int = currentQueryVersion(),
 	enrich: suspend List<BaseItemDto>.(ApiClient) -> List<BaseItemDto>,
 ) {
+	if (queryVersion != currentQueryVersion()) return
 	val badgeItems = items.streamBadgeItems(shouldRefresh)
 	if (badgeItems.isEmpty()) return
 
@@ -386,11 +388,17 @@ private fun ItemRowAdapter.refreshCurrentStreamBadges(
 			return@launch
 		}
 
-		if (enriched != badgeItems) replaceBaseItemRows(enriched)
+		applyIfQueryCurrent(queryVersion) {
+			if (enriched != badgeItems) replaceBaseItemRows(enriched)
+		}
 	}
 }
 
-private fun ItemRowAdapter.refreshSeriesStreamBadges(api: ApiClient, items: List<BaseItemDto>) {
+private fun ItemRowAdapter.refreshSeriesStreamBadges(
+	api: ApiClient,
+	items: List<BaseItemDto>,
+	queryVersion: Int = currentQueryVersion(),
+) {
 	val candidates = items.seriesOrSeasonStreamBadgeCandidates()
 	if (candidates.isEmpty()) return
 
@@ -399,6 +407,7 @@ private fun ItemRowAdapter.refreshSeriesStreamBadges(api: ApiClient, items: List
 		items = candidates,
 		errorMessage = "Unable to refresh series stream badges",
 		shouldRefresh = BaseItemDto::needsSeriesOrSeasonStreamBadgeSource,
+		queryVersion = queryVersion,
 	) { apiClient ->
 		withSeriesOrSeasonStreamBadges(apiClient)
 	}
@@ -1473,10 +1482,11 @@ fun ItemRowAdapter.retrieveItems(
 							items = streamBadgeItems,
 							errorMessage = "Unable to refresh item stream badges",
 							shouldRefresh = BaseItemDto::needsDirectStreamBadgeSource,
+							queryVersion = queryVersion,
 						) { apiClient ->
 							withDirectStreamBadges(apiClient)
 						}
-						refreshSeriesStreamBadges(api, streamBadgeItems)
+						refreshSeriesStreamBadges(api, streamBadgeItems, queryVersion)
 					}
 				} else notifyObsoleteRetrieveFinished()
 			},

@@ -8,24 +8,32 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.preference.UserPreferences
@@ -33,12 +41,12 @@ import org.jellyfin.androidtv.preference.constant.WatchedIndicatorBehavior
 import org.jellyfin.androidtv.ui.base.Badge
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
-import org.jellyfin.androidtv.ui.base.Seekbar
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.livetv.LiveTvTrackCache
 import org.jellyfin.androidtv.util.TimeUtils
+import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.languageCodesMatch
 import org.jellyfin.androidtv.util.sdk.STREAM_BADGE_DISPLAY_LIMIT
 import org.jellyfin.androidtv.util.sdk.hasLanguageBadgeStreams
@@ -56,6 +64,7 @@ import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.api.UserDto
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.compose.koinInject
 import kotlin.math.roundToLong
@@ -74,8 +83,20 @@ fun ItemCardBaseItemOverlay(
 		.fillMaxSize()
 ) {
 	val badgeSize = (minOf(maxWidth, maxHeight) * 0.09f).coerceAtMost(9.dp)
-	Box(Modifier.fillMaxSize().padding(badgeSize * 0.5f)) {
-		val progress = rememberItemCardProgressInfo(item)
+	val progress = rememberItemCardProgressInfo(item)
+	val context = LocalContext.current
+	val progressColor = remember(context.theme) {
+		Color(Utils.getThemeColor(context, android.R.attr.colorAccent)).copy(alpha = 0.65f)
+	}
+	Box(
+		Modifier
+			.fillMaxSize()
+			.drawBehind {
+				val fraction = progress.progress.value ?: return@drawBehind
+				if (fraction > 0f) drawRect(progressColor, size = Size(size.width * fraction, size.height))
+			}
+			.padding(badgeSize * 0.5f)
+	) {
 
 		StateIndicator(
 			item = item,
@@ -87,8 +108,7 @@ fun ItemCardBaseItemOverlay(
 		TopEndIndicator(
 			item = item,
 			badgeSize = badgeSize,
-			progress = progress?.progress,
-			duration = progress?.duration,
+			progress = progress,
 			showRemainingTimeBadge = showRemainingTimeBadge,
 			modifier = Modifier.align(Alignment.TopEnd),
 		)
@@ -118,10 +138,6 @@ fun ItemCardBaseItemOverlay(
 				}
 			}
 
-			ProgressIndicator(
-				progress = progress?.progress,
-			)
-
 			if (footer != null) footer()
 		}
 	}
@@ -132,12 +148,16 @@ fun ItemCardBaseItemOverlay(
 private fun TopEndIndicator(
 	item: BaseItemDto,
 	badgeSize: Dp,
-	progress: Float?,
-	duration: Duration?,
+	progress: ItemCardProgress,
 	showRemainingTimeBadge: Boolean,
 	modifier: Modifier = Modifier,
 ) {
-	val remainingTimeText = if (showRemainingTimeBadge) item.remainingPlaybackTimeText(progress, duration) else null
+	val remainingTimeText = if (showRemainingTimeBadge) {
+		val text by remember(item, progress) {
+			derivedStateOf { item.remainingPlaybackTimeText(progress.progress.value, progress.duration) }
+		}
+		text
+	} else null
 	if (remainingTimeText != null) {
 		MediaStreamBadge(
 			icon = R.drawable.ic_time,
@@ -169,6 +189,7 @@ private fun StateIndicator(
 		recordingItem?.timerId != null -> R.drawable.ic_record
 		else -> null
 	}
+	if (recordingIcon == null && !isFavorited) return
 
 	Column(
 		modifier = modifier,
@@ -265,10 +286,10 @@ private fun MediaStreamBadges(
 		if (!hasLanguageBadgeSource) return
 
 		val userRepository = koinInject<UserRepository>()
-		val user by userRepository.currentUser.collectAsState()
-		val configuration = user?.configuration
-		val audioLanguagePreference = configuration?.takeUnless { it.playDefaultAudioTrack }?.audioLanguagePreference
-		val subtitleLanguagePreference = configuration?.subtitleLanguagePreference
+		val preferences by remember(userRepository) {
+			userRepository.currentUser.map { it.streamBadgeLanguagePreferences() }.distinctUntilChanged()
+		}.collectAsState(initial = userRepository.currentUser.value.streamBadgeLanguagePreferences())
+		val (audioLanguagePreference, subtitleLanguagePreference) = preferences
 		remember(item.type, item.mediaSources, audioLanguagePreference, subtitleLanguagePreference) {
 			item.languageBadges(
 				audioLanguagePreference = audioLanguagePreference,
@@ -298,6 +319,11 @@ private fun MediaStreamBadges(
 			)
 		}
 	}
+}
+
+private fun UserDto?.streamBadgeLanguagePreferences(): Pair<String?, String?> {
+	val configuration = this?.configuration
+	return configuration?.takeUnless { it.playDefaultAudioTrack }?.audioLanguagePreference to configuration?.subtitleLanguagePreference
 }
 
 @Composable
@@ -530,21 +556,20 @@ private fun Float.validPlaybackProgress() =
 @Composable
 private fun rememberItemCardProgressInfo(
 	item: BaseItemDto,
-): ItemCardProgress? {
+): ItemCardProgress {
 	val playbackManager = koinInject<PlaybackManager>()
 	val playState by playbackManager.state.playState.collectAsState()
 	val currentQueueEntry by rememberQueueEntry(playbackManager)
 
 	return if (playState.isActivePlayback && currentQueueEntry?.baseItem?.id == item.id) {
-		val progress = rememberPlayerProgress(playbackManager).value.validPlaybackProgress() ?: return null
-		ItemCardProgress(
-			progress = progress,
-			duration = playbackManager.state.positionInfo.duration,
-		)
+		val animatedProgress = rememberPlayerProgress(playbackManager)
+		val progress = remember(animatedProgress) { derivedStateOf { animatedProgress.value.validPlaybackProgress() } }
+		val duration = playbackManager.state.positionInfo.duration
+		remember(progress, duration) { ItemCardProgress(progress, duration) }
 	} else {
-		item.storedPlayedProgress()?.let { progress ->
+		remember(item) {
 			ItemCardProgress(
-				progress = progress,
+				progress = mutableStateOf(item.storedPlayedProgress()),
 				duration = item.runTimeTicks?.takeIf { it > 0 }?.ticks,
 			)
 		}
@@ -552,24 +577,6 @@ private fun rememberItemCardProgressInfo(
 }
 
 private data class ItemCardProgress(
-	val progress: Float,
+	val progress: State<Float?>,
 	val duration: Duration?,
 )
-
-@Composable
-private fun ProgressIndicator(
-	progress: Float?,
-	modifier: Modifier = Modifier,
-) {
-	if (progress != null) {
-		Box(modifier = modifier.padding(Tokens.Space.spaceXs)) {
-			Seekbar(
-				progress = progress,
-				enabled = false,
-				modifier = Modifier
-					.fillMaxWidth()
-					.height(4.dp)
-			)
-		}
-	}
-}
