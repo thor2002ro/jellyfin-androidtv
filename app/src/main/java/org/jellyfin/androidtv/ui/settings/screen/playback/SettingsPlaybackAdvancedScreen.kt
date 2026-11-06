@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,8 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.getQualityProfiles
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.UserSettingPreferences
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
+import org.jellyfin.androidtv.preference.constant.BitstreamAudioMode
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.form.RangeControl
@@ -50,7 +53,8 @@ fun SettingsPlaybackAdvancedScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
 	val userSettingPreferences = koinInject<UserSettingPreferences>()
-
+	val supportedPassthroughMimes = rememberSupportedPassthroughAudioMimes()
+	val ac3Mode by rememberPreference(userPreferences, UserPreferences.bitstreamAc3)
 
 	SettingsColumn {
 		item {
@@ -357,6 +361,29 @@ fun SettingsPlaybackAdvancedScreen() {
 				trailingContent = { Checkbox(checked = audioNightMode) },
 				onClick = { audioNightMode = !audioNightMode },
 				modifier = Modifier.focusKey("audio_night_mode")
+			)
+		}
+
+		items(BitstreamAudioFormat.entries.size) { index ->
+			val format = BitstreamAudioFormat.entries[index]
+			val mode by rememberPreference(userPreferences, format.preference)
+
+			ListButton(
+				headingContent = { Text(stringResource(format.nameRes)) },
+				captionContent = {
+					Column {
+						Text(stringResource(mode.nameRes))
+						AudioPassthroughSupportCaption(supportedPassthroughAudioFormats(format, supportedPassthroughMimes))
+					}
+				},
+				enabled = format != BitstreamAudioFormat.EAC3 || ac3Mode != BitstreamAudioMode.DISABLE,
+				onClick = {
+					router.push(
+						route = Routes.PLAYBACK_BITSTREAM_AUDIO,
+						parameters = mapOf("format" to format.name),
+					)
+				},
+				modifier = Modifier.focusKey("bitstream_audio_${format.name}"),
 			)
 		}
 
