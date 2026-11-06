@@ -80,7 +80,7 @@ class DoviPlaybackSupportTests : FunSpec({
 		builtInPlayerSelected = builtIn,
 	)
 
-	test("Auto advertises supported Profile 5 and Profile 7 unchanged") {
+	test("Auto preserves supported Profile 5 and Profile 7 with the DV metadata trigger") {
 		val profile5 = decideDoviPlayback(
 			request(
 				range = VideoRangeType.DOVI,
@@ -95,7 +95,39 @@ class DoviPlaybackSupportTests : FunSpec({
 		profile5.decision.route shouldBe DoviRoute.Native
 		profile5.advertisedHevcRangeTypes.shouldContainExactly(VideoRangeType.DOVI)
 		profile7.decision.route shouldBe DoviRoute.Native
-		profile7.advertisedHevcRangeTypes.shouldContainExactly(VideoRangeType.DOVI_WITH_EL)
+		profile7.advertisedHevcRangeTypes shouldBe setOf(VideoRangeType.DOVI_WITH_EL, VideoRangeType.DOVI)
+	}
+
+	test("MPV advertises the Dolby Vision remux metadata trigger for Profile 8") {
+		val plan = decideDoviPlayback(
+			request(
+				backend = DoviPlaybackBackend.MPV,
+				range = VideoRangeType.DOVI_WITH_HDR10,
+				source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+			),
+		)
+
+		plan.decision.route shouldBe DoviRoute.Native
+		plan.advertisedHevcRangeTypes shouldBe setOf(
+			VideoRangeType.DOVI_WITH_HDR10,
+			VideoRangeType.DOVI,
+		)
+	}
+
+	test("Native Dolby Vision remux metadata is independent of backend") {
+		DoviPlaybackBackend.entries.forEach { backend ->
+			val plan = decideDoviPlayback(request(
+				mode = DoviCompatibilityMode.OFF,
+				backend = backend,
+				range = VideoRangeType.DOVI_WITH_HDR10,
+				source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+			))
+			plan.decision.route shouldBe DoviRoute.Native
+			plan.advertisedHevcRangeTypes shouldBe setOf(VideoRangeType.DOVI_WITH_HDR10, VideoRangeType.DOVI)
+			val fallback = decideDoviPlayback(request(backend = backend, device = DoviDeviceCapabilities()))
+			fallback.decision.route shouldBe DoviRoute.ServerFallback
+			fallback.advertiseRemuxDoviMetadata shouldBe false
+		}
 	}
 
 	test("Auto advertises Profile 5 and Profile 7 conversion only with Profile 8 and native target support") {
@@ -108,7 +140,7 @@ class DoviPlaybackSupportTests : FunSpec({
 		).forEach { (range, source) ->
 			val converted = decideDoviPlayback(request(range = range, source = source))
 			converted.decision.request?.target shouldBe DoviTarget.PROFILE_8_1
-			converted.advertisedHevcRangeTypes.shouldContainExactly(range)
+			converted.advertisedHevcRangeTypes shouldBe setOf(range, VideoRangeType.DOVI)
 
 			val noProfile8 = decideDoviPlayback(
 				request(range = range, source = source, device = DoviDeviceCapabilities()),
@@ -213,7 +245,7 @@ class DoviPlaybackSupportTests : FunSpec({
 			),
 		)
 		melPlan.decision.request?.target shouldBe DoviTarget.MEL
-		melPlan.advertisedHevcRangeTypes.shouldContainExactly(VideoRangeType.DOVI_WITH_EL)
+		melPlan.advertisedHevcRangeTypes shouldBe setOf(VideoRangeType.DOVI_WITH_EL, VideoRangeType.DOVI)
 
 		val noLayerEvidence = decideDoviPlayback(
 			request(
@@ -298,6 +330,10 @@ class DoviPlaybackSupportTests : FunSpec({
 		fun DeviceProfile.unsupportedRanges(codec: String): Set<String> = codecProfiles
 			.asSequence()
 			.filter { it.codec == codec }
+			.filter { it.conditions.any { condition ->
+				condition.property == ProfileConditionValue.VIDEO_RANGE_TYPE &&
+					condition.condition == org.jellyfin.sdk.model.api.ProfileConditionType.NOT_EQUALS
+			} }
 			.flatMap { it.applyConditions.asSequence() }
 			.filter { it.property == ProfileConditionValue.VIDEO_RANGE_TYPE }
 			.flatMap { it.value.orEmpty().split('|').asSequence() }
@@ -313,6 +349,47 @@ class DoviPlaybackSupportTests : FunSpec({
 		advertised.unsupportedRanges(Codec.Video.HEVC).contains(selected) shouldBe false
 		advertised.unsupportedRanges(Codec.Video.HEVC).contains(sibling) shouldBe true
 		advertised.unsupportedRanges(Codec.Video.AV1) shouldBe baseline.unsupportedRanges(Codec.Video.AV1)
+
+		val mpvPlan = decideDoviPlayback(request(
+			backend = DoviPlaybackBackend.MPV,
+			range = VideoRangeType.DOVI_WITH_HDR10,
+			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
+		))
+		// StreamBuilder emits rangetype only from conditions applicable to this input.
+		val requestedRanges = profile(mpvPlan).codecProfiles
+			.filter { it.codec == Codec.Video.HEVC }
+			.filter { it.applyConditions.any { condition -> condition.value == "DOVIWithHDR10" } }
+			.flatMap { it.conditions }
+			.single { it.property == ProfileConditionValue.VIDEO_RANGE_TYPE }
+		requestedRanges.condition shouldBe org.jellyfin.sdk.model.api.ProfileConditionType.EQUALS_ANY
+		requestedRanges.value.orEmpty().split('|').contains("DOVI") shouldBe true
+		requestedRanges.value.orEmpty().split('|').contains("DOVIWithHDR10") shouldBe true
+
+		val av1Plan = decideDoviPlayback(request(
+			backend = DoviPlaybackBackend.MPV,
+			codec = DoviVideoCodec.AV1,
+			range = VideoRangeType.DOVI_WITH_HDR10,
+			source = DoviSource(DoviPresentation.UNKNOWN),
+		))
+		val av1Capabilities = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
+			every { getMaxResolution(any()) } returns size
+			every { supportsAV1DolbyVision() } returns true
+		}
+		profile(av1Plan, capabilities = av1Capabilities).codecProfiles
+			.filter { it.codec == Codec.Video.AV1 }
+			.filter { it.applyConditions.any { condition -> condition.value == "DOVIWithHDR10" } }
+			.flatMap { it.conditions }
+			.single { it.property == ProfileConditionValue.VIDEO_RANGE_TYPE }
+			.value.orEmpty().split('|').contains("DOVI") shouldBe true
+		val av1HdrBaseCapabilities = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
+			every { getMaxResolution(any()) } returns size
+			every { supportsAV1HDR10() } returns true
+		}
+		profile(av1Plan, capabilities = av1HdrBaseCapabilities).codecProfiles
+			.filter { it.codec == Codec.Video.AV1 }
+			.flatMap { it.conditions }
+			.none { it.property == ProfileConditionValue.VIDEO_RANGE_TYPE &&
+				it.condition == org.jellyfin.sdk.model.api.ProfileConditionType.EQUALS_ANY } shouldBe true
 
 		val fallback = decideDoviPlayback(
 			request(
