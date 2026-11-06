@@ -47,7 +47,6 @@
     <string name="lbl_artists">Artistoj</string>
     <string name="lbl_albums">Albumoj</string>
     <string name="lbl_programs">Programoj</string>
-    <string name="lbl_filters">Eteraj TD filtriloj</string>
     <string name="lbl_rating">Taksado</string>
     <string name="lbl_name">Nomo</string>
     <string name="lbl_from">de</string>
@@ -90,7 +89,6 @@
     <string name="connect_manually_by_address">Entajpi servilan adreson</string>
     <string name="lbl_valid_server_address">Entajpi la servilan adreson (IP aŭ domajna/maŝina nomo)</string>
     <string name="lbl_enter_server_address">Entajpi servilan adreson</string>
-    <string name="lbl_tv_channel_status">%1$d de %2$d kanaloj</string>
     <string name="welcome_title">Bonvenon al Jellyfin!</string>
     <string name="lbl_sign_in">Ensaluti</string>
     <string name="lbl_colored_backgrounds">Kolorkoditaj Fonoj</string>
@@ -207,7 +205,6 @@
     <string name="lbl_playback_control_ends">Finiĝas je %1$s</string>
     <string name="just_one">Nur ĉi tiu</string>
     <string name="seek_error">Nekapable serĉi</string>
-    <string name="lbl_load_guide_data">Ŝarĝi Gvidilajn Datenojn</string>
     <string name="pref_subtitle_track_button">Butono de subteksttrako</string>
     <string name="pref_audio_track_button">Butono de aŭdtrako</string>
     <string name="lbl_resume_from">Daŭrigi de %1$s</string>
@@ -265,7 +262,6 @@
     <string name="lbl_series_recordings">Seriaj Rikordoj</string>
     <string name="msg_settings_updated">Preferoj ĝisdatigitaj</string>
     <string name="lbl_recent_recordings">Lastatempaj Rikordoj</string>
-    <string name="lbl_select_date">Elekti Daton</string>
     <string name="lbl_auto_crop">Aŭtomata Stuco</string>
     <string name="lbl_new_premieres">Novaj Premieroj</string>
     <string name="msg_item_added">" aĵo aldonita"</string>
@@ -323,12 +319,9 @@
     <string name="turn_off">Malŝalti ĉi tiun opcion</string>
     <string name="msg_no_items">Neniuj aĵoj por ludi</string>
     <string name="subtitle_error">Ne eblas elekti subtekston</string>
-    <string name="msg_live_tv_prev">Ĉu ŝargi antaŭajn %1$d horojn?</string>
-    <string name="msg_live_tv_next">Ĉu ŝargi sekvajn %1$d horojn?</string>
     <string name="pref_next_up_behavior_title">Montri informojn pri sekva video</string>
     <string name="pref_next_up_timeout_title">Tempumila daŭro de Sekva plue</string>
     <string name="lbl_start_favorites">Metu Favoratojn ĉe Komenco</string>
-    <string name="lbl_tv_filter_status">dum venontaj %1$d horoj</string>
     <string name="no_program_data">Neniu \"Program Data\" Disponeblaj</string>
     <string name="lbl_show_backdrop">Montri dorsbildojn</string>
     <string name="lbl_bitstream_ac3">Bitfluo de Dolby Digital aŭdio</string>

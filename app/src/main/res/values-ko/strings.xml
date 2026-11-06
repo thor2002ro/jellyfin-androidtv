@@ -95,7 +95,6 @@
     <string name="lbl_date_added">추가된 날짜</string>
     <string name="lbl_rating">평점</string>
     <string name="lbl_display_preferences">환경 설정 표시</string>
-    <string name="lbl_filters">실시간 TV 필터</string>
     <string name="msg_subtitles_loading">자막 로딩 중…</string>
     <string name="msg_unable_load_subs">자막 로드 불가</string>
     <string name="msg_burn_sub_warning">자막을 굽는 중입니다. 잠시 시간이 소요될 수 있습니다…</string>
@@ -127,7 +126,6 @@
     <string name="lbl_zoom">확대</string>
     <string name="lbl_play_next_up">계속 재생</string>
     <string name="lbl_open">열기</string>
-    <string name="lbl_select_date">날짜 선택</string>
     <string name="msg_record_entire_series">모든 시리즈를 녹화하시겠습니까\?</string>
     <string name="no_program_data">프로그램 데이터 없음</string>
     <string name="lbl_sports">스포츠</string>
@@ -195,8 +193,6 @@
     <string name="pref_device_model">디바이스 모델</string>
     <string name="pref_app_theme">앱 테마</string>
     <string name="lbl_news">신규</string>
-    <string name="lbl_tv_filter_status">다음 %1$d 시간 동안</string>
-    <string name="lbl_tv_channel_status">%2$d 개 채널 중 %1$d 개</string>
     <string name="lbl_in_x_days">%d 일 후</string>
     <string name="desc_premieres">시청하는 시리즈의 새로운 에피소드 파일럿 행을 표시</string>
     <string name="lbl_show_backdrop">배경 표시</string>
@@ -213,9 +209,6 @@
     <string name="lbl_begin_padding">패딩 시작</string>
     <string name="too_many_errors">오류가 너무 많이 발생했습니다. 중단합니다</string>
     <string name="seek_error">찾을수 없습니다</string>
-    <string name="msg_live_tv_prev">이전 %1$d 시간을 불러올까요?</string>
-    <string name="msg_live_tv_next">다음 %1$d 시간을 불러올까요?</string>
-    <string name="lbl_load_guide_data">가이드 불러오기</string>
     <string name="no_player">플레이어 없음</string>
     <string name="mark_watched_message">이 항목의 길이가 실제 길이보다 짧은 것 같습니다. 시청한 것으로 표시 하시겠습니까?</string>
     <string name="bitrate_kbit">%1$,.0f Kbit/s</string>
