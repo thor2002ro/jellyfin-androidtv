@@ -428,7 +428,7 @@ private object NewPlayerStreamStatusBuilder {
 					)
 					row("Dolby Vision", libdoviConversionDiagnostic(frameStats.doviTransform, doviFailure))
 					row("Audio decoder", frameStats.audioDecoderLabel())
-					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec))
+					row("Audio codec", streamingAudioCodec(audioTrack, selectedAudio, transcodingInfo, stream.conversionMethod, frameStats.audioCodec, frameStats.localAudioConversionCodec))
 					row("Passthrough supported", frameStats.audioPassthroughSupported.formatPassthroughSupport())
 					row("Audio channels", audioTrack?.channels?.takeIf { it > 0 }?.formatChannels() ?: frameStats.audioChannels)
 					row("Audio language", audioLanguage(selectedAudio))
@@ -584,12 +584,14 @@ private object NewPlayerStreamStatusBuilder {
 		transcodingInfo: TranscodingInfo?,
 		conversionMethod: MediaConversionMethod,
 		fallbackCodec: String?,
+		localConversionCodec: String?,
 	): String? {
 		val sourceCodec = track?.codec ?: selectedTrack?.codec
 		val source = sourceCodec.formatCodec()
 		val target = transcodingInfo?.audioCodec.formatCodec()
 
 		return when {
+			localConversionCodec != null -> streamingCodecLabel(sourceCodec, fallbackCodec, conversionMethod, localConversionCodec)
 			transcodingInfo == null -> streamingCodecLabel(sourceCodec, fallbackCodec, conversionMethod)
 			transcodingInfo.isAudioDirect && source != null -> "$source (direct)"
 			source != null && target != null -> "$source -> $target (transcoding)"
@@ -786,9 +788,13 @@ internal fun streamingCodecLabel(
 	sourceCodec: String?,
 	playbackCodec: String?,
 	conversionMethod: MediaConversionMethod,
+	localConversionCodec: String? = null,
 ): String? {
 	val source = sourceCodec.codecDisplayName()
 	val playback = playbackCodec.codecDisplayName()
+	localConversionCodec.codecDisplayName()?.let { target ->
+		return "${source ?: playback ?: "Unknown"} -> $target (local)"
+	}
 	if (conversionMethod == MediaConversionMethod.Remux && source != null && playback != null && source.baseCodecName() != playback.baseCodecName()) {
 		return "$source -> $playback (transcoding)"
 	}

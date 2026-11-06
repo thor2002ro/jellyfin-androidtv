@@ -59,6 +59,7 @@ data class PlaybackFrameStats(
 	val audioDecoderName: String? = null,
 	val audioDecoderType: String? = null,
 	val audioCodec: String? = null,
+	val localAudioConversionCodec: String? = null,
 	val audioBitrate: Int? = null,
 	val audioChannels: String? = null,
 	val audioSampleRate: Int? = null,

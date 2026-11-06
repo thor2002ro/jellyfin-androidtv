@@ -146,6 +146,8 @@ internal fun createDeviceProfile(
 	} else {
 		getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
 	}
+	val convertAudioLocally = enableMpvAudio &&
+		userPreferences.mpvAudioPolicy(supportedPassthroughAudioMimes).convertAudioToAc3
 	return createDeviceProfile(
 		mediaTest = mediaTest,
 		maxBitrate = userPreferences.getMaxBitrate(),
@@ -163,7 +165,8 @@ internal fun createDeviceProfile(
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
 		passthroughAudioCodecs = if (allowPassthrough) userPreferences.profilePassthroughAudioCodecs(supportedPassthroughAudioMimes) else emptySet(),
-		transcodeToPassthrough = allowPassthrough && audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH,
+		// Keep original surround audio for MPV's encoder instead of requesting server conversion.
+		transcodeToPassthrough = allowPassthrough && audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH && !convertAudioLocally,
 		supportsDtsHdPassthrough = MimeTypes.AUDIO_DTS_HD in supportedPassthroughAudioMimes,
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,
