@@ -95,6 +95,10 @@ internal fun shouldReadLibMPVStatProperty(lastMissNanos: Long?, nowNanos: Long, 
 
 internal fun libMPVCommandSucceeded(result: MPVNode?): Boolean = result != null
 
+internal fun Map<String, MPVNode>.mpvTrackTitle(): String? =
+	this["title"]?.asString()?.takeUnless(String::isBlank)
+		?: this["metadata"]?.asMap()?.get("name")?.asString()?.takeUnless(String::isBlank)
+
 internal fun doviMpvPlaybackErrorCode(status: DoviStatus): String? =
 	status.takeUnless { it == DoviStatus.OK }?.let { "DOVI_TRANSFORMATION_FAILED_${it.name}" }
 
@@ -1712,7 +1716,7 @@ class LibMPVBackend(
 		LibMPVTrack(
 			id = id,
 			type = type,
-			title = map["title"]?.asString(),
+			title = map.mpvTrackTitle(),
 			language = map["lang"]?.asString(),
 			codec = map["codec"]?.asString(),
 			isSelected = map["selected"]?.asBoolean() == true,
