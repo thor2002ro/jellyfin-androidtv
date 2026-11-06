@@ -42,7 +42,7 @@ class HomeFragmentBrowseRowDefRow(
 				browseRowDef.liveTvProgramSelectAction,
 			)
 			QueryType.LiveTvRecording -> ItemRowAdapter(context, browseRowDef.recordingQuery, browseRowDef.chunkSize, cardPresenter, rowsAdapter)
-			QueryType.Resume -> ItemRowAdapter(context, browseRowDef.resumeQuery, browseRowDef.chunkSize, browseRowDef.preferParentThumb, browseRowDef.isStaticHeight, cardPresenter, rowsAdapter)
+			QueryType.Resume -> createResumeHomeRowAdapter(context, browseRowDef, cardPresenter, rowsAdapter)
 			else -> ItemRowAdapter(context, browseRowDef.query, browseRowDef.chunkSize, browseRowDef.preferParentThumb, browseRowDef.isStaticHeight, cardPresenter, rowsAdapter, browseRowDef.queryType)
 		}
 
@@ -53,3 +53,18 @@ class HomeFragmentBrowseRowDefRow(
 		rowsAdapter.add(row)
 	}
 }
+
+internal fun createResumeHomeRowAdapter(
+	context: Context,
+	browseRowDef: BrowseRowDef,
+	cardPresenter: CardPresenter,
+	rowsAdapter: MutableObjectAdapter<Row>,
+) = ItemRowAdapter(
+	context,
+	browseRowDef.resumeQuery,
+	browseRowDef.chunkSize,
+	browseRowDef.preferParentThumb,
+	browseRowDef.isStaticHeight,
+	cardPresenter,
+	rowsAdapter,
+)
