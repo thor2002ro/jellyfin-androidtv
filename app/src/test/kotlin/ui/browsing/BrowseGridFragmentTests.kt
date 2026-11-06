@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.browsing
 
 import android.view.View
 import android.view.ViewGroup
+import android.view.KeyEvent
 import androidx.leanback.widget.Presenter
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -10,6 +11,8 @@ import org.jellyfin.androidtv.data.model.FilterOptions
 import org.jellyfin.androidtv.data.model.PlaybackFilter
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.constant.GridDirection
+import org.jellyfin.androidtv.constant.LibraryViewStyle
+import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter
 import org.jellyfin.androidtv.ui.presentation.ComposeVerticalGridPresenter
 import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -66,6 +69,24 @@ class BrowseGridFragmentTests : FunSpec({
 		BrowseGridFragment.createGridPresenter(GridDirection.HORIZONTAL).javaClass shouldBe HorizontalGridPresenter::class.java
 	}
 
+	test("dense list overrides the saved card direction") {
+		BrowseGridFragment.createGridPresenter(
+			GridDirection.HORIZONTAL,
+			LibraryViewStyle.DENSE_LIST,
+		).javaClass shouldBe ComposeBrowseListPresenter::class.java
+	}
+
+	test("dense list uses vertical navigation controls while cards honor their direction") {
+		BrowseGridFragment.effectiveNavigationControlsDirection(
+			LibraryViewStyle.DENSE_LIST,
+			GridDirection.HORIZONTAL,
+		) shouldBe GridDirection.VERTICAL
+		BrowseGridFragment.effectiveNavigationControlsDirection(
+			LibraryViewStyle.CARDS,
+			GridDirection.HORIZONTAL,
+		) shouldBe GridDirection.HORIZONTAL
+	}
+
 	test("fresh sort and filter queries choose only valid positions") {
 		BrowseGridFragment.nextSelectionAfterQueryChange(50) shouldBe 0
 		BrowseGridFragment.nextSelectionAfterQueryChange(0) shouldBe -1
@@ -114,6 +135,70 @@ class BrowseGridFragmentTests : FunSpec({
 		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.VERTICAL, GridDirection.VERTICAL) shouldBe true
 		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.HORIZONTAL, GridDirection.VERTICAL) shouldBe false
 		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.VERTICAL, GridDirection.HORIZONTAL) shouldBe false
+	}
+
+	test("horizontal grid handoff routes up to customization") {
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe true
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_DOWN,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_UP,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+	}
+
+	test("vertical grid handoff routes up to home") {
+		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe true
+		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_DOWN,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
+	}
+
+	test("custom navigation control focus routing is horizontal only") {
+		BrowseGridFragment.shouldConfigureNavigationControlsFocus(GridDirection.HORIZONTAL) shouldBe true
+		BrowseGridFragment.shouldConfigureNavigationControlsFocus(GridDirection.VERTICAL) shouldBe false
+	}
+
+	test("horizontal customization routes up to home") {
+		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe true
+		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+			GridDirection.HORIZONTAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_DOWN,
+		) shouldBe false
+		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+			GridDirection.VERTICAL,
+			KeyEvent.ACTION_DOWN,
+			KeyEvent.KEYCODE_DPAD_UP,
+		) shouldBe false
 	}
 
 	test("replacing a browse grid releases its bound presenter") {
