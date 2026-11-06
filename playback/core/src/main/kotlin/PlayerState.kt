@@ -90,6 +90,7 @@ class MutablePlayerState(
 	init {
 		backendService.addListener(object : PlayerBackendEventListener() {
 			override fun onPlayStateChange(state: PlayState) {
+				if (queue?.entry?.value == null && state != PlayState.STOPPED) return
 				_playState.value = state
 			}
 
@@ -125,6 +126,7 @@ class MutablePlayerState(
 	override fun stop() {
 		backendService.backend?.stop()
 		queue?.clear()
+		_playState.value = PlayState.STOPPED
 	}
 
 	override fun seek(to: Duration) {
