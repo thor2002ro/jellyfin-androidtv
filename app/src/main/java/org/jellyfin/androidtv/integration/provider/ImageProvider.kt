@@ -21,6 +21,7 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.io.OutputStream
 
 class ImageProvider : ContentProvider() {
 	private val imageLoader by inject<ImageLoader>()
@@ -61,24 +62,7 @@ class ImageProvider : ContentProvider() {
 
 		return openPipeHelper(uri, MIME_TYPE, null, source) { output, _, _, _, _ ->
 			try {
-				ParcelFileDescriptor.AutoCloseOutputStream(output).use { stream ->
-					val context = requireNotNull(context)
-					val result = runBlocking {
-						imageLoader.execute(ImageRequest.Builder(context).apply {
-							data(source)
-							allowHardware(false)
-							error(R.drawable.placeholder_icon)
-						}.build())
-					}
-					if (result is ErrorResult) Timber.w(result.throwable, "Unable to load image $source")
-					val bitmap = requireNotNull(result.image).toBitmap()
-
-					@Suppress("DEPRECATION")
-					val format = if (AndroidVersion.isAtLeastR) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
-					check(bitmap.compress(format, COMPRESSION_QUALITY, stream)) {
-						"Unable to compress image"
-					}
-				}
+				writeImage(source, ParcelFileDescriptor.AutoCloseOutputStream(output))
 			} catch (_: IOException) {
 				// The requester may close the pipe before the image has been written.
 			} catch (error: Exception) {
@@ -87,7 +71,30 @@ class ImageProvider : ContentProvider() {
 		}
 	}
 
+	internal fun writeImage(source: Uri, outputStream: OutputStream) {
+		outputStream.use { stream ->
+			val context = requireNotNull(context)
+			val result = runBlocking {
+				imageLoader.execute(ImageRequest.Builder(context).apply {
+					data(source)
+					size(MAX_IMAGE_SIZE, MAX_IMAGE_SIZE)
+					allowHardware(false)
+					error(R.drawable.placeholder_icon)
+				}.build())
+			}
+			if (result is ErrorResult) Timber.w(result.throwable, "Unable to load image $source")
+			val bitmap = requireNotNull(result.image).toBitmap()
+
+			@Suppress("DEPRECATION")
+			val format = if (AndroidVersion.isAtLeastR) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+			check(bitmap.compress(format, COMPRESSION_QUALITY, stream)) {
+				"Unable to compress image"
+			}
+		}
+	}
+
 	companion object {
+		internal const val MAX_IMAGE_SIZE = 512
 		private const val MIME_TYPE = "image/webp"
 		private const val SOURCE_PARAMETER = "src"
 		private const val COMPRESSION_QUALITY = 95

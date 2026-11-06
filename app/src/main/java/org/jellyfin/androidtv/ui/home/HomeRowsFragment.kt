@@ -34,6 +34,7 @@ import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LiveTvOption
+import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
@@ -69,6 +70,7 @@ import org.jellyfin.sdk.model.api.LibraryChangedMessage
 import org.jellyfin.sdk.model.api.UserDataChangedMessage
 import org.koin.android.ext.android.inject
 import timber.log.Timber
+import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyListener {
@@ -101,6 +103,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
 	private var homeRowsLoaded = false
+	private var homeUserViewsFailed = false
 	private var rowsDensityDpi = 0
 	private var rowsFontScale = 0f
 	private val refreshRowMeasurements = Runnable {
@@ -115,6 +118,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var backgroundUpdateJob: Job? = null
 	private var homeRowsDebounceJob: Job? = null
 	private var homeRowsRefreshJob: Job? = null
+	private var pendingFullRefresh = false
+	private val pendingUserDataItems = mutableSetOf<UUID>()
 	private var currentBackgroundItemId: String? = null
 	private val homeRowAdapters = linkedSetOf<ItemRowAdapter>()
 	private val liveTvActions by lazy {
@@ -156,7 +161,12 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		lifecycleScope.launch {
 			lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
 				api.webSocket.subscribe<UserDataChangedMessage>()
-					.onEach { refreshHomeRows() }
+					.onEach { message ->
+						val data = message.data
+						if (data != null && data.userId == userRepository.currentUser.value?.id) {
+							refreshHomeRows(data.userDataList.mapTo(mutableSetOf()) { it.itemId })
+						}
+					}
 					.launchIn(this)
 
 				api.webSocket.subscribe<LibraryChangedMessage>()
@@ -254,6 +264,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		) {
 			userViewsRepository.views.first()
 		}
+		homeUserViewsFailed = userViews == null
 
 		for (section in layout.sections) when (section) {
 			HomeSectionType.LATEST_MEDIA -> userViews?.let { add(helper.loadRecentlyAdded(it)) }
@@ -331,18 +342,30 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
 	}
 
-	private fun refreshHomeRows() {
+	private fun refreshHomeRows(changedItemIds: Set<UUID>? = null) {
+		if (changedItemIds == null) pendingFullRefresh = true
+		else pendingUserDataItems.addAll(changedItemIds)
 		homeRowsRefreshJob?.cancel()
 		homeRowsDebounceJob?.cancel()
 		homeRowsDebounceJob = lifecycleScope.launch {
 			delay(HOME_ROWS_REFRESH_DEBOUNCE_MS)
-			retrieveHomeRows()
+			val changedItems = if (pendingFullRefresh) null else pendingUserDataItems.toSet()
+			retrieveHomeRows(changedItems)
 		}
 	}
 
-	private fun retrieveHomeRows() {
+	private fun retrieveHomeRows(changedItemIds: Set<UUID>? = null) {
+		pendingFullRefresh = false
+		pendingUserDataItems.clear()
+		if (homeUserViewsFailed) {
+			homeUserViewsFailed = false
+			customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration)
+			return
+		}
 		startHomeRowUpdates()
-		homeRowAdapters.toList().forEach(ItemRowAdapter::Retrieve)
+		homeRowAdapters.toList()
+			.filter { changedItemIds == null || it.shouldRefreshForUserData(changedItemIds) }
+			.forEach(ItemRowAdapter::Retrieve)
 	}
 
 	private fun trackHomeRows() {
@@ -361,6 +384,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	}
 
 	private fun scheduleHomeRowsRefresh(delayMs: Long = HOME_ROWS_REFRESH_DELAY_MS) {
+		pendingFullRefresh = true
 		homeRowsRefreshJob?.cancel()
 		homeRowsRefreshJob = lifecycleScope.launch {
 			delay(delayMs)
@@ -459,6 +483,15 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				updateBackground(item)
 			}
 		}
+	}
+}
+
+internal fun ItemRowAdapter.shouldRefreshForUserData(changedItemIds: Set<UUID>): Boolean = when (queryType) {
+	QueryType.NextUp, QueryType.Resume -> true
+	QueryType.Views -> false
+	else -> any { item ->
+		val baseItem = (item as? BaseRowItem)?.baseItem
+		baseItem?.id in changedItemIds || baseItem?.currentProgram?.id in changedItemIds
 	}
 }
 

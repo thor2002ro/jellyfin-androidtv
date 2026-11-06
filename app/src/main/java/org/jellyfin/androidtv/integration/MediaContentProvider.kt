@@ -109,7 +109,7 @@ class MediaContentProvider : ContentProvider(), KoinComponent {
 		MatrixCursor(columns).also { cursor ->
 			searchResult?.items?.forEach { item ->
 				val imageUri = ImageProvider.getImageUri(
-					item.itemImages[ImageType.PRIMARY]?.getUrl(api)
+					item.itemImages[ImageType.PRIMARY]?.getUrl(api, maxWidth = ImageProvider.MAX_IMAGE_SIZE, maxHeight = ImageProvider.MAX_IMAGE_SIZE)
 						?: imageHelper.getResourceUrl(context!!, R.drawable.tile_land_tv)
 				)
 

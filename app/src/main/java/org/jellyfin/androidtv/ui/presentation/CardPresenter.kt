@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,7 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import coil3.compose.AsyncImagePainter
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LibraryCardSpacing
@@ -60,11 +63,14 @@ import org.jellyfin.androidtv.ui.itemhandling.GridButtonBaseRowItem
 import org.jellyfin.androidtv.util.ImageHelper
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage
 import org.jellyfin.androidtv.util.apiclient.channelPrimaryImage
+import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.getActivity
 import org.jellyfin.androidtv.util.getTimeFormatter
 import org.jellyfin.design.Tokens
+import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.koin.compose.koinInject
 
 class CardPresenter(
 	val showInfo: Boolean,
@@ -119,7 +125,7 @@ class CardPresenter(
 	}
 
 	private inner class CardViewHolder(private val composeView: ComposeView) : ViewHolder(composeView) {
-		private var item by mutableStateOf<BaseRowItem?>(null)
+		private var item by mutableStateOf<BaseRowItem?>(null, referentialEqualityPolicy())
 		private var focused by mutableStateOf(false)
 
 		init {
@@ -328,6 +334,11 @@ internal fun resolveBrowseGridSpacing(base: Int, option: LibraryCardSpacing): In
 internal fun shouldShowBrowseCardInfo(style: LibraryViewStyle, showCardTitles: Boolean): Boolean =
 	style == LibraryViewStyle.DENSE_LIST || showCardTitles
 
+internal fun BaseRowItem.showLibraryTextFallback(usePreview: Boolean, imageState: AsyncImagePainter.State): Boolean =
+	!usePreview && imageState !is AsyncImagePainter.State.Success && (
+		baseItem?.type == BaseItemKind.USER_VIEW || baseItem?.type == BaseItemKind.COLLECTION_FOLDER
+	)
+
 @Composable
 @Stable
 internal fun CardViewHolderContent(
@@ -345,10 +356,10 @@ internal fun CardViewHolderContent(
 	val context = LocalContext.current
 	val localDensity = LocalDensity.current
 
-	val title = remember(item, context) { item?.getCardName(context) }
-	val subtitle = remember(item, context) { item?.getSubText(context) }
-	val liveTvText = remember(item, context) { item?.getLiveTvCardText(context) }
-	val displayConfig = remember(item, imageType, uniformAspect) { item?.getDisplayConfig(imageType, uniformAspect) }
+	val title = remember(item, item?.baseItem, context) { item?.getCardName(context) }
+	val subtitle = remember(item, item?.baseItem, context) { item?.getSubText(context) }
+	val liveTvText = remember(item, item?.baseItem, context) { item?.getLiveTvCardText(context) }
+	val displayConfig = remember(item, item?.baseItem, imageType, uniformAspect) { item?.getDisplayConfig(imageType, uniformAspect) }
 	if (item == null || displayConfig == null) return
 
 	val image = displayConfig.image
@@ -360,10 +371,16 @@ internal fun CardViewHolderContent(
 		else -> DpSize(150.dp * aspectRatio, 150.dp)
 	}
 
-	val usePreview = liveTvText == null && (showBrowserTitle || (displayConfig.overrideShowInfo ?: showInfo))
-	val libraryTextFallback = !usePreview && image == null && (
-		item.baseItem?.type == BaseItemKind.USER_VIEW || item.baseItem?.type == BaseItemKind.COLLECTION_FOLDER
+	val api = koinInject<ApiClient>()
+	val imageUrl = image?.getUrl(
+		api,
+		maxWidth = with(localDensity) { size.width.roundToPx() },
+		maxHeight = with(localDensity) { size.height.roundToPx() },
 	)
+	var imageState by remember(item.itemId, imageUrl) { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
+	val usePreview = liveTvText == null && (showBrowserTitle || (displayConfig.overrideShowInfo ?: showInfo))
+	val libraryCard = item.showLibraryTextFallback(usePreview, AsyncImagePainter.State.Empty)
+	val libraryTextFallback = item.showLibraryTextFallback(usePreview, imageState)
 
 	val cardModifier = if (fillAvailableWidth) {
 		modifier
@@ -379,21 +396,23 @@ internal fun CardViewHolderContent(
 			focused = focused,
 			image = {
 				if (image != null) {
-					AsyncImage(
-						image = image,
-						maxWidth = with(localDensity) { size.width.roundToPx() },
-						maxHeight = with(localDensity) { size.height.roundToPx() },
-						aspectRatio = aspectRatio,
-						scaleType = displayConfig.scaleType ?: ImageView.ScaleType.CENTER_CROP,
-						modifier = displayConfig.imageHeightRes?.let { heightRes ->
-							Modifier
-								.fillMaxWidth()
-								.height(dimensionResource(heightRes))
+					key(item.itemId, imageUrl) {
+						AsyncImage(
+							url = imageUrl,
+							blurHash = image.blurHash.takeUnless { libraryCard },
+							onState = { imageState = it },
+							aspectRatio = aspectRatio,
+							scaleType = displayConfig.scaleType ?: ImageView.ScaleType.CENTER_CROP,
+							modifier = displayConfig.imageHeightRes?.let { heightRes ->
+								Modifier
+									.fillMaxWidth()
+									.height(dimensionResource(heightRes))
+									.align(Alignment.Center)
+							} ?: Modifier
+								.fillMaxSize()
 								.align(Alignment.Center)
-						} ?: Modifier
-							.fillMaxSize()
-							.align(Alignment.Center)
-					)
+						)
+					}
 				} else if (item is GridButtonBaseRowItem && item.gridButton.imageRes != null) {
 					Image(
 						painter = painterResource(item.gridButton.imageRes),
@@ -424,7 +443,7 @@ internal fun CardViewHolderContent(
 						overflow = TextOverflow.Ellipsis,
 					)
 				}
-				val showInfo = !usePreview && !libraryTextFallback && item.showCardInfoOverlay
+				val showInfo = !usePreview && !libraryCard && item.showCardInfoOverlay
 				item.baseItem?.let { baseItem ->
 					ItemCardBaseItemOverlay(
 						item = baseItem,
