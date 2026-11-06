@@ -6,6 +6,7 @@ import android.util.AttributeSet
 import android.view.KeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -33,15 +34,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.LocalTextStyle
 import org.jellyfin.androidtv.ui.base.ProfilePicture
 import org.jellyfin.androidtv.ui.base.ProvideTextStyle
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.util.MenuBuilder
+import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.androidtv.util.popupMenu
 import org.jellyfin.androidtv.util.AndroidVersion
 import org.jellyfin.androidtv.util.showIfNotEmpty
@@ -56,14 +65,17 @@ fun UserCard(
 	shape: Shape = CircleShape,
 ) {
 	val focused by interactionSource.collectIsFocusedAsState()
+	val context = LocalContext.current
+	val accentColor = remember(context.theme) {
+		Color(Utils.getThemeColor(context, android.R.attr.colorAccent))
+	}
 
-	// Mix button background with input foreground because we display text beneath the profile picture on a transparent background similar
-	// to the input text
+	// Keep names readable on the transparent background while using the theme accent for focus.
 	val color = when {
-		focused -> JellyfinTheme.colorScheme.buttonFocused to JellyfinTheme.colorScheme.onInputFocused
+		focused -> accentColor to JellyfinTheme.colorScheme.onInputFocused
 		else -> JellyfinTheme.colorScheme.button to JellyfinTheme.colorScheme.onInput
 	}
-	val scale by animateFloatAsState(if (focused) 1.1f else 1f, label = "UserCardFocusScale")
+	val scale by animateFloatAsState(if (focused) 1.2f else 1f, label = "UserCardFocusScale")
 
 	Column(
 		modifier = modifier
@@ -75,12 +87,13 @@ fun UserCard(
 			modifier = Modifier
 				.aspectRatio(1f)
 				.clip(shape)
-				.border(2.dp, color.first, shape)
+				.background(JellyfinTheme.colorScheme.surface, shape)
+				.border(if (focused) 3.dp else 1.dp, color.first, shape)
 		) {
 			image()
 		}
 
-		Spacer(Modifier.height(8.dp))
+		Spacer(Modifier.height(UserCardView.NAME_SPACING))
 
 		Box(
 			modifier = Modifier
@@ -107,8 +120,22 @@ class UserCardView @JvmOverloads constructor(
 	attrs: AttributeSet? = null,
 	defStyleAttr: Int = 0,
 ) : AbstractComposeView(context, attrs, defStyleAttr) {
+	companion object {
+		// Smaller avatars leave room for focus enlargement without shrinking the names underneath.
+		internal val AVATAR_SIZE = 83.dp
+		internal val HORIZONTAL_PADDING = 10.dp
+		internal val VERTICAL_PADDING = 12.dp
+		internal val NAME_SPACING = 12.dp
+		internal val NAME_LINE_HEIGHT = 20.sp
+		private val USER_ICON_PADDING = 16.dp
+		private val ADD_ACCOUNT_ICON_PADDING = 23.dp
+		// Include the card's side padding so the grid and Compose agree on each column's width.
+		internal val CARD_WIDTH = AVATAR_SIZE + HORIZONTAL_PADDING * 2
+	}
+
 	var name by mutableStateOf<String?>(null)
 	var image by mutableStateOf<String?>(null)
+	var imageIcon by mutableStateOf<Int?>(null)
 	private var focused by mutableStateOf(false)
 
 	init {
@@ -142,7 +169,7 @@ class UserCardView @JvmOverloads constructor(
 	override fun Content() {
 		val interactionSource = remember { MutableInteractionSource() }
 
-		// Forward focus events to the interaction source
+		// The grid owns remote focus; forward it to Compose so the selected card gets its outline and zoom.
 		val focusInteraction = remember { FocusInteraction.Focus() }
 		LaunchedEffect(focused) {
 			if (focused) interactionSource.emit(focusInteraction)
@@ -151,23 +178,31 @@ class UserCardView @JvmOverloads constructor(
 
 		UserCard(
 			image = {
-				ProfilePicture(
+				val icon = imageIcon
+				if (icon != null) Icon(
+					imageVector = ImageVector.vectorResource(icon),
+					contentDescription = null,
+					modifier = Modifier.fillMaxSize().padding(ADD_ACCOUNT_ICON_PADDING),
+				) else ProfilePicture(
 					url = image,
-					iconPadding = PaddingValues(24.dp),
+					iconPadding = PaddingValues(USER_ICON_PADDING),
 					modifier = Modifier.fillMaxSize()
 				)
 			},
 			name = {
 				Text(
 					text = name.orEmpty(),
-					maxLines = 1
+					maxLines = 1,
+					fontSize = 16.sp,
+					fontWeight = FontWeight.Medium,
+					lineHeight = NAME_LINE_HEIGHT,
 				)
 			},
 			modifier = Modifier
-				.padding(horizontal = 6.dp, vertical = 8.dp)
-				.width(110.dp),
+				.padding(horizontal = HORIZONTAL_PADDING, vertical = VERTICAL_PADDING)
+				.width(AVATAR_SIZE),
 			interactionSource = interactionSource,
-			// We use our own click handler for views used in presenters
+			// The outer View handles OK presses so grid selection and the profile menu keep working.
 			onClick = {}
 		)
 	}
