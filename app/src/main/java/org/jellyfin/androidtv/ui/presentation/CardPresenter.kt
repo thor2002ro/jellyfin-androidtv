@@ -69,6 +69,7 @@ class CardPresenter(
 	val staticHeight: Int,
 	val uniformAspect: Boolean,
 	private val onLongClick: ((item: Any?, view: View) -> Boolean)? = null,
+	val showFavoriteIndicator: Boolean = true,
 ) : Presenter() {
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int) : this(showInfo, imageType, staticHeight, false)
@@ -128,6 +129,7 @@ class CardPresenter(
 					imageType = imageType,
 					staticHeight = staticHeight,
 					uniformAspect = uniformAspect,
+					showFavoriteIndicator = showFavoriteIndicator,
 				)
 			}
 		}
@@ -325,6 +327,7 @@ internal fun CardViewHolderContent(
 	imageType: ImageType,
 	staticHeight: Int,
 	uniformAspect: Boolean,
+	showFavoriteIndicator: Boolean = true,
 	modifier: Modifier = Modifier,
 	fillAvailableWidth: Boolean = false,
 ) {
@@ -401,6 +404,7 @@ internal fun CardViewHolderContent(
 						item = baseItem,
 						streamBadgeItem = (item as? BaseItemDtoBaseRowItem)?.streamBadgeItem ?: baseItem,
 						showRemainingTimeBadge = item.showRemainingTimeBadge,
+						showFavoriteIndicator = showFavoriteIndicator,
 						footer = {
 							if (liveTvText != null) {
 								LiveTvCardFooter(liveTvText, focused)
