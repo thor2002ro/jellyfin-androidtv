@@ -368,7 +368,6 @@
     <string name="welcome_title">Добродошли у Jellyfin!</string>
     <string name="saved_servers">Сачувани сервери</string>
     <string name="press_to_close">Притисните да затворите</string>
-    <string name="no_network_permissions">Jellyfin захтева дозволе за мрежу да би функционисао</string>
     <string name="pref_theme_muted_purple">Утишана Љубичаста</string>
     <string name="lbl_switch_user">Промени налог</string>
     <string name="server_connection_failed_candidates">Повезивање са сервером није успело, покушано са следећих адреса:%1$s</string>

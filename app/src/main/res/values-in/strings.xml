@@ -325,7 +325,6 @@
     <string name="lbl_switch_user">Ganti akun</string>
     <string name="pref_theme_muted_purple">Ungu redam</string>
     <string name="user_picker_last_user_summary">Gunakan akun aktif terakhir</string>
-    <string name="no_network_permissions">Jellyfin membutuhkan izin jaringan untuk berfungsi</string>
     <string name="add_user">Tambah akun</string>
     <string name="press_to_close">Pencet untuk menutup</string>
     <string name="lbl_next_up_extended">Dengan keluku</string>
