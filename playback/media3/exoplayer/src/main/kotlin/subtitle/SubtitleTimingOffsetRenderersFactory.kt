@@ -17,12 +17,13 @@ import org.jellyfin.playback.media3.exoplayer.StereoDownmixAudioProcessor
 
 @UnstableApi
 @OptIn(ExperimentalApi::class)
-class SubtitleTimingOffsetRenderersFactory(
+class SubtitleTimingOffsetRenderersFactory @JvmOverloads constructor(
 	context: Context,
 	private val offsetState: SubtitleTimingOffsetState,
 	private val subtitleParserFactory: SubtitleParser.Factory,
 	private val isAudioPassthroughEnabled: (String) -> Boolean = { true },
 	private val downmixToStereo: () -> Boolean = { false },
+	private val onAudioSinkBufferAttempt: () -> Unit = {},
 ) : DefaultRenderersFactory(context) {
 	override fun buildAudioSink(
 		context: Context,
@@ -39,6 +40,7 @@ class SubtitleTimingOffsetRenderersFactory(
 				.build(),
 			downmixToStereo = downmixToStereo,
 			downmixProcessor = downmixProcessor,
+			onBufferAttempt = onAudioSinkBufferAttempt,
 			isPassthroughEnabled = isAudioPassthroughEnabled,
 		)
 	}
