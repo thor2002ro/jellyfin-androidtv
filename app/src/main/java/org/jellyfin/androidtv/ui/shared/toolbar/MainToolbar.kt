@@ -11,10 +11,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +32,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.ui.NowPlayingComposable
+import org.jellyfin.androidtv.ui.browsing.MainActivity
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.ProfilePicture
@@ -87,6 +92,9 @@ private fun MainToolbar(
 	val sessionRepository = koinInject<SessionRepository>()
 	val settingsViewModel = koinActivityViewModel<SettingsViewModel>()
 	val activity = LocalActivity.current
+	val density = LocalDensity.current
+	val profileAnimation = (activity as? MainActivity)?.profileLoginAnimation
+		.takeIf { activeButton == MainToolbarActiveButton.Home }
 	val activeButtonColors = ButtonDefaults.colors(
 		containerColor = JellyfinTheme.colorScheme.buttonActive,
 		contentColor = JellyfinTheme.colorScheme.onButtonActive,
@@ -103,6 +111,7 @@ private fun MainToolbar(
 				val userImageVisible = userImageState is AsyncImagePainter.State.Success
 
 				IconButton(
+					modifier = Modifier.alpha(if (profileAnimation == null) 1f else 0f),
 					onClick = {
 						if (activeButton != MainToolbarActiveButton.User) {
 							mediaManager.clearAudioQueue()
@@ -122,6 +131,7 @@ private fun MainToolbar(
 						modifier = Modifier
 							.aspectRatio(1f)
 							.clip(IconButtonDefaults.Shape)
+							.onGloballyPositioned { profileAnimation?.avatarTarget = it.boundsInWindow() }
 					)
 				}
 
@@ -129,7 +139,12 @@ private fun MainToolbar(
 					// Keep long names from crowding the Home, Favorites, and Search controls.
 					Text(
 						text = userName,
-						modifier = Modifier.widthIn(max = 120.dp),
+						modifier = Modifier.widthIn(max = 120.dp)
+							.alpha(if (profileAnimation == null) 1f else 0f)
+							.onGloballyPositioned {
+								profileAnimation?.nameTarget = it.boundsInWindow()
+								profileAnimation?.nameFontSizeTargetPx = with(density) { 14.sp.toPx() }
+							},
 						fontSize = 14.sp,
 						color = JellyfinTheme.colorScheme.onBackground,
 						maxLines = 1,
