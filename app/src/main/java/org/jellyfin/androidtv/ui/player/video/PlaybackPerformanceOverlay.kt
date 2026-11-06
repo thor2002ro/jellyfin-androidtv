@@ -511,10 +511,7 @@ private fun RenderFrameMetric.formatRenderFrameMetric() = when {
 	else -> "n/a"
 }
 
-private fun Float.formatFps() = when {
-	this >= 10f -> "%.0f".format(this)
-	else -> "%.1f".format(this)
-}
+private fun Float.formatFps() = "%.3f".format(this)
 
 private fun Float.formatRenderMs() = when {
 	this >= 10f -> "%.0f".format(this)
