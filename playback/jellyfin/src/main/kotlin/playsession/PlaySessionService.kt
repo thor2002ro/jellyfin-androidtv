@@ -66,10 +66,13 @@ class PlaySessionService(
 	override suspend fun onInitialize() {
 		state.playState.onEach { playState ->
 			when (playState) {
-				PlayState.PLAYING,
-				PlayState.BUFFERING -> {
+				PlayState.PLAYING -> {
 					sendStreamStart()
 					startProgressReports(PROGRESS_REPORTING_INTERVAL)
+				}
+				PlayState.BUFFERING -> {
+					// Initial buffering must not overwrite the saved resume point.
+					if (activeSession != null) startProgressReports(PROGRESS_REPORTING_INTERVAL)
 				}
 
 				PlayState.STOPPED -> {
@@ -85,7 +88,7 @@ class PlaySessionService(
 
 				PlayState.ERROR -> {
 					stopProgressReports()
-					sendActiveStreamStop()
+					sendActiveStreamStop(failed = true)
 					activePlaybackKey = null
 				}
 			}
@@ -157,6 +160,7 @@ class PlaySessionService(
 
 	fun sendStopIfActive() {
 		val session = activeSession
+		val failed = state.playState.value == PlayState.ERROR || session == null
 		if (session != null) {
 			if (stoppedPlaySessionId == session.playSessionId) return
 
@@ -176,6 +180,7 @@ class PlaySessionService(
 					playlistItemId = session.playlistItemId,
 					positionTicks = reporting.positionTicks,
 					queue = session.queue,
+					failed = failed,
 				)
 			}
 			return
@@ -206,6 +211,7 @@ class PlaySessionService(
 				playlistItemId = item.playlistItemId,
 				positionTicks = reporting.positionTicks,
 				queue = queue,
+				failed = failed,
 			)
 		}
 	}
@@ -273,6 +279,7 @@ class PlaySessionService(
 	}
 
 	private suspend fun sendStreamStart() {
+		if (state.playState.value != PlayState.PLAYING && state.playState.value != PlayState.PAUSED) return
 		val entry = manager.queue.entry.value ?: return
 		val stream = entry.mediaStream ?: return
 		val item = entry.baseItem ?: return
@@ -355,6 +362,7 @@ class PlaySessionService(
 	}
 
 	private suspend fun sendStreamUpdate() {
+		if (state.playState.value == PlayState.ERROR || state.playState.value == PlayState.STOPPED) return
 		val entry = manager.queue.entry.value ?: return
 		val stream = entry.mediaStream ?: return
 		val session = activeSession
@@ -509,12 +517,13 @@ class PlaySessionService(
 			playlistItemId = item.playlistItemId,
 			positionTicks = reporting.positionTicks,
 			queue = getQueue(),
+			failed = true,
 		)
 	}
 
-	private suspend fun sendActiveStreamStop() {
+	private suspend fun sendActiveStreamStop(failed: Boolean = false) {
 		val session = activeSession
-		if (session != null) sendStreamStop(session)
+		if (session != null) sendStreamStop(session, failed)
 		else sendStreamStop()
 	}
 
@@ -555,6 +564,7 @@ class PlaySessionService(
 		playlistItemId: String?,
 		positionTicks: Long,
 		queue: List<QueueItem>,
+		failed: Boolean,
 	) {
 		if (stoppedPlaySessionId == playSessionId) return
 		stoppedPlaySessionId = playSessionId
@@ -568,10 +578,14 @@ class PlaySessionService(
 			playlistItemId = playlistItemId,
 			positionTicks = positionTicks,
 			queue = queue,
+			failed = failed,
 		)
 	}
 
-	private suspend fun sendStreamStop(session: ActivePlaybackSession) {
+	private suspend fun sendStreamStop(
+		session: ActivePlaybackSession,
+		failed: Boolean = state.playState.value == PlayState.ERROR,
+	) {
 		if (stoppedPlaySessionId == session.playSessionId) return
 		stoppedPlaySessionId = session.playSessionId
 		val reporting = getPlaybackReportingState(
@@ -589,6 +603,7 @@ class PlaySessionService(
 			playlistItemId = session.playlistItemId,
 			positionTicks = reporting.positionTicks,
 			queue = session.queue,
+			failed = failed,
 		)
 	}
 
@@ -601,6 +616,7 @@ class PlaySessionService(
 		playlistItemId: String?,
 		positionTicks: Long,
 		queue: List<QueueItem>,
+		failed: Boolean,
 	) {
 		runCatching {
 			api.sessionApi.reportPlaybackStopped(
@@ -612,7 +628,7 @@ class PlaySessionService(
 					liveStreamId = liveStreamId,
 					playlistItemId = playlistItemId,
 					positionTicks = positionTicks,
-					failed = false,
+					failed = failed,
 					nowPlayingQueue = queue,
 				)
 			)
