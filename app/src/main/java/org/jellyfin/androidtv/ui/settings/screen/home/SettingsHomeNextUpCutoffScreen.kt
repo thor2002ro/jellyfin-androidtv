@@ -8,6 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.constant.CustomMessage
+import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.RadioButton
@@ -38,6 +40,7 @@ fun getNextUpCutoffOptions(): List<Pair<Int, String>> {
 fun SettingsHomeNextUpCutoffScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
+	val customMessageRepository = koinInject<CustomMessageRepository>()
 	var homeNextUpMaxDays by rememberPreference(userPreferences, UserPreferences.homeNextUpMaxDays)
 	val options = getNextUpCutoffOptions()
 
@@ -55,6 +58,8 @@ fun SettingsHomeNextUpCutoffScreen() {
 				trailingContent = { RadioButton(checked = homeNextUpMaxDays == days) },
 				onClick = {
 					homeNextUpMaxDays = days
+					userPreferences[UserPreferences.homeNextUpMaxDays] = days
+					customMessageRepository.pushMessage(CustomMessage.RefreshHomeNextUp)
 					router.back()
 				},
 				modifier = Modifier
