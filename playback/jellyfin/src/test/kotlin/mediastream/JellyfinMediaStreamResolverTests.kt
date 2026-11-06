@@ -76,9 +76,11 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 
 	test("audio and subtitle options are resolved from the awaited media source") {
 		runBlocking {
+			val alternateSource = source().copy(id = "alternate")
 			val item = BaseItemDto(
 				id = UUID.randomUUID(),
 				type = BaseItemKind.TV_CHANNEL,
+				mediaSources = listOf(source(), alternateSource),
 			)
 			val openedSource = source(
 				stream(index = 2, language = "jpn", type = MediaStreamType.AUDIO),
@@ -114,7 +116,24 @@ class JellyfinMediaStreamResolverTests : FunSpec({
 			coVerify(exactly = 1) { mediaInfoApi.getPostedPlaybackInfo(any(), any()) }
 			stream?.selectedAudioStreamIndex shouldBe 2
 			stream?.selectedSubtitleStreamIndex shouldBe 4
+			// Only the accepted response should update the source used by track selection.
+			entry.baseItem shouldBe item
+			stream?.onAccepted?.invoke()
+			entry.baseItem?.mediaSources shouldBe listOf(openedSource)
+			entry.baseItem?.id shouldBe item.id
 		}
+	}
+
+	test("accepted VOD metadata preserves alternate versions and their order") {
+		val stream = requireNotNull(resolveVideo("/Videos/item/master.m3u8?VideoCodec=hevc&AudioCodec=aac"))
+		val entry = requireNotNull(stream.queueEntry)
+		val cachedSource = source()
+		val alternateSource = cachedSource.copy(id = "alternate")
+		entry.baseItem = requireNotNull(entry.baseItem).copy(mediaSources = listOf(cachedSource, alternateSource))
+		stream.onAccepted?.invoke()
+		entry.baseItem?.mediaSources?.map { it.id } shouldBe listOf(cachedSource.id, alternateSource.id)
+		entry.baseItem?.mediaSources?.first()?.protocol shouldBe MediaProtocol.FILE
+		entry.baseItem?.mediaSources?.last() shouldBe alternateSource
 	}
 
 	test("partial Live TV tracks do not invalidate a saved selection before the response") {

@@ -120,12 +120,13 @@ fun AudioTrackButton(
 			icon = icon,
 			onTrackSelected = { track ->
 				track?.let {
-					val streamIndex = it.streamIndex ?: it.index
-					playbackManager.saveSelectedAudioTrack(videoQueueManager, streamIndex)
-					playbackManager.getService<PlaySessionService>()
-						?.setSelectedStreamIndexes(audioStreamIndex = streamIndex)
+					it.streamIndex?.let { streamIndex ->
+						playbackManager.saveSelectedAudioTrack(videoQueueManager, streamIndex)
+						playbackManager.getService<PlaySessionService>()
+							?.setSelectedStreamIndexes(audioStreamIndex = streamIndex)
+					}
 
-					if (!trackBackend.selectTrack(TrackType.AUDIO, it.index)) {
+					if (!trackBackend.selectTrack(TrackType.AUDIO, it.index) && it.streamIndex != null) {
 						reloadCurrentMediaStreamAfterTrackSelection(playbackManager, coroutineScope)
 					}
 				}
@@ -202,12 +203,15 @@ fun SubtitleTrackButton(
 			},
 			onTrackSelected = { track ->
 				val trackIndex = track?.index ?: -1
-				val streamIndex = track?.streamIndex ?: -1
-				playbackManager.saveSelectedSubtitleTrack(videoQueueManager, streamIndex)
-				playbackManager.getService<PlaySessionService>()
-					?.setSelectedStreamIndexes(subtitleStreamIndex = streamIndex)
+				// A native track without a server index can still be selected locally.
+				val streamIndex = if (track == null) -1 else track.streamIndex
+				if (streamIndex != null) {
+					playbackManager.saveSelectedSubtitleTrack(videoQueueManager, streamIndex)
+					playbackManager.getService<PlaySessionService>()
+						?.setSelectedStreamIndexes(subtitleStreamIndex = streamIndex)
+				}
 
-				if (!trackBackend.selectTrack(TrackType.SUBTITLE, trackIndex)) {
+				if (!trackBackend.selectTrack(TrackType.SUBTITLE, trackIndex) && streamIndex != null) {
 					reloadCurrentMediaStreamAfterTrackSelection(playbackManager, coroutineScope)
 				}
 				offsetControlsExpanded = false
@@ -249,8 +253,6 @@ private fun PlaybackManager.saveSelectedSubtitleTrack(
 
 private fun BaseItemDto.findMediaSource(mediaSourceId: String?) = mediaSources
 	?.firstOrNull { mediaSource -> mediaSourceId == null || mediaSource.id == mediaSourceId }
-	?: mediaSources
-		?.firstOrNull()
 
 private fun reloadCurrentMediaStreamAfterTrackSelection(
 	playbackManager: PlaybackManager,
