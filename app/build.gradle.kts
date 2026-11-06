@@ -225,7 +225,7 @@ dependencies {
 	implementation(libs.androidx.media3.datasource.okhttp)
 	implementation(libs.androidx.media3.exoplayer.hls)
 	implementation(libs.androidx.media3.ui)
-	implementation(files(rootProject.extra["customMedia3FfmpegDecoderAarFile"] as File))
+	implementation(libs.androidx.media3.decoder.ffmpeg)
 	implementation(libs.libass.media3)
 
 	// Markdown
