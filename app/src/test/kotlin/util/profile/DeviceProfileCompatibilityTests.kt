@@ -104,6 +104,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 			every { preferences[UserPreferences.mpvAudioOutput] } returns LibMPVAudioOutput.AUDIOTRACK
 			every { preferences[UserPreferences.maxBitrate] } returns "100"
 			every { preferences[UserPreferences.maxResolution] } returns PlaybackResolution.NATIVE
+			every { preferences[UserPreferences.preferFmp4HlsContainer] } returns true
 			every { preferences[UserPreferences.assDirectPlay] } returns true
 			every { preferences[UserPreferences.pgsDirectPlay] } returns true
 			every { preferences[UserPreferences.userAVCLevel] } returns UserPreferences.userAVCLevel.defaultValue
@@ -351,7 +352,7 @@ class DeviceProfileCompatibilityTests : FunSpec({
 
 		profile.transcodingProfiles
 			.filter { it.type == DlnaProfileType.VIDEO }
-			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.TS, Codec.Container.MP4)
+			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.MP4, Codec.Container.TS)
 		profile.videoTranscodeProfiles(Codec.Container.MP4).first().run {
 			audioCodec.declarations().first() shouldBe Codec.Audio.DTS
 			maxAudioChannels shouldBe null
@@ -420,6 +421,18 @@ class DeviceProfileCompatibilityTests : FunSpec({
 		audioTranscode.container shouldBe Codec.Container.MP4
 		audioTranscode.protocol shouldBe MediaStreamProtocol.HLS
 		audioTranscode.audioCodec shouldBe Codec.Audio.AAC
+	}
+
+	test("video streaming prefers fMP4 and keeps MPEG-TS fallback") {
+		deviceProfile().transcodingProfiles
+			.filter { it.type == DlnaProfileType.VIDEO }
+			.map { it.container } shouldBe listOf(Codec.Container.MP4, Codec.Container.TS)
+	}
+
+	test("video streaming prefers MPEG-TS when fMP4 preference is disabled") {
+		deviceProfile(preferFmp4HlsContainer = false).transcodingProfiles
+			.filter { it.type == DlnaProfileType.VIDEO }
+			.map { it.container } shouldBe listOf(Codec.Container.TS, Codec.Container.MP4)
 	}
 
 	test("MPEG-TS video profile only advertises practical encoder codecs") {
@@ -779,6 +792,7 @@ private fun deviceProfile(
 	enableFfmpegAudio: Boolean = true,
 	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
+	preferFmp4HlsContainer: Boolean = true,
 	transcodeToPassthrough: Boolean = false,
 	supportsDtsHdPassthrough: Boolean = true,
 	maxResolution: PlaybackResolution = PlaybackResolution.NATIVE,
@@ -864,6 +878,7 @@ private fun deviceProfile(
 		enableFfmpegAudio = enableFfmpegAudio,
 		enableMpvAudio = enableMpvAudio,
 		enableFfmpegVideo = enableFfmpegVideo,
+		preferFmp4HlsContainer = preferFmp4HlsContainer,
 	)
 }
 
