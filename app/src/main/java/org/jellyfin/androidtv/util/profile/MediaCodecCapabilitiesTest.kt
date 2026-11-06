@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.util.profile
 
 import android.media.MediaCodecList
+import android.media.MediaCodecInfo.CodecProfileLevel
 import android.util.Size
 import androidx.annotation.OptIn
 import androidx.media3.common.MimeTypes
@@ -67,6 +68,13 @@ class MediaCodecCapabilitiesTest(
 	@OptIn(UnstableApi::class)
 	fun hasAudioDecoder(mimeType: String): Boolean =
 		codecQuery.hasCodecForMime(mimeType) || (softwareCodecsEnabled && FfmpegLibrary.supportsFormat(mimeType))
+
+	fun supportsMimeType(mime: String): Boolean = codecQuery.hasCodecForMime(mime)
+
+	@OptIn(UnstableApi::class)
+	fun supportsVp9Main10(): Boolean =
+		codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile2, CodecProfileLevel.VP9Level1) ||
+			codecQuery.hasDecoder(MimeTypes.VIDEO_VP9, CodecProfileLevel.VP9Profile3, CodecProfileLevel.VP9Level1)
 
 	fun getMaxResolution(mime: String): Size = codecQuery.getMaxResolution(mime)
 }

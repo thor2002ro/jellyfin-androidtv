@@ -6,7 +6,8 @@ import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlin.time.Duration
 
 data class ExoPlayerOptions(
-	val preferFfmpeg: Boolean = false,
+	val preferFfmpegAudio: () -> Boolean = { false },
+	val preferFfmpegVideo: () -> Boolean = { false },
 	val enableDebugLogging: Boolean = false,
 	val enableLibass: Boolean = false,
 	val libassRenderType: AssRenderType = AssRenderType.OVERLAY_OPEN_GL,
