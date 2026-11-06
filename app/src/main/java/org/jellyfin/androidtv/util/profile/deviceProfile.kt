@@ -79,11 +79,17 @@ private val hlsFmp4AudioCodecs = arrayOf(
 	Codec.Audio.DTS,
 )
 
+private val eac3ServerAudioCodecs = setOf(Codec.Audio.EAC3)
+private val dtsServerAudioCodecs = setOf(Codec.Audio.DCA, Codec.Audio.DTS)
+
 private val passthroughAudioCodecMimes = mapOf(
 	MimeTypes.AUDIO_AC3 to setOf(Codec.Audio.AC3),
 	MimeTypes.AUDIO_AC4 to setOf(Codec.Audio.AC4),
-	MimeTypes.AUDIO_E_AC3 to setOf(Codec.Audio.EAC3),
-	MimeTypes.AUDIO_DTS to setOf(Codec.Audio.DCA, Codec.Audio.DTS),
+	MimeTypes.AUDIO_E_AC3 to eac3ServerAudioCodecs,
+	MimeTypes.AUDIO_E_AC3_JOC to eac3ServerAudioCodecs,
+	MimeTypes.AUDIO_DTS to dtsServerAudioCodecs,
+	MimeTypes.AUDIO_DTS_EXPRESS to dtsServerAudioCodecs,
+	MimeTypes.AUDIO_DTS_HD to dtsServerAudioCodecs,
 	MimeTypes.AUDIO_TRUEHD to setOf(Codec.Audio.MLP, Codec.Audio.TRUEHD),
 )
 
