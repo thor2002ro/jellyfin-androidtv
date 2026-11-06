@@ -228,6 +228,8 @@
 	<string name="preference_mpv_video_output_gpu_description">Use the established libMPV GPU renderer.</string>
 	<string name="preference_mpv_video_output_gpu_next">GPU Next</string>
 	<string name="preference_mpv_video_output_gpu_next_description">Use the newer libplacebo-based renderer when included in the native build.</string>
+	<string name="preference_mpv_video_output_mediacodec_embed">MediaCodec embed</string>
+	<string name="preference_mpv_video_output_mediacodec_embed_description">Force direct MediaCodec output for all video, including SDR. Requires native MediaCodec hardware decoding; GPU rendering effects are bypassed.</string>
 	<string name="preference_mpv_video_sync">Video synchronization</string>
 	<string name="preference_mpv_video_sync_audio">Audio clock</string>
 	<string name="preference_mpv_video_sync_audio_description">Use audio as the master clock and adjust video timing.</string>
