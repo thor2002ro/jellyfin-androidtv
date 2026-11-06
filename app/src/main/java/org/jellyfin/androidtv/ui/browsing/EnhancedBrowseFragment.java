@@ -89,6 +89,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     protected BaseItemKind itemType;
     protected boolean showViews = true;
     protected boolean justLoaded = true;
+    private static final int VIEW_SELECT_UPDATE_DELAY = 250;
 
     protected RowsSupportFragment mRowsFragment;
     protected CompositeClickedListener mClickedListener = new CompositeClickedListener();
@@ -98,6 +99,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     protected CardPresenter mCardPresenter;
     protected BaseRowItem mCurrentItem;
     protected ListRow mCurrentRow;
+    private final Handler mHandler = new Handler();
 
     private Lazy<BackgroundService> backgroundService = inject(BackgroundService.class);
     private Lazy<MarkdownRenderer> markdownRenderer = inject(MarkdownRenderer.class);
@@ -112,7 +114,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        mRowsAdapter = new MutableObjectAdapter<Row>(new PositionableListRowPresenter());
+        mRowsAdapter = new MutableObjectAdapter<Row>(new PositionableListRowPresenter(null, true));
 
         setupViews();
         setupQueries(this);
@@ -153,6 +155,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        mHandler.removeCallbacks(mDelayedSetItem);
         mClickedListener.removeListeners();
         mSelectedListener.removeListeners();
     }
@@ -225,7 +228,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     }
 
     public void loadRows(List<BrowseRowDef> rows) {
-        mRowsAdapter = new MutableObjectAdapter<Row>(new PositionableListRowPresenter());
+        mRowsAdapter = new MutableObjectAdapter<Row>(new PositionableListRowPresenter(null, true));
         mCardPresenter = new CardPresenter(false, getDefaultCardImageType(), getDefaultCardHeight());
         ClassPresenterSelector ps = new ClassPresenterSelector();
         ps.addClassPresenter(GridButtonBaseRowItem.class, new GridButtonPresenter(getDefaultGridButtonWidth(), getDefaultGridButtonHeight()));
@@ -486,10 +489,28 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         }
     }
 
+    private final Runnable mDelayedSetItem = new Runnable() {
+        @Override
+        public void run() {
+            if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED) || mCurrentItem == null) return;
+
+            BaseRowItem rowItem = mCurrentItem;
+            String summary = rowItem.getSummary(requireContext());
+            if (summary != null)
+                mSummary.setText(markdownRenderer.getValue().toMarkdownSpanned(summary));
+            else mSummary.setText(null);
+
+            mInfoRow.removeAllViews();
+            InfoLayoutHelper.addInfoRow(requireContext(), rowItem.getBaseItem(), mInfoRow, true);
+            backgroundService.getValue().setBackground(rowItem.getBaseItem());
+        }
+    };
+
     private final class ItemViewSelectedListener implements OnItemViewSelectedListener {
         @Override
         public void onItemSelected(Presenter.ViewHolder itemViewHolder, Object item,
                                    RowPresenter.ViewHolder rowViewHolder, Row row) {
+            mHandler.removeCallbacks(mDelayedSetItem);
             if (!(item instanceof BaseRowItem)) {
                 mTitle.setText(mFolder != null ? mFolder.getName() : "");
                 mInfoRow.removeAllViews();
@@ -505,21 +526,13 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
 
             mCurrentItem = rowItem;
             mCurrentRow = (ListRow) row;
-            mInfoRow.removeAllViews();
-
             mTitle.setText(rowItem.getName(requireContext()));
-
-            String summary = rowItem.getSummary(requireContext());
-            if (summary != null)
-                mSummary.setText(markdownRenderer.getValue().toMarkdownSpanned(summary));
-            else mSummary.setText(null);
-
-            InfoLayoutHelper.addInfoRow(requireContext(), rowItem.getBaseItem(), mInfoRow, true);
+            mInfoRow.removeAllViews();
+            mSummary.setText(null);
+            mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
 
             ItemRowAdapter adapter = (ItemRowAdapter) ((ListRow) row).getAdapter();
             adapter.loadMoreItemsIfNeeded(adapter.indexOf(rowItem));
-
-            backgroundService.getValue().setBackground(rowItem.getBaseItem());
         }
     }
 }
