@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.io.File
 import java.util.Properties
 
@@ -33,6 +34,26 @@ val libdoviVersion = libdoviVersions.single().take(12)
 val libassProviderFile = rootProject.file("dependencies/libass-android/OUTPUT/libass-provider.properties")
 val libassVersion = requireNotNull(readProperties(libassProviderFile).getProperty("libass_version")) {
 	"libass_version not found in $libassProviderFile"
+}
+
+// App native files take priority over VLC's older C++ runtime when pickFirst merges them.
+val nativeRuntimeDirectory = objects.directoryProperty().convention(layout.buildDirectory.dir("generated/nativeRuntime"))
+val prepareNativeRuntime = tasks.register<Sync>("prepareNativeRuntime") {
+	val ndkDirectory = androidComponents.sdkComponents.ndkDirectory.get()
+	val abiMetadata = JsonSlurper().parse(ndkDirectory.file("meta/abis.json").asFile) as Map<*, *>
+	apkAbis.forEach { abi ->
+		val target = (abiMetadata[abi] as Map<*, *>)["triple"] as String
+		from(ndkDirectory.dir("toolchains/llvm/prebuilt")) {
+			include("*/sysroot/usr/lib/$target/libc++_shared.so")
+			eachFile { path = "$abi/$name" }
+			includeEmptyDirs = false
+		}
+	}
+	into(nativeRuntimeDirectory)
+}
+android.sourceSets.getByName("main").jniLibs.srcDir(nativeRuntimeDirectory.get().asFile)
+tasks.configureEach {
+	if (name.endsWith("JniLibFolders")) dependsOn(prepareNativeRuntime)
 }
 
 android {
