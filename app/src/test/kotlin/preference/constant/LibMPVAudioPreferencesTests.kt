@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.preference.mpvAudioPitchCorrection
 import org.jellyfin.androidtv.preference.mpvAudioOutput
 import org.jellyfin.androidtv.preference.mpvAudioPreset
 import org.jellyfin.androidtv.preference.mpvConvertAudioToAc3
+import org.jellyfin.androidtv.preference.mpvCheckHardwareProfile
 import org.jellyfin.androidtv.preference.mpvDeband
 import org.jellyfin.androidtv.preference.mpvDecoderThreads
 import org.jellyfin.androidtv.preference.mpvDeinterlace
@@ -262,6 +263,7 @@ private fun preferences(
 	every { this@mockk[UserPreferences.mpvAudioPitchCorrection] } returns true
 	every { this@mockk[UserPreferences.mpvReplayGain] } returns LibMPVReplayGain.DISABLED
 	every { this@mockk[UserPreferences.mpvDecoderThreads] } returns 0
+	every { this@mockk[UserPreferences.mpvCheckHardwareProfile] } returns false
 	every { this@mockk[UserPreferences.mpvLoopFilter] } returns LibMPVLoopFilter.DEFAULT
 	every { this@mockk[UserPreferences.mpvSubtitleAssOverride] } returns LibMPVSubtitleAssOverride.NO
 	every { this@mockk[UserPreferences.mpvSubtitleUseMargins] } returns true

@@ -421,6 +421,7 @@ class LibMPVOptionsTest : StringSpec({
 			"audio-pitch-correction" to "yes",
 			"replaygain" to "no",
 			"vd-lavc-threads" to "0",
+			"vd-lavc-check-hw-profile" to "no",
 			"vd-lavc-skiploopfilter" to "default",
 			"sub-ass-override" to "no",
 			"sub-use-margins" to "yes",
