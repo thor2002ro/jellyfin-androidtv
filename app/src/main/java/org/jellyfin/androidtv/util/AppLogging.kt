@@ -13,6 +13,11 @@ object AppLogging {
 
 	fun dumpMemoryLogs(): String = memoryLogs.dump()
 
+	fun appendNativeLog(line: String) {
+		// Native messages already reached logcat; logging through Timber would feed the reader again.
+		memoryLogs.append("${Instant.now()} $line\n")
+	}
+
 	fun configure(context: Context) {
 		val userPreferences = UserPreferences(context.applicationContext)
 		setVerboseLogging(
