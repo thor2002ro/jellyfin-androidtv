@@ -2,8 +2,20 @@ package org.jellyfin.androidtv.util
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.assertions.throwables.shouldThrow
+import java.util.concurrent.CancellationException
 
 class BlurHashRequestTests : FunSpec({
+	test("cancelled BlurHash work stops before rendering its bitmap") {
+		Thread.currentThread().interrupt()
+		try {
+			shouldThrow<CancellationException> {
+				BlurHashDecoder.decode("LEHV6nWB2yk8pyo0adR*.7kCMdnj", 32, 32)
+			}
+		} finally {
+			Thread.interrupted()
+		}
+	}
 	test("network images with a valid BlurHash get an aspect-correct decode request") {
 		createBlurHashRequest(
 			url = "https://example.test/poster",
