@@ -272,8 +272,9 @@ fun LiveTvGuideOverlay(
 
 	fun moveGuideTime(offsetMinutes: Long) {
 		val guideRange = guideProgramsByChannel?.guideTimeRange() ?: return
-		guideTime = guideTime
-			.plusMinutes(offsetMinutes)
+		val channelId = channels?.getOrNull(selectedChannelIndex)?.liveTvChannelId()
+		guideTime = guideProgramsByChannel?.get(channelId).orEmpty()
+			.adjacentGuideTime(guideTime, offsetMinutes)
 			.coerceIn(guideRange.first, guideRange.second)
 	}
 
@@ -363,11 +364,10 @@ fun LiveTvGuideOverlay(
 
 	fun showSelectedProgramOptions() {
 		val channel = channels?.getOrNull(selectedChannelIndex) ?: return
-		val program = channel
+		val programs = channel
 			.liveTvChannelId()
 			?.let { channelId -> guideProgramsByChannel?.get(channelId) }
-			?.programAt(guideTime)
-			?: channel.currentProgram
+		val program = if (programs == null) channel.currentProgram else programs.programAt(guideTime)
 		val popupProgram = program ?: channel
 
 		programDetailPopup?.dismiss()
@@ -516,13 +516,13 @@ fun LiveTvGuideOverlay(
 					val brandEnd = colorResource(R.color.card_focus_gradient_end)
 					val brandAlpha = integerResource(R.integer.card_focus_overlay_alpha_percent) / 100f
 					val selectedChannel = loadedChannels.getOrNull(selectedChannelIndex)
-					val selectedProgram = selectedChannel
+					val selectedPrograms = selectedChannel
 						?.liveTvChannelId()
 						?.let { channelId -> guideProgramsByChannel?.get(channelId) }
-						?.programAt(guideTime)
-						?: selectedChannel?.currentProgram
-					val timeSlots = remember(guideTime) {
-						List(GuideVisibleTimeSlots) { slot -> guideTime.plusMinutes(GuideTimeStepMinutes * slot) }
+					val selectedProgram = if (selectedPrograms == null) selectedChannel?.currentProgram else selectedPrograms.programAt(guideTime)
+					val viewportTime = guideStartTime(guideTime)
+					val timeSlots = remember(viewportTime) {
+						List(GuideVisibleTimeSlots) { slot -> viewportTime.plusMinutes(GuideTimeStepMinutes * slot) }
 					}
 					val guideTextSecondary = colorResource(R.color.guide_text_secondary)
 
@@ -539,7 +539,7 @@ fun LiveTvGuideOverlay(
 						modifier = Modifier
 							.fillMaxWidth()
 							.weight(1f)
-							.currentTimeIndicator(guideTime, currentTime, brandStart, brandEnd),
+							.currentTimeIndicator(viewportTime, currentTime, brandStart, brandEnd),
 					) {
 						Column {
 							GuideTimeHeader(timeSlots, timeFormatter, guideLoadedAt, currentTime, guideTextSecondary)
@@ -565,6 +565,7 @@ fun LiveTvGuideOverlay(
 										current = channel.liveTvChannelId() == playingChannelId,
 										enabled = !switchingChannel,
 										timeSlots = timeSlots,
+										selectedTime = guideTime,
 										brandStart = brandStart,
 										brandEnd = brandEnd,
 										brandAlpha = brandAlpha,
@@ -594,6 +595,7 @@ private fun LiveTvGuideChannelRow(
 	current: Boolean,
 	enabled: Boolean,
 	timeSlots: List<LocalDateTime>,
+	selectedTime: LocalDateTime,
 	brandStart: Color,
 	brandEnd: Color,
 	brandAlpha: Float,
@@ -629,7 +631,7 @@ private fun LiveTvGuideChannelRow(
 				modifier = Modifier.weight(GuideVisibleTimeSlots.toFloat()),
 			)
 		} else {
-			programs.programBlocks(timeSlots).forEach { block ->
+			programs.programBlocks(timeSlots, selectedTime).forEach { block ->
 				GuideProgramCell(
 					program = block.program,
 					selected = selected && block.includesGuideTime,
@@ -637,7 +639,7 @@ private fun LiveTvGuideChannelRow(
 					brandStart = brandStart,
 					brandEnd = brandEnd,
 					brandAlpha = brandAlpha,
-					modifier = Modifier.weight(block.slots.toFloat()),
+					modifier = Modifier.weight(block.slots),
 				)
 			}
 		}
@@ -695,7 +697,7 @@ private fun GuideSummary(
 	val overview = program.guideDescription()
 		?: channel
 			?.currentProgram
-			?.takeIf { currentProgram -> program == null || currentProgram.id == program.id }
+			?.takeIf { currentProgram -> currentProgram.id == program?.id }
 			.guideDescription()
 		?: channel
 			?.overview
@@ -1060,10 +1062,6 @@ internal fun Collection<BaseItemDto>.programAt(
 
 		start != null && end != null && !start.isAfter(guideTime) && end.isAfter(guideTime)
 	}
-	?: programs.firstOrNull { program ->
-		program.startDate?.isAfter(guideTime) == true
-	}
-	?: programs.lastOrNull()
 }
 
 internal fun guideChannelIndex(
@@ -1088,7 +1086,6 @@ internal fun Map<UUID, List<BaseItemDto>>.guideTimeRange(): Pair<LocalDateTime, 
 		.mapNotNull { program -> program.endDate ?: program.startDate }
 		.maxOrNull()
 		?.minusNanos(1)
-		?.let(::guideStartTime)
 		?.coerceAtLeast(start)
 		?: return null
 
@@ -1101,38 +1098,48 @@ private fun Collection<BaseItemDto>?.recordingProgram(): BaseItemDto? =
 private fun BaseItemDto?.hasRecordingIndicator(): Boolean =
 	this?.timerId != null || this?.seriesTimerId != null
 
-private data class GuideProgramBlock(
+internal data class GuideProgramBlock(
 	val program: BaseItemDto?,
-	val slots: Int,
+	val slots: Float,
 	val includesGuideTime: Boolean,
 )
 
-private fun Collection<BaseItemDto>?.programBlocks(timeSlots: List<LocalDateTime>): List<GuideProgramBlock> {
-	val programs = this
-	if (programs == null) return listOf(GuideProgramBlock(null, GuideVisibleTimeSlots, true))
+internal fun Collection<BaseItemDto>?.programBlocks(
+	timeSlots: List<LocalDateTime>,
+	selectedTime: LocalDateTime? = timeSlots.firstOrNull(),
+): List<GuideProgramBlock> {
+	val windowStart = timeSlots.firstOrNull() ?: return emptyList()
+	val windowEnd = timeSlots.last().plusMinutes(GuideTimeStepMinutes)
+	var cursor = windowStart
+	fun block(program: BaseItemDto?, start: LocalDateTime, end: LocalDateTime) = GuideProgramBlock(
+		program = program,
+		slots = Duration.between(start, end).toNanos().toFloat() / Duration.ofMinutes(GuideTimeStepMinutes).toNanos(),
+		includesGuideTime = selectedTime != null && !selectedTime.isBefore(start) && selectedTime.isBefore(end),
+	)
 
-	return timeSlots
-		.mapIndexed { index, slot -> index to programs.programOverlapping(slot) }
-		.fold(emptyList()) { blocks, (index, program) ->
-			val previous = blocks.lastOrNull()
-			if (previous != null && previous.program?.id == program?.id) {
-				blocks.dropLast(1) + previous.copy(slots = previous.slots + 1)
-			} else {
-				blocks + GuideProgramBlock(program, 1, index == 0)
-			}
-		}
-}
-
-private fun Collection<BaseItemDto>.programOverlapping(slotStart: LocalDateTime): BaseItemDto? {
-	val slotEnd = slotStart.plusMinutes(GuideTimeStepMinutes)
-
-	return sortedBy { program -> program.startDate ?: LocalDateTime.MAX }
-		.firstOrNull { program ->
+	return buildList {
+		for (program in this@programBlocks.orEmpty().sortedBy { it.startDate ?: LocalDateTime.MAX }) {
 			val start = program.startDate
 			val end = program.endDate
-
-			start != null && end != null && start.isBefore(slotEnd) && end.isAfter(slotStart)
+			if (start == null || end == null || !end.isAfter(start)) continue
+			val blockStart = maxOf(start, cursor)
+			val blockEnd = minOf(end, windowEnd)
+			if (!blockEnd.isAfter(blockStart)) continue
+			if (cursor.isBefore(blockStart)) add(block(null, cursor, blockStart))
+			add(block(program, blockStart, blockEnd))
+			cursor = blockEnd
 		}
+		if (cursor.isBefore(windowEnd)) add(block(null, cursor, windowEnd))
+	}
+}
+
+internal fun Collection<BaseItemDto>.adjacentGuideTime(time: LocalDateTime, offsetMinutes: Long): LocalDateTime {
+	if (offsetMinutes == 0L) return time
+	val boundaries = asSequence()
+		.filter { program -> program.startDate?.let { start -> program.endDate?.isAfter(start) } == true }
+		.flatMap { program -> sequenceOf(requireNotNull(program.startDate), requireNotNull(program.endDate)) }
+	return if (offsetMinutes > 0) boundaries.filter { it.isAfter(time) }.minOrNull() ?: time.plusMinutes(offsetMinutes)
+	else boundaries.filter { it.isBefore(time) }.maxOrNull() ?: time.plusMinutes(offsetMinutes)
 }
 
 private fun BaseItemDto.guideTimeRange(
