@@ -21,8 +21,9 @@ import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
 import org.jellyfin.androidtv.ui.livetv.liveTvActionButtons
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.player.video.LiveTvGuidePlayback
+import org.jellyfin.androidtv.ui.presentation.ActionButtonPresenter
+import org.jellyfin.androidtv.ui.presentation.ActionButtonSize
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
-import org.jellyfin.androidtv.ui.presentation.LiveTvActionButtonPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.androidtv.util.dimenDp
@@ -181,7 +182,7 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 	}
 
 	override fun addAdditionalRows(rowAdapter: MutableObjectAdapter<Row>) {
-		val gridRowAdapter = ArrayObjectAdapter(LiveTvActionButtonPresenter(defaultGridButtonWidth, defaultGridButtonHeight)).apply {
+		val gridRowAdapter = ArrayObjectAdapter(ActionButtonPresenter(ActionButtonSize.DOUBLE)).apply {
 			liveTvActionButtons(requireContext(), userRepository.currentUser.value).forEach(::add)
 		}
 

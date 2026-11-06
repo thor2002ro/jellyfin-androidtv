@@ -47,6 +47,8 @@ import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapterHelperKt;
 import org.jellyfin.androidtv.ui.navigation.Destinations;
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
 import org.jellyfin.androidtv.ui.playback.MediaManager;
+import org.jellyfin.androidtv.ui.presentation.ActionButtonPresenter;
+import org.jellyfin.androidtv.ui.presentation.ActionButtonSize;
 import org.jellyfin.androidtv.ui.presentation.CardPresenter;
 import org.jellyfin.androidtv.ui.presentation.GridButtonPresenter;
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter;
@@ -302,28 +304,28 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         if (!showViews || itemType == null) return;
 
         HeaderItem gridHeader = new HeaderItem(rowAdapter.size(), getString(R.string.lbl_views));
-        GridButtonPresenter mGridPresenter = new GridButtonPresenter(getDefaultGridButtonWidth(), getDefaultGridButtonHeight());
+        ActionButtonPresenter mGridPresenter = new ActionButtonPresenter(viewButtonSize(itemType));
         ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
 
         switch (itemType) {
             case MOVIE:
-                gridRowAdapter.add(new GridButton(SUGGESTED, getString(R.string.lbl_suggested)));
+                gridRowAdapter.add(createViewButton(SUGGESTED, R.string.lbl_suggested));
                 addStandardViewButtons(gridRowAdapter);
-                gridRowAdapter.add(new GridButton(RANDOM, getString(R.string.random)));
+                gridRowAdapter.add(createViewButton(RANDOM, R.string.random));
                 break;
 
             case MUSIC_ALBUM:
-                gridRowAdapter.add(new GridButton(ALBUMS, getString(R.string.lbl_albums)));
-                gridRowAdapter.add(new GridButton(ALBUM_ARTISTS, getString(R.string.lbl_album_artists)));
-                gridRowAdapter.add(new GridButton(ARTISTS, getString(R.string.lbl_artists)));
-                gridRowAdapter.add(new GridButton(GENRES, getString(R.string.lbl_genres)));
-                gridRowAdapter.add(new GridButton(RANDOM, getString(R.string.random)));
-                gridRowAdapter.add(new GridButton(SHUFFLE_SONGS, getString(R.string.lbl_shuffle_all)));
+                gridRowAdapter.add(createViewButton(ALBUMS, R.string.lbl_albums));
+                gridRowAdapter.add(createViewButton(ALBUM_ARTISTS, R.string.lbl_album_artists));
+                gridRowAdapter.add(createViewButton(ARTISTS, R.string.lbl_artists));
+                gridRowAdapter.add(createViewButton(GENRES, R.string.lbl_genres));
+                gridRowAdapter.add(createViewButton(RANDOM, R.string.random));
+                gridRowAdapter.add(createViewButton(SHUFFLE_SONGS, R.string.lbl_shuffle_all));
                 break;
 
             case SERIES:
                 addStandardViewButtons(gridRowAdapter);
-                gridRowAdapter.add(new GridButton(RANDOM, getString(R.string.random)));
+                gridRowAdapter.add(createViewButton(RANDOM, R.string.random));
                 break;
 
             default:
@@ -335,11 +337,35 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
     }
 
     protected void addStandardViewButtons(ArrayObjectAdapter gridRowAdapter) {
-        gridRowAdapter.add(new GridButton(GRID, getString(R.string.lbl_all_items)));
-        gridRowAdapter.add(new GridButton(BY_LETTER, getString(R.string.lbl_by_letter)));
-        gridRowAdapter.add(new GridButton(GENRES, getString(R.string.lbl_genres)));
+        gridRowAdapter.add(createViewButton(GRID, R.string.lbl_all_items));
+        gridRowAdapter.add(createViewButton(BY_LETTER, R.string.lbl_by_letter));
+        gridRowAdapter.add(createViewButton(GENRES, R.string.lbl_genres));
         // Disabled because the screen doesn't behave properly
         // gridRowAdapter.add(new GridButton(PERSONS, getString(R.string.lbl_performers)));
+    }
+
+    protected GridButton createViewButton(int id, int textRes) {
+        return new GridButton(id, getString(textRes), viewButtonIcon(id));
+    }
+
+    static int viewButtonIcon(int id) {
+        switch (id) {
+            case BY_LETTER: return R.drawable.ic_abc;
+            case GENRES: return R.drawable.ic_masks;
+            case RANDOM:
+            case SHUFFLE_SONGS: return R.drawable.ic_shuffle;
+            case SUGGESTED: return R.drawable.ic_lightbulb;
+            case ALBUMS: return R.drawable.ic_album;
+            case ALBUM_ARTISTS: return R.drawable.ic_users;
+            case ARTISTS: return R.drawable.ic_artist;
+            case SCHEDULE: return R.drawable.ic_time;
+            case SERIES: return R.drawable.ic_tv_play;
+            default: return R.drawable.ic_grid;
+        }
+    }
+
+    static ActionButtonSize viewButtonSize(BaseItemKind itemType) {
+        return itemType == BaseItemKind.SERIES ? ActionButtonSize.SINGLE : ActionButtonSize.DOUBLE;
     }
 
     protected void setupEventListeners() {
