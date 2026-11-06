@@ -95,6 +95,19 @@ class LeanbackChannelWorker(
 			context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) &&
 			context.packageManager.resolveContentProvider(TvContractCompat.AUTHORITY, 0) != null
 
+		/** Remove all channels and programs managed by the Android TV home screen integration. */
+		internal fun clearChannels(context: Context) {
+			context.contentResolver.delete(TvContractCompat.PreviewPrograms.CONTENT_URI, null, null)
+			context.contentResolver.delete(WatchNextPrograms.CONTENT_URI, null, null)
+
+			val store = context.getSharedPreferences(CHANNEL_STORE_NAME, Context.MODE_PRIVATE)
+			store.all.values
+				.filterIsInstance<String>()
+				.map(Uri::parse)
+				.forEach { uri -> context.contentResolver.delete(uri, null, null) }
+			store.edit { clear() }
+		}
+
 		fun enqueueOneTime(workManager: WorkManager) {
 			workManager.enqueueUniqueWork(
 				ONE_TIME_UPDATE_REQUEST_NAME,
@@ -129,7 +142,7 @@ class LeanbackChannelWorker(
 		!isAvailable(context) -> Result.success()
 		// Clear all integration data when disabled
 		!userPreferences[UserPreferences.tvProviderEnabled] -> {
-			clearChannels()
+			clearChannels(context)
 			Result.success()
 		}
 		// Retry while authentication or its server-backed preferences are not ready.
@@ -225,21 +238,6 @@ class LeanbackChannelWorker(
 
 			Result.retry()
 		}
-	}
-
-	/**
-	 * Remove all channels and programs managed by the Android TV home screen integration.
-	 */
-	private fun clearChannels() {
-		context.contentResolver.delete(TvContractCompat.PreviewPrograms.CONTENT_URI, null, null)
-		context.contentResolver.delete(WatchNextPrograms.CONTENT_URI, null, null)
-
-		val store = context.getSharedPreferences(CHANNEL_STORE_NAME, Context.MODE_PRIVATE)
-		store.all.values
-			.filterIsInstance<String>()
-			.map(Uri::parse)
-			.forEach { uri -> context.contentResolver.delete(uri, null, null) }
-		store.edit { clear() }
 	}
 
 	/**

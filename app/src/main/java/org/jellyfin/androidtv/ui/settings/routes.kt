@@ -3,8 +3,9 @@ package org.jellyfin.androidtv.ui.settings
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.HdrFormat
 import org.jellyfin.androidtv.ui.navigation.RouteComposable
-import org.jellyfin.androidtv.ui.settings.screen.SettingsDeveloperScreen
+import org.jellyfin.androidtv.ui.settings.screen.SettingsBackupScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsDebugCapabilitiesScreen
+import org.jellyfin.androidtv.ui.settings.screen.SettingsDeveloperScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsMainScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsSearchScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsTelemetryScreen
@@ -140,6 +141,7 @@ object Routes {
 	const val PLAYBACK_HEVC_LEVEL = "/playback/codec/hevc-level"
 	const val PLAYBACK_DEBUG_CAPABILITIES = "/playback/advanced/debug-capabilities"
 	const val TELEMETRY = "/telemetry"
+	const val BACKUP = "/backup"
 	const val DEVELOPER = "/developer"
 	const val APP_UPDATES = "/updates"
 	const val ABOUT = "/about"
@@ -359,6 +361,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.TELEMETRY to {
 		SettingsTelemetryScreen()
+	},
+	Routes.BACKUP to {
+		SettingsBackupScreen()
 	},
 	Routes.DEVELOPER to {
 		SettingsDeveloperScreen()

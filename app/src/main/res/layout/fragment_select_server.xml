@@ -55,6 +55,16 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:text="@string/connect_manually_by_address" />
+
+        <Button
+            android:id="@+id/restore_backup"
+            style="@style/Button.Default"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/backup_restore_restore"
+            android:visibility="gone"
+            tools:visibility="visible" />
     </LinearLayout>
 
     <Space
