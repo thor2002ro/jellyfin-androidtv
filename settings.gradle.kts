@@ -88,6 +88,8 @@ dependencyResolutionManagement {
 			version("androidx-media3-local", media3Version)
 			library("androidx-media3-datasource-okhttp", "androidx.media3", "media3-datasource-okhttp")
 				.versionRef("androidx-media3-local")
+			library("androidx-media3-decoder-ffmpeg", "androidx.media3", "media3-decoder-ffmpeg")
+				.versionRef("androidx-media3-local")
 			library("androidx-media3-exoplayer", "androidx.media3", "media3-exoplayer")
 				.versionRef("androidx-media3-local")
 			library("androidx-media3-exoplayer-hls", "androidx.media3", "media3-exoplayer-hls")
