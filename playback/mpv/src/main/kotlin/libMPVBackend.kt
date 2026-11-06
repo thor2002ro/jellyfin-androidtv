@@ -1,9 +1,11 @@
 package org.jellyfin.playback.mpv
 
 import android.content.Context
+import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceHolder
+import android.view.View
 import android.view.ViewGroup
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.MPVNode
@@ -32,6 +34,7 @@ import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackSelectionBackend
 import org.jellyfin.playback.core.backend.TrackType
 import org.jellyfin.playback.core.backend.VideoDecoderOption
+import org.jellyfin.playback.core.font.SubtitleFontProvider
 import org.jellyfin.playback.core.mediastream.ExternalSubtitle
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
 import org.jellyfin.playback.core.mediastream.MediaStream
@@ -309,6 +312,9 @@ class LibMPVBackend(
 	private var nativeSubtitleView: LibMPVSubtitleOverlayView? = null
 	private var nativeSubtitleJob: Job? = null
 	private var subtitleStyle: PlayerSubtitleStyle? = null
+	private val subtitleLayoutListener = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+		if (bottom - top != oldBottom - oldTop) applySubtitleStyle(subtitleStyle)
+	}
 	private var subtitleTimingOffset = Duration.ZERO
 	private var subtitleTimingSpeed = 1f
 	@Volatile
@@ -570,6 +576,7 @@ class LibMPVBackend(
 
 	override fun setSubtitleView(surfaceView: PlayerSubtitleView?) {
 		subtitleView?.onSubtitleStyleChanged = null
+		subtitleView?.removeOnLayoutChangeListener(subtitleLayoutListener)
 		(nativeSubtitleView?.parent as? ViewGroup)?.removeView(nativeSubtitleView)
 		subtitleView = surfaceView
 		subtitleStyle = surfaceView?.subtitleStyle
@@ -585,6 +592,7 @@ class LibMPVBackend(
 			}
 		}
 		surfaceView?.onSubtitleStyleChanged = { style -> applySubtitleStyle(style) }
+		surfaceView?.addOnLayoutChangeListener(subtitleLayoutListener)
 		applySubtitleStyle(subtitleStyle)
 		updateNativeSubtitleOverlayMode()
 	}
@@ -596,19 +604,30 @@ class LibMPVBackend(
 	private fun applySubtitleStyle(style: PlayerSubtitleStyle?) {
 		if (style == null) return
 		subtitleStyle = style
+		val context = subtitleView?.context ?: appContext
+		val density = context.resources.displayMetrics.density
+		val fontMetrics = Paint().apply {
+			typeface = SubtitleFontProvider.typeface(context, style.textWeight)
+			textSize = 1f
+		}.fontMetrics
 		setProperty("sub-ass-override", playbackOptions.subtitleAssOverride)
-		setProperty("sub-font-size", mpvSubtitleFontSize(style.textSizeDp).toString())
+		// Android sizes the em; libass sizes the ascender/descender span. Use
+		// physical pixels so window resolution does not change the selected dp size.
+		setProperty("sub-scale-by-window", "no")
+		setProperty("sub-scale-with-window", "yes")
+		setProperty("sub-font-size", mpvSubtitleFontSize(style.textSizeDp, density, fontMetrics.descent - fontMetrics.ascent).toString())
 		setProperty("sub-bold", if (style.textWeight >= 600) "yes" else "no")
 		setProperty("sub-color", style.textColor.mpvColor())
 		setProperty("sub-back-color", style.backgroundColor.mpvColor())
 		setProperty("sub-outline-color", style.edgeColor.mpvColor())
-		setProperty("sub-outline-size", "2.5")
+		setProperty("sub-outline-size", mpvSubtitleOutlineSize(density).toString())
 		setProperty("sub-shadow-offset", "0")
 		setProperty(
 			"sub-border-style",
 			if (style.backgroundColor.alpha() > 0) "background-box" else "outline-and-shadow",
 		)
-		setProperty("sub-margin-y", mpvSubtitleMarginY(style.bottomPaddingFraction).toString())
+		val canvasHeight = subtitleView?.height?.takeIf { it > 0 } ?: context.resources.displayMetrics.heightPixels
+		setProperty("sub-margin-y", mpvSubtitleMarginY(style.bottomPaddingFraction, canvasHeight).toString())
 	}
 
 	private fun updateNativeSubtitleOverlayMode() {
@@ -1942,11 +1961,18 @@ internal fun mpvGpuApiDisplay(
 	}
 }
 
-internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float) =
-	(bottomPaddingFraction * 720f).roundToInt().coerceIn(0, 600)
+internal fun mpvSubtitleMarginY(bottomPaddingFraction: Float, canvasHeight: Int) =
+	(bottomPaddingFraction * canvasHeight).roundToInt().coerceIn(0, canvasHeight.coerceAtLeast(0))
 
-internal fun mpvSubtitleFontSize(textSizeDp: Float) =
-	(textSizeDp * 38f / 24f).coerceIn(8f, 96f)
+// Android paints a centered stroke and covers its inner half with the glyph fill.
+internal fun mpvSubtitleOutlineSize(density: Float) = (2f * density).roundToInt() / 2f
+
+internal fun mpvSubtitleFontSize(textSizeDp: Float, density: Float, fontHeightEm: Float): Float {
+	val size = textSizeDp.takeIf { it.isFinite() && it > 0f } ?: 24f
+	val pixelDensity = density.takeIf { it.isFinite() && it > 0f } ?: 1f
+	val fontHeight = fontHeightEm.takeIf { it.isFinite() && it > 0f } ?: 1f
+	return (size * pixelDensity * fontHeight).coerceIn(1f, 9000f)
+}
 
 internal fun Duration?.mpvStartOption() =
 	this?.takeIf { it > Duration.ZERO }?.let { "start=${it.inWholeMilliseconds / 1_000.0}" }
