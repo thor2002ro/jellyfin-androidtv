@@ -38,9 +38,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.findViewTreeCompositionContext
+import androidx.compose.ui.res.integerResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -52,6 +54,7 @@ import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
@@ -160,6 +163,8 @@ class ComposeVerticalGridPresenter : BrowseCardGridPresenter() {
 	@OptIn(ExperimentalFoundationApi::class)
 	@Composable
 	private fun VerticalBrowseGrid(holder: ViewHolder) {
+		val focusScale = LocalResources.current.getFraction(R.fraction.card_scale_focus, 1, 1)
+		val focusDuration = integerResource(R.integer.card_scale_duration)
 		val snapshotValue by snapshot.collectAsState()
 		val configValue by config.collectAsState()
 		val requestGeneration by focusRequestGeneration.collectAsState()
@@ -237,8 +242,8 @@ class ComposeVerticalGridPresenter : BrowseCardGridPresenter() {
 							if (focused) select(holder, entry.adapterPosition, entry.item)
 						}
 						val scale = animateFloatAsState(
-							targetValue = if (focused) 1.15f else 1f,
-							animationSpec = tween(durationMillis = 120),
+							targetValue = if (focused) focusScale else 1f,
+							animationSpec = tween(durationMillis = focusDuration),
 							label = "browse_card_focus",
 						)
 
