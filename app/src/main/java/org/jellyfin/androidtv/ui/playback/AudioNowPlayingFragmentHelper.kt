@@ -32,7 +32,6 @@ import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.player.base.PlayerSeekbar
 import org.jellyfin.androidtv.util.apiclient.albumPrimaryImage
-import org.jellyfin.androidtv.util.apiclient.getUrl
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
 import org.jellyfin.playback.core.PlaybackManager
@@ -41,9 +40,7 @@ import org.jellyfin.playback.jellyfin.lyrics.lyrics
 import org.jellyfin.playback.jellyfin.lyrics.lyricsFlow
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
-import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.ImageType
-import org.koin.compose.koinInject
 
 fun initializePlayerProgress(
 	playerProgress: ComposeView,
@@ -69,7 +66,6 @@ fun initializePreviewView(
 	playbackManager: PlaybackManager,
 ) {
 	lyricsView.setContent {
-		val api = koinInject<ApiClient>()
 		val entry by rememberQueueEntry(playbackManager)
 		val baseItem = entry?.run { baseItemFlow.collectAsState(baseItem).value }
 		val lyrics = entry?.run { lyricsFlow.collectAsState(lyrics) }?.value
@@ -90,8 +86,7 @@ fun initializePreviewView(
 						.background(Color.Black)
 				) {
 					AsyncImage(
-						url = cover.getUrl(api),
-						blurHash = cover.blurHash,
+						image = cover,
 						aspectRatio = cover.aspectRatio?.toFloat() ?: 1f,
 						scaleType = ImageView.ScaleType.CENTER_INSIDE,
 						modifier = Modifier
