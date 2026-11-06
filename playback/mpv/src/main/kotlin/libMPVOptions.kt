@@ -1,5 +1,8 @@
 package org.jellyfin.playback.mpv
 
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import `is`.xyz.mpv.MPVNode
 import java.util.Locale
 
@@ -46,34 +49,58 @@ data class LibMPVPlaybackOptions(
 	val softwareDecodingForLiveTv: Boolean = false,
 	val customOptions: Map<String, String> = emptyMap(),
 ) {
-	internal fun managedOptions(): LinkedHashMap<String, String> = linkedMapOf(
-		"vo" to videoOutput,
-		"gpu-context" to gpuContext,
-		"gpu-api" to gpuApi,
-		"video-sync" to videoSync,
-		"framedrop" to frameDrop,
-		"deinterlace" to deinterlace,
-		"interpolation" to interpolation.mpvBoolean(),
-		"scale" to scaler,
-		"cscale" to scaler,
-		"dscale" to scaler,
-		"deband" to deband.mpvBoolean(),
-		"tone-mapping" to toneMapping,
-		"ao" to audioOutput,
-		"audio-channels" to audioChannels,
-		"audio-spdif" to audioSpdif,
-		"audio-pitch-correction" to audioPitchCorrection.mpvBoolean(),
-		"replaygain" to replayGain,
-		"vd-lavc-threads" to decoderThreads.coerceIn(0, 32).toString(),
-		"vd-lavc-skiploopfilter" to skipLoopFilter,
-		"sub-ass-override" to subtitleAssOverride,
-		"sub-use-margins" to subtitleUseMargins.mpvBoolean(),
-	)
+	internal fun managedOptions(vulkanSupported: Boolean = true): LinkedHashMap<String, String> {
+		val effectiveGpuApi = effectiveLibMPVGpuApi(gpuApi, vulkanSupported)
+		val effectiveGpuContext = when {
+			gpuApi == "vulkan" && vulkanSupported -> "androidvk,android"
+			gpuApi == "vulkan" -> "android"
+			else -> gpuContext
+		}
+		return linkedMapOf(
+			"vo" to videoOutput,
+			"gpu-context" to effectiveGpuContext,
+			"gpu-api" to effectiveGpuApi,
+			"video-sync" to videoSync,
+			"framedrop" to frameDrop,
+			"deinterlace" to deinterlace,
+			"interpolation" to interpolation.mpvBoolean(),
+			"scale" to scaler,
+			"cscale" to scaler,
+			"dscale" to scaler,
+			"deband" to deband.mpvBoolean(),
+			"tone-mapping" to toneMapping,
+			"ao" to audioOutput,
+			"audio-channels" to audioChannels,
+			"audio-spdif" to audioSpdif,
+			"audio-pitch-correction" to audioPitchCorrection.mpvBoolean(),
+			"replaygain" to replayGain,
+			"vd-lavc-threads" to decoderThreads.coerceIn(0, 32).toString(),
+			"vd-lavc-skiploopfilter" to skipLoopFilter,
+			"sub-ass-override" to subtitleAssOverride,
+			"sub-use-margins" to subtitleUseMargins.mpvBoolean(),
+		)
+	}
 
 	companion object {
 		val DEFAULT = LibMPVPlaybackOptions()
 	}
 }
+
+fun isLibMPVVulkanSupported(context: Context): Boolean =
+	Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+		context.packageManager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, VULKAN_1_2)
+
+fun isLibMPVVulkanSupported(apiVersion: Int?): Boolean =
+	apiVersion != null && apiVersion >= VULKAN_1_2
+
+internal fun effectiveLibMPVGpuApi(requested: String, vulkanSupported: Boolean) =
+	when {
+		requested != "vulkan" -> requested
+		vulkanSupported -> "vulkan,opengl"
+		else -> "opengl"
+	}
+
+private const val VULKAN_1_2 = (1 shl 22) or (2 shl 12)
 
 /** Metadata reported by the bundled libMPV for a single option. */
 data class LibMPVOptionInfo(
