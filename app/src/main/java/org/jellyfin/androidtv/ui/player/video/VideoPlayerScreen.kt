@@ -83,6 +83,12 @@ fun VideoPlayerScreen(
 	openLiveTvGuideOnStart: Boolean = false,
 ) {
 	val playbackManager = koinInject<PlaybackManager>()
+	val appContext = LocalContext.current.applicationContext
+	DisposableEffect(playbackManager, appContext) {
+		val networkUsage = PlaybackNetworkUsageService(appContext)
+		playbackManager.addService(networkUsage)
+		onDispose { playbackManager.removeService(networkUsage) }
+	}
 	val userPreferences = koinInject<UserPreferences>()
 	var zoomMode by remember { mutableStateOf(userPreferences[UserPreferences.playerZoomMode]) }
 	val initialZoomStatus = stringResource(zoomMode.nameRes)
