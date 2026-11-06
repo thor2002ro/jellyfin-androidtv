@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.ui.presentation
 
+import android.content.res.Configuration
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -37,7 +38,26 @@ open class HorizontalGridPresenter : BrowseCardGridPresenter() {
 	private var longClickedListener: ((Any?, View) -> Boolean)? = null
 
 	override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
-		val grid = HorizontalGridView(parent.context).apply {
+		val grid = object : HorizontalGridView(parent.context) {
+			private var layoutDensity = resources.displayMetrics.density
+
+			override fun onConfigurationChanged(newConfig: Configuration) {
+				super.onConfigurationChanged(newConfig)
+				refreshSpacing()
+			}
+
+			override fun onAttachedToWindow() {
+				super.onAttachedToWindow()
+				refreshSpacing()
+			}
+
+			private fun refreshSpacing() {
+				val currentDensity = resources.displayMetrics.density
+				if (layoutDensity == currentDensity) return
+				layoutDensity = currentDensity
+				boundViewHolder?.takeIf { it.gridView === this }?.let(::applyConfig)
+			}
+		}.apply {
 			layoutParams = ViewGroup.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT,
 				ViewGroup.LayoutParams.MATCH_PARENT,

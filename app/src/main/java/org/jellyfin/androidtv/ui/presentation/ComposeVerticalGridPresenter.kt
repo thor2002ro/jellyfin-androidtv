@@ -81,6 +81,7 @@ class ComposeVerticalGridPresenter : BrowseCardGridPresenter() {
 
 	override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
 		val composeView = ComposeView(parent.context).apply {
+			syncConfigurationOnAttach()
 			setParentCompositionContext(parent.findViewTreeCompositionContext())
 			setViewTreeLifecycleOwner(parent.findViewTreeLifecycleOwner())
 			setViewTreeSavedStateRegistryOwner(parent.findViewTreeSavedStateRegistryOwner())

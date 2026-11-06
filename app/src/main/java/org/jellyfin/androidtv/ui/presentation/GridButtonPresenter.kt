@@ -79,6 +79,7 @@ class GridButtonPresenter @JvmOverloads constructor(
 
 	override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
 		val view = ComposeView(parent.context).apply {
+			syncConfigurationOnAttach()
 			isFocusable = true
 		}
 
