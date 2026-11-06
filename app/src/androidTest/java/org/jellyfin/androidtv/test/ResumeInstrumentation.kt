@@ -94,6 +94,8 @@ class PlaybackTestInstrumentation : Instrumentation() {
 						"fresh" to null,
 						"preroll" to -500L,
 						"preloaded" to 15_250L,
+						"local-next-stop-position" to 15_250L,
+						"local-manual-stop-position" to 7_000L,
 						"reload" to 15_250L,
 						)) {
 							if (arguments.scenario != null && arguments.scenario != scenario) continue
@@ -147,7 +149,7 @@ class PlaybackTestInstrumentation : Instrumentation() {
 					}
 				}
 			}
-			if (arguments.suites.any { it in setOf("server", "transcode", "backend", "soak", "hdmi-audio") }) {
+			if (arguments.suites.any { it in setOf("server", "transcode", "backend", "player-flow", "soak", "hdmi-audio") }) {
 				runServerCatalog(results)
 			}
 			if ("server" in arguments.suites) {
@@ -177,6 +179,18 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				}
 				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment))
 					.run(arguments.backend, arguments.scenario)
+			}
+			if ("player-flow" in arguments.suites) {
+				if (!::activity.isInitialized) {
+					activity = startActivitySync(Intent(targetContext, PlaybackTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+				}
+				results += PlaybackBackendSuite(this, activity, requireNotNull(serverEnvironment)).run(
+					backendFilter = arguments.backend,
+					scenarioFilter = arguments.scenario,
+					suiteName = "player-flow",
+					playerFlowOnly = true,
+				)
+				results += PlayerFlowLogicSuite.run(arguments.scenario)
 			}
 			if ("soak" in arguments.suites) {
 				if (!::activity.isInitialized) {
@@ -212,7 +226,10 @@ class PlaybackTestInstrumentation : Instrumentation() {
 	}
 
 	private fun runServerCatalog(results: MutableList<PlaybackTestResult>) = runBlocking {
-		val environment = PlaybackServerSession.connect(arguments.testUser).loadEnvironment(arguments.testFolder)
+		val verifiesServerStop = "player-flow" in arguments.suites &&
+			arguments.scenario in setOf("server-stops", "server-manual-stop", "server-next-episode")
+		val environment = PlaybackServerSession.connect(arguments.testUser, useCurrentAccount = verifiesServerStop)
+			.loadEnvironment(arguments.testFolder, restorableOnly = verifiesServerStop)
 		serverEnvironment = environment
 		results += PlaybackTestResult(
 			PlaybackTestStatus.PASS,
@@ -285,13 +302,17 @@ class PlaybackTestInstrumentation : Instrumentation() {
 		var createdBackend: PlayerBackend? = null
 		var createdManager: PlaybackManager? = null
 		var firstPlaying: Long? = null
+		val manualStops = mutableListOf<Duration>()
+		val replacements = mutableListOf<Duration>()
+		var expectedReplacement: Duration? = null
 		var playbackError: String? = null
 		var playbackErrorCount = 0
 		val traceStarted = SystemClock.elapsedRealtime()
 		val playbackTrace = mutableListOf<String>()
 		var resolveCount = 0
 		var expected = (requested ?: 0).coerceAtLeast(0)
-		val warm = scenario == "preloaded" || scenario == "reload"
+		val preloaded = scenario == "preloaded" || scenario == "local-next-stop-position"
+		val warm = preloaded || scenario == "reload"
 		val entry = QueueEntry().apply { startPosition = if (warm) Duration.ZERO else requested?.milliseconds }
 		val nextEntry = QueueEntry().apply { startPosition = requested?.milliseconds }
 		try {
@@ -313,10 +334,17 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				}
 				createdManager = manager
 				manager.addBackendEventListener(object : PlayerBackendEventListener() {
-					override fun onPlayStateChange(state: PlayState) {
+					override fun onPlayStateChange(state: PlayState, stream: PlayableMediaStream?, position: Duration?) {
+						if (state == PlayState.STOPPED && stream?.queueEntry === entry && position != null) {
+							manualStops += position
+						}
 						playbackTrace += "${SystemClock.elapsedRealtime() - traceStarted}ms:$state@${backend.getPositionInfo().active.inWholeMilliseconds}ms"
 						if (state == PlayState.PLAYING && firstPlaying == null) firstPlaying = backend.getPositionInfo().active.inWholeMilliseconds
 					}
+					override fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) {
+						if (mediaStream.queueEntry === entry) replacements += position
+					}
+
 					override fun onPlaybackError(error: PlaybackError) {
 						playbackErrorCount++
 						playbackError = "${error.codeName} originMatches=${error.origin?.matches(entry)} state=${manager.state.playState.value}"
@@ -334,7 +362,7 @@ class PlaybackTestInstrumentation : Instrumentation() {
 			check(surfaceReady) { "Video surface not ready; wake the device and dismiss its screensaver" }
 			onMain {
 				manager.queue.addSupplier(object : QueueSupplier {
-					override val size = if (scenario == "preloaded") 2 else 1
+					override val size = if (preloaded) 2 else 1
 					override suspend fun getItem(index: Int) = when (index) {
 						0 -> entry
 						1 -> nextEntry.takeIf { size == 2 }
@@ -379,14 +407,15 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				onMain {
 					manager.state.pause()
 					firstPlaying = null
-					if (scenario == "preloaded") {
+					if (preloaded) {
+						expectedReplacement = backend.getPositionInfo().active
 						nextEntry.mediaStream = streamFor(nextEntry, streamUrl ?: Uri.fromFile(video).toString())
 						backend.prepareItem(nextEntry)
 					}
 				}
 				runBlocking {
 					withContext(Dispatchers.Main) {
-						if (scenario == "preloaded") manager.queue.next()
+						if (preloaded) manager.queue.next()
 						else check(manager.reloadCurrentMediaStream(requested?.milliseconds))
 					}
 				}
@@ -421,6 +450,25 @@ class PlaybackTestInstrumentation : Instrumentation() {
 				manager.state.unpause()
 			}
 			awaitAdvance(paused)
+			if (scenario == "local-next-stop-position") onMain {
+				val expectedStop = checkNotNull(expectedReplacement)
+				check(replacements.size == 1 && (replacements.single() - expectedStop).absoluteValue <= 1_000.milliseconds) {
+					"Expected one replacement near $expectedStop, observed $replacements"
+				}
+			}
+			if (scenario == "local-manual-stop-position") {
+				var expectedStop = Duration.ZERO
+				onMain {
+					expectedStop = backend.getPositionInfo().active
+					manager.state.stop()
+				}
+				SystemClock.sleep(500)
+				onMain {
+					check(manualStops.size == 1 && (manualStops.single() - expectedStop).absoluteValue <= 1_000.milliseconds) {
+						"Expected one manual stop near $expectedStop, observed $manualStops"
+					}
+				}
+			}
 			return first
 		} finally {
 			onMain {

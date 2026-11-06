@@ -8,7 +8,7 @@ import io.kotest.matchers.string.shouldNotContain
 class PlaybackTestResultTests : FunSpec({
 	test("runner arguments default to the complete matrix") {
 		PlaybackTestArguments.from(emptyMap()) shouldBe PlaybackTestArguments(
-			suites = setOf("resume", "server", "transcode", "backend", "soak", "recovery", "hdmi-audio", "updater"),
+			suites = setOf("resume", "server", "transcode", "backend", "player-flow", "soak", "recovery", "hdmi-audio", "updater"),
 			backend = null,
 			scenario = null,
 			testUser = "androidtv-playback-test",

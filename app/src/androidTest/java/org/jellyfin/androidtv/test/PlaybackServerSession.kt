@@ -15,10 +15,13 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CreateUserByName
 import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.ItemFilter
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.MediaType
+import org.jellyfin.sdk.model.api.UpdateUserItemDataDto
 import org.jellyfin.sdk.model.api.UpdateUserPassword
+import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.jellyfin.sdk.model.api.UserDto
 import org.koin.core.context.GlobalContext
 
@@ -52,7 +55,7 @@ class PlaybackServerSession private constructor(
 	val testUser: UserDto,
 ) {
 	companion object {
-		suspend fun connect(testUsername: String): PlaybackServerSession {
+		suspend fun connect(testUsername: String, useCurrentAccount: Boolean): PlaybackServerSession {
 			val koin = GlobalContext.get()
 			val sessionRepository = koin.get<SessionRepository>()
 			if (sessionRepository.currentSession.value == null) sessionRepository.restoreSession(destroyOnly = false)
@@ -60,6 +63,7 @@ class PlaybackServerSession private constructor(
 			val baseUrl = requireNotNull(normalApi.baseUrl) { "The debug app is not connected to a Jellyfin server" }
 			checkNotNull(normalApi.accessToken) { "The debug app has no authenticated user" }
 			val normalUser = normalApi.userApi.getCurrentUser().content
+			if (useCurrentAccount) return PlaybackServerSession(normalApi, normalApi, normalUser, normalUser)
 			val users = normalApi.userApi.getUsers().content
 			var testUser = users.firstOrNull { it.name.equals(testUsername, ignoreCase = true) }
 				?: normalApi.userApi.createUserByName(CreateUserByName(testUsername, "")).content
@@ -119,7 +123,7 @@ class PlaybackServerSession private constructor(
 		}
 	}
 
-	suspend fun discoverMedia(folderName: String): List<ServerPlaybackFixture> {
+	private suspend fun discoverMedia(folderName: String, restorableOnly: Boolean): List<ServerPlaybackFixture> {
 		val views = testApi.userViewApi.getUserViews().content.items
 		val folder = views.firstOrNull { it.name.equals(folderName, ignoreCase = true) }
 			?: testApi.libraryApi.getItems(
@@ -139,15 +143,16 @@ class PlaybackServerSession private constructor(
 			recursive = true,
 			fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS),
 			mediaTypes = listOf(MediaType.VIDEO),
-			enableUserData = false,
-			limit = 10_000,
-		).content.items.flatMap { item ->
+			enableUserData = restorableOnly,
+			filters = if (restorableOnly) listOf(ItemFilter.IS_RESUMABLE) else emptyList(),
+			limit = if (restorableOnly) 80 else 10_000,
+		).content.items.filter { !restorableOnly || it.userData?.lastPlayedDate != null }.flatMap { item ->
 			item.mediaSources.orEmpty().mapNotNull { source -> source.toFixture(item) }
 		}
 	}
 
-	suspend fun loadEnvironment(folderName: String): PlaybackServerEnvironment {
-		val discovered = discoverMedia(folderName)
+	suspend fun loadEnvironment(folderName: String, restorableOnly: Boolean = false): PlaybackServerEnvironment {
+		val discovered = discoverMedia(folderName, restorableOnly)
 		val fixtures = discovered.associateBy { it.descriptor.id }
 		val selection = PlaybackMediaCatalog.select(discovered.map(ServerPlaybackFixture::descriptor))
 		val passthroughCodecs = setOf("ac3", "eac3", "eac3_joc", "dts", "dts_hd", "dtshd", "truehd", "ac4")
@@ -175,6 +180,27 @@ class PlaybackServerSession private constructor(
 			rating = data.rating,
 			lastPlayed = data.lastPlayedDate?.toString(),
 		)
+	}
+
+	suspend fun fixtureUserData(item: BaseItemDto): UserItemDataDto =
+		testApi.userDataApi.getItemUserData(item.id, testUser.id).content
+
+	suspend fun restoreFixtureUserData(item: BaseItemDto, before: UserItemDataDto) {
+		testApi.userDataApi.updateItemUserData(
+			itemId = item.id,
+			userId = testUser.id,
+			data = UpdateUserItemDataDto(
+				playbackPositionTicks = before.playbackPositionTicks,
+				playCount = before.playCount,
+				lastPlayedDate = before.lastPlayedDate,
+				played = before.played,
+			),
+		)
+		val after = fixtureUserData(item)
+		check(after.playbackPositionTicks == before.playbackPositionTicks &&
+			after.playCount == before.playCount && after.lastPlayedDate == before.lastPlayedDate &&
+			after.played == before.played
+		) { "Could not restore the test fixture's watch data" }
 	}
 
 	suspend fun stopEncoding(playSessionId: String) {
