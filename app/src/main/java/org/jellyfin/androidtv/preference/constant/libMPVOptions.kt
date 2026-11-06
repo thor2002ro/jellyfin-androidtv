@@ -423,6 +423,7 @@ fun UserPreferences.mpvPlaybackOptions(
 		convertAudioToAc3 = audioPolicy.convertAudioToAc3,
 		audioPitchCorrection = this[UserPreferences.mpvAudioPitchCorrection],
 		replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
+		surroundVolumeBoost = this[UserPreferences.surroundVolumeBoost],
 		decoderThreads = this[UserPreferences.mpvDecoderThreads].coerceIn(0, 32),
 		skipLoopFilter = this[UserPreferences.mpvLoopFilter].mpvValue,
 		subtitleAssOverride = this[UserPreferences.mpvSubtitleAssOverride].mpvValue,

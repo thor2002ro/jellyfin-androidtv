@@ -16,11 +16,18 @@ internal class AudioPassthroughPolicyAudioSink(
 	private val downmixToStereo: () -> Boolean = { false },
 	private val downmixProcessor: StereoDownmixAudioProcessor? = null,
 	private val onBufferAttempt: () -> Unit = {},
+	private val onOutputFormat: (Format?) -> Unit = {},
 	private val isPassthroughEnabled: (String) -> Boolean,
 ) : ForwardingAudioSink(sink) {
 	override fun configure(audioSinkConfig: AudioSinkConfig) {
 		downmixProcessor?.setInputFormat(audioSinkConfig.format, audioSinkConfig.outputChannelMapping?.toArray())
 		super.configure(audioSinkConfig)
+		onOutputFormat(audioSinkConfig.format)
+	}
+
+	override fun reset() {
+		super.reset()
+		onOutputFormat(null)
 	}
 
 	override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
