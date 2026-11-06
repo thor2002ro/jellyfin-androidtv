@@ -5,12 +5,15 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import androidx.fragment.app.Fragment
 import androidx.fragment.compose.content
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapNotNull
@@ -55,6 +58,7 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	companion object {
@@ -84,6 +88,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val entryChangePredicate: suspend (QueueEntry) -> Boolean = ::shouldChangeQueueEntry
 	private var displayModePreparation: (suspend (PlayableMediaStream) -> Boolean)? = null
 	private var originalDisplayModePreference: Int? = null
+	private var displayModeRestoreJob: Job? = null
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -202,23 +207,71 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		playbackManager.state.pause()
 	}
 
-	private fun restoreDisplayMode() {
+	private fun restoreDisplayMode(
+		preparation: (suspend (PlayableMediaStream) -> Boolean)? = displayModePreparation,
+		originalPreference: Int? = originalDisplayModePreference,
+		window: Window? = activity?.window,
+	) {
 		// The manager is shared. An older fragment must not remove a newer screen's
 		// callback or restore its window preference after that screen takes ownership.
-		if (playbackManager.options.beforePlayItem === displayModePreparation) {
-			playbackManager.options.beforePlayItem = null
-			activity?.window?.let { window ->
-				originalDisplayModePreference?.let { originalPreference ->
-					val attributes = window.attributes
-					attributes.preferredDisplayModeId = originalPreference
-					window.attributes = attributes
-				}
+		if (playbackManager.options.beforePlayItem !== preparation) {
+			Timber.d("Skipping display mode restore because another player owns it")
+			return
+		}
+		playbackManager.options.beforePlayItem = null
+		window?.let { playerWindow ->
+			originalPreference?.let { preference ->
+				val attributes = playerWindow.attributes
+				val previousPreference = attributes.preferredDisplayModeId
+				attributes.preferredDisplayModeId = preference
+				playerWindow.attributes = attributes
+				Timber.i("Restored preferred display mode from %d to %d", previousPreference, preference)
 			}
 		}
 	}
 
+	private fun scheduleDisplayModeRestore() {
+		displayModeRestoreJob?.let { job ->
+			if (job.isActive) Timber.d("Cancelling pending display mode restore before rescheduling")
+			job.cancel()
+		}
+		val preparation = displayModePreparation
+		val originalPreference = originalDisplayModePreference
+		val window = activity?.window
+		val switchingEnabled =
+			userPreferences[UserPreferences.refreshRateSwitchingEnabled] ||
+				userPreferences[UserPreferences.resolutionSwitchingEnabled]
+		// Don't touch the window if we never switched modes. On some Amlogic devices,
+		// doing that can turn HDR back on after playback has already returned to SDR.
+		val skipReason = when {
+			!switchingEnabled -> "display switching is disabled"
+			window == null -> "the player window is unavailable"
+			originalPreference == null -> "the original display mode is unavailable"
+			window.attributes.preferredDisplayModeId == originalPreference -> "the display mode did not change"
+			else -> null
+		}
+		if (skipReason != null) {
+			Timber.d("Skipping delayed display mode restore because %s", skipReason)
+			displayModeRestoreJob = null
+			restoreDisplayMode(preparation, originalPreference, window = null)
+			return
+		}
+		// The fragment may be gone before the delay finishes, so keep the job with the activity.
+		// If another player starts in the meantime, the ownership check leaves its mode alone.
+		Timber.i(
+			"Scheduling preferred display mode restore from %d to %s in 2 seconds",
+			window.attributes.preferredDisplayModeId,
+			originalPreference,
+		)
+		displayModeRestoreJob = requireActivity().lifecycleScope.launch {
+			// Give the player and TV a moment to settle in SDR before restoring the mode.
+			delay(2.seconds)
+			restoreDisplayMode(preparation, originalPreference, window)
+		}
+	}
+
 	override fun onDestroy() {
-		restoreDisplayMode()
+		if (displayModeRestoreJob == null) scheduleDisplayModeRestore()
 		displayModePreparation = null
 		playbackManager.getService<QueueService>()?.clearEntryChangePredicate(entryChangePredicate)
 		mediaStreamEndListener?.let(playbackManager::removeBackendEventListener)
@@ -386,17 +439,25 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 	override fun onStart() {
 		super.onStart()
+		displayModeRestoreJob?.let { job ->
+			if (job.isActive) Timber.i("Cancelling pending display mode restore because playback resumed")
+			job.cancel()
+		}
+		displayModeRestoreJob = null
 		playbackManager.options.beforePlayItem = displayModePreparation
 	}
 
 	override fun onStop() {
 		super.onStop()
-		// Exit animations can delay destruction until after the browsing screen resumes.
-		restoreDisplayMode()
-
-		if (closingPlayer && shouldReturnToLiveTvGuide()) return
+		if (closingPlayer && shouldReturnToLiveTvGuide()) {
+			// closePlayer already stopped playback before navigating to the guide.
+			scheduleDisplayModeRestore()
+			return
+		}
 		notifyPlaybackChanged()
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
+		// Exit animations can delay destruction until after the browsing screen resumes.
+		scheduleDisplayModeRestore()
 	}
 }
