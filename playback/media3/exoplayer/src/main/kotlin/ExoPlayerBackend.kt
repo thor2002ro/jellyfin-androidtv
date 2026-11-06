@@ -397,6 +397,7 @@ class ExoPlayerBackend(
 	private var bufferAllocator: DefaultAllocator? = null
 	private var estimatedBandwidthBytesPerSecond: Long? = null
 	private var appliedRendererPreferences: FfmpegRendererPreferences? = null
+	private var released = false
 	private lateinit var mediaSourceFactory: MediaSource.Factory
 	private val mediaSourceTsExtractorFlags = mutableMapOf<String, Int>()
 	private val audioCapabilitiesReceiver by lazy {
@@ -1322,7 +1323,9 @@ class ExoPlayerBackend(
 
 	override fun setSurfaceView(surfaceView: PlayerSurfaceView?) {
 		playerSurfaceView = surfaceView
-		exoPlayer.setVideoSurfaceView(surfaceView?.surface)
+		if (surfaceView != null || exoPlayerDelegate.isInitialized()) {
+			exoPlayer.setVideoSurfaceView(surfaceView?.surface)
+		}
 	}
 
 	override fun setSubtitleView(surfaceView: PlayerSubtitleView?) {
@@ -1587,6 +1590,37 @@ class ExoPlayerBackend(
 		unregisterAudioCapabilitiesReceiver()
 		setForcedVideoDecoder(null)
 		resetPlaybackStats()
+	}
+
+	override fun reset() {
+		if (!released && exoPlayerDelegate.isInitialized()) stop()
+	}
+
+	override fun cleanup() {
+		if (released) return
+		startHandler.removeCallbacksAndMessages(null)
+		initialTrackSelectionHandler.removeCallbacksAndMessages(null)
+		videoFirstFrameHandler.removeCallbacksAndMessages(null)
+		videoBufferingHandler.removeCallbacksAndMessages(null)
+		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
+		setListener(null)
+		setSurfaceView(null)
+		setSubtitleView(null)
+		unregisterAudioCapabilitiesReceiver()
+	}
+
+	override fun release() {
+		if (released) return
+		reset()
+		cleanup()
+		if (exoPlayerDelegate.isInitialized()) {
+			subtitleTimingRendererInvalidator.cancel()
+			exoPlayer.release()
+		}
+		trackSelectorDelegate = lazy(::createTrackSelector)
+		exoPlayerDelegate = lazy(::createExoPlayer)
+		appliedRendererPreferences = null
+		released = true
 	}
 
 	private fun resetForcedVideoDecoderFallback() {
