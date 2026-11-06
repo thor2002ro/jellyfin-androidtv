@@ -24,7 +24,7 @@ class LibMPVPreferenceRefreshTests : FunSpec({
 		backend.setField("playbackOptionsProvider", { selected })
 		backend.setField("videoDecoder", LibMPVVideoDecoder.AUTOMATIC)
 		backend.setField("videoDecoderProvider", { LibMPVVideoDecoder.SOFTWARE })
-		for (name in listOf("doviRequestSession", "scrubbing")) {
+		for (name in listOf("doviRequestSession", "scrubbing", "emptyProperties")) {
 			val field = LibMPVBackend::class.java.getDeclaredField(name)
 			backend.setField(name, mockkClass(field.type.kotlin, relaxed = true))
 		}
