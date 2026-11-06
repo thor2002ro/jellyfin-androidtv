@@ -90,9 +90,6 @@ internal fun PlayableMediaStream.mpvSourceTracks(type: TrackType): List<MediaStr
 	}
 }
 
-internal fun shouldReadLibMPVStatProperty(lastMissNanos: Long?, nowNanos: Long, retryNanos: Long) =
-	lastMissNanos == null || nowNanos - lastMissNanos >= retryNanos
-
 internal fun libMPVCommandSucceeded(result: MPVNode?): Boolean = result != null
 
 internal fun Map<String, MPVNode>.mpvTrackTitle(): String? =
@@ -218,7 +215,6 @@ class LibMPVBackend(
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
 		const val SUBTITLE_OVERLAY_INTERVAL_MS = 33L
-		val FRAME_STAT_PROPERTY_RETRY_NANOS = 10.seconds.inWholeNanoseconds
 	}
 
 	override val reportsBufferedPosition = true
@@ -353,7 +349,7 @@ class LibMPVBackend(
 	private val pendingInitialTrackTypes = mutableSetOf<TrackType>()
 	private val appliedPresetOptions = mutableSetOf<String>()
 	private val appliedCustomOptions = mutableSetOf<String>()
-	private val frameStatPropertyMisses = mutableMapOf<String, Long>()
+	private val observedProperties = LibMPVObservedProperties()
 	private val videoOutput = MPVVideoOutput { aspectRatio ->
 		setProperty("video-aspect-override", aspectRatio)
 	}
@@ -465,6 +461,7 @@ class LibMPVBackend(
 		detachSurface(previous)
 		// Invalidate native callbacks already queued before observer removal.
 		playerGeneration++
+		observedProperties.clear()
 		previousObserver?.let(previous::removeObserver)
 		previous.removeLogObserver(playerLogObserver)
 		runCatching { previous.close() }
@@ -483,7 +480,9 @@ class LibMPVBackend(
 	private inner class PlayerObserver(
 		private val generation: Long,
 	) : MPV.EventObserver {
-		override fun eventProperty(property: String) = Unit
+		override fun eventProperty(property: String) = onPlayerEvent(generation) {
+			observedProperties.update(property, null)
+		}
 
 		override fun eventProperty(property: String, value: Long) = Unit
 
@@ -510,6 +509,10 @@ class LibMPVBackend(
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("hwdec-current", MPV.mpvFormat.MPV_FORMAT_STRING)
+		target.observeProperty("demuxer-cache-state", MPV.mpvFormat.MPV_FORMAT_NODE)
+		for (name in libMPVObservedStatProperties) {
+			target.observeProperty(name, MPV.mpvFormat.MPV_FORMAT_STRING)
+		}
 	}
 
 	private var surroundBoostFilter: String? = null
@@ -773,6 +776,9 @@ class LibMPVBackend(
 			if (stream.selectedSubtitleStreamIndex != null) pendingInitialTrackTypes += TrackType.SUBTITLE
 		}
 		val startPosition = stream.queueEntry.startPosition ?: Duration.ZERO
+		for (name in listOf("time-pos", "duration", "demuxer-cache-time", "demuxer-cache-duration", "seekable")) {
+			observedProperties.update(name, null)
+		}
 		lastPositionInfo = PositionInfo(startPosition, startPosition, Duration.ZERO)
 		lastTickPosition = startPosition
 		listener?.onSubtitleTimingOffsetSupportChange(true)
@@ -919,6 +925,7 @@ class LibMPVBackend(
 			if (released) return
 			// Ignore native events already queued on the main thread before destroying the handle.
 			playerGeneration++
+			observedProperties.clear()
 			doviRequestSession.clear()
 			cancelNvidiaFallbackResync(restorePlayback = false)
 			cleanup()
@@ -1256,26 +1263,18 @@ class LibMPVBackend(
 
 	override fun getPositionInfo(): PositionInfo {
 		return mpvPositionInfo(
-			activeSeconds = player.getPropertyDouble("time-pos"),
-			durationSeconds = player.getPropertyDouble("duration"),
-			cacheEndSeconds = player.getPropertyDouble("demuxer-cache-time"),
-			cacheDurationSeconds = player.getPropertyDouble("demuxer-cache-duration"),
+			activeSeconds = observedProperties.double("time-pos"),
+			durationSeconds = observedProperties.double("duration"),
+			cacheEndSeconds = observedProperties.double("demuxer-cache-time"),
+			cacheDurationSeconds = observedProperties.double("demuxer-cache-duration"),
 			fallback = lastPositionInfo,
-		).copy(isSeekable = player.getPropertyBoolean("seekable") == true).also { lastPositionInfo = it }
+		).copy(isSeekable = observedProperties.string("seekable") == "yes").also { lastPositionInfo = it }
 	}
 
 	override fun getFrameStats(): PlaybackFrameStats {
-		fun <T> property(name: String, getter: () -> T?): T? {
-			val now = System.nanoTime()
-			if (!shouldReadLibMPVStatProperty(frameStatPropertyMisses[name], now, FRAME_STAT_PROPERTY_RETRY_NANOS)) return null
-			return getter().also { value ->
-				if (value == null) frameStatPropertyMisses[name] = now
-				else frameStatPropertyMisses.remove(name)
-			}
-		}
-		fun string(name: String) = property(name) { player.getPropertyString(name) }?.takeUnless(String::isBlank)
-		fun integer(name: String) = property(name) { player.getPropertyInt(name) }
-		fun double(name: String) = property(name) { player.getPropertyDouble(name) }?.takeIf(Double::isFinite)
+		fun string(name: String) = observedProperties.string(name)?.takeUnless(String::isBlank)
+		fun integer(name: String) = observedProperties.integer(name)
+		fun double(name: String) = observedProperties.double(name)
 		fun number(name: String, suffix: String = "", multiplier: Double = 1.0) =
 			double(name)?.let { value -> String.format(Locale.US, "%.3f%s", value * multiplier, suffix) }
 		fun correction(name: String) =
@@ -1306,14 +1305,7 @@ class LibMPVBackend(
 		val hasHdr10Plus = double("video-params/scene-max-r") != null ||
 			double("video-params/scene-max-g") != null ||
 			double("video-params/scene-max-b") != null
-		val bufferedBytes = property("demuxer-cache-state") {
-			runCatching {
-				player.getPropertyNode("demuxer-cache-state")
-				?.asMap()
-				?.get("fw-bytes")
-				?.asInt()
-			}.getOrNull()
-		}
+		val bufferedBytes = observedProperties.string("demuxer-cache-state")?.toLongOrNull()
 		val bufferDetails = formatLibMPVBufferDetails(
 			bufferedBytes = bufferedBytes,
 			isPausedForCache = string("paused-for-cache").equals("yes", ignoreCase = true),
@@ -1382,6 +1374,7 @@ class LibMPVBackend(
 	}
 
 	private fun handleEventProperty(generation: Long, property: String, value: Boolean) = onPlayerEvent(generation) {
+		observedProperties.update(property, if (value) "yes" else "no")
 		when (property) {
 			"pause" -> {
 				isPaused = value
@@ -1394,6 +1387,7 @@ class LibMPVBackend(
 	}
 
 	private fun handleEventProperty(generation: Long, property: String, value: String) = onPlayerEvent(generation) {
+		observedProperties.update(property, value)
 		if (property == "hwdec-current") {
 			doviVideoDecoderFailureObserved = retainDoviMpvDecoderFailureObservation(
 				doviVideoDecoderFailureObserved,
@@ -1404,6 +1398,9 @@ class LibMPVBackend(
 	}
 
 	private fun handleEventProperty(generation: Long, property: String, value: MPVNode) = onPlayerEvent(generation) {
+		if (property == "demuxer-cache-state") {
+			observedProperties.update(property, value.asMap()?.get("fw-bytes")?.asInt()?.toString())
+		}
 		when (property) {
 			"audio-out-params", "audio-params" -> updateSurroundVolumeBoost()
 			"track-list" -> {
@@ -1420,7 +1417,6 @@ class LibMPVBackend(
 				setSurroundBoostFilter(null)
 				clearVideoGeometry()
 				cancelNvidiaFallbackResync(restorePlayback = false)
-				frameStatPropertyMisses.clear()
 				loadRequested = false
 				activePlaylistEntryId = data["playlist_entry_id"]?.asInt()
 				fileLoaded = false
@@ -1461,7 +1457,6 @@ class LibMPVBackend(
 			}
 			MPV.mpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
 				val fallbackResync = nvidiaFallbackResync.consume()
-				frameStatPropertyMisses.clear()
 				playbackRestarted = fallbackResync == null
 				seeking = fallbackResync != null
 				rebufferWaitSeconds?.let { setOption("cache-pause-wait", it.toLibMPVString()) }
@@ -1781,7 +1776,6 @@ class LibMPVBackend(
 	}
 
 	override fun getAvailableTracks(type: TrackType): List<PlayerTrack> {
-		player.getPropertyNode("track-list")?.let { node -> updateTracks(node, notify = false) }
 		val stream = currentStream
 		val sourceTracks = stream?.mpvSourceTracks(type).orEmpty()
 		val selectable = tracks.filter { track -> track.type == type }
