@@ -6,14 +6,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -34,6 +35,8 @@ import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.ui.base.Icon
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.base.Text
+import org.jellyfin.androidtv.ui.base.button.ButtonDefaults
+import org.jellyfin.androidtv.ui.base.button.ProgressButton
 import org.jellyfin.androidtv.ui.composable.AsyncImage
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.sdk.getDisplayName
@@ -58,6 +61,8 @@ fun VideoPlayerNextUpOverlay(
 	visible: Boolean,
 	controlsVisible: Boolean,
 	seekOverlayVisible: Boolean,
+	progress: Float,
+	onClick: () -> Unit,
 	modifier: Modifier = Modifier,
 ) {
 	val showThumbnail = nextUpBehavior == NextUpBehavior.EXTENDED
@@ -127,24 +132,23 @@ fun VideoPlayerNextUpOverlay(
 
 				Spacer(Modifier.height(7.dp))
 
-				Row(
-					horizontalArrangement = Arrangement.spacedBy(6.dp),
-					verticalAlignment = Alignment.CenterVertically,
+				ProgressButton(
+					progress = progress,
+					onClick = onClick,
+					shape = RoundedCornerShape(4.dp),
+					colors = ButtonDefaults.colors(
+						containerColor = Color.White.copy(alpha = 0.10f),
+					),
+					contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp),
 				) {
-					Box(
-						contentAlignment = Alignment.Center,
-						modifier = Modifier
-							.clip(RoundedCornerShape(4.dp))
-							.background(Color.White.copy(alpha = 0.10f))
-							.padding(horizontal = 5.dp, vertical = 2.dp),
-					) {
-						Icon(
-							imageVector = ImageVector.vectorResource(R.drawable.ic_control_select),
-							contentDescription = null,
-							tint = Color.White.copy(alpha = 0.86f),
-							modifier = Modifier.size(15.dp),
-						)
-					}
+					Icon(
+						imageVector = ImageVector.vectorResource(R.drawable.ic_control_select),
+						contentDescription = null,
+						tint = Color.White.copy(alpha = 0.86f),
+						modifier = Modifier.size(15.dp),
+					)
+
+					Spacer(Modifier.width(6.dp))
 
 					Text(
 						text = stringResource(R.string.lbl_start_now),

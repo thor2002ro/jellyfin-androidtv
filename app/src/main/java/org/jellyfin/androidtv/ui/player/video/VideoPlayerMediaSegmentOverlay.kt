@@ -47,6 +47,7 @@ fun VideoPlayerMediaSegmentOverlay(
 	item: BaseItemDto?,
 	onPromptTargetChanged: (Duration?) -> Unit,
 	onEndingSkipPromptChanged: (Boolean) -> Unit = {},
+	visible: Boolean = true,
 	modifier: Modifier = Modifier,
 ) {
 	val mediaSegmentRepository = koinInject<MediaSegmentRepository>()
@@ -98,6 +99,8 @@ fun VideoPlayerMediaSegmentOverlay(
 		onPromptTargetChanged(promptSegment?.end.takeIf { promptVisible })
 		onEndingSkipPromptChanged(promptVisible && promptSegment.type == MediaSegmentType.OUTRO)
 	}
+
+	if (!visible) return
 
 	AnimatedVisibility(
 		visible = promptVisible,
