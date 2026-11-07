@@ -51,10 +51,6 @@ internal class DoviExtractorsFactory(
 		delegate.setSubtitleParserFactory(subtitleParserFactory)
 	}
 
-	override fun experimentalSetCodecsToParseWithinGopSampleDependencies(codecs: Int): ExtractorsFactory = apply {
-		delegate.experimentalSetCodecsToParseWithinGopSampleDependencies(codecs)
-	}
-
 	private fun Array<Extractor>.wrapped(): Array<Extractor> {
 		return map { extractor -> DoviExtractor(extractor, { context }, transformer) }.toTypedArray()
 	}
@@ -95,10 +91,6 @@ internal class DoviHlsExtractorFactory(
 	@Suppress("DEPRECATION")
 	override fun experimentalParseSubtitlesDuringExtraction(enabled: Boolean): HlsExtractorFactory = apply {
 		delegate.experimentalParseSubtitlesDuringExtraction(enabled)
-	}
-
-	override fun experimentalSetCodecsToParseWithinGopSampleDependencies(codecs: Int): HlsExtractorFactory = apply {
-		delegate.experimentalSetCodecsToParseWithinGopSampleDependencies(codecs)
 	}
 
 	override fun getOutputTextFormat(sourceFormat: Format): Format = delegate.getOutputTextFormat(sourceFormat)
