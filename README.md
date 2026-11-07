@@ -57,8 +57,8 @@ org.jellyfin.androidtv.thor
 | Media3 FFmpeg decoder | FFmpeg `8.1.2` | Shared source revision `c573a95381b0`; includes custom video-decoder and rendering patches |
 | MPV Android library | `0.2.2-thor` | Uses FFmpeg `release/8.1`, LibreSSL `4.3.2`, and native subtitle-overlay export |
 | libass Android | `0.5.1-thor` | Uses libass `0.17.5`; custom Media3 renderer with prewarming and configurable subtitle FPS |
-| libdovi Android | `0.1.1-thor` | Packages the Dolby Vision bridge as an Android AAR and native SDK |
-| Native toolchain | NDK r29 (`29.0.14206865`) | Pinned across the app and checked-in media projects |
+| libdovi Android | `0.1.2-thor` | Packages the Dolby Vision bridge as an Android AAR and native SDK |
+| Native toolchain | NDK r30 (`30.0.16248370`) | Pinned across the app and checked-in media projects |
 
 ## Installation
 
@@ -85,9 +85,9 @@ Requirements:
 - Git with submodule support
 - JDK 21
 - Android Studio or a compatible Android SDK
-- Android NDK r29 (`29.0.14206865`)
+- Android NDK r30 (`30.0.16248370`)
 
-The current build uses Gradle 9.7.1, Android Gradle Plugin 9.4.1, and Kotlin 2.4.20.
+The current build uses Gradle 9.9.0, Android Gradle Plugin 9.4.1, and Kotlin 2.4.20.
 
 ```shell
 git clone --recurse-submodules https://github.com/thor2002ro/jellyfin-androidtv.git
