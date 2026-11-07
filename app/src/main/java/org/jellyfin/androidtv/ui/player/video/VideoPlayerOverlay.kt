@@ -42,6 +42,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.ZoomMode
 import org.jellyfin.androidtv.ui.base.shouldHandleHeldSeek
+import org.jellyfin.androidtv.ui.composable.rememberPlayerProgress
 import org.jellyfin.androidtv.ui.composable.rememberPlayerPositionInfo
 import org.jellyfin.androidtv.ui.composable.rememberQueueEntry
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
@@ -134,6 +135,7 @@ fun VideoPlayerOverlay(
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
 	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
 	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = entry, updateWhilePaused = entry?.isLiveTv == true)
+	val playbackProgress by rememberPlayerProgress(playbackManager)
 	val seekEnabled = entry.canSeek(positionInfo)
 	val playPauseEnabled = seekEnabled
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
@@ -151,12 +153,17 @@ fun VideoPlayerOverlay(
 		resetToEmpty = true,
 		updateImmediately = false,
 	)
-	val nextUpPromptVisible = item.isNextUpPromptVisible(
+	val nextUpPromptAvailable = item.isNextUpPromptVisible(
 		nextItem = nextItem,
 		nextUpBehavior = nextUpBehavior,
 		positionInfo = nextUpPositionInfo,
 		endingSkipPromptVisible = endingSkipPromptVisible,
 	)
+	var nextUpPromptShown by remember(item?.id, nextItem?.id, nextUpBehavior) { mutableStateOf(false) }
+	LaunchedEffect(nextUpPromptAvailable) {
+		if (nextUpPromptAvailable) nextUpPromptShown = true
+	}
+	val nextUpPromptVisible = nextUpPromptAvailable || nextUpPromptShown
 
 	fun hideOverlay() {
 		pausedOverlayDismissed = true
@@ -456,7 +463,7 @@ fun VideoPlayerOverlay(
 
 			if (keyEvent.isCenterKey()) {
 				val promptTarget = skipPromptTarget
-				if (promptTarget != null && !(endingSkipPromptVisible && shouldHandleNextUpPrompt())) {
+				if (promptTarget != null && !shouldHandleNextUpPrompt()) {
 					if (keyEvent.action == KeyEvent.ACTION_DOWN) {
 						clearCenterLongPress()
 						centerShortcutState.keyCode = null
@@ -622,7 +629,7 @@ fun VideoPlayerOverlay(
 				)
 			},
 			onCenterClick = {
-				if (endingSkipPromptVisible && shouldHandleNextUpPrompt()) {
+				if (shouldHandleNextUpPrompt()) {
 					startNextItemNow()
 					return@PlayerOverlayLayout true
 				}
@@ -631,11 +638,6 @@ fun VideoPlayerOverlay(
 				if (promptTarget != null) {
 					playbackManager.state.seek(promptTarget)
 					skipPromptTarget = null
-					return@PlayerOverlayLayout true
-				}
-
-				if (shouldHandleNextUpPrompt()) {
-					startNextItemNow()
 					return@PlayerOverlayLayout true
 				}
 
@@ -724,6 +726,7 @@ fun VideoPlayerOverlay(
 			item = item,
 			onPromptTargetChanged = { skipPromptTarget = it },
 			onEndingSkipPromptChanged = { endingSkipPromptVisible = it },
+			visible = !nextUpPromptVisible,
 			modifier = Modifier
 				.align(Alignment.BottomEnd)
 				.padding(
@@ -740,13 +743,15 @@ fun VideoPlayerOverlay(
 			visible = nextUpPromptVisible,
 			controlsVisible = visibilityState.visible,
 			seekOverlayVisible = seekOverlayVisible,
+			progress = playbackProgress,
+			onClick = ::startNextItemNow,
 			modifier = Modifier
 				.align(Alignment.BottomEnd)
 				.padding(
 					start = 48.dp,
 					top = 48.dp,
 					end = 48.dp,
-					bottom = promptBottomPadding + if (skipPromptTarget != null) 56.dp else 0.dp,
+					bottom = promptBottomPadding,
 				)
 		)
 
