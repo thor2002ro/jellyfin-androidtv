@@ -35,7 +35,7 @@ import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.backend.PlayerBackendEventListener
+import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.MediaStreamVideoTrack
 import org.jellyfin.androidtv.util.PlaybackDisplayMode
@@ -57,6 +57,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.UUID
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -81,10 +82,9 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
 	private var closingPlayer = false
 	private var hasSeenVideoQueueEntry = false
-	private var closeWhenVideoQueueEnds = false
 	private var showingPostPlaybackPrompt = false
 	private var handingOffPlayer = false
-	private var mediaStreamEndListener: PlayerBackendEventListener? = null
+	private var completedEntry: QueueEntry? = null
 	private val entryChangePredicate: suspend (QueueEntry) -> Boolean = ::shouldChangeQueueEntry
 	private var displayModePreparation: (suspend (PlayableMediaStream) -> Boolean)? = null
 	private var originalDisplayModePreference: Int? = null
@@ -154,26 +154,6 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		playbackManager.queue.clear()
 		playbackManager.queue.addSupplier(queueSupplier, startIndex = startIndex)
 
-		mediaStreamEndListener = object : PlayerBackendEventListener() {
-			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
-				if (mediaStream.queueEntry !== playbackManager.queue.entry.value) return
-				if (mediaStream.queueEntry.isLiveTv) return
-				notifyPlaybackChanged(mediaStream.queueEntry.baseItem)
-				if (handingOffPlayer || closingPlayer || showingPostPlaybackPrompt) return
-				if (mediaStream.queueEntry.baseItem?.type == BaseItemKind.EPISODE) {
-					interactionTracker.onEpisodeWatched()
-				}
-				if (showPostPlaybackPromptIfAvailable(mediaStream)) return
-
-				if (!playbackManager.queue.hasNext(usePlaybackOrder = true, useRepeatMode = true)) {
-					Timber.i("Video queue ended, closing player")
-					closePlayer()
-					return
-				}
-				closeWhenVideoQueueEnds = true
-				closePlayerIfVideoQueueEnded()
-			}
-		}.also(playbackManager::addBackendEventListener)
 		lifecycleScope.launch {
 			repeatOnLifecycle(Lifecycle.State.STARTED) {
 				playbackManager.state.playState.onEach { playState ->
@@ -187,10 +167,9 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 								playbackManager.state.playState.value == PlayState.STOPPED &&
 								!showingPostPlaybackPrompt &&
 								!handingOffPlayer
-							) closePlayer() else closePlayerIfVideoQueueEnded()
+							) closePlayer()
 						} else {
 							hasSeenVideoQueueEntry = entry.isLiveTv != true
-							closeWhenVideoQueueEnds = false
 							onQueueEntryChanged(entry)
 						}
 					}
@@ -275,8 +254,6 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		if (displayModeRestoreJob == null) scheduleDisplayModeRestore()
 		displayModePreparation = null
 		playbackManager.getService<QueueService>()?.clearEntryChangePredicate(entryChangePredicate)
-		mediaStreamEndListener?.let(playbackManager::removeBackendEventListener)
-		mediaStreamEndListener = null
 		super.onDestroy()
 	}
 
@@ -291,6 +268,8 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 					remoteKeyEventHandler = handler
 				},
 				onClosePlayer = ::closePlayer,
+				onPlaybackComplete = ::onPlaybackComplete,
+				onPlayNext = ::playNext,
 			)
 		}
 	}
@@ -338,18 +317,62 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true &&
 			playbackManager.queue.entry.value?.isLiveTv == true
 
-	private fun closePlayerIfVideoQueueEnded() {
+	private fun recordCompleted(entry: QueueEntry, completedPosition: Duration): Boolean {
 		if (
-			!hasSeenVideoQueueEntry ||
-			!closeWhenVideoQueueEnds ||
-			playbackManager.queue.entry.value != null ||
+			entry !== playbackManager.queue.entry.value ||
+			completedEntry === entry ||
+			handingOffPlayer ||
 			closingPlayer ||
 			showingPostPlaybackPrompt
-		) return
+		) return false
 
-		Timber.i("Video queue ended, closing player")
-		closeWhenVideoQueueEnds = false
-		closePlayer()
+		completedEntry = entry
+		notifyPlaybackChanged(entry.baseItem)
+		playbackManager.getService<PlaySessionService>()?.sendStopIfActive(
+			completedPosition.takeIf { it > Duration.ZERO }
+		)
+		entry.baseItem?.takeIf { item -> item.type == BaseItemKind.EPISODE }?.let { episode ->
+			interactionTracker.onEpisodeWatched()
+		}
+		return true
+	}
+
+	private fun onPlaybackComplete(entry: QueueEntry, completedPosition: Duration) {
+		if (
+			entry !== playbackManager.queue.entry.value ||
+			entry.isLiveTv ||
+			!playbackManager.state.playState.value.allowsTimedCompletion()
+		) return
+		if (!recordCompleted(entry, completedPosition)) return
+		if (showPostPlaybackPromptIfAvailable(entry)) return
+
+		lifecycleScope.launch {
+			if (!advanceToNext(entry)) {
+				Timber.i("Video queue ended, closing player")
+				closePlayer()
+			}
+		}
+	}
+
+	private suspend fun playNext(entry: QueueEntry, completedPosition: Duration): Boolean {
+		if (entry !== playbackManager.queue.entry.value || closingPlayer || showingPostPlaybackPrompt) return false
+		recordCompleted(entry, completedPosition)
+		return advanceToNext(entry)
+	}
+
+	private suspend fun advanceToNext(entry: QueueEntry): Boolean {
+		if (entry !== playbackManager.queue.entry.value) return false
+		val currentIndex = playbackManager.queue.indexOf(entry) ?: playbackManager.queue.entryIndex.value
+		val nextIndex = currentIndex + 1
+		if (currentIndex < 0 || nextIndex > videoQueueManager.getCurrentVideoQueue().lastIndex) return false
+
+		val nextEntry = playbackManager.queue.peekNext(usePlaybackOrder = false, useRepeatMode = false) ?: return false
+		// The next entry may have been preloaded before the latest subtitle selection was known.
+		nextEntry.mediaStream = null
+		if (playbackManager.queue.next(usePlaybackOrder = false, useRepeatMode = false) == null) return false
+
+		videoQueueManager.setCurrentMediaPosition(nextIndex)
+		return true
 	}
 
 	internal fun selectPostPlaybackPrompt(itemType: BaseItemKind?, nextItemId: UUID): Destination.Fragment? = when {
@@ -359,22 +382,21 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		else -> null
 	}
 
-	private fun showPostPlaybackPromptIfAvailable(mediaStream: PlayableMediaStream): Boolean {
+	private fun showPostPlaybackPromptIfAvailable(entry: QueueEntry): Boolean {
 		if (showingPostPlaybackPrompt) return true
 		if (closingPlayer) return false
 
-		val currentIndex = playbackManager.queue.indexOf(mediaStream.queueEntry)
+		val currentIndex = playbackManager.queue.indexOf(entry)
 			?: playbackManager.queue.entryIndex.value
 		if (currentIndex < 0) return false
 
 		val nextIndex = currentIndex + 1
 		val nextItem = videoQueueManager.getCurrentVideoQueue().getOrNull(nextIndex) ?: return false
-		val destination = selectPostPlaybackPrompt(mediaStream.queueEntry.baseItem?.type, nextItem.id) ?: return false
+		val destination = selectPostPlaybackPrompt(entry.baseItem?.type, nextItem.id) ?: return false
 
 		Timber.i("Showing post-playback prompt for item ${nextItem.id} after queue index $currentIndex")
 		videoQueueManager.setCurrentMediaPosition(nextIndex)
 		showingPostPlaybackPrompt = true
-		closeWhenVideoQueueEnds = false
 		remoteKeyEventHandler = null
 
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()

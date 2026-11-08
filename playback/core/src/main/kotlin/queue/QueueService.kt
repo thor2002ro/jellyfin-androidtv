@@ -47,12 +47,50 @@ class QueueService internal constructor() : PlayerService(), Queue {
 	private val _entries = MutableStateFlow<List<QueueEntry>>(emptyList())
 	override val entries: StateFlow<List<QueueEntry>> get() = _entries.asStateFlow()
 
+	override suspend fun onInitialize() {
+		// Reset calculated next-up indices when playback order changes
+		state.playbackOrder
+			.onEach { playbackOrder ->
+				orderIndexProvider = when (playbackOrder) {
+					PlaybackOrder.DEFAULT -> defaultOrderIndexProvider
+					PlaybackOrder.RANDOM -> RandomOrderIndexProvider()
+					PlaybackOrder.SHUFFLE -> ShuffleOrderIndexProvider()
+				}
+			}
+			.launchIn(coroutineScope)
+
+		// Automatically advance or repeat when the current stream ends
+		state.backendEvents
+			.filterIsInstance<PlayerBackendEvent.MediaStreamEnded>()
+			.onEach { event ->
+				val currentEntry = event.stream.queueEntry
+				if (currentEntry !== _entry.value || controlsTimedCompletion()) return@onEach
+				val repeat = state.repeatMode.value != RepeatMode.NONE
+				val nextEntry = next(usePlaybackOrder = true, useRepeatMode = true)
+
+				if (nextEntry === currentEntry && repeat) withContext(Dispatchers.Main) {
+					state.seek(Duration.ZERO)
+					state.play()
+				} else if (nextEntry == null && _entryIndex.value != Queue.INDEX_NONE) {
+					setIndex(Queue.INDEX_NONE, true)
+				}
+			}
+			.launchIn(coroutineScope)
+	}
+
 	fun setEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
 		entryChangePredicate = predicate
 	}
 
 	fun clearEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
 		if (entryChangePredicate === predicate) entryChangePredicate = null
+	}
+
+	fun controlsTimedCompletion(): Boolean {
+		val entry = _entry.value ?: return false
+		return entryChangePredicate != null &&
+			!entry.isLiveTv &&
+			(state.positionInfo.duration.isPositive() || entry.metadata.duration?.isPositive() == true)
 	}
 
 	// Entry management

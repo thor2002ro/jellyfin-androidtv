@@ -65,6 +65,7 @@ import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
@@ -73,6 +74,7 @@ import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.compose.koinInject
 import timber.log.Timber
+import kotlin.time.Duration
 
 private const val BufferingBlockCount = 5
 
@@ -80,6 +82,8 @@ private const val BufferingBlockCount = 5
 fun VideoPlayerScreen(
 	onRemoteKeyEventHandlerChanged: (((keyCode: Int, event: android.view.KeyEvent?) -> Boolean)?) -> Unit = {},
 	onClosePlayer: () -> Unit = {},
+	onPlaybackComplete: (QueueEntry, Duration) -> Unit = { _, _ -> },
+	onPlayNext: suspend (QueueEntry, Duration) -> Boolean = { _, _ -> false },
 	openLiveTvGuideOnStart: Boolean = false,
 ) {
 	val playbackManager = koinInject<PlaybackManager>()
@@ -135,6 +139,8 @@ fun VideoPlayerScreen(
 			onZoomModeSelected = { zoomMode = it },
 			onRemoteKeyEventHandlerChanged = onRemoteKeyEventHandlerChanged,
 			onClosePlayer = onClosePlayer,
+			onPlaybackComplete = onPlaybackComplete,
+			onPlayNext = onPlayNext,
 			openLiveTvGuideOnStart = openLiveTvGuideOnStart,
 		)
 	}

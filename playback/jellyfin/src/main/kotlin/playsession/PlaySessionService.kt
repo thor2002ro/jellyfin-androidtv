@@ -23,6 +23,7 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -73,27 +74,32 @@ class PlaySessionService(
 						if (manager.queue.entry.value?.mediaStream !== stream) return@onEach
 						sendStreamStart()
 						startProgressReports(
-							if (event.state != PlayState.PAUSED) PROGRESS_REPORTING_INTERVAL else PAUSED_REPORTING_INTERVAL,
+							if (event.state == PlayState.PLAYING) PROGRESS_REPORTING_INTERVAL else PAUSED_REPORTING_INTERVAL,
 						)
 					}
-
+					PlayState.BUFFERING -> {
+						// Initial buffering must not overwrite the saved resume point.
+						if (activeSession != null) startProgressReports(PROGRESS_REPORTING_INTERVAL)
+					}
 					PlayState.STOPPED, PlayState.ERROR -> {
 						val stream = event.stream ?: return@onEach
-						stopReportedStream(stream.identifier, event.position, failed = event.state == PlayState.ERROR)
+						if (activeSession?.playSessionId != stream.identifier) return@onEach
+						stopProgressReports()
+						val failed = event.state == PlayState.ERROR
+						if (failed || manager.getService<QueueService>()?.controlsTimedCompletion() != true) {
+							stopReportedStream(stream.identifier, event.position, failed = failed)
+						}
 					}
 				}
-				PlayState.BUFFERING -> {
-					// Initial buffering must not overwrite the saved resume point.
-					if (activeSession != null) startProgressReports(PROGRESS_REPORTING_INTERVAL)
+				is PlayerBackendEvent.MediaStreamEnded -> {
+					if (manager.getService<QueueService>()?.controlsTimedCompletion() != true) {
+						stopReportedStream(event.stream.identifier, event.position)
+					}
 				}
-
-				}
-				}
-				is PlayerBackendEvent.MediaStreamEnded -> stopReportedStream(event.stream.identifier, event.position)
 				is PlayerBackendEvent.MediaStreamReplaced -> {
 					val entry = manager.queue.entry.value
-					val session = activeSession
-					if (session != null && shouldKeepLiveStreamOpen(session, entry)) {
+					val session = activeSession?.takeIf { it.playSessionId == event.stream.identifier } ?: return@onEach
+					if (shouldKeepLiveStreamOpen(session, entry)) {
 						stopActiveSessionIfChanged(entry, entry?.mediaStream)
 					} else {
 						stopReportedStream(event.stream.identifier, event.position)
@@ -166,7 +172,7 @@ class PlaySessionService(
 		coroutineScope.launch { sendStreamUpdate() }
 	}
 
-	fun sendStopIfActive() {
+	fun sendStopIfActive(positionOverride: Duration? = null) {
 		val session = activeSession
 		val failed = state.playState.value == PlayState.ERROR || session == null
 		if (session != null) {
@@ -178,6 +184,7 @@ class PlaySessionService(
 					item = session.item,
 					conversionMethod = session.conversionMethod,
 					streamStartedAt = session.streamStartedAt,
+					playerPosition = positionOverride,
 				)
 				reportPlaybackStopped(
 					itemId = session.item.id,
@@ -209,6 +216,7 @@ class PlaySessionService(
 				item = item,
 				conversionMethod = stream.conversionMethod,
 				streamStartedAt = null,
+				playerPosition = positionOverride,
 			)
 			reportPlaybackStopped(
 				itemId = item.id,
@@ -432,14 +440,14 @@ class PlaySessionService(
 		conversionMethod: MediaConversionMethod,
 		streamStartedAt: LocalDateTime?,
 		now: LocalDateTime = LocalDateTime.now(),
-		position: Duration? = null,
+		playerPosition: Duration? = null,
 	): PlaybackReportingState {
 		val reportingItem = getLiveTvReportingItem(item)
 		val positionItem = reportingItem ?: item
 		val positionTicks = withContext(Dispatchers.Main) {
 			positionItem.getReportingPositionTicks(
 				conversionMethod,
-				position ?: state.positionInfo.active,
+				playerPosition ?: state.positionInfo.active,
 				streamStartedAt,
 				now = now,
 			)
@@ -609,7 +617,7 @@ class PlaySessionService(
 			item = session.item,
 			conversionMethod = session.conversionMethod,
 			streamStartedAt = session.streamStartedAt,
-			position = position,
+			playerPosition = position,
 		)
 
 		reportPlaybackStopped(

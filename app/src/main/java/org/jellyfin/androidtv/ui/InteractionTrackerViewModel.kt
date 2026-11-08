@@ -44,6 +44,7 @@ class InteractionTrackerViewModel(
 	private var watchTime = 0L
 	private var episodeWasInterrupted: Boolean = false
 	private var currentItemId: UUID? = null
+	private var currentItemCompleted = false
 
 	// Preferences
 
@@ -110,7 +111,8 @@ class InteractionTrackerViewModel(
 
 	fun onEpisodeWatched() {
 		notifyPlaybackState(false)
-		if (!isWatchingVideo) return
+		if (!isWatchingVideo || currentItemCompleted) return
+		currentItemCompleted = true
 		if (!episodeWasInterrupted) episodeCount++
 		episodeWasInterrupted = false
 	}
@@ -118,6 +120,7 @@ class InteractionTrackerViewModel(
 	fun notifyStart(item: BaseItemDto) {
 		if (currentItemId != item.id) episodeWasInterrupted = false
 		currentItemId = item.id
+		currentItemCompleted = false
 		isWatchingVideo = item.type != BaseItemKind.TRAILER && !item.isLiveTv()
 		notifyPlaybackState(playbackPlaying)
 	}
