@@ -11,7 +11,7 @@ interface PlaybackHelper {
 		mainItem: BaseItemDto,
 		allowIntros: Boolean,
 		shuffle: Boolean,
-		outerResponse: Response<List<BaseItemDto>>,
+		outerResponse: Response<PlaybackItems>,
 	)
 
 	fun retrieveAndPlay(itemId: UUID, shuffle: Boolean, context: Context)
@@ -20,3 +20,8 @@ interface PlaybackHelper {
 
 	fun playInstantMix(context: Context, item: BaseItemDto)
 }
+
+data class PlaybackItems(
+	val items: List<BaseItemDto>,
+	val startIndex: Int = 0,
+)

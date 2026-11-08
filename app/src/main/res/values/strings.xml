@@ -18,6 +18,11 @@
     <string name="lbl_continue_watching">Continue watching</string>
     <string name="continue_listening">Continue listening</string>
     <string name="lbl_next_up">Next up</string>
+    <string name="season_up_next">Season %1$d up next</string>
+    <plurals name="episodes_left_till_season">
+        <item quantity="one">%1$d episode left till Season %2$d</item>
+        <item quantity="other">%1$d episodes left till Season %2$d</item>
+    </plurals>
     <string name="lbl_on_now">On now</string>
     <string name="lbl_views">Views</string>
     <string name="lbl_by_letter">By letter</string>

@@ -60,6 +60,7 @@ import org.jellyfin.androidtv.util.ImageHelper;
 import org.jellyfin.androidtv.util.KeyEventExtensionsKt;
 import org.jellyfin.androidtv.util.LanguageUtils;
 import org.jellyfin.androidtv.util.PlaybackHelper;
+import org.jellyfin.androidtv.util.PlaybackItems;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.EmptyResponse;
 import org.jellyfin.androidtv.util.apiclient.JellyfinImage;
@@ -855,10 +856,10 @@ public class CustomPlaybackOverlayFragment extends Fragment implements View.OnKe
                             if (myChannel == null) return false;
 
                             final Lazy<PlaybackHelper> playbackHelper = inject(PlaybackHelper.class);
-                            playbackHelper.getValue().getItemsToPlay(requireContext(), myChannel, false, false, new Response<List<BaseItemDto>>() {
+                            playbackHelper.getValue().getItemsToPlay(requireContext(), myChannel, false, false, new Response<PlaybackItems>() {
                                 @Override
-                                public void onResponse(List<BaseItemDto> response) {
-                                    playbackControllerContainer.getValue().getPlaybackController().setItems(response);
+                                public void onResponse(PlaybackItems response) {
+                                    playbackControllerContainer.getValue().getPlaybackController().setItems(response.getItems());
                                     playbackControllerContainer.getValue().getPlaybackController().updateTvProgramInfo();
                                     updateDisplay();
                                 }
