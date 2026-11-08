@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +56,7 @@ import org.jellyfin.androidtv.ui.composable.FixedMotionDurationScale
 import org.jellyfin.androidtv.ui.composable.modifier.overscan
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
+import org.jellyfin.androidtv.ui.playback.text
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -185,6 +187,17 @@ fun NextUpOverlay(
 				.align(Alignment.Bottom),
 			horizontalAlignment = Alignment.End,
 		) {
+			item.seasonTransition?.let { transition ->
+				Text(
+					text = transition.text(),
+					style = LocalTextStyle.current.copy(
+						fontSize = 20.sp,
+						fontWeight = FontWeight.Bold,
+					),
+				)
+				Spacer(Modifier.height(8.dp))
+			}
+
 			Text(
 				text = stringResource(R.string.lbl_next_up),
 				style = LocalTextStyle.current.copy(fontSize = 34.sp),

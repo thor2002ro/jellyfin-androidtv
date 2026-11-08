@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.ui.player.base.rememberPlayerOverlayVisibility
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToasts
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
+import org.jellyfin.androidtv.ui.playback.seasonTransitionAt
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackend
@@ -140,6 +141,9 @@ fun VideoPlayerOverlay(
 	val nextItem = videoQueue
 		.getOrNull(entryIndex + 1)
 		.takeIf { entryIndex >= 0 && entryIndex < videoQueue.lastIndex }
+	val seasonTransition = remember(videoQueue, entryIndex) {
+		videoQueue.seasonTransitionAt(entryIndex)
+	}
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
 	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
 	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = entry, updateWhilePaused = entry?.isLiveTv == true)
@@ -792,6 +796,7 @@ fun VideoPlayerOverlay(
 
 		VideoPlayerNextUpOverlay(
 			nextItem = nextItem,
+			seasonTransition = seasonTransition,
 			nextUpBehavior = nextUpBehavior,
 			visible = nextUpPromptVisible,
 			controlsVisible = visibilityState.visible,

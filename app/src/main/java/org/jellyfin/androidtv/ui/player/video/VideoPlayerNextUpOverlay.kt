@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +42,8 @@ import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.button.Button
 import org.jellyfin.androidtv.ui.base.button.ButtonDefaults
 import org.jellyfin.androidtv.ui.composable.AsyncImage
+import org.jellyfin.androidtv.ui.playback.SeasonTransition
+import org.jellyfin.androidtv.ui.playback.text
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.sdk.getDisplayName
 import org.jellyfin.androidtv.util.sdk.isLiveTv
@@ -60,6 +63,7 @@ internal val NextUpProgressCheckInterval = 3.seconds
 @Composable
 fun VideoPlayerNextUpOverlay(
 	nextItem: BaseItemDto?,
+	seasonTransition: SeasonTransition?,
 	nextUpBehavior: NextUpBehavior,
 	visible: Boolean,
 	controlsVisible: Boolean,
@@ -89,86 +93,101 @@ fun VideoPlayerNextUpOverlay(
 		}
 		val shape = RoundedCornerShape(8.dp)
 
-		Box(
-			modifier = Modifier
-				.widthIn(max = 390.dp)
-				.clip(shape)
-				.background(colorResource(R.color.popup_menu_background).copy(alpha = bottomAlpha))
-				.border(1.dp, Color.White.copy(alpha = 0.08f), shape),
+		Column(
+			horizontalAlignment = Alignment.End,
 		) {
-			Box(Modifier.matchParentSize()) {
-				Box(
-					Modifier
-						.fillMaxHeight()
-						.fillMaxWidth(progress.coerceIn(0f, 1f))
-						.background(JellyfinTheme.colorScheme.rangeControlFill.copy(alpha = 0.35f))
+			seasonTransition?.let { transition ->
+				Text(
+					text = transition.text(),
+					color = Color.White,
+					fontSize = 16.sp,
+					fontWeight = FontWeight.Bold,
+					maxLines = 1,
 				)
+				Spacer(Modifier.height(8.dp))
 			}
 
-			Row(
-				horizontalArrangement = Arrangement.spacedBy(10.dp),
-				verticalAlignment = Alignment.CenterVertically,
-				modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+			Box(
+				modifier = Modifier
+					.widthIn(max = 390.dp)
+					.clip(shape)
+					.background(colorResource(R.color.popup_menu_background).copy(alpha = bottomAlpha))
+					.border(1.dp, Color.White.copy(alpha = 0.08f), shape),
 			) {
-				if (thumbnail != null) {
-					AsyncImage(
-						image = thumbnail,
-						fillHeight = 64,
-						aspectRatio = thumbnail.aspectRatio ?: 2f / 3f,
-						modifier = Modifier
-							.height(64.dp)
-							.widthIn(max = 96.dp)
-							.aspectRatio(thumbnail.aspectRatio ?: 2f / 3f)
-							.clip(JellyfinTheme.shapes.extraSmall),
+				Box(Modifier.matchParentSize()) {
+					Box(
+						Modifier
+							.fillMaxHeight()
+							.fillMaxWidth(progress.coerceIn(0f, 1f))
+							.background(JellyfinTheme.colorScheme.rangeControlFill.copy(alpha = 0.35f))
 					)
 				}
 
-				Column(
-					verticalArrangement = Arrangement.Center,
-					modifier = Modifier.widthIn(max = if (thumbnail != null) 280.dp else 340.dp),
+				Row(
+					horizontalArrangement = Arrangement.spacedBy(10.dp),
+					verticalAlignment = Alignment.CenterVertically,
+					modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
 				) {
-					Text(
-						text = stringResource(R.string.lbl_next_up),
-						color = Color.White.copy(alpha = 0.58f),
-						fontSize = 12.sp,
-						maxLines = 1,
-					)
-
-					Spacer(Modifier.height(2.dp))
-
-					Text(
-						text = title,
-						color = colorResource(R.color.button_default_normal_text),
-						fontSize = 16.sp,
-						maxLines = 3,
-						overflow = TextOverflow.Ellipsis,
-					)
-
-					Spacer(Modifier.height(7.dp))
-
-					Button(
-						onClick = onClick,
-						shape = RoundedCornerShape(4.dp),
-						colors = ButtonDefaults.colors(
-							containerColor = Color.White.copy(alpha = 0.10f),
-						),
-						contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp),
-					) {
-						Icon(
-							imageVector = ImageVector.vectorResource(R.drawable.ic_control_select),
-							contentDescription = null,
-							tint = Color.White.copy(alpha = 0.86f),
-							modifier = Modifier.size(15.dp),
+					if (thumbnail != null) {
+						AsyncImage(
+							image = thumbnail,
+							fillHeight = 64,
+							aspectRatio = thumbnail.aspectRatio ?: 2f / 3f,
+							modifier = Modifier
+								.height(64.dp)
+								.widthIn(max = 96.dp)
+								.aspectRatio(thumbnail.aspectRatio ?: 2f / 3f)
+								.clip(JellyfinTheme.shapes.extraSmall),
 						)
+					}
 
-						Spacer(Modifier.width(6.dp))
-
+					Column(
+						verticalArrangement = Arrangement.Center,
+						modifier = Modifier.widthIn(max = if (thumbnail != null) 280.dp else 340.dp),
+					) {
 						Text(
-							text = stringResource(R.string.lbl_start_now),
-							color = Color.White.copy(alpha = 0.82f),
-							fontSize = 13.sp,
+							text = stringResource(R.string.lbl_next_up),
+							color = Color.White.copy(alpha = 0.58f),
+							fontSize = 12.sp,
 							maxLines = 1,
 						)
+
+						Spacer(Modifier.height(2.dp))
+
+						Text(
+							text = title,
+							color = colorResource(R.color.button_default_normal_text),
+							fontSize = 16.sp,
+							maxLines = 3,
+							overflow = TextOverflow.Ellipsis,
+						)
+
+						Spacer(Modifier.height(7.dp))
+
+						Button(
+							onClick = onClick,
+							shape = RoundedCornerShape(4.dp),
+							colors = ButtonDefaults.colors(
+								containerColor = Color.White.copy(alpha = 0.10f),
+							),
+							contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp),
+						) {
+							Icon(
+								imageVector = ImageVector.vectorResource(R.drawable.ic_control_select),
+								contentDescription = null,
+								tint = Color.White.copy(alpha = 0.86f),
+								modifier = Modifier.size(15.dp),
+							)
+
+							Spacer(Modifier.width(6.dp))
+
+							Text(
+								text = stringResource(R.string.lbl_start_now),
+								color = Color.White.copy(alpha = 0.82f),
+								fontSize = 13.sp,
+								maxLines = 1,
+							)
+						}
 					}
 				}
 			}

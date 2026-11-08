@@ -12,6 +12,7 @@ import org.jellyfin.androidtv.ui.playback.MediaManager;
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher;
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter;
 import org.jellyfin.androidtv.util.PlaybackHelper;
+import org.jellyfin.androidtv.util.PlaybackItems;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.Response;
 import org.jellyfin.androidtv.util.sdk.compat.JavaCompat;
@@ -122,11 +123,11 @@ public class ItemLauncher {
                             break;
                         case Play:
                             //Just play it directly
-                            playbackHelper.getValue().getItemsToPlay(context, baseItem, baseItem.getType() == BaseItemKind.MOVIE, false, new Response<List<BaseItemDto>>() {
+                            playbackHelper.getValue().getItemsToPlay(context, baseItem, baseItem.getType() == BaseItemKind.MOVIE, false, new Response<PlaybackItems>() {
                                 @Override
-                                public void onResponse(List<BaseItemDto> response) {
+                                public void onResponse(PlaybackItems response) {
                                     if (!isActive()) return;
-                                    playbackLauncher.getValue().launch(context, response);
+                                    playbackLauncher.getValue().launch(context, response.getItems(), null, false, response.getStartIndex(), false);
                                 }
                             });
                             break;
@@ -182,11 +183,11 @@ public class ItemLauncher {
                     @Override
                     public void onResponse(BaseItemDto response) {
                         if (!isActive()) return;
-                        playbackHelper.getValue().getItemsToPlay(context, response, false, false, new Response<List<BaseItemDto>>() {
+                        playbackHelper.getValue().getItemsToPlay(context, response, false, false, new Response<PlaybackItems>() {
                             @Override
-                            public void onResponse(List<BaseItemDto> response) {
+                            public void onResponse(PlaybackItems response) {
                                 if (!isActive()) return;
-                                playbackLauncher.getValue().launch(context, response);
+                                playbackLauncher.getValue().launch(context, response.getItems(), null, false, response.getStartIndex(), false);
                             }
                         });
                     }

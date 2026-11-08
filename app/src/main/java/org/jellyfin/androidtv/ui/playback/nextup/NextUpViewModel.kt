@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
+import org.jellyfin.androidtv.ui.playback.seasonTransitionAt
 import org.jellyfin.androidtv.util.apiclient.itemImages
 import org.jellyfin.androidtv.util.apiclient.parentImages
 import org.jellyfin.androidtv.util.sdk.getDisplayName
@@ -37,7 +38,9 @@ class NextUpViewModel(
 	}
 
 	private fun loadItemData(id: UUID): NextUpItemData? {
-		val item = videoQueueManager.getCurrentVideoQueue().firstOrNull { it.id == id } ?: return null
+		val queue = videoQueueManager.getCurrentVideoQueue()
+		val itemIndex = queue.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return null
+		val item = queue[itemIndex]
 
 		val thumbnail = item.itemImages[ImageType.PRIMARY]
 			.takeIf { userPreferences[UserPreferences.nextUpBehavior] == NextUpBehavior.EXTENDED }
@@ -50,6 +53,7 @@ class NextUpViewModel(
 			title,
 			thumbnail,
 			logo,
+			queue.seasonTransitionAt(itemIndex - 1),
 		)
 	}
 }

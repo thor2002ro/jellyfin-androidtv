@@ -286,7 +286,9 @@ fun VideoPlayerControls(
 							switchLiveTvChannel(LiveTvChannelDirection.PREVIOUS)
 						} else {
 							coroutineScope.launch {
-								playbackManager.queue.previous()
+								previousEntryIndex(entryIndex)?.let { index ->
+									playbackManager.queue.setIndex(index)
+								}
 							}
 						}
 					},
@@ -316,6 +318,9 @@ fun VideoPlayerControls(
 		}
 	}
 }
+
+internal fun previousEntryIndex(entryIndex: Int): Int? =
+	(entryIndex - 1).takeIf { it >= 0 }
 
 @Composable
 private fun UpHint(

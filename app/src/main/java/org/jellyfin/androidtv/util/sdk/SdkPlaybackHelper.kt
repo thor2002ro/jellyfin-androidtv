@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -14,6 +15,7 @@ import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.ui.playback.PlaybackControllerContainer
 import org.jellyfin.androidtv.ui.playback.PlaybackLauncher
 import org.jellyfin.androidtv.util.PlaybackHelper
+import org.jellyfin.androidtv.util.PlaybackItems
 import org.jellyfin.androidtv.util.apiclient.Response
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.instantMixApi
@@ -28,6 +30,7 @@ import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.extensions.ticks
+import timber.log.Timber
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -47,13 +50,13 @@ class SdkPlaybackHelper(
 		mainItem: BaseItemDto,
 		allowIntros: Boolean,
 		shuffle: Boolean,
-		outerResponse: Response<List<BaseItemDto>>
+		outerResponse: Response<PlaybackItems>
 	) {
 		getScope(context).launch {
 			runCatching {
-				val items = getItems(mainItem, allowIntros, shuffle)
-				if (items.isEmpty() && !mainItem.mediaSources.isNullOrEmpty()) listOf(mainItem)
-				else items
+				val playbackItems = getItems(mainItem, allowIntros, shuffle)
+				if (playbackItems.items.isEmpty() && !mainItem.mediaSources.isNullOrEmpty()) PlaybackItems(listOf(mainItem))
+				else playbackItems
 			}.fold(
 				onSuccess = { items -> outerResponse.onResponse(items) },
 				onFailure = { exception ->
@@ -70,7 +73,7 @@ class SdkPlaybackHelper(
 		mainItem: BaseItemDto,
 		allowIntros: Boolean,
 		shuffle: Boolean,
-	): List<BaseItemDto> = withContext(Dispatchers.IO) {
+	): PlaybackItems = withContext(Dispatchers.IO) {
 		when (mainItem.type) {
 			BaseItemKind.EPISODE -> {
 				val seriesId = mainItem.seriesId
@@ -83,9 +86,25 @@ class SdkPlaybackHelper(
 						fields = ItemRepository.itemFields
 					)
 
-					response.items
+					val selectedItem = response.items.firstOrNull()
+					val adjacentItems = if (selectedItem == null) emptyList() else try {
+						val adjacentResponse by api.showApi.getEpisodes(
+							seriesId = seriesId,
+							adjacentTo = selectedItem.id,
+							isMissing = false,
+							fields = ItemRepository.itemFields,
+						)
+						adjacentResponse.items
+					} catch (error: CancellationException) {
+						throw error
+					} catch (error: Exception) {
+						Timber.w(error, "Unable to retrieve the previous episode")
+						emptyList()
+					}
+
+					episodePlaybackItems(response.items, adjacentItems)
 				} else {
-					listOf(mainItem)
+					PlaybackItems(listOf(mainItem))
 				}
 			}
 
@@ -97,7 +116,7 @@ class SdkPlaybackHelper(
 					limit = ITEM_QUERY_LIMIT,
 					fields = ItemRepository.itemFields,
 				)
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.SEASON -> {
@@ -109,7 +128,7 @@ class SdkPlaybackHelper(
 					limit = ITEM_QUERY_LIMIT,
 					fields = ItemRepository.itemFields,
 				)
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.FOLDER -> {
@@ -127,7 +146,7 @@ class SdkPlaybackHelper(
 					fields = ItemRepository.itemFields
 				)
 
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.BOX_SET -> {
@@ -145,7 +164,7 @@ class SdkPlaybackHelper(
 					fields = ItemRepository.itemFields
 				)
 
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.MUSIC_ALBUM -> {
@@ -165,7 +184,7 @@ class SdkPlaybackHelper(
 					albumIds = listOf(mainItem.id)
 				)
 
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.MUSIC_ARTIST -> {
@@ -185,7 +204,7 @@ class SdkPlaybackHelper(
 					artistIds = listOf(mainItem.id)
 				)
 
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.PLAYLIST -> {
@@ -198,7 +217,7 @@ class SdkPlaybackHelper(
 					fields = ItemRepository.itemFields
 				)
 
-				response.items
+				PlaybackItems(response.items)
 			}
 
 			BaseItemKind.PROGRAM,
@@ -215,7 +234,7 @@ class SdkPlaybackHelper(
 					currentProgram = mainItem.copy(currentProgram = null),
 				)
 
-				listOf(channelWithProgramMetadata)
+				PlaybackItems(listOf(channelWithProgramMetadata))
 			}
 
 			BaseItemKind.TV_CHANNEL,
@@ -230,14 +249,14 @@ class SdkPlaybackHelper(
 						officialRating = currentProgram.officialRating,
 						runTimeTicks = currentProgram.runTimeTicks,
 					)
-					listOf(channelWithCurrentProgramMetadata)
+					PlaybackItems(listOf(channelWithCurrentProgramMetadata))
 				} else {
-					listOf(channel)
+					PlaybackItems(listOf(channel))
 				}
 			}
 
 			else -> {
-				if (mainItem.isLiveTv()) return@withContext listOf(mainItem)
+				if (mainItem.isLiveTv()) return@withContext PlaybackItems(listOf(mainItem))
 
 				val parts = getParts(mainItem)
 				val addIntros = allowIntros && userPreferences[UserPreferences.cinemaModeEnabled]
@@ -248,9 +267,9 @@ class SdkPlaybackHelper(
 						// Force the type to be trailer as the legacy playback UI uses it to determine if it should show the next up screen
 						.map { it.copy(type = BaseItemKind.TRAILER) }
 
-					intros + parts
+					PlaybackItems(intros + parts)
 				} else {
-					parts
+					PlaybackItems(parts)
 				}
 			}
 		}
@@ -280,14 +299,14 @@ class SdkPlaybackHelper(
 			val pos = item.userData?.playbackPositionTicks?.ticks?.minus(resumeSubtractDuration) ?: Duration.ZERO
 
 			val allowIntros = pos == Duration.ZERO && item.type == BaseItemKind.MOVIE
-			val items = getItems(item, allowIntros, shuffle)
+			val playbackItems = getItems(item, allowIntros, shuffle)
 
 			playbackLauncher.launch(
 				context,
-				items,
+				playbackItems.items,
 				pos.inWholeMilliseconds.toInt(),
 				playbackControllerContainer.playbackController?.hasFragment() == true,
-				0,
+				playbackItems.startIndex,
 				shuffle,
 			)
 		}
@@ -344,4 +363,16 @@ class SdkPlaybackHelper(
 		is LifecycleOwner -> context.lifecycleScope
 		else -> ProcessLifecycleOwner.get().lifecycleScope
 	}
+}
+
+internal fun episodePlaybackItems(
+	forwardItems: List<BaseItemDto>,
+	adjacentItems: List<BaseItemDto>,
+): PlaybackItems {
+	val selectedItem = forwardItems.firstOrNull() ?: return PlaybackItems(emptyList())
+	val selectedIndex = adjacentItems.indexOfFirst { it.id == selectedItem.id }
+	val previousItem = adjacentItems.getOrNull(selectedIndex - 1)
+
+	return if (previousItem == null) PlaybackItems(forwardItems)
+	else PlaybackItems(listOf(previousItem) + forwardItems, startIndex = 1)
 }
