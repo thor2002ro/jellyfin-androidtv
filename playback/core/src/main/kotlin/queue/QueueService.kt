@@ -58,6 +58,7 @@ class QueueService internal constructor() : PlayerService(), Queue {
 		manager.backendService.addListener(object : PlayerBackendEventListener() {
 			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) {
 				if (mediaStream.queueEntry !== _entry.value) return
+				if (controlsTimedCompletion()) return
 
 				coroutineScope.launch {
 					val nextEntry = next(usePlaybackOrder = true, useRepeatMode = true)
@@ -73,6 +74,13 @@ class QueueService internal constructor() : PlayerService(), Queue {
 
 	fun clearEntryChangePredicate(predicate: suspend (QueueEntry) -> Boolean) {
 		if (entryChangePredicate === predicate) entryChangePredicate = null
+	}
+
+	fun controlsTimedCompletion(): Boolean {
+		val entry = _entry.value ?: return false
+		return entryChangePredicate != null &&
+			!entry.isLiveTv &&
+			(state.positionInfo.duration.isPositive() || entry.metadata.duration?.isPositive() == true)
 	}
 
 	// Entry management

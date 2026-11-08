@@ -22,6 +22,7 @@ import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
+import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -77,8 +78,10 @@ class PlaySessionService(
 
 				PlayState.STOPPED -> {
 					stopProgressReports()
-					sendActiveStreamStop()
-					activePlaybackKey = null
+					if (manager.getService<QueueService>()?.controlsTimedCompletion() != true) {
+						sendActiveStreamStop()
+						activePlaybackKey = null
+					}
 				}
 
 				PlayState.PAUSED -> {
@@ -158,7 +161,7 @@ class PlaySessionService(
 		coroutineScope.launch { sendStreamUpdate() }
 	}
 
-	fun sendStopIfActive() {
+	fun sendStopIfActive(positionOverride: Duration? = null) {
 		val session = activeSession
 		val failed = state.playState.value == PlayState.ERROR || session == null
 		if (session != null) {
@@ -170,6 +173,7 @@ class PlaySessionService(
 					item = session.item,
 					conversionMethod = session.conversionMethod,
 					streamStartedAt = session.streamStartedAt,
+					playerPosition = positionOverride,
 				)
 				reportPlaybackStopped(
 					itemId = session.item.id,
@@ -201,6 +205,7 @@ class PlaySessionService(
 				item = item,
 				conversionMethod = stream.conversionMethod,
 				streamStartedAt = null,
+				playerPosition = positionOverride,
 			)
 			reportPlaybackStopped(
 				itemId = item.id,
@@ -424,13 +429,14 @@ class PlaySessionService(
 		conversionMethod: MediaConversionMethod,
 		streamStartedAt: LocalDateTime?,
 		now: LocalDateTime = LocalDateTime.now(),
+		playerPosition: Duration? = null,
 	): PlaybackReportingState {
 		val reportingItem = getLiveTvReportingItem(item)
 		val positionItem = reportingItem ?: item
 		val positionTicks = withContext(Dispatchers.Main) {
 			positionItem.getReportingPositionTicks(
 				conversionMethod,
-				state.positionInfo.active,
+				playerPosition ?: state.positionInfo.active,
 				streamStartedAt,
 				now = now,
 			)

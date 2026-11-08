@@ -74,12 +74,14 @@ fun rememberPlayerProgress(
 	playbackManager: PlaybackManager = koinInject(),
 ): State<Float> {
 	val playState by playbackManager.state.playState.collectAsStateWithLifecycle()
+	val speed by playbackManager.state.speed.collectAsStateWithLifecycle()
 	val positionInfo = playbackManager.state.positionInfo
 
 	return rememberPlayerProgress(
 		playing = playState.isActivePlayback,
 		active = positionInfo.active,
 		duration = positionInfo.duration,
+		speed = speed,
 	)
 }
 
@@ -89,37 +91,57 @@ fun rememberPlayerProgress(
 	active: Duration,
 	duration: Duration,
 	seekRequests: Flow<Duration>? = null,
+	start: Duration = Duration.ZERO,
+	speed: Float = 1f,
 ): State<Float> {
 	val animatable = remember { Animatable(0f, 0f) }
 
 	suspend fun updateProgress(position: Duration) {
-		val boundedPosition = if (duration > Duration.ZERO) {
-			position.coerceIn(Duration.ZERO, duration)
-		} else Duration.ZERO
-		val activeMs = boundedPosition.inWholeMilliseconds.toFloat()
-		val durationMs = duration.inWholeMilliseconds.toFloat()
+		val relativePosition = progressPosition(position, duration, start)
+		val activeMs = relativePosition.active.inWholeMilliseconds.toFloat()
+		val durationMs = relativePosition.duration.inWholeMilliseconds.toFloat()
 
-		if (boundedPosition == Duration.ZERO) animatable.snapTo(0f)
+		if (relativePosition.duration <= Duration.ZERO) animatable.snapTo(0f)
 		else animatable.snapTo((activeMs / durationMs).coerceIn(0f, 1f))
 
-		if (playing) withContext(FixedMotionDurationScale) {
+		if (playing && speed > 0f && durationMs > activeMs) withContext(FixedMotionDurationScale) {
 			animatable.animateTo(
 				targetValue = 1f,
 				animationSpec = tween(
-					durationMillis = (durationMs - activeMs).roundToInt(),
+					durationMillis = ((durationMs - activeMs) / speed).roundToInt(),
 					easing = LinearEasing,
 				)
 			)
 		}
 	}
 
-	LaunchedEffect(playing, duration) {
+	LaunchedEffect(playing, duration, start, speed) {
 		updateProgress(active)
 	}
 
-	LaunchedEffect(seekRequests, playing, duration) {
+	LaunchedEffect(seekRequests, playing, duration, start, speed) {
 		seekRequests?.collectLatest { updateProgress(it) }
 	}
 
 	return animatable.asState()
+}
+
+internal data class ProgressPosition(
+	val active: Duration,
+	val duration: Duration,
+)
+
+internal fun progressPosition(
+	active: Duration,
+	duration: Duration,
+	start: Duration = Duration.ZERO,
+): ProgressPosition {
+	if (duration <= Duration.ZERO) return ProgressPosition(Duration.ZERO, Duration.ZERO)
+
+	val boundedActive = active.coerceIn(Duration.ZERO, duration)
+	val effectiveStart = start.coerceIn(Duration.ZERO, duration).coerceAtMost(boundedActive)
+	return ProgressPosition(
+		active = boundedActive - effectiveStart,
+		duration = duration - effectiveStart,
+	)
 }

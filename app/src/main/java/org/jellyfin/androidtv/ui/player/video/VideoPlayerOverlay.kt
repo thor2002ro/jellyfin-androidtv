@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.BuildConfig
 import org.jellyfin.androidtv.R
@@ -54,18 +56,21 @@ import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.backend.PlayerBackend
-import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.canSeek
 import org.jellyfin.playback.core.queue.isLiveTv
+import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
+import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.koin.compose.koinInject
 import timber.log.Timber
+import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -90,9 +95,12 @@ fun VideoPlayerOverlay(
 	onZoomModeSelected: (ZoomMode) -> Unit,
 	onRemoteKeyEventHandlerChanged: (((keyCode: Int, event: KeyEvent?) -> Boolean)?) -> Unit = {},
 	onClosePlayer: () -> Unit = {},
+	onPlaybackComplete: (QueueEntry, Duration) -> Unit = { _, _ -> },
+	onPlayNext: suspend (QueueEntry, Duration) -> Boolean = { _, _ -> false },
 	openLiveTvGuideOnStart: Boolean = false,
 ) {
 	val playState by playbackManager.state.playState.collectAsStateWithLifecycle()
+	val playbackSpeed by playbackManager.state.speed.collectAsStateWithLifecycle()
 	val videoQueueManager = koinInject<VideoQueueManager>()
 	val userPreferences = koinInject<UserPreferences>()
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
@@ -135,7 +143,6 @@ fun VideoPlayerOverlay(
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
 	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
 	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = entry, updateWhilePaused = entry?.isLiveTv == true)
-	val playbackProgress by rememberPlayerProgress(playbackManager)
 	val seekEnabled = entry.canSeek(positionInfo)
 	val playPauseEnabled = seekEnabled
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
@@ -143,6 +150,12 @@ fun VideoPlayerOverlay(
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
 	val currentOnRemoteKeyEventHandlerChanged by rememberUpdatedState(onRemoteKeyEventHandlerChanged)
+	val currentOnPlaybackComplete by rememberUpdatedState(onPlaybackComplete)
+	val networkRecoveryService = remember(playbackManager) {
+		playbackManager.getService<NetworkPlaybackRecoveryService>()
+	}
+	val networkRecovering by networkRecoveryService?.recovering?.collectAsStateWithLifecycle()
+		?: remember { mutableStateOf(false) }
 	val initialControlsFocusRequester = remember { FocusRequester() }
 	val nextUpBehavior = userPreferences[UserPreferences.nextUpBehavior]
 	val trickPlayEnabled = userPreferences[UserPreferences.trickPlayEnabled]
@@ -160,10 +173,60 @@ fun VideoPlayerOverlay(
 		endingSkipPromptVisible = endingSkipPromptVisible,
 	)
 	var nextUpPromptShown by remember(item?.id, nextItem?.id, nextUpBehavior) { mutableStateOf(false) }
+	var nextUpPromptStartedAt by remember(item?.id, nextItem?.id, nextUpBehavior) { mutableStateOf<Duration?>(null) }
+	var completionTimerStarted by remember(entry) { mutableStateOf(false) }
+	LaunchedEffect(entry, playState) {
+		if (playState == PlayState.PLAYING) completionTimerStarted = true
+	}
 	LaunchedEffect(nextUpPromptAvailable) {
-		if (nextUpPromptAvailable) nextUpPromptShown = true
+		if (nextUpPromptAvailable) {
+			if (!nextUpPromptShown) nextUpPromptStartedAt = positionInfo.active
+			nextUpPromptShown = true
+		}
 	}
 	val nextUpPromptVisible = nextUpPromptAvailable || nextUpPromptShown
+	val playbackDuration = positionInfo.duration
+		.takeIf { it > Duration.ZERO }
+		?: entry?.metadata?.duration
+		?: Duration.ZERO
+	val completionTimerRunning = completionTimerStarted && !networkRecovering && when (playState) {
+		PlayState.PLAYING,
+		PlayState.STOPPED -> true
+		PlayState.BUFFERING,
+		PlayState.PAUSED,
+		PlayState.ERROR -> false
+	}
+	val nextUpProgress by rememberPlayerProgress(
+		playing = completionTimerRunning && nextUpPromptVisible,
+		active = positionInfo.active,
+		duration = playbackDuration,
+		seekRequests = playbackManager.state.seekRequests,
+		start = nextUpPromptStartedAt ?: positionInfo.active,
+		speed = playbackSpeed,
+	)
+	LaunchedEffect(entry, completionTimerRunning, playbackDuration, playbackSpeed) {
+		val currentEntry = entry ?: return@LaunchedEffect
+		if (!completionTimerRunning || currentEntry.isLiveTv || playbackDuration <= Duration.ZERO) {
+			return@LaunchedEffect
+		}
+
+		playbackManager.state.seekRequests
+			.onStart { emit(playbackManager.state.positionInfo.active) }
+			.collectLatest { active ->
+				delay(
+					playbackCompletionDelay(
+						playState = playState,
+						isLiveTv = false,
+						positionInfo = positionInfo.copy(active = active, duration = playbackDuration),
+						speed = playbackSpeed,
+					) ?: return@collectLatest
+				)
+				if (
+					currentEntry === playbackManager.queue.entry.value &&
+					playbackManager.state.playState.value.allowsTimedCompletion()
+				) currentOnPlaybackComplete(currentEntry, playbackDuration)
+			}
+	}
 
 	fun hideOverlay() {
 		pausedOverlayDismissed = true
@@ -221,25 +284,15 @@ fun VideoPlayerOverlay(
 
 	fun startNextItemNow() {
 		if (nextUpStartInProgress) return
+		val currentEntry = entry ?: return
 		val nextIndex = playbackManager.queue.entryIndex.value + 1
 		if (nextIndex <= 0 || nextIndex > videoQueueManager.getCurrentVideoQueue().lastIndex) return
 
 		nextUpStartInProgress = true
 		centerShortcutState.keyCode = null
 		coroutineScope.launch {
-			val nextEntry = playbackManager.queue.peekNext(usePlaybackOrder = false, useRepeatMode = false)
-			if (nextEntry == null) {
+			if (!onPlayNext(currentEntry, playbackDuration)) {
 				nextUpStartInProgress = false
-				return@launch
-			}
-
-			// The next entry may have been preloaded before the latest subtitle selection was known.
-			nextEntry.mediaStream = null
-
-			if (playbackManager.queue.next(usePlaybackOrder = false, useRepeatMode = false) == null) {
-				nextUpStartInProgress = false
-			} else {
-				videoQueueManager.setCurrentMediaPosition(nextIndex)
 			}
 		}
 	}
@@ -743,7 +796,7 @@ fun VideoPlayerOverlay(
 			visible = nextUpPromptVisible,
 			controlsVisible = visibilityState.visible,
 			seekOverlayVisible = seekOverlayVisible,
-			progress = playbackProgress,
+			progress = nextUpProgress,
 			onClick = ::startNextItemNow,
 			modifier = Modifier
 				.align(Alignment.BottomEnd)
@@ -786,6 +839,24 @@ internal fun isPendingSeekCurrent(
 	currentEntry: QueueEntry?,
 	currentBackend: PlayerBackend,
 ) = expectedEntry != null && expectedEntry === currentEntry && expectedBackend === currentBackend
+
+internal fun playbackCompletionDelay(
+	playState: PlayState,
+	isLiveTv: Boolean,
+	positionInfo: PositionInfo,
+	speed: Float = 1f,
+): Duration? {
+	if (
+		!playState.allowsTimedCompletion() ||
+		isLiveTv ||
+		positionInfo.duration <= Duration.ZERO ||
+		speed <= 0f
+	) return null
+	val remaining = (positionInfo.duration - positionInfo.active).coerceAtLeast(Duration.ZERO)
+	return (remaining.inWholeMilliseconds.toDouble() / speed).roundToLong().milliseconds
+}
+
+internal fun PlayState.allowsTimedCompletion() = this == PlayState.PLAYING || this == PlayState.STOPPED
 
 internal fun seekAccelerationMultiplier(pressCount: Int): Int =
 	SeekAccelerationMultipliers[(pressCount - 1).coerceIn(SeekAccelerationMultipliers.indices)]
