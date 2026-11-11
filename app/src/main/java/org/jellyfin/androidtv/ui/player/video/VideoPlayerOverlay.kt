@@ -107,8 +107,6 @@ fun VideoPlayerOverlay(
 	var pausedOverlayDismissed by remember { mutableStateOf(false) }
 	var showPlaybackInfo by remember { mutableStateOf(BuildConfig.DEBUG) }
 	var openLiveTvGuideOnStartConsumed by remember { mutableStateOf(false) }
-	var skipPromptTarget by remember { mutableStateOf<Duration?>(null) }
-	var endingSkipPromptVisible by remember { mutableStateOf(false) }
 	var overlayWakeKeyCode by remember { mutableStateOf<Int?>(null) }
 	var nextUpPromptKeyCode by remember { mutableStateOf<Int?>(null) }
 	var skipPromptKeyCode by remember { mutableStateOf<Int?>(null) }
@@ -135,6 +133,12 @@ fun VideoPlayerOverlay(
 	val visibilityState = rememberPlayerOverlayVisibility(keepVisible = keepOverlayVisible)
 	val windowInfo = LocalWindowInfo.current
 	val entry by rememberQueueEntry(playbackManager)
+	val preparingEntry by playbackManager.preparingEntry?.collectAsStateWithLifecycle()
+		?: remember { mutableStateOf<QueueEntry?>(null) }
+	val entryPreparing = preparingEntry != null && preparingEntry === entry
+	val positionResetKey = entry to entryPreparing
+	var skipPromptTarget by remember(entry) { mutableStateOf<Duration?>(null) }
+	var endingSkipPromptVisible by remember(entry) { mutableStateOf(false) }
 	val entryIndex by playbackManager.queue.entryIndex.collectAsStateWithLifecycle()
 	val item = entry?.run { baseItemFlow.collectAsStateWithLifecycle(baseItem) }?.value
 	val videoQueue = videoQueueManager.getCurrentVideoQueue()
@@ -146,7 +150,7 @@ fun VideoPlayerOverlay(
 	}
 	val currentLiveTvItem = item?.takeIf { baseItem -> baseItem.isLiveTv() }
 	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
-	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = entry, updateWhilePaused = entry?.isLiveTv == true)
+	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = positionResetKey, updateWhilePaused = entry?.isLiveTv == true)
 	val seekEnabled = entry.canSeek(positionInfo)
 	val playPauseEnabled = seekEnabled
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
@@ -166,21 +170,21 @@ fun VideoPlayerOverlay(
 	val nextUpPositionInfo by rememberPlayerPositionInfo(
 		playbackManager = playbackManager,
 		precision = NextUpProgressCheckInterval,
-		resetKey = entryIndex,
+		resetKey = positionResetKey,
 		resetToEmpty = true,
 		updateImmediately = false,
 	)
-	val nextUpPromptAvailable = item.isNextUpPromptVisible(
+	val nextUpPromptAvailable = !entryPreparing && item.isNextUpPromptVisible(
 		nextItem = nextItem,
 		nextUpBehavior = nextUpBehavior,
 		positionInfo = nextUpPositionInfo,
 		endingSkipPromptVisible = endingSkipPromptVisible,
 	)
-	var nextUpPromptShown by remember(item?.id, nextItem?.id, nextUpBehavior) { mutableStateOf(false) }
-	var nextUpPromptStartedAt by remember(item?.id, nextItem?.id, nextUpBehavior) { mutableStateOf<Duration?>(null) }
+	var nextUpPromptShown by remember(entry, nextItem?.id, nextUpBehavior) { mutableStateOf(false) }
+	var nextUpPromptStartedAt by remember(entry, nextItem?.id, nextUpBehavior) { mutableStateOf<Duration?>(null) }
 	var completionTimerStarted by remember(entry) { mutableStateOf(false) }
-	LaunchedEffect(entry, playState) {
-		if (playState == PlayState.PLAYING) completionTimerStarted = true
+	LaunchedEffect(entry, entryPreparing, playState) {
+		if (!entryPreparing && playState == PlayState.PLAYING) completionTimerStarted = true
 	}
 	LaunchedEffect(nextUpPromptAvailable) {
 		if (nextUpPromptAvailable) {
@@ -193,7 +197,7 @@ fun VideoPlayerOverlay(
 		.takeIf { it > Duration.ZERO }
 		?: entry?.metadata?.duration
 		?: Duration.ZERO
-	val completionTimerRunning = completionTimerStarted && !networkRecovering && when (playState) {
+	val completionTimerRunning = completionTimerStarted && !entryPreparing && !networkRecovering && when (playState) {
 		PlayState.PLAYING,
 		PlayState.STOPPED -> true
 		PlayState.BUFFERING,
