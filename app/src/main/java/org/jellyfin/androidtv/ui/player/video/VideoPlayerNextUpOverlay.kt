@@ -202,6 +202,7 @@ internal fun BaseItemDto?.isNextUpPromptVisible(
 	endingSkipPromptVisible: Boolean = false,
 ): Boolean {
 	val currentItem = this ?: return false
+	if (positionInfo.duration <= Duration.ZERO) return false
 
 	return nextItem != null &&
 		nextUpBehavior != NextUpBehavior.DISABLED &&
