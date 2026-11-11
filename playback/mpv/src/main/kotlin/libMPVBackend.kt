@@ -87,7 +87,7 @@ internal fun PlayableMediaStream.mpvSourceTracks(type: TrackType): List<MediaStr
 	TrackType.AUDIO -> tracks.filterIsInstance<MediaStreamAudioTrack>()
 	TrackType.SUBTITLE -> {
 		val subtitles = tracks.filterIsInstance<MediaStreamSubtitleTrack>()
-		subtitles.filterNot { it.isExternal } + externalSubtitles.mapNotNull { external ->
+		subtitles.filterNot { it.isExternal } + externalSubtitles.sortedBy { it.index }.mapNotNull { external ->
 			subtitles.firstOrNull { subtitle -> subtitle.isExternal && subtitle.index == external.index }
 		}
 	}
@@ -214,6 +214,7 @@ class LibMPVBackend(
 	private val videoDecoderProvider: (() -> LibMPVVideoDecoder)? = null,
 	private val playbackOptionsProvider: (() -> LibMPVPlaybackOptions)? = null,
 	private val gpuApiVersionProvider: (String) -> String? = { null },
+	private val languageMatcher: ((String?, String?) -> Boolean)? = null,
 ) : BasePlayerBackend(), TrackSelectionBackend, SurfaceHolder.Callback {
 	private companion object {
 		const val TICK_INTERVAL_MS = 250L
@@ -1769,7 +1770,7 @@ class LibMPVBackend(
 		if (stream.externalSubtitles.any { shouldSelectExternalSubtitle(it, stream.selectedSubtitleStreamIndex) }) {
 			pendingInitialTrackTypes += TrackType.SUBTITLE
 		}
-		stream.externalSubtitles.forEach { subtitle ->
+		stream.externalSubtitles.sortedBy { subtitle -> subtitle.index }.forEach { subtitle ->
 			val flags = buildString {
 				// Select through track-list updates, so late loads cannot override a newer user choice.
 				append("auto")
@@ -1777,7 +1778,6 @@ class LibMPVBackend(
 				if (subtitle.isDefault) append("+default")
 			}
 			runCommand(
-				"async",
 				"sub-add",
 				subtitle.url,
 				flags,
@@ -1869,9 +1869,7 @@ class LibMPVBackend(
 		if (type == TrackType.SUBTITLE) {
 			val external = stream.externalSubtitles.firstOrNull { subtitle -> subtitle.index == streamIndex }
 			if (external != null) {
-				return selectable.firstOrNull { track ->
-					track.isExternal && track.externalFilename.matchesExternalUrl(external.url)
-				}
+				return selectable.firstOrNull { track -> track.matchesExternalSubtitle(external, languageMatcher) }
 			}
 		}
 		selectable.firstOrNull { track -> track.ffIndex == streamIndex }?.let { return it }
@@ -1884,7 +1882,7 @@ class LibMPVBackend(
 		val stream = currentStream
 		val sourceTracks = stream?.mpvSourceTracks(type).orEmpty()
 		val selectable = tracks.filter { track -> track.type == type }
-		return selectable.mapIndexed { index, track ->
+		val availableTracks = selectable.mapIndexed { index, track ->
 			val source = stream?.sourceTrackFor(track, index, sourceTracks)
 			PlayerTrack(
 				index = index,
@@ -1893,10 +1891,14 @@ class LibMPVBackend(
 				language = track.language ?: source.language(),
 				codec = track.codec ?: source?.codec,
 				isSelected = track.isSelected,
-				streamIndex = source?.index ?: track.ffIndex,
+				streamIndex = source?.index ?: track.ffIndex.takeUnless {
+					track.type == TrackType.SUBTITLE && track.isExternal
+				},
 				trackIndex = track.id,
 			)
 		}
+		if (type != TrackType.SUBTITLE) return availableTracks
+		return availableTracks.sortedBy { track -> track.streamIndex ?: Int.MAX_VALUE }
 	}
 
 	override fun selectTrack(type: TrackType, index: Int): Boolean {
@@ -1926,11 +1928,9 @@ class LibMPVBackend(
 	): MediaStreamTrack? {
 		if (track.type == TrackType.SUBTITLE && track.isExternal) {
 			val external = externalSubtitles.firstOrNull { subtitle ->
-				track.externalFilename.matchesExternalUrl(subtitle.url)
-			}
-			external?.let { subtitle ->
-				sourceTracks.firstOrNull { source -> source.index == subtitle.index }?.let { return it }
-			}
+				track.matchesExternalSubtitle(subtitle, languageMatcher)
+			} ?: return null
+			return sourceTracks.firstOrNull { source -> source.index == external.index }
 		}
 		track.ffIndex?.let { index -> sourceTracks.firstOrNull { source -> source.index == index }?.let { return it } }
 		return sourceTracks.getOrNull(ordinal)
@@ -2001,7 +2001,30 @@ private fun MediaStreamTrack?.language(): String? = when (this) {
 
 private fun String?.matchesExternalUrl(url: String): Boolean {
 	if (this == null) return false
-	return this == url || substringAfterLast('/') == url.substringAfterLast('/')
+	return this == url || substringBefore('#').substringBefore('?') == url.substringBefore('#').substringBefore('?')
+}
+
+private fun LibMPVTrack.matchesExternalSubtitle(
+	subtitle: ExternalSubtitle,
+	languageMatcher: ((String?, String?) -> Boolean)?,
+): Boolean {
+	if (!isExternal || !externalFilename.matchesExternalUrl(subtitle.url)) return false
+	val expectedLanguage = subtitle.language?.trim().orEmpty()
+	val actualLanguage = language?.trim().orEmpty()
+	if (
+		expectedLanguage.isEmpty() ||
+		actualLanguage.isEmpty() ||
+		expectedLanguage.equals(actualLanguage, ignoreCase = true) ||
+		languageMatcher?.invoke(expectedLanguage, actualLanguage) == true
+	) return true
+	Timber.w(
+		"External subtitle stream %d URL matched MPV track %d but language differed: expected=%s actual=%s",
+		subtitle.index,
+		id,
+		expectedLanguage,
+		actualLanguage,
+	)
+	return false
 }
 
 internal fun mpvPositionInfo(
