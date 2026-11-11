@@ -41,6 +41,7 @@ import org.jellyfin.androidtv.util.DeviceGraphicsInfoProvider
 import org.jellyfin.androidtv.ui.playback.VideoQueueManager
 import org.jellyfin.androidtv.ui.playback.rewrite.RewriteMediaManager
 import org.jellyfin.androidtv.util.AndroidVersion
+import org.jellyfin.androidtv.util.languageCodesMatch
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.androidtv.util.TrackSelectionResolver
 import org.jellyfin.androidtv.util.profile.createDeviceProfile
@@ -165,6 +166,7 @@ private fun Scope.createLibMPVBackend(): LibMPVBackend {
 		videoDecoderProvider = { userPreferences[UserPreferences.mpvDecoder].decoder },
 		playbackOptionsProvider = { userPreferences.detectedMPVPlaybackOptions(androidContext()) },
 		gpuApiVersionProvider = { api -> DeviceGraphicsInfoProvider.getNow()?.apiVersion(api) },
+		languageMatcher = ::languageCodesMatch,
 	)
 }
 
