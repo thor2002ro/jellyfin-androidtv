@@ -1763,6 +1763,7 @@ class ExoPlayerBackend(
 
 		override fun onTracksChanged(tracks: Tracks) {
 			notifyTracksChanged()
+			logExternalSubtitleTracks()
 			applyPendingInitialTrackSelection()
 			schedulePendingInitialTrackSelectionRetry()
 
@@ -2412,33 +2413,41 @@ class ExoPlayerBackend(
 			TrackType.SUBTITLE -> (sourceTrack as? MediaStreamSubtitleTrack)?.let(::findSupportedSubtitleTrack)
 		}
 
+	private fun logExternalSubtitleTracks() {
+		if (!currentMediaItemMatchesCurrentStream()) return
+		getSourceTracks(TrackType.SUBTITLE).filterIsInstance<MediaStreamSubtitleTrack>()
+			.filter { it.isExternal && it.index != null }
+			.forEach { track ->
+				val match = findSupportedSubtitleTrack(track)
+				if (match == null) {
+					Timber.w(
+						"External subtitle track selection failed streamIndex=%s title=%s language=%s",
+						track.index,
+						track.displayTitle ?: "none",
+						track.displayLanguage ?: "unknown",
+					)
+				} else {
+					val format = match.group.getFormat(match.trackIndex)
+					Timber.i(
+						"External subtitle track matched streamIndex=%s groupIndex=%d trackIndex=%d groupId=%s formatId=%s mime=%s label=%s",
+						track.index,
+						match.groupIndex,
+						match.trackIndex,
+						match.group.id,
+						format.id ?: "none",
+						format.sampleMimeType ?: "unknown",
+						format.label ?: "none",
+					)
+				}
+			}
+	}
+
 	private fun findSupportedSubtitleTrack(track: MediaStreamSubtitleTrack): SupportedTrack? {
 		val streamIndex = track.index ?: return null
 		return if (track.isExternal) {
-			val match = findSupportedTextTrack { group, trackIndex ->
+			findSupportedTextTrack { group, trackIndex ->
 				group.isExternalSubtitleTrack(trackIndex, streamIndex)
 			}
-			if (match == null) {
-				Timber.w(
-					"External subtitle track selection failed streamIndex=%s title=%s language=%s",
-					streamIndex,
-					track.displayTitle ?: "none",
-					track.displayLanguage ?: "unknown",
-				)
-			} else {
-				val format = match.group.getFormat(match.trackIndex)
-				Timber.i(
-					"External subtitle track matched streamIndex=%s groupIndex=%d trackIndex=%d groupId=%s formatId=%s mime=%s label=%s",
-					streamIndex,
-					match.groupIndex,
-					match.trackIndex,
-					match.group.id,
-					format.id ?: "none",
-					format.sampleMimeType ?: "unknown",
-					format.label ?: "none",
-				)
-			}
-			match
 		} else {
 			val internalSubtitleIndex = getSourceTracks(TrackType.SUBTITLE)
 				.filterIsInstance<MediaStreamSubtitleTrack>()
@@ -2555,7 +2564,14 @@ class ExoPlayerBackend(
 			?: return false
 
 		return if (applyTrackOverride(type.exoTrackType, match.group, match.trackIndex)) {
-			Timber.i("Applied initial ${type.name.lowercase()} stream index $streamIndex")
+			Timber.i(
+				"Applied initial %s stream index %s groupIndex=%d trackIndex=%d groupId=%s",
+				type.name.lowercase(),
+				streamIndex,
+				match.groupIndex,
+				match.trackIndex,
+				match.group.id,
+			)
 			true
 		} else {
 			true
