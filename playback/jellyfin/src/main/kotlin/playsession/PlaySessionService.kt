@@ -1,12 +1,9 @@
 package org.jellyfin.playback.jellyfin.playsession
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
@@ -16,9 +13,8 @@ import org.jellyfin.playback.core.backend.PlayerBackendEvent
 import org.jellyfin.playback.core.backend.PlayerTrack
 import org.jellyfin.playback.core.backend.TrackType
 import org.jellyfin.playback.core.mediastream.MediaConversionMethod
-import org.jellyfin.playback.core.mediastream.MediaStream
+import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
-import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.RepeatMode
 import org.jellyfin.playback.core.plugin.PlayerService
@@ -58,13 +54,12 @@ class PlaySessionService(
 	private var selectedAudioStreamIndex: Int? = null
 	private var selectedSubtitleStreamIndex: Int? = null
 	private var observedTrackSelection: Pair<Int?, Int?>? = null
-	private var stoppedPlaySessionId: String? = null
+	private val stoppedPlaySessionIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 	private var activePlaybackKey: String? = null
 	private var activeSession: ActivePlaybackSession? = null
 	private var progressReportJob: Job? = null
 	private var liveTvReportingState: LiveTvReportingState? = null
 
-	@OptIn(ExperimentalCoroutinesApi::class)
 	override suspend fun onInitialize() {
 		state.backendEvents.onEach { event ->
 			when (event) {
@@ -86,21 +81,24 @@ class PlaySessionService(
 						if (activeSession?.playSessionId != stream.identifier) return@onEach
 						stopProgressReports()
 						val failed = event.state == PlayState.ERROR
-						if (failed || manager.getService<QueueService>()?.controlsTimedCompletion() != true) {
+						if (failed || !controlsTimedCompletion(stream)) {
 							stopReportedStream(stream.identifier, event.position, failed = failed)
 						}
 					}
 				}
 				is PlayerBackendEvent.MediaStreamEnded -> {
-					if (manager.getService<QueueService>()?.controlsTimedCompletion() != true) {
+					if (!controlsTimedCompletion(event.stream)) {
 						stopReportedStream(event.stream.identifier, event.position)
 					}
 				}
 				is PlayerBackendEvent.MediaStreamReplaced -> {
 					val entry = manager.queue.entry.value
 					val session = activeSession?.takeIf { it.playSessionId == event.stream.identifier } ?: return@onEach
-					if (shouldKeepLiveStreamOpen(session, entry)) {
-						stopActiveSessionIfChanged(entry, entry?.mediaStream)
+					if (entry?.mediaStream?.identifier != session.playSessionId && shouldKeepLiveStreamOpen(session, entry)) {
+						stopProgressReports()
+						Timber.d("Keeping Live TV live stream ${session.liveStreamId} open while changing playback session")
+						activeSession = null
+						activePlaybackKey = null
 					} else {
 						stopReportedStream(event.stream.identifier, event.position)
 					}
@@ -108,23 +106,13 @@ class PlaySessionService(
 			}
 		}.launchIn(coroutineScope)
 
-		manager.queue.entry.onEach { entry ->
-			stopActiveSessionIfChanged(entry, entry?.mediaStream)
-
+		manager.queue.entry.onEach {
 			selectedAudioStreamIndex = null
 			selectedSubtitleStreamIndex = null
 			observedTrackSelection = null
-			if (entry != null && entry.mediaStream?.identifier != stoppedPlaySessionId) stoppedPlaySessionId = null
 			activePlaybackKey = null
 			liveTvReportingState = null
 		}.launchIn(coroutineScope)
-
-		manager.queue.entry
-			.filterNotNull()
-			.flatMapLatest { entry -> entry.mediaStreamFlow }
-			.onEach { stream ->
-				stopActiveSessionIfChanged(manager.queue.entry.value, stream)
-			}.launchIn(coroutineScope)
 
 		state.trackRevision
 			.drop(1)
@@ -173,18 +161,17 @@ class PlaySessionService(
 	}
 
 	fun sendStopIfActive(positionOverride: Duration? = null) {
+		val stopPosition = positionOverride ?: state.positionInfo.active
 		val session = activeSession
 		val failed = state.playState.value == PlayState.ERROR || session == null
 		if (session != null) {
-			if (stoppedPlaySessionId == session.playSessionId) return
-
-			stoppedPlaySessionId = session.playSessionId
+			if (!stoppedPlaySessionIds.add(session.playSessionId)) return
 			coroutineScope.launch {
 				val reporting = getPlaybackReportingState(
 					item = session.item,
 					conversionMethod = session.conversionMethod,
 					streamStartedAt = session.streamStartedAt,
-					playerPosition = positionOverride,
+					playerPosition = stopPosition,
 				)
 				reportPlaybackStopped(
 					itemId = session.item.id,
@@ -204,9 +191,7 @@ class PlaySessionService(
 		val entry = manager.queue.entry.value ?: return
 		val stream = entry.mediaStream ?: return
 		val item = entry.baseItem ?: return
-		if (stoppedPlaySessionId == stream.identifier) return
-
-		stoppedPlaySessionId = stream.identifier
+		if (!stoppedPlaySessionIds.add(stream.identifier)) return
 		val queue = manager.queue.entries.value
 			.mapNotNull { it.baseItem }
 			.map { QueueItem(id = it.id, playlistItemId = it.playlistItemId) }
@@ -216,7 +201,7 @@ class PlaySessionService(
 				item = item,
 				conversionMethod = stream.conversionMethod,
 				streamStartedAt = null,
-				playerPosition = positionOverride,
+				playerPosition = stopPosition,
 			)
 			reportPlaybackStopped(
 				itemId = item.id,
@@ -299,9 +284,11 @@ class PlaySessionService(
 		val entry = manager.queue.entry.value ?: return
 		val stream = entry.mediaStream ?: return
 		val item = entry.baseItem ?: return
-		stopActiveSessionIfChanged(entry, stream)
 		val playbackKey = "${item.id}:${stream.identifier}"
 		val session = activeSession
+		if (session != null && session.playSessionId != stream.identifier &&
+			session.playSessionId !in stoppedPlaySessionIds
+		) return
 
 		if (
 			activePlaybackKey == playbackKey &&
@@ -313,7 +300,7 @@ class PlaySessionService(
 			return
 		}
 
-		if (stoppedPlaySessionId == stream.identifier) stoppedPlaySessionId = null
+		stoppedPlaySessionIds.remove(stream.identifier)
 		val queue = getQueue()
 		val streamStartedAt = LocalDateTime.now()
 		val playMethod = stream.conversionMethod.playMethod
@@ -544,22 +531,6 @@ class PlaySessionService(
 		else sendStreamStop()
 	}
 
-	private suspend fun stopActiveSessionIfChanged(entry: QueueEntry?, stream: MediaStream?) {
-		val session = activeSession ?: return
-		if (session.playSessionId == stream?.identifier) return
-
-		stopProgressReports()
-		if (stream != null && shouldKeepLiveStreamOpen(session, entry)) {
-			Timber.d("Keeping Live TV live stream ${session.liveStreamId} open while changing playback session")
-			activeSession = null
-			activePlaybackKey = null
-			return
-		}
-
-		sendStreamStop(session)
-		activePlaybackKey = null
-	}
-
 	private fun shouldKeepLiveStreamOpen(
 		session: ActivePlaybackSession,
 		entry: QueueEntry?,
@@ -583,8 +554,7 @@ class PlaySessionService(
 		queue: List<QueueItem>,
 		failed: Boolean,
 	) {
-		if (stoppedPlaySessionId == playSessionId) return
-		stoppedPlaySessionId = playSessionId
+		if (!stoppedPlaySessionIds.add(playSessionId)) return
 
 		reportPlaybackStopped(
 			itemId = itemId,
@@ -599,11 +569,19 @@ class PlaySessionService(
 		)
 	}
 
+	private suspend fun controlsTimedCompletion(stream: PlayableMediaStream): Boolean = withContext(Dispatchers.Main.immediate) {
+		manager.queue.entry.value?.mediaStream === stream &&
+			manager.getService<QueueService>()?.controlsTimedCompletion() == true
+	}
+
 	private suspend fun stopReportedStream(identifier: String, position: Duration?, failed: Boolean = state.playState.value == PlayState.ERROR) {
 		val session = activeSession?.takeIf { it.playSessionId == identifier } ?: return
 		stopProgressReports()
 		sendStreamStop(session, failed = failed, position = position)
-		activePlaybackKey = null
+		if (activeSession === session) {
+			activeSession = null
+			activePlaybackKey = null
+		}
 	}
 
 	private suspend fun sendStreamStop(
@@ -611,8 +589,7 @@ class PlaySessionService(
 		failed: Boolean = state.playState.value == PlayState.ERROR,
 		position: Duration? = null,
 	) {
-		if (stoppedPlaySessionId == session.playSessionId) return
-		stoppedPlaySessionId = session.playSessionId
+		if (!stoppedPlaySessionIds.add(session.playSessionId)) return
 		val reporting = getPlaybackReportingState(
 			item = session.item,
 			conversionMethod = session.conversionMethod,

@@ -64,7 +64,7 @@ class QueueService internal constructor() : PlayerService(), Queue {
 			.filterIsInstance<PlayerBackendEvent.MediaStreamEnded>()
 			.onEach { event ->
 				val currentEntry = event.stream.queueEntry
-				if (currentEntry !== _entry.value || controlsTimedCompletion()) return@onEach
+				if (currentEntry !== _entry.value || withContext(Dispatchers.Main.immediate) { controlsTimedCompletion() }) return@onEach
 				val repeat = state.repeatMode.value != RepeatMode.NONE
 				val nextEntry = next(usePlaybackOrder = true, useRepeatMode = true)
 
