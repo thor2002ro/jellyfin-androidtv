@@ -26,6 +26,7 @@ enum class BufferLength(
 	AUTO(
 		nameRes = R.string.playback_buffer_auto,
 		liveTvBufferDuration = 2.seconds,
+		maxBufferBytes = 48 * MEBIBYTE,
 	),
 
 	/**
@@ -38,7 +39,7 @@ enum class BufferLength(
 		bufferForPlaybackDuration = 2.5.seconds,
 		bufferForPlaybackAfterRebufferDuration = 5.seconds,
 		liveTvBufferDuration = 5.seconds,
-		maxBufferBytes = 128 * MEBIBYTE,
+		maxBufferBytes = 64 * MEBIBYTE,
 	),
 
 	/**
@@ -52,7 +53,7 @@ enum class BufferLength(
 		bufferForPlaybackDuration = 5.seconds,
 		bufferForPlaybackAfterRebufferDuration = 10.seconds,
 		liveTvBufferDuration = 10.seconds,
-		maxBufferBytes = 256 * MEBIBYTE,
+		maxBufferBytes = 96 * MEBIBYTE,
 	),
 }
 

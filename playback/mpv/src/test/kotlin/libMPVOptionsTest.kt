@@ -649,12 +649,9 @@ class LibMPVOptionsTest : StringSpec({
 		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = null) shouldBe null
 	}
 
-	"MPV automatic cache has a bounded default without replacing explicit limits" {
-		PlaybackBufferOptions().libMPVMaxCacheBytes() shouldBe 64L * 1024 * 1024
-		PlaybackBufferOptions(maxBufferBytes = 128L * 1024 * 1024).libMPVMaxCacheBytes() shouldBe
-			128L * 1024 * 1024
-		PlaybackBufferOptions(maxBufferBytes = 0).libMPVMaxCacheBytes() shouldBe 0
-		PlaybackBufferOptions(maxBufferBytes = -1).libMPVMaxCacheBytes() shouldBe -1
+	"MPV byte cache uses native limits for non-positive byte caps" {
+		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = 0) shouldBe null
+		mpvCacheBytes(cacheSeconds = 120.0, bitrate = 20_000_000, maximum = -1) shouldBe null
 	}
 
 	"MPV byte cap also limits cache and wait durations" {

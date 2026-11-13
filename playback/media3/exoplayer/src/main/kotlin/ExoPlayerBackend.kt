@@ -1410,7 +1410,7 @@ class ExoPlayerBackend(
 				bufferOptions.bufferForPlaybackDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
 				bufferOptions.bufferForPlaybackAfterRebufferDuration?.inWholeMilliseconds?.toInt() ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
 			)
-			.setPrioritizeTimeOverSizeThresholds(targetBufferBytes == null)
+			.setPrioritizeTimeOverSizeThresholds(false)
 		targetBufferBytes?.let(loadControlBuilder::setTargetBufferBytes)
 		val loadControl = loadControlBuilder.build()
 

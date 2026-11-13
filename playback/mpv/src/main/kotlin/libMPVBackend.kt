@@ -897,7 +897,7 @@ class LibMPVBackend(
 
 	private fun applyBufferOptions(stream: PlayableMediaStream) {
 		val bitrate = stream.totalBitrate()
-		val maximumBytes = bufferOptions.libMPVMaxCacheBytes()
+		val maximumBytes = bufferOptions.maxBufferBytes
 		val configuration = bufferOptions
 			.toLibMPVBufferConfiguration(stream.queueEntry.isLiveTv)
 			.cappedToBytes(bitrate, maximumBytes)
@@ -918,7 +918,7 @@ class LibMPVBackend(
 			val cacheSeconds = configuration.cacheSeconds.toLibMPVString()
 			setOption("cache-secs", cacheSeconds)
 			val forwardBytes = mpvCacheBytes(configuration.cacheSeconds, bitrate, maximumBytes)
-			if (forwardBytes != null) {
+			if (forwardBytes != null && maximumBytes != null) {
 				setOption("demuxer-max-bytes", forwardBytes.toString())
 				setOption("demuxer-max-back-bytes", (maximumBytes - forwardBytes).coerceAtLeast(0).toString())
 			} else {
