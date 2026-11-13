@@ -65,7 +65,7 @@ class MainActivity : FragmentActivity() {
 	override fun onCreate(savedInstanceState: Bundle?) {
 		applyTheme()
 
-		super.onCreate(savedInstanceState)
+		super.onCreate(savedInstanceState.takeIf { isAuthenticated() })
 
 		if (!validateAuthentication()) return
 
@@ -139,7 +139,7 @@ class MainActivity : FragmentActivity() {
 	}
 
 	private fun validateAuthentication(): Boolean {
-		if (sessionRepository.currentSession.value == null || userRepository.currentUser.value == null) {
+		if (!isAuthenticated()) {
 			if (authenticationRedirectStarted) return false
 			authenticationRedirectStarted = true
 			Timber.w("Activity ${this::class.qualifiedName} started without a session, bouncing to StartupActivity")
@@ -150,6 +150,9 @@ class MainActivity : FragmentActivity() {
 
 		return true
 	}
+
+	private fun isAuthenticated() =
+		sessionRepository.currentSession.value != null && userRepository.currentUser.value != null
 
 	override fun onPause() {
 		super.onPause()
