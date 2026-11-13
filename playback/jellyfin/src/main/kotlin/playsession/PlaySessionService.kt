@@ -78,7 +78,11 @@ class PlaySessionService(
 
 				PlayState.STOPPED -> {
 					stopProgressReports()
-					if (manager.getService<QueueService>()?.controlsTimedCompletion() != true) {
+					val controlsTimedCompletion = withContext(Dispatchers.Main.immediate) {
+						manager.getService<QueueService>()?.controlsTimedCompletion() == true
+					}
+
+					if (!controlsTimedCompletion) {
 						sendActiveStreamStop()
 						activePlaybackKey = null
 					}
