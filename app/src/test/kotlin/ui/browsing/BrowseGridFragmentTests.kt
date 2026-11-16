@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui.browsing
 
 import android.view.View
+import android.content.Context
 import android.view.ViewGroup
 import android.view.KeyEvent
 import androidx.leanback.widget.Presenter
@@ -13,7 +14,9 @@ import org.jellyfin.androidtv.data.model.FilterOptions
 import org.jellyfin.androidtv.data.model.PlaybackFilter
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.constant.GridDirection
+import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LibraryViewStyle
+import org.jellyfin.androidtv.constant.LibraryCardSpacing
 import org.jellyfin.androidtv.ui.presentation.ComposeBrowseListPresenter
 import org.jellyfin.androidtv.ui.presentation.ComposeVerticalGridPresenter
 import org.jellyfin.androidtv.ui.presentation.HorizontalGridPresenter
@@ -25,12 +28,36 @@ import org.jellyfin.sdk.model.api.SortOrder
 import java.util.UUID
 
 class BrowseGridFragmentTests : FunSpec({
+	test("music posters remain square while other poster and thumbnail dimensions retain their ratios") {
+		val music = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.COLLECTION_FOLDER, collectionType = CollectionType.MUSIC)
+		val movies = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.USER_VIEW, collectionType = CollectionType.MOVIES)
+		getCardWidthBy(90.0, ImageType.POSTER, music) shouldBe 90.0
+		getCardHeightBy(90.0, ImageType.POSTER, music) shouldBe 90.0
+		getCardWidthBy(90.0, ImageType.POSTER, movies) shouldBe 60.0
+		getCardWidthBy(90.0, ImageType.THUMB, movies) shouldBe 160.0
+		getCardHeightBy(160.0, ImageType.THUMB, movies) shouldBe 90.0
+	}
+
+	test("grid sizing preserves card layout and visible item estimates") {
+		val library = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.USER_VIEW, collectionType = CollectionType.MOVIES)
+		val horizontal = HorizontalGridPresenter().apply { setSpanCount(3) }
+		val vertical = ComposeVerticalGridPresenter().apply { setSpanCount(5) }
+		for (presenter in listOf(horizontal, vertical)) {
+			val layout = calculateBrowseGridLayout(presenter, 1920, 900, 1.05, ImageType.POSTER, library, false, LibraryCardSpacing.NORMAL)
+			(layout.cardHeight > 0) shouldBe true
+			(layout.cardsScreenEstimate >= layout.cardsScreenStride) shouldBe true
+			(layout.cardsScreenStride > 0) shouldBe true
+		}
+		val list = calculateBrowseGridLayout(ComposeBrowseListPresenter(), 1920, 900, 1.05, ImageType.POSTER, library, false, LibraryCardSpacing.NORMAL)
+		list.horizontalSpacing shouldBe 0
+		list.cardsScreenStride shouldBe list.cardsScreenEstimate
+	}
 	test("only horizontal cards use the separate library backdrop") {
-		BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.CARDS, GridDirection.HORIZONTAL) shouldBe true
-		BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.CARDS, GridDirection.VERTICAL) shouldBe false
+		shouldDrawBrowseBackground(LibraryViewStyle.CARDS, GridDirection.HORIZONTAL) shouldBe true
+		shouldDrawBrowseBackground(LibraryViewStyle.CARDS, GridDirection.VERTICAL) shouldBe false
 		for (direction in GridDirection.entries) {
-			BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.DENSE_LIST, direction) shouldBe false
-			BrowseGridFragment.shouldDrawBrowseBackground(LibraryViewStyle.KALEIDESCAPE_STYLE, direction) shouldBe false
+			shouldDrawBrowseBackground(LibraryViewStyle.DENSE_LIST, direction) shouldBe false
+			shouldDrawBrowseBackground(LibraryViewStyle.KALEIDESCAPE_STYLE, direction) shouldBe false
 		}
 	}
 
@@ -38,24 +65,24 @@ class BrowseGridFragmentTests : FunSpec({
 		val counter = mockk<View>(relaxed = true)
 		every { counter.width } returns 120
 		every { counter.height } returns 40
-		BrowseGridFragment.configureFooterRotation(counter, true, 0)
+		configureFooterRotation(counter, true, 0)
 		verify {
 			counter.rotation = 90f
 			counter.pivotX = 120f
 			counter.pivotY = 0f
 			counter.translationY = 40f
 		}
-		BrowseGridFragment.configureFooterRotation(counter, true, 16)
+		configureFooterRotation(counter, true, 16)
 		verify { counter.translationY = 24f }
-		BrowseGridFragment.configureFooterRotation(counter, false, 16)
+		configureFooterRotation(counter, false, 16)
 		verify {
 			counter.rotation = 0f
 			counter.translationY = 0f
 		}
 	}
 	test("rotated status fits between the toolbar and counter") {
-		BrowseGridFragment.getVerticalStatusWidth(400, 1080, 120, 16) shouldBe 528
-		BrowseGridFragment.getVerticalStatusWidth(400, 480, 120, 16) shouldBe 0
+		getVerticalStatusWidth(400, 1080, 120, 16) shouldBe 528
+		getVerticalStatusWidth(400, 480, 120, 16) shouldBe 0
 	}
 	test("selecting active sort reverses its direction") {
 		selectSort(
@@ -76,23 +103,35 @@ class BrowseGridFragmentTests : FunSpec({
 		SortOrder.DESCENDING.menuArrow shouldBe "↓"
 	}
 
+	test("library sort choices preserve show and movie specific fields") {
+		val context = mockk<Context>()
+		every { context.getString(any()) } answers { firstArg<Int>().toString() }
+		val shows = browseSortOptions(context, CollectionType.TVSHOWS)
+		val movies = browseSortOptions(context, CollectionType.MOVIES)
+		shows[6]?.value shouldBe ItemSortBy.SERIES_DATE_PLAYED
+		shows[7]?.value shouldBe ItemSortBy.DATE_LAST_CONTENT_ADDED
+		movies[6]?.value shouldBe ItemSortBy.DATE_PLAYED
+		movies[7]?.value shouldBe ItemSortBy.RUNTIME
+		browseSortOptions(context, CollectionType.MUSIC).containsKey(7) shouldBe false
+	}
+
 	test("safe selected position never returns invalid leanback positions") {
-		BrowseGridFragment.getSafeSelectedPosition(-1, -1, -1, 125) shouldBe 0
-		BrowseGridFragment.getSafeSelectedPosition(21, 6, 6, 80) shouldBe 21
-		BrowseGridFragment.getSafeSelectedPosition(150, -1, -1, 125) shouldBe 124
-		BrowseGridFragment.getSafeSelectedPosition(-1, 150, -1, 125) shouldBe 124
-		BrowseGridFragment.getSafeSelectedPosition(-1, -1, 150, 125) shouldBe 124
-		BrowseGridFragment.getSafeSelectedPosition(-1, -1, -1, 0) shouldBe -1
+		getSafeSelectedPosition(-1, -1, -1, 125) shouldBe 0
+		getSafeSelectedPosition(21, 6, 6, 80) shouldBe 21
+		getSafeSelectedPosition(150, -1, -1, 125) shouldBe 124
+		getSafeSelectedPosition(-1, 150, -1, 125) shouldBe 124
+		getSafeSelectedPosition(-1, -1, 150, 125) shouldBe 124
+		getSafeSelectedPosition(-1, -1, -1, 0) shouldBe -1
 	}
 
 	test("returning to a populated library reuses its loaded items") {
-		BrowseGridFragment.shouldRetrieveGrid(false, false, 80) shouldBe false
+		shouldRetrieveGrid(false, false, 80) shouldBe false
 	}
 
 	test("initial empty rebuilt and query-changed libraries retrieve items") {
-		BrowseGridFragment.shouldRetrieveGrid(false, false, 0) shouldBe true
-		BrowseGridFragment.shouldRetrieveGrid(true, false, 80) shouldBe true
-		BrowseGridFragment.shouldRetrieveGrid(false, true, 80) shouldBe true
+		shouldRetrieveGrid(false, false, 0) shouldBe true
+		shouldRetrieveGrid(true, false, 80) shouldBe true
+		shouldRetrieveGrid(false, true, 80) shouldBe true
 	}
 
 	test("browse grid loads lightweight fields before stream badges") {
@@ -106,103 +145,103 @@ class BrowseGridFragmentTests : FunSpec({
 	}
 
 	test("vertical browse uses a packed grid for mixed card widths") {
-		BrowseGridFragment.createGridPresenter(GridDirection.VERTICAL).javaClass shouldBe ComposeVerticalGridPresenter::class.java
+		createGridPresenter(GridDirection.VERTICAL).javaClass shouldBe ComposeVerticalGridPresenter::class.java
 	}
 
 	test("horizontal browse uses the Compose grid presenter") {
-		BrowseGridFragment.createGridPresenter(GridDirection.HORIZONTAL).javaClass shouldBe HorizontalGridPresenter::class.java
+		createGridPresenter(GridDirection.HORIZONTAL).javaClass shouldBe HorizontalGridPresenter::class.java
 	}
 
 	test("dense list overrides the saved card direction") {
-		BrowseGridFragment.createGridPresenter(
+		createGridPresenter(
 			GridDirection.HORIZONTAL,
 			LibraryViewStyle.DENSE_LIST,
 		).javaClass shouldBe ComposeBrowseListPresenter::class.java
 	}
 
 	test("dense list uses vertical navigation controls while cards honor their direction") {
-		BrowseGridFragment.effectiveNavigationControlsDirection(
+		effectiveNavigationControlsDirection(
 			LibraryViewStyle.DENSE_LIST,
 			GridDirection.HORIZONTAL,
 		) shouldBe GridDirection.VERTICAL
-		BrowseGridFragment.effectiveNavigationControlsDirection(
+		effectiveNavigationControlsDirection(
 			LibraryViewStyle.CARDS,
 			GridDirection.HORIZONTAL,
 		) shouldBe GridDirection.HORIZONTAL
 	}
 
 	test("fresh sort and filter queries choose only valid positions") {
-		BrowseGridFragment.nextSelectionAfterQueryChange(50) shouldBe 0
-		BrowseGridFragment.nextSelectionAfterQueryChange(0) shouldBe -1
+		nextSelectionAfterQueryChange(50) shouldBe 0
+		nextSelectionAfterQueryChange(0) shouldBe -1
 	}
 
 	test("empty results keep filter clearing reachable") {
-		BrowseGridFragment.shouldKeepToolbarFocusable(0, true) shouldBe true
-		BrowseGridFragment.shouldKeepToolbarFocusable(0, false) shouldBe false
+		shouldKeepToolbarFocusable(0, true) shouldBe true
+		shouldKeepToolbarFocusable(0, false) shouldBe false
 	}
 
 	test("watched filter removes an item refreshed as unplayed") {
 		val filters = FilterOptions(playback = PlaybackFilter.WATCHED)
 
-		BrowseGridFragment.shouldRemoveFilteredItem(filters, true, false) shouldBe true
-		BrowseGridFragment.shouldRemoveFilteredItem(filters, true, true) shouldBe false
+		shouldRemoveFilteredItem(filters, true, false) shouldBe true
+		shouldRemoveFilteredItem(filters, true, true) shouldBe false
 	}
 
 	test("unchanged filters do not start another library query") {
 		val current = FilterOptions(playback = PlaybackFilter.UNWATCHED)
 
-		BrowseGridFragment.shouldApplyLibraryFilters(current, current.copy()) shouldBe false
-		BrowseGridFragment.shouldApplyLibraryFilters(current, FilterOptions()) shouldBe true
+		shouldApplyLibraryFilters(current, current.copy()) shouldBe false
+		shouldApplyLibraryFilters(current, FilterOptions()) shouldBe true
 	}
 
 	test("vertical browse leaves room for the alphabet rail while horizontal stays edge aligned") {
-		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.VERTICAL) shouldBe 20
-		BrowseGridFragment.getGridHostSideMarginDp(GridDirection.HORIZONTAL) shouldBe 0
+		getGridHostSideMarginDp(GridDirection.VERTICAL) shouldBe 20
+		getGridHostSideMarginDp(GridDirection.HORIZONTAL) shouldBe 0
 	}
 
 	test("vertical browse leaves room for the customization rail") {
-		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.VERTICAL) shouldBe 26
-		BrowseGridFragment.getGridHostEndMarginDp(GridDirection.HORIZONTAL) shouldBe 0
+		getGridHostEndMarginDp(GridDirection.VERTICAL) shouldBe 26
+		getGridHostEndMarginDp(GridDirection.HORIZONTAL) shouldBe 0
 	}
 
 	test("horizontal browse converts XML pixel insets before passing them to Compose") {
-		BrowseGridFragment.pixelsToDp(100, 2f) shouldBe 50
+		pixelsToDp(100, 2f) shouldBe 50
 	}
 
 	test("horizontal card titles fit inside every grid row") {
-		BrowseGridFragment.getHorizontalBrowseCardHeight(124, false) shouldBe 124
-		BrowseGridFragment.getHorizontalBrowseCardHeight(124, true) shouldBe 98
+		getHorizontalBrowseCardHeight(124, false) shouldBe 124
+		getHorizontalBrowseCardHeight(124, true) shouldBe 98
 	}
 
 	test("browse grid keeps the appropriate bottom control band clear of cards") {
-		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.HORIZONTAL) shouldBe 32
-		BrowseGridFragment.getGridHostBottomMarginDp(GridDirection.VERTICAL) shouldBe 0
+		getGridHostBottomMarginDp(GridDirection.HORIZONTAL) shouldBe 32
+		getGridHostBottomMarginDp(GridDirection.VERTICAL) shouldBe 0
 	}
 
 	test("alphabet rail follows the grid direction without a sort gate") {
-		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.HORIZONTAL, GridDirection.HORIZONTAL) shouldBe true
-		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.VERTICAL, GridDirection.VERTICAL) shouldBe true
-		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.HORIZONTAL, GridDirection.VERTICAL) shouldBe false
-		BrowseGridFragment.shouldShowAlphabetPicker(GridDirection.VERTICAL, GridDirection.HORIZONTAL) shouldBe false
+		shouldShowAlphabetPicker(GridDirection.HORIZONTAL, GridDirection.HORIZONTAL) shouldBe true
+		shouldShowAlphabetPicker(GridDirection.VERTICAL, GridDirection.VERTICAL) shouldBe true
+		shouldShowAlphabetPicker(GridDirection.HORIZONTAL, GridDirection.VERTICAL) shouldBe false
+		shouldShowAlphabetPicker(GridDirection.VERTICAL, GridDirection.HORIZONTAL) shouldBe false
 	}
 
 	test("horizontal grid handoff routes up to customization") {
-		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+		shouldMoveFocusFromGridToToolbar(
 			GridDirection.HORIZONTAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_UP,
 		) shouldBe true
-		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+		shouldMoveFocusFromGridToToolbar(
 			GridDirection.HORIZONTAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_DOWN,
 		) shouldBe false
-		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+		shouldMoveFocusFromGridToToolbar(
 			GridDirection.HORIZONTAL,
 			KeyEvent.ACTION_UP,
 			KeyEvent.KEYCODE_DPAD_UP,
 		) shouldBe false
-		BrowseGridFragment.shouldMoveFocusFromGridToToolbar(
+		shouldMoveFocusFromGridToToolbar(
 			GridDirection.VERTICAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_UP,
@@ -210,17 +249,17 @@ class BrowseGridFragmentTests : FunSpec({
 	}
 
 	test("vertical grid handoff routes up to home") {
-		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+		shouldMoveFocusFromGridToHome(
 			GridDirection.VERTICAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_UP,
 		) shouldBe true
-		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+		shouldMoveFocusFromGridToHome(
 			GridDirection.VERTICAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_DOWN,
 		) shouldBe false
-		BrowseGridFragment.shouldMoveFocusFromGridToHome(
+		shouldMoveFocusFromGridToHome(
 			GridDirection.HORIZONTAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_UP,
@@ -228,22 +267,22 @@ class BrowseGridFragmentTests : FunSpec({
 	}
 
 	test("custom navigation control focus routing is horizontal only") {
-		BrowseGridFragment.shouldConfigureNavigationControlsFocus(GridDirection.HORIZONTAL) shouldBe true
-		BrowseGridFragment.shouldConfigureNavigationControlsFocus(GridDirection.VERTICAL) shouldBe false
+		shouldConfigureNavigationControlsFocus(GridDirection.HORIZONTAL) shouldBe true
+		shouldConfigureNavigationControlsFocus(GridDirection.VERTICAL) shouldBe false
 	}
 
 	test("horizontal customization routes up to home") {
-		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+		shouldMoveFocusFromToolbarToHome(
 			GridDirection.HORIZONTAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_UP,
 		) shouldBe true
-		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+		shouldMoveFocusFromToolbarToHome(
 			GridDirection.HORIZONTAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_DOWN,
 		) shouldBe false
-		BrowseGridFragment.shouldMoveFocusFromToolbarToHome(
+		shouldMoveFocusFromToolbarToHome(
 			GridDirection.VERTICAL,
 			KeyEvent.ACTION_DOWN,
 			KeyEvent.KEYCODE_DPAD_UP,
@@ -255,7 +294,7 @@ class BrowseGridFragmentTests : FunSpec({
 		val holder = Presenter.ViewHolder(mockk<View>(relaxed = true))
 		presenter.onBindViewHolder(holder, Unit)
 
-		BrowseGridFragment.releaseGrid(presenter, holder)
+		releaseGrid(presenter, holder)
 
 		presenter.bound shouldBe false
 	}

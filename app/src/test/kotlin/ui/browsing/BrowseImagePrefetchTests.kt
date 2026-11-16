@@ -13,11 +13,11 @@ class BrowseImagePrefetchTests : FunSpec({
 		val obsolete = mockk<Disposable> { every { dispose() } answers { obsoleteCancelled = true } }
 		val retained = mockk<Disposable> { every { dispose() } answers { retainedCancelled = true } }
 		val requests = mutableMapOf("obsolete" to obsolete, "retained" to retained)
-		BrowseGridFragment.cancelObsoleteImagePrefetches(requests, setOf("retained", "next"))
+		cancelObsoleteImagePrefetches(requests, setOf("retained", "next"))
 		obsoleteCancelled shouldBe true
 		retainedCancelled shouldBe false
 		requests.keys shouldBe setOf("retained")
-		BrowseGridFragment.cancelObsoleteImagePrefetches(requests, emptySet())
+		cancelObsoleteImagePrefetches(requests, emptySet())
 		retainedCancelled shouldBe true
 		requests.isEmpty() shouldBe true
 	}
