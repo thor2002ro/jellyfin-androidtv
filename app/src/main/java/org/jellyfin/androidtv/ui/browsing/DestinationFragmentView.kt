@@ -7,6 +7,7 @@ import android.os.Parcel
 import android.os.Parcelable
 import android.util.AttributeSet
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.os.BundleCompat
 import androidx.core.os.ParcelCompat
@@ -38,6 +39,7 @@ private class HistoryEntry(
 	var fragment: Fragment? = null,
 	var savedState: Fragment.SavedState? = null,
 	var focusedView: View? = null,
+	var descendantFocusability: Int? = null,
 ) : Parcelable {
 	override fun describeContents(): Int = 0
 
@@ -197,6 +199,7 @@ class DestinationFragmentView @JvmOverloads constructor(
 					val retained = previous.fragment ?: continue
 					if (!retained.isHidden || retained === fragment) continue
 					previous.focusedView = null
+					previous.descendantFocusability = null
 					detach(retained)
 					show(retained)
 					setMaxLifecycle(retained, Lifecycle.State.RESUMED)
@@ -205,14 +208,28 @@ class DestinationFragmentView @JvmOverloads constructor(
 			if (keepLibraryViews && currentEntry != null && current != null && current.javaClass in LIBRARY_SCREENS) {
 				// Keep only the current library's Back path ready to show without rebuilding its cards.
 				currentEntry.focusedView = current.view?.findFocus()
+				(current.view as? ViewGroup)?.let { view ->
+					currentEntry.descendantFocusability = view.descendantFocusability
+					view.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+					view.clearFocus()
+				}
 				hide(current)
 				setMaxLifecycle(current, Lifecycle.State.STARTED)
+				runOnCommit {
+					if (currentEntry.focusedView != null && fragment.view?.hasFocus() == false) {
+						fragment.view?.requestFocus()
+					}
+				}
 			} else {
 				current?.let(::detach)
 			}
 
 			// Attach or add next fragment
 			if (fragment.isHidden) {
+				(fragment.view as? ViewGroup)?.let { view ->
+					entry.descendantFocusability?.let { view.descendantFocusability = it }
+				}
+				entry.descendantFocusability = null
 				show(fragment)
 				setMaxLifecycle(fragment, Lifecycle.State.RESUMED)
 				val focusedView = entry.focusedView
