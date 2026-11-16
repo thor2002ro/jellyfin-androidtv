@@ -87,7 +87,7 @@ data class LibMPVPlaybackOptions(
 	val checkHardwareProfile: Boolean = false,
 	val skipLoopFilter: String = "default",
 	val subtitleAssOverride: String = "no",
-	val subtitleUseMargins: Boolean = true,
+	val subtitlesInsideVideo: Boolean = false,
 	val softwareDecodingForLiveTv: Boolean = false,
 	val nvidiaShieldWorkarounds: Boolean = true,
 	val videoPreset: LibMPVVideoPreset = LibMPVVideoPreset.OFF,
@@ -124,7 +124,8 @@ data class LibMPVPlaybackOptions(
 			"vd-lavc-check-hw-profile" to checkHardwareProfile.mpvBoolean(),
 			"vd-lavc-skiploopfilter" to skipLoopFilter,
 			"sub-ass-override" to subtitleAssOverride,
-			"sub-use-margins" to subtitleUseMargins.mpvBoolean(),
+			// libMPV enables margins when subtitles may extend into the black bars.
+			"sub-use-margins" to (!subtitlesInsideVideo).mpvBoolean(),
 		)
 	}
 

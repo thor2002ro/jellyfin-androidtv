@@ -53,6 +53,7 @@ import org.jellyfin.androidtv.ui.player.base.PlayerSubtitles
 import org.jellyfin.androidtv.ui.player.base.PlayerSurface
 import org.jellyfin.androidtv.ui.player.base.toast.MediaToastRegistry
 import org.jellyfin.androidtv.ui.player.video.toast.rememberPlaybackManagerMediaToastEmitter
+import org.jellyfin.androidtv.ui.settings.compat.rememberPreference
 import org.jellyfin.androidtv.util.apiclient.getTrickplayTileSheets
 import org.jellyfin.androidtv.util.apiclient.TrickplayTileSheet
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
@@ -71,6 +72,8 @@ import org.jellyfin.playback.jellyfin.queue.baseItem
 import org.jellyfin.playback.jellyfin.queue.baseItemFlow
 import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
+import org.jellyfin.playback.media3.exoplayer.ExoPlayerBackend
+import org.jellyfin.playback.libvlc.LibVLCBackend
 import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.compose.koinInject
 import timber.log.Timber
@@ -156,6 +159,8 @@ internal fun PlayerVideoOutput(
 	showBufferingIndicator: Boolean = true,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
+	val userPreferences = koinInject<UserPreferences>()
+	val subtitlesInsideVideo by rememberPreference(userPreferences, UserPreferences.subtitlesInsideVideo)
 	val videoGeometry by playbackManager.state.videoGeometry.collectAsState()
 	val currentEntry by playbackManager.queue.entry.collectAsState()
 	val preparingEntry by playbackManager.preparingEntry?.collectAsState()
@@ -220,7 +225,15 @@ internal fun PlayerVideoOutput(
 
 		PlayerSubtitles(
 			playbackManager = playbackManager,
-			modifier = Modifier.fillMaxSize()
+			// libMPV handles its own margins; the other players use the visible viewport.
+			modifier = if (subtitlesInsideVideo && videoReady &&
+				(playbackManager.backend is ExoPlayerBackend || playbackManager.backend is LibVLCBackend)
+			) {
+				Modifier.requiredSize(
+					with(density) { minOf(appliedViewport.width, container.width).toDp() },
+					with(density) { minOf(appliedViewport.height, container.height).toDp() },
+				).align(Alignment.Center)
+			} else Modifier.fillMaxSize()
 		)
 
 		VideoBufferingIndicator(

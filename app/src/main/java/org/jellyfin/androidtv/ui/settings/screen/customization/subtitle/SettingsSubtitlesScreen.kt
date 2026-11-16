@@ -19,8 +19,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
+import org.jellyfin.androidtv.preference.LibMPVBackendSettings
 import org.jellyfin.androidtv.ui.base.Text
 import org.jellyfin.androidtv.ui.base.form.ColorSwatch
+import org.jellyfin.androidtv.ui.base.form.Checkbox
 import org.jellyfin.androidtv.ui.base.form.RangeControl
 import org.jellyfin.androidtv.ui.base.list.ListButton
 import org.jellyfin.androidtv.ui.base.list.ListControl
@@ -39,6 +41,10 @@ import kotlin.math.roundToInt
 fun SettingsSubtitlesScreen() {
 	val router = LocalRouter.current
 	val userPreferences = koinInject<UserPreferences>()
+	val backendSettings = koinInject<LibMPVBackendSettings>()
+	var subtitlesInsideVideo by rememberPreference(userPreferences, UserPreferences.subtitlesInsideVideo, onCommitted = {
+		backendSettings.applyPreferences(clearOverrides = setOf("sub-use-margins"))
+	})
 
 	var subtitlesBackgroundColor by rememberPreference(userPreferences, UserPreferences.subtitlesBackgroundColor)
 	var subtitlesTextWeight by rememberPreference(userPreferences, UserPreferences.subtitlesTextWeight)
@@ -53,6 +59,15 @@ fun SettingsSubtitlesScreen() {
 			ListSection(
 				overlineContent = { Text(stringResource(R.string.pref_customization).uppercase()) },
 				headingContent = { Text(stringResource(R.string.pref_subtitles)) },
+			)
+		}
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_subtitles_inside_video)) },
+				captionContent = { Text(stringResource(R.string.pref_subtitles_inside_video_description)) },
+				trailingContent = { Checkbox(checked = subtitlesInsideVideo) },
+				onClick = { subtitlesInsideVideo = !subtitlesInsideVideo },
 			)
 		}
 

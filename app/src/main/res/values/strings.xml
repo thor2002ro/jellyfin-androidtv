@@ -504,6 +504,8 @@
     <string name="color_cyan">Cyan</string>
     <string name="pref_subtitles_size">Text size</string>
     <string name="pref_subtitles_position">Offset from bottom</string>
+    <string name="pref_subtitles_inside_video">Keep subtitles inside video frame</string>
+    <string name="pref_subtitles_inside_video_description">Keep subtitles inside the video instead of placing them in the black borders.</string>
     <string name="pref_subtitles_bold">Bold text</string>
     <string name="server_issue_unable_to_connect">Unable to connect</string>
     <string name="server_issue_invalid_product">Server software is incompatible</string>
