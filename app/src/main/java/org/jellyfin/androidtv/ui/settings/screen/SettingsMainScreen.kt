@@ -40,6 +40,7 @@ import org.jellyfin.androidtv.ui.settings.Routes
 import org.jellyfin.androidtv.ui.settings.composable.SettingsAsyncActionListButton
 import org.jellyfin.androidtv.ui.settings.composable.SettingsColumn
 import org.jellyfin.androidtv.util.AppLogging
+import org.jellyfin.androidtv.util.logUploadParts
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.systemApi
 import org.koin.compose.koinInject
@@ -157,15 +158,24 @@ fun SettingsMainScreen() {
 				captionContent = { Text(stringResource(R.string.pref_upload_logs_summary)) },
 				action = {
 					val memoryLogs = AppLogging.dumpMemoryLogs()
-					val logs = ProcessBuilder("logcat", "-d", "-v", "threadtime")
-						.redirectErrorStream(true)
-						.start()
-						.inputStream.bufferedReader().use { it.readText() }
-					val response by api.systemApi.logFile("=== App RAM logs ===\n$memoryLogs\n=== Logcat ===\n$logs")
-					response
+					val logs = try {
+						ProcessBuilder("logcat", "-d", "-v", "threadtime")
+							.redirectErrorStream(true)
+							.start()
+							.inputStream.bufferedReader().use { it.readText() }
+					} catch (e: java.io.IOException) {
+						"Logcat unavailable: $e"
+					} catch (e: SecurityException) {
+						"Logcat unavailable: $e"
+					}
+					val parts = logUploadParts("=== App RAM logs ===\n$memoryLogs\n=== Logcat ===\n$logs")
+					parts.mapIndexed { index, part ->
+						val response by api.systemApi.logFile("=== Part ${index + 1} of ${parts.size} ===\n$part")
+						response.fileName
+					}.joinToString(", ")
 				},
 				onSuccess = { result ->
-					Toast.makeText(context, context.getString(R.string.pref_upload_logs_success, result.fileName), Toast.LENGTH_LONG).show()
+					Toast.makeText(context, context.getString(R.string.pref_upload_logs_success, result), Toast.LENGTH_LONG).show()
 				},
 				onFailure = {
 					Toast.makeText(context, R.string.pref_upload_logs_failure, Toast.LENGTH_LONG).show()
