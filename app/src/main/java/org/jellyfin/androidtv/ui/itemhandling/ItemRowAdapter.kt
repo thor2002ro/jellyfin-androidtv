@@ -82,6 +82,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var latestQuery: GetLatestMediaRequest? = null
 	private var resumeQuery: GetResumeItemsRequest? = null
 	internal var initialUserViews: Collection<BaseItemDto>? = null
+	internal var showTitleYears = false
 
 	var queryType: QueryType = QueryType.Items
 		private set
