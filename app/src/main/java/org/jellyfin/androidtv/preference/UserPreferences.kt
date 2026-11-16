@@ -279,6 +279,7 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 * Subtitles offset
 		 */
 		var subtitlesOffsetPosition = floatPreference("subtitles_offset_position", 0.08f)
+		var subtitlesInsideVideo = booleanPreference("subtitles_inside_video", false)
 
 		/**
 		 * Ordered preferred subtitle languages.

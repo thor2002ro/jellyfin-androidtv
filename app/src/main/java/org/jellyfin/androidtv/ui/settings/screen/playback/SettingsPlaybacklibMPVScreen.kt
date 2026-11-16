@@ -52,7 +52,6 @@ import org.jellyfin.androidtv.preference.mpvOptionOverrides
 import org.jellyfin.androidtv.preference.mpvReplayGain
 import org.jellyfin.androidtv.preference.mpvScaler
 import org.jellyfin.androidtv.preference.mpvSubtitleAssOverride
-import org.jellyfin.androidtv.preference.mpvSubtitleUseMargins
 import org.jellyfin.androidtv.preference.mpvSoftwareDecodingForLiveTv
 import org.jellyfin.androidtv.preference.mpvToneMapping
 import org.jellyfin.androidtv.preference.mpvVideoOutput
@@ -103,7 +102,6 @@ fun SettingsPlaybackLibMPVScreen() {
 	var interpolation by rememberPreference(userPreferences, UserPreferences.mpvInterpolation)
 	var deband by rememberPreference(userPreferences, UserPreferences.mpvDeband)
 	var audioPitchCorrection by rememberPreference(userPreferences, UserPreferences.mpvAudioPitchCorrection)
-	var subtitleUseMargins by rememberPreference(userPreferences, UserPreferences.mpvSubtitleUseMargins)
 	var softwareDecodingForLiveTv by rememberPreference(userPreferences, UserPreferences.mpvSoftwareDecodingForLiveTv)
 	var nvidiaShieldWorkarounds by rememberPreference(userPreferences, UserPreferences.mpvNvidiaShieldWorkarounds)
 	val videoPreset by rememberPreference(userPreferences, UserPreferences.mpvVideoPreset)
@@ -277,18 +275,6 @@ fun SettingsPlaybackLibMPVScreen() {
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_subtitles)) }) }
 		item { LibMPVChoiceButton(LibMPVChoiceSetting.SUBTITLE_ASS_OVERRIDE, subtitleAssOverride) }
-		item {
-			LibMPVBooleanButton(
-				headingRes = R.string.preference_mpv_sub_use_margins,
-				captionRes = R.string.preference_mpv_sub_use_margins_description,
-				checked = subtitleUseMargins,
-				defaultValue = true,
-				onClick = {
-					subtitleUseMargins = !subtitleUseMargins
-					backendSettings.applyPreferences(clearOverrides = setOf("sub-use-margins"))
-				},
-			)
-		}
 
 		item { ListSection(headingContent = { Text(stringResource(R.string.preference_mpv_section_expert)) }) }
 		item {

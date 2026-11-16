@@ -202,8 +202,6 @@
 	<string name="preference_mpv_sub_ass_override_strip_description">Remove ASS tags, embedded font choices, positioning, and effects, then render the subtitle as plain text.</string>
 	<string name="preference_mpv_sub_ass_override_yes">Style options</string>
 	<string name="preference_mpv_sub_ass_override_yes_description">Apply supported Jellyfin subtitle options while retaining ASS features that libMPV does not override.</string>
-	<string name="preference_mpv_sub_use_margins">Use subtitle margins</string>
-	<string name="preference_mpv_sub_use_margins_description">Allow text subtitles to use available black borders. Jellyfin default: Enabled.</string>
 	<string name="preference_mpv_tone_mapping">Tone mapping</string>
 	<string name="preference_mpv_tone_mapping_auto_description">Let the selected renderer choose its tone-mapping algorithm.</string>
 	<string name="preference_mpv_tone_mapping_bt2390">BT.2390</string>
