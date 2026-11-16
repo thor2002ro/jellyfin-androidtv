@@ -14,6 +14,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.auth.model.Server
 import org.jellyfin.androidtv.preference.UserPreferences
@@ -47,6 +49,7 @@ class BackgroundService(
 
 	// Async
 	private val scope = MainScope()
+	private val backdropLoadPermit = Semaphore(1)
 	private var loadBackgroundsJob: Job? = null
 	private var updateBackgroundTimerJob: Job? = null
 	private var lastBackgroundTimerUpdate = 0L
@@ -83,7 +86,7 @@ class BackgroundService(
 			.map { it.getUrl(api, maxWidth = BACKDROP_MAX_WIDTH) }
 			.toSet()
 
-		loadBackgrounds(backdropUrls, 250.milliseconds)
+		loadBackgrounds(backdropUrls)
 	}
 
 	/**
@@ -108,7 +111,7 @@ class BackgroundService(
 		loadBackgrounds(setOf(splashscreenUrl))
 	}
 
-	private fun loadBackgrounds(backdropUrls: Set<String>, debounce: Duration = Duration.ZERO) {
+	private fun loadBackgrounds(backdropUrls: Set<String>) {
 		if (backdropUrls.isEmpty()) return clearBackgrounds()
 		if (backdropUrls == requestedBackdropUrls) return
 
@@ -119,17 +122,28 @@ class BackgroundService(
 		// Cancel current loading job
 		loadBackgroundsJob?.cancel()
 		loadBackgroundsJob = scope.launch {
-			delay(debounce)
-			val backgrounds = backdropUrls.mapNotNull { url ->
-				backgroundCache[url] ?: withContext(Dispatchers.IO) {
-					imageLoader.execute(
-						request = ImageRequest.Builder(context)
-							.data(url)
-							.memoryCachePolicy(CachePolicy.ENABLED)
-							.diskCachePolicy(CachePolicy.ENABLED)
-							.build()
-					).image?.toBitmap()?.asImageBitmap()
+			val backgrounds = mutableListOf<ImageBitmap>()
+			for (url in backdropUrls) {
+				val background = backgroundCache[url] ?: withContext(Dispatchers.IO) {
+					// Keep backdrop decoding separate from UI work and limit it to one image.
+					backdropLoadPermit.withPermit {
+						imageLoader.execute(
+							request = ImageRequest.Builder(context)
+								.data(url)
+								.memoryCachePolicy(CachePolicy.ENABLED)
+								.diskCachePolicy(CachePolicy.ENABLED)
+								.build()
+						).image?.toBitmap()?.apply { prepareToDraw() }?.asImageBitmap()
+					}
 				}?.also { backgroundCache[url] = it }
+				if (background != null) {
+					backgrounds.add(background)
+					if (backgrounds.size == 1) {
+						_backgrounds = listOf(background)
+						_currentIndex = 0
+						update()
+					}
+				}
 			}
 			_backgrounds = backgrounds
 

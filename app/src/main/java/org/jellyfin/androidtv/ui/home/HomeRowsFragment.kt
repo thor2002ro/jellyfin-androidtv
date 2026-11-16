@@ -118,7 +118,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			grid.recreatePresentation()
 		}
 	}
-	private var backgroundUpdateJob: Job? = null
 	private var homeRowsDebounceJob: Job? = null
 	private var homeRowsRefreshJob: Job? = null
 	private var pendingFullRefresh = false
@@ -391,7 +390,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	override fun onDestroy() {
 		super.onDestroy()
 
-		backgroundUpdateJob?.cancel()
 		homeRowsDebounceJob?.cancel()
 		homeRowsRefreshJob?.cancel()
 		mediaManager.removeAudioEventListener(this)
@@ -401,30 +399,16 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		verticalGridView?.removeCallbacks(refreshRowMeasurements)
 		trackHomeRows()
 		homeRowAdapters.forEach(ItemRowAdapter::cancelRetrieval)
-		backgroundUpdateJob?.cancel()
 		homeRowsDebounceJob?.cancel()
 		homeRowsRefreshJob?.cancel()
 		super.onDestroyView()
 	}
 
 	private fun updateBackground(item: BaseRowItem?) {
-		backgroundUpdateJob?.cancel()
-
 		val itemId = item?.baseItem?.id?.toString()
-		if (itemId == currentBackgroundItemId) return
-
-		backgroundUpdateJob = lifecycleScope.launch {
-			delay(HOME_BACKGROUND_UPDATE_DELAY_MS)
-
-			if (item?.baseItem == null) {
-				currentBackgroundItemId = null
-				backgroundService.clearBackgrounds()
-				return@launch
-			}
-
-			currentBackgroundItemId = itemId
-			backgroundService.setBackground(item.baseItem)
-		}
+		if (itemId != null && itemId == currentBackgroundItemId) return
+		currentBackgroundItemId = itemId
+		backgroundService.setBackground(item?.baseItem)
 	}
 
 	private inner class ItemViewClickedListener : OnItemViewClickedListener {
@@ -499,7 +483,6 @@ internal fun ItemRowAdapter.shouldRefreshForUserData(changedItemIds: Set<UUID>):
 
 private const val HOME_ROWS_REFRESH_DELAY_MS = 3_500L
 private const val HOME_ROWS_REFRESH_DEBOUNCE_MS = 250L
-private const val HOME_BACKGROUND_UPDATE_DELAY_MS = 1_500L
 
 internal fun createHomeCardPresenter(useWideCards: Boolean) = when (useWideCards) {
 	false -> CardPresenter()
