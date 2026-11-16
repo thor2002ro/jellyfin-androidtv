@@ -30,7 +30,7 @@ class HomeFragmentHelper(
 	}
 
 	fun loadRecentlyReleased(userViews: Collection<BaseItemDto>): HomeFragmentRow {
-		return HomeFragmentRecentlyReleasedRow(userRepository, userViews, itemLimit)
+		return HomeFragmentLatestRow(userRepository, userViews, itemLimit, recentlyReleased = true)
 	}
 
 	fun loadResume(title: String, includeMediaTypes: Collection<MediaType>): HomeFragmentRow {

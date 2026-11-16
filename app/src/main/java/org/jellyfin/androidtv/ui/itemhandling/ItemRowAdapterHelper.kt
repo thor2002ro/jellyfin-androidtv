@@ -41,6 +41,7 @@ import org.jellyfin.sdk.api.client.extensions.showApi
 import org.jellyfin.sdk.api.client.extensions.userViewApi
 import org.jellyfin.sdk.api.client.extensions.videoApi
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.SeriesStatus
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemFields
@@ -317,7 +318,21 @@ fun ItemRowAdapter.retrieveLatestMedia(api: ApiClient, query: GetLatestMediaRequ
 				api.libraryApi.getLatestMedia(query).content
 			}
 
-			replaceLatestMediaItems(response)
+			// Seasons and episodes need their parent series to show the series year range.
+			val seriesIds = response.filter { it.type == BaseItemKind.SEASON || it.type == BaseItemKind.EPISODE }
+				.mapNotNull { it.seriesId }.distinct()
+			val seriesYears = if (seriesIds.isEmpty()) emptyMap() else try {
+				withContext(Dispatchers.IO) {
+					api.libraryApi.getItems(GetItemsRequest(ids = seriesIds, enableImages = false, enableUserData = false))
+						.content.items.associateBy { it.id }
+				}
+			} catch (error: CancellationException) {
+				throw error
+			} catch (error: Exception) {
+				Timber.w(error, "Unable to load series years for latest media")
+				emptyMap()
+			}
+			replaceLatestMediaItems(response, seriesYears)
 
 			if (response.isEmpty()) removeRow()
 		}.fold(
@@ -342,9 +357,9 @@ private fun ItemRowAdapter.refreshLatestStreamBadges(api: ApiClient, items: List
 	refreshSeriesStreamBadges(api, items)
 }
 
-private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto>) {
+private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto>, seriesYears: Map<UUID, BaseItemDto>) {
 	replaceAll(
-		items = items.map { item -> latestMediaRowItem(item, preferParentThumb, isStaticHeight) },
+		items = items.map { item -> latestMediaRowItem(item, preferParentThumb, isStaticHeight, item.seriesId?.let(seriesYears::get)) },
 		areItemsTheSame = { old, new -> (old as? BaseRowItem)?.itemId == (new as? BaseRowItem)?.itemId },
 	)
 	itemsLoaded = items.size
@@ -356,6 +371,7 @@ internal fun latestMediaRowItem(
 	item: BaseItemDto,
 	preferParentThumb: Boolean,
 	staticHeight: Boolean,
+	series: BaseItemDto? = null,
 ) = BaseItemDtoBaseRowItem(
 	item = item,
 	preferParentThumb = preferParentThumb,
@@ -363,7 +379,24 @@ internal fun latestMediaRowItem(
 	selectAction = BaseRowItemSelectAction.ShowDetails,
 	preferSeriesPoster = preferParentThumb,
 	showParentTitle = true,
+	latestTitleYear = item.titleYear(series),
 )
+
+internal fun BaseItemDto.titleYear(series: BaseItemDto? = null): String? = when (type) {
+	BaseItemKind.MOVIE -> productionYear?.toString()
+	BaseItemKind.SERIES -> seriesYearPeriod()
+	BaseItemKind.SEASON, BaseItemKind.EPISODE -> series?.seriesYearPeriod()
+	else -> null
+}
+
+internal fun BaseItemDto.seriesYearPeriod(): String? {
+	val start = productionYear ?: return null
+	return when (status?.let(SeriesStatus::fromNameOrNull)) {
+		SeriesStatus.CONTINUING -> "$start-Present"
+		SeriesStatus.ENDED -> endDate?.year?.takeIf { it > start }?.let { "$start-$it" } ?: start.toString()
+		else -> start.toString()
+	}
+}
 
 private fun ItemRowAdapter.refreshCurrentStreamBadges(
 	api: ApiClient,
@@ -1487,11 +1520,14 @@ fun ItemRowAdapter.retrieveItems(
 						items = response.items,
 						startIndex = startIndex,
 						transform = { item, _ ->
-							item.toBaseItemRowItem(
+							val rowItem = item.toBaseItemRowItem(
 								preferParentThumb = preferParentThumb,
 								staticHeight = isStaticHeight,
 								showRemainingTimeBadge = showRemainingTimeBadge,
 							)
+							if (showTitleYears) {
+								rowItem.copyWithItem(item, latestTitleYear = item.titleYear())
+							} else rowItem
 						},
 					)
 

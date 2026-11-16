@@ -25,6 +25,7 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	val preferSeriesPoster: Boolean = false,
 	val streamBadgeMediaSources: List<MediaSourceInfo>? = null,
 	val showParentTitle: Boolean = false,
+	val latestTitleYear: String? = null,
 ) : BaseRowItem(
 	baseRowType = when (item.type) {
 		BaseItemKind.TV_CHANNEL,
@@ -73,15 +74,19 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 	override val isFavorite get() = baseItem?.userData?.isFavorite == true
 	override val isPlayed get() = baseItem?.userData?.played == true
 
-	override fun getCardName(context: Context) = when {
-		showParentTitle &&
-			baseItem?.type == BaseItemKind.SEASON &&
-			!baseItem.seriesName.isNullOrBlank() -> baseItem.seriesName
-		baseItem?.type == BaseItemKind.AUDIO && baseItem.artists != null -> baseItem.artists?.joinToString(", ")
-		baseItem?.type == BaseItemKind.AUDIO && baseItem.albumArtists != null -> baseItem.albumArtists?.joinToString(", ")
-		baseItem?.type == BaseItemKind.AUDIO && baseItem.albumArtist != null -> baseItem.albumArtist
-		baseItem?.type == BaseItemKind.AUDIO && baseItem.album != null -> baseItem.album
-		else -> baseItem?.getFullName(context)
+	override fun getCardName(context: Context): String? {
+		val name = when {
+			showParentTitle &&
+				baseItem?.type == BaseItemKind.SEASON &&
+				!baseItem.seriesName.isNullOrBlank() -> baseItem.seriesName
+			baseItem?.type == BaseItemKind.AUDIO && baseItem.artists != null -> baseItem.artists?.joinToString(", ")
+			baseItem?.type == BaseItemKind.AUDIO && baseItem.albumArtists != null -> baseItem.albumArtists?.joinToString(", ")
+			baseItem?.type == BaseItemKind.AUDIO && baseItem.albumArtist != null -> baseItem.albumArtist
+			baseItem?.type == BaseItemKind.AUDIO && baseItem.album != null -> baseItem.album
+			else -> baseItem?.getFullName(context)
+		}
+
+		return if (name != null && latestTitleYear != null) "$name ($latestTitleYear)" else name
 	}
 
 	override fun getFullName(context: Context) = baseItem?.getFullName(context)
@@ -167,6 +172,7 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 			return other.baseItem == baseItem &&
 				other.streamBadgeMediaSources == streamBadgeMediaSources &&
 				other.showParentTitle == showParentTitle &&
+				other.latestTitleYear == latestTitleYear &&
 				other.showRemainingTimeBadge == showRemainingTimeBadge
 		}
 		return super.equals(other)
@@ -176,6 +182,7 @@ open class BaseItemDtoBaseRowItem @JvmOverloads constructor(
 		var result = baseItem?.hashCode() ?: 0
 		result = 31 * result + (streamBadgeMediaSources?.hashCode() ?: 0)
 		result = 31 * result + showParentTitle.hashCode()
+		result = 31 * result + (latestTitleYear?.hashCode() ?: 0)
 		result = 31 * result + showRemainingTimeBadge.hashCode()
 		return result
 	}
@@ -220,6 +227,7 @@ fun BaseItemDtoBaseRowItem.copyWithItem(
 		preferSeriesPoster = preferSeriesPoster,
 		streamBadgeMediaSources = streamBadgeMediaSources,
 		showParentTitle = showParentTitle,
+		latestTitleYear = latestTitleYear,
 	)
 }
 

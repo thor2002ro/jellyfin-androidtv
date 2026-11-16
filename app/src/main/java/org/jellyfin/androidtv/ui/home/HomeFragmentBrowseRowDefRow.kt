@@ -22,6 +22,7 @@ import org.koin.core.component.inject
 class HomeFragmentBrowseRowDefRow(
 	private val browseRowDef: BrowseRowDef,
 	private val channelCardLongClick: ((item: Any?, view: View) -> Boolean)? = null,
+	private val showTitleYears: Boolean = false,
 ) : HomeFragmentRow, KoinComponent {
 	private val userSettingPreferences by inject<UserSettingPreferences>()
 
@@ -65,6 +66,7 @@ class HomeFragmentBrowseRowDefRow(
 			else -> ItemRowAdapter(context, browseRowDef.query, browseRowDef.chunkSize, browseRowDef.preferParentThumb, browseRowDef.isStaticHeight, cardPresenter, rowsAdapter, browseRowDef.queryType)
 		}
 
+		rowAdapter.showTitleYears = showTitleYears
 		rowAdapter.setReRetrieveTriggers(browseRowDef.changeTriggers)
 		val row = OrderedListRow(header, rowAdapter, rowOrder)
 		rowAdapter.setRow(row, rowOrder)
