@@ -25,7 +25,6 @@ import org.jellyfin.androidtv.preference.mpvReplayGain
 import org.jellyfin.androidtv.preference.mpvScaler
 import org.jellyfin.androidtv.preference.mpvSoftwareDecodingForLiveTv
 import org.jellyfin.androidtv.preference.mpvSubtitleAssOverride
-import org.jellyfin.androidtv.preference.mpvSubtitleUseMargins
 import org.jellyfin.androidtv.preference.mpvToneMapping
 import org.jellyfin.androidtv.preference.mpvVideoOutput
 import org.jellyfin.androidtv.preference.mpvVideoPreset
@@ -266,7 +265,7 @@ private fun preferences(
 	every { this@mockk[UserPreferences.mpvCheckHardwareProfile] } returns false
 	every { this@mockk[UserPreferences.mpvLoopFilter] } returns LibMPVLoopFilter.DEFAULT
 	every { this@mockk[UserPreferences.mpvSubtitleAssOverride] } returns LibMPVSubtitleAssOverride.NO
-	every { this@mockk[UserPreferences.mpvSubtitleUseMargins] } returns true
+	every { this@mockk[UserPreferences.subtitlesInsideVideo] } returns false
 	every { this@mockk[UserPreferences.mpvSoftwareDecodingForLiveTv] } returns false
 	every { this@mockk[UserPreferences.mpvNvidiaShieldWorkarounds] } returns true
 	every { this@mockk[UserPreferences.mpvVideoPreset] } returns LibMPVVideoPresetOption.OFF
