@@ -657,7 +657,7 @@ public class BrowseGridFragment extends Fragment implements View.OnKeyListener {
         if (grid == null || mAdapter == null || mAdapter.getItemsLoaded() <= 0) return;
 
         grid.post(() -> {
-            if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
+            if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED) || isHidden()) return;
             View focused = mActivity != null ? mActivity.getCurrentFocus() : null;
             if (isFocusInsideGrid(focused, grid)) return;
             grid.requestFocus();
