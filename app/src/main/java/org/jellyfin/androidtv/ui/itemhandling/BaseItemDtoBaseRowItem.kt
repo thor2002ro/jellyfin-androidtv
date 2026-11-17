@@ -205,6 +205,7 @@ internal fun BaseItemDto.toBaseItemRowItem(
 fun BaseItemDtoBaseRowItem.copyWithItem(
 	item: BaseItemDto,
 	streamBadgeMediaSources: List<MediaSourceInfo>? = this.streamBadgeMediaSources,
+	latestTitleYear: String? = this.latestTitleYear,
 ) = when (this) {
 	is ResumeItemBaseRowItem -> ResumeItemBaseRowItem(
 		item = item,
