@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import coil3.ImageLoader
 import androidx.core.view.doOnLayout
 import androidx.core.view.doOnPreDraw
 import androidx.leanback.app.RowsSupportFragment
@@ -78,6 +79,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyListener {
 	private val api by inject<ApiClient>()
+	private val imageLoader by inject<ImageLoader>()
 	private val backgroundService by inject<BackgroundService>()
 	private val playbackManager by inject<Lazy<PlaybackManager>>()
 	private val mediaManager by inject<MediaManager>()
@@ -124,6 +126,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val pendingUserDataItems = mutableSetOf<UUID>()
 	private var currentBackgroundItemId: String? = null
 	private val homeRowAdapters = linkedSetOf<ItemRowAdapter>()
+	private var homeImagePrefetcher: HomeImagePrefetcher? = null
 	private val liveTvActions by lazy {
 		LiveTvCardActionHandler(this, api, playbackHelper) { _, _ ->
 			refreshHomeRows()
@@ -367,7 +370,12 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private fun startHomeRowUpdates() {
 		trackHomeRows()
 		val owner = viewLifecycleOwner
-		homeRowAdapters.forEach { it.startLiveTvProgramUpdates(owner) }
+		val prefetcher = homeImagePrefetcher ?: HomeImagePrefetcher(requireContext(), owner.lifecycleScope, api, imageLoader)
+			.also { homeImagePrefetcher = it }
+		homeRowAdapters.forEach {
+			it.startLiveTvProgramUpdates(owner)
+			prefetcher.observe(it)
+		}
 	}
 
 	private fun scheduleHomeRowsRefresh(delayMs: Long = HOME_ROWS_REFRESH_DELAY_MS) {
@@ -397,6 +405,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onDestroyView() {
 		verticalGridView?.removeCallbacks(refreshRowMeasurements)
+		homeImagePrefetcher?.close()
+		homeImagePrefetcher = null
 		trackHomeRows()
 		homeRowAdapters.forEach(ItemRowAdapter::cancelRetrieval)
 		homeRowsDebounceJob?.cancel()
