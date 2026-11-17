@@ -51,7 +51,14 @@ class HomeFragmentBrowseRowDefRow(
 			QueryType.LiveTvProgram -> ItemRowAdapter(
 				context,
 				browseRowDef.programQuery,
-				if (browseRowDef.useChannelCards) CardPresenter(false, ImageType.THUMB, context.dimenDp(R.dimen.live_tv_card_height), channelCardLongClick) else cardPresenter,
+				if (browseRowDef.useChannelCards) CardPresenter(
+					showInfo = false,
+					imageType = ImageType.THUMB,
+					staticHeight = context.dimenDp(R.dimen.live_tv_card_height),
+					uniformAspect = false,
+					onLongClick = channelCardLongClick,
+					deferHomeCards = true,
+				) else cardPresenter,
 				rowsAdapter,
 				browseRowDef.liveTvProgramSelectAction,
 			)

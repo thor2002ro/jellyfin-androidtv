@@ -1,9 +1,13 @@
 package org.jellyfin.androidtv.ui.presentation
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewParent
+import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -43,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.leanback.widget.Presenter
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.recyclerview.widget.RecyclerView
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import coil3.compose.AsyncImagePainter
@@ -80,7 +85,22 @@ class CardPresenter(
 	private val onLongClick: ((item: Any?, view: View) -> Boolean)? = null,
 	val showFavoriteIndicator: Boolean = true,
 	val showBrowserTitle: Boolean = false,
+	private val deferHomeCards: Boolean = false,
 ) : Presenter() {
+	// Avoid composing newly visible Home cards during a scroll.
+	private val pending = ArrayDeque<CardViewHolder>()
+	private val handler by lazy { Handler(Looper.getMainLooper()) }
+	private val drain = object : Runnable {
+		override fun run() {
+			val next = pending.firstOrNull()
+			if (next != null && !next.isScrolling()) {
+				pending.removeFirst()
+				next.showContent()
+			}
+			if (pending.isNotEmpty()) handler.postDelayed(this, HOME_CARD_STAGGER_MS)
+		}
+	}
+
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int, uniformAspect: Boolean, showBrowserTitle: Boolean) : this(showInfo, imageType, staticHeight, uniformAspect, null, true, showBrowserTitle)
 	constructor(showInfo: Boolean, imageType: ImageType, staticHeight: Int) : this(showInfo, imageType, staticHeight, false)
@@ -103,7 +123,15 @@ class CardPresenter(
 			}
 		}
 
-		return CardViewHolder(view)
+		val root = if (deferHomeCards) FrameLayout(parent.context).apply {
+			isFocusable = true
+			isFocusableInTouchMode = true
+			descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+			clipChildren = false
+			clipToPadding = false
+			setBackgroundResource(R.drawable.channel_card_background)
+		} else view
+		return CardViewHolder(view, root)
 	}
 
 	override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
@@ -124,12 +152,63 @@ class CardPresenter(
 		viewHolder.unbind()
 	}
 
-	private inner class CardViewHolder(private val composeView: ComposeView) : ViewHolder(composeView) {
+	override fun onViewAttachedToWindow(viewHolder: ViewHolder) {
+		super.onViewAttachedToWindow(viewHolder)
+		(viewHolder as? CardViewHolder)?.enqueue()
+	}
+
+	override fun onViewDetachedFromWindow(viewHolder: ViewHolder) {
+		(viewHolder as? CardViewHolder)?.let(pending::remove)
+		super.onViewDetachedFromWindow(viewHolder)
+	}
+
+	private inner class CardViewHolder(private val composeView: ComposeView, private val root: View) : ViewHolder(root) {
 		private var item by mutableStateOf<BaseRowItem?>(null, referentialEqualityPolicy())
 		private var focused by mutableStateOf(false)
 
 		init {
-			composeView.setOnFocusChangeListener { _, hasFocus -> focused = hasFocus }
+			root.setOnFocusChangeListener { _, hasFocus ->
+				focused = hasFocus
+				if (hasFocus && deferHomeCards && !rendered) {
+					pending.remove(this)
+					showContent()
+				}
+			}
+			if (!deferHomeCards) setContent()
+		}
+
+		private var rendered = false
+
+		fun enqueue() {
+			if (!deferHomeCards || rendered || item == null || this in pending) return
+			val wasEmpty = pending.isEmpty()
+			pending.addLast(this)
+			if (wasEmpty) {
+				handler.removeCallbacks(drain)
+				handler.postDelayed(drain, HOME_CARD_STAGGER_MS)
+			}
+		}
+
+		fun isScrolling(): Boolean {
+			var parent: ViewParent? = root.parent
+			while (parent != null) {
+				if (parent is RecyclerView && parent.scrollState != RecyclerView.SCROLL_STATE_IDLE) return true
+				parent = parent.parent
+			}
+			return false
+		}
+
+		fun showContent() {
+			if (rendered) return
+			rendered = true
+			setContent()
+			root.minimumWidth = 0
+			root.minimumHeight = 0
+			root.background = null
+			(root as FrameLayout).addView(composeView)
+		}
+
+		private fun setContent() {
 			composeView.setContent {
 				CardViewHolderContent(
 					item = item,
@@ -145,9 +224,19 @@ class CardPresenter(
 		}
 
 		fun bind(rowItem: BaseRowItem, originalItem: Any?) {
+			pending.remove(this)
 			item = rowItem
-			composeView.tag = rowItem.itemId
-			composeView.setOnLongClickListener(
+			if (deferHomeCards && !rendered) {
+				val config = rowItem.getDisplayConfig(imageType, uniformAspect)
+				val size = cardImageSize(rowItem.staticHeight, staticHeight, config.resolvedAspectRatio())
+				val density = root.resources.displayMetrics.density
+				root.minimumWidth = (size.width.value * density).toInt()
+				// shortcut: metadata height is approximate; measure text if placeholder shifts become visible.
+				root.minimumHeight = ((size.height.value + if (showInfo) 45 else 0) * density).toInt()
+				enqueue()
+			}
+			root.tag = rowItem.itemId
+			root.setOnLongClickListener(
 				onLongClick?.let { handler ->
 					View.OnLongClickListener { view -> handler(originalItem, view) }
 				}
@@ -155,12 +244,15 @@ class CardPresenter(
 		}
 
 		fun unbind() {
+			pending.remove(this)
 			item = null
-			composeView.tag = null
-			composeView.setOnLongClickListener(null)
+			root.tag = null
+			root.setOnLongClickListener(null)
 		}
 	}
 }
+
+private const val HOME_CARD_STAGGER_MS = 80L
 
 internal data class BaseRowItemDisplayConfig(
 	val image: JellyfinImage?,
