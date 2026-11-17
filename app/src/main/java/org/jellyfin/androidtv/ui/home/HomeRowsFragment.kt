@@ -495,12 +495,19 @@ private const val HOME_ROWS_REFRESH_DELAY_MS = 3_500L
 private const val HOME_ROWS_REFRESH_DEBOUNCE_MS = 250L
 
 internal fun createHomeCardPresenter(useWideCards: Boolean) = when (useWideCards) {
-	false -> CardPresenter()
+	false -> CardPresenter(
+		showInfo = true,
+		imageType = ImageType.POSTER,
+		staticHeight = 150,
+		uniformAspect = false,
+		deferHomeCards = true,
+	)
 	true -> CardPresenter(
 		showInfo = true,
 		imageType = ImageType.THUMB,
 		staticHeight = 120,
 		uniformAspect = false,
+		deferHomeCards = true,
 	)
 }
 
