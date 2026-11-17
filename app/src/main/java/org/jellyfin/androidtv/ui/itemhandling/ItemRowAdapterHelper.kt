@@ -318,30 +318,53 @@ fun ItemRowAdapter.retrieveLatestMedia(api: ApiClient, query: GetLatestMediaRequ
 				api.libraryApi.getLatestMedia(query).content
 			}
 
-			// Seasons and episodes need their parent series to show the series year range.
-			val seriesIds = response.filter { it.type == BaseItemKind.SEASON || it.type == BaseItemKind.EPISODE }
-				.mapNotNull { it.seriesId }.distinct()
-			val seriesYears = if (seriesIds.isEmpty()) emptyMap() else try {
-				withContext(Dispatchers.IO) {
-					api.libraryApi.getItems(GetItemsRequest(ids = seriesIds, enableImages = false, enableUserData = false))
-						.content.items.associateBy { it.id }
-				}
-			} catch (error: CancellationException) {
-				throw error
-			} catch (error: Exception) {
-				Timber.w(error, "Unable to load series years for latest media")
-				emptyMap()
-			}
-			replaceLatestMediaItems(response, seriesYears)
+			// Show recent items without waiting for optional parent-series metadata.
+			replaceLatestMediaItems(response, emptyMap())
 
 			if (response.isEmpty()) removeRow()
 		}.fold(
 			onSuccess = {
 				notifyRetrieveFinished()
-				if (response.isNotEmpty()) refreshLatestStreamBadges(api, response)
+				if (response.isNotEmpty()) {
+					refreshLatestStreamBadges(api, response)
+					refreshLatestSeriesYears(api, response)
+				}
 			},
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
 		)
+	}
+}
+
+private fun ItemRowAdapter.refreshLatestSeriesYears(api: ApiClient, items: List<BaseItemDto>) {
+	// Seasons and episodes need their parent series to show the series year range.
+	val seriesIds = items.filter { it.type == BaseItemKind.SEASON || it.type == BaseItemKind.EPISODE }
+		.mapNotNull { it.seriesId }.distinct()
+	if (seriesIds.isEmpty()) return
+	val queryVersion = currentQueryVersion()
+	retrievalScope.launch {
+		val years = try {
+			withContext(Dispatchers.IO) {
+				api.libraryApi.getItems(GetItemsRequest(ids = seriesIds, enableImages = false, enableUserData = false))
+					.content.items.associateBy { it.id }
+			}
+		} catch (error: CancellationException) {
+			throw error
+		} catch (error: Exception) {
+			Timber.w(error, "Unable to load series years for latest media")
+			return@launch
+		}
+		// Do not apply late results to items replaced by a newer refresh.
+		val originalItems = items.associateBy { it.id }
+		applyIfQueryCurrent(queryVersion) {
+			for (index in 0 until size()) {
+				val row = get(index) as? BaseItemDtoBaseRowItem ?: continue
+				val item = row.baseItem ?: continue
+				if (originalItems[item.id] != item) continue
+				val year = item.seriesId?.let(years::get)?.seriesYearPeriod() ?: continue
+				// Copy the current row so badge metadata loaded in parallel is retained.
+				if (row.latestTitleYear != year) set(index, row.copyWithItem(item, latestTitleYear = year))
+			}
+		}
 	}
 }
 
@@ -609,10 +632,9 @@ private suspend fun List<BaseItemDto>.withSeriesOrSeasonStreamBadges(
 	val sampleItems = seriesOrSeasonStreamBadgeCandidates()
 	if (sampleItems.isEmpty()) return@coroutineScope this@withSeriesOrSeasonStreamBadges
 
-	val parallelism = Semaphore(SERIES_STREAM_BADGE_PARALLELISM)
 	val samples = sampleItems.map { item ->
 		async {
-			parallelism.withPermit {
+			seriesStreamBadgeParallelism.withPermit {
 				item.id to item.loadStreamBadgeSamples(api)
 			}
 		}
@@ -979,7 +1001,8 @@ internal object DirectStreamBadgeCache {
 private val DIRECT_STREAM_BADGE_TYPES = streamBadgeItemTypes - setOf(BaseItemKind.SERIES, BaseItemKind.SEASON)
 private val STREAM_BADGE_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.MEDIA_STREAMS)
 private const val SERIES_STREAM_BADGE_SAMPLE_SIZE = 6
-private const val SERIES_STREAM_BADGE_PARALLELISM = 4
+// Share the limit across rows so badge sampling cannot overwhelm home loading.
+private val seriesStreamBadgeParallelism = Semaphore(2)
 private const val STREAM_BADGE_CACHE_MAX_ENTRIES = 512
 
 private fun <K, V> LinkedHashMap<K, V>.removeEldestKeys(maxSize: Int): List<K> = buildList {
@@ -1161,20 +1184,7 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 	return retrievalScope.launch {
 		runCatching {
 			val items = withContext(Dispatchers.IO) {
-				val programs = api.liveTvApi.getRecommendedPrograms(query).content.items
-				if (programs.isEmpty() || programs.all { program -> program.channelPrimaryImageTag != null }) {
-					return@withContext programs
-				}
-
-				val channels = api.liveTvApi.getLiveTvChannels(
-					GetLiveTvChannelsRequest(
-						addCurrentProgram = false,
-						limit = LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT,
-					)
-				).content.items
-					.associateBy { channel -> channel.id }
-
-				programs.map { program -> program.withChannelImage(channels[program.channelId]) }
+				api.liveTvApi.getRecommendedPrograms(query).content.items
 			}
 
 			val rowItems = items.map { item ->
@@ -1192,12 +1202,43 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 				return@launch
 			}
 			prefetchLiveTvTracks(api, items)
+			// Missing channel images are optional and must not delay the program row.
+			refreshLiveTvChannelImages(api, items, queryVersion)
 
 			if (items.isEmpty()) removeRow()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
 		)
+	}
+}
+
+private fun ItemRowAdapter.refreshLiveTvChannelImages(api: ApiClient, items: List<BaseItemDto>, queryVersion: Int) {
+	if (items.none { it.channelPrimaryImageTag == null }) return
+	retrievalScope.launch {
+		val channels = try {
+			withContext(Dispatchers.IO) {
+				api.liveTvApi.getLiveTvChannels(
+					GetLiveTvChannelsRequest(addCurrentProgram = false, limit = LIVE_TV_CHANNEL_IMAGE_FALLBACK_LIMIT)
+				).content.items.associateBy { it.id }
+			}
+		} catch (error: CancellationException) {
+			throw error
+		} catch (error: Exception) {
+			Timber.w(error, "Unable to load channel images for recommended programs")
+			return@launch
+		}
+		// Do not apply late results to items replaced by a newer refresh.
+		val originalItems = items.associateBy { it.id }
+		applyIfQueryCurrent(queryVersion) {
+			for (index in 0 until size()) {
+				val row = get(index) as? BaseItemDtoBaseRowItem ?: continue
+				val item = row.baseItem ?: continue
+				if (originalItems[item.id] != item) continue
+				val updated = item.withChannelImage(channels[item.channelId])
+				if (updated != item) set(index, row.copyWithItem(updated))
+			}
+		}
 	}
 }
 

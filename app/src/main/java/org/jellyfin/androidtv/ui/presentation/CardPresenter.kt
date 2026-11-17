@@ -321,6 +321,13 @@ internal fun BaseRowItem.getDisplayConfig(imageType: ImageType, uniformAspect: B
 	)
 }
 
+// Prefetch and display must request the same dimensions to share cached images.
+internal fun cardImageSize(useStaticHeight: Boolean, staticHeight: Int, aspectRatio: Float): DpSize = when {
+	useStaticHeight -> DpSize(staticHeight.dp * aspectRatio, staticHeight.dp)
+	aspectRatio > 1f -> DpSize(130.dp * aspectRatio, 130.dp)
+	else -> DpSize(150.dp * aspectRatio, 150.dp)
+}
+
 internal fun BaseRowItem.browseCardAspectRatio(imageType: ImageType, uniformAspect: Boolean): Float =
 	getDisplayConfig(imageType, uniformAspect).resolvedAspectRatio()
 
@@ -365,11 +372,7 @@ internal fun CardViewHolderContent(
 	val image = displayConfig.image
 	val aspectRatio = displayConfig.resolvedAspectRatio()
 
-	val size = when (item.staticHeight) {
-		true -> DpSize(staticHeight.dp * aspectRatio, staticHeight.dp)
-		false if (aspectRatio > 1f) -> DpSize(130.dp * aspectRatio, 130.dp)
-		else -> DpSize(150.dp * aspectRatio, 150.dp)
-	}
+	val size = cardImageSize(item.staticHeight, staticHeight, aspectRatio)
 
 	val api = koinInject<ApiClient>()
 	val imageUrl = image?.getUrl(
