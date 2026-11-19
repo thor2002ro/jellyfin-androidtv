@@ -93,6 +93,7 @@ fun VideoPlayerControls(
 	liveTvTimeshiftPosition: Duration? = null,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
+	val playWhenReady by playbackManager.state.playWhenReady.collectAsState()
 	val currentQueueEntry by playbackManager.queue.entry.collectAsState()
 	val entryIndex by playbackManager.queue.entryIndex.collectAsState()
 	val chapters = remember(item) { item?.buildChapterItems().orEmpty() }
@@ -104,7 +105,7 @@ fun VideoPlayerControls(
 	val isLiveTv = item?.isLiveTv() == true
 	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = currentQueueEntry, updateWhilePaused = isLiveTv)
 	val seekEnabled = currentQueueEntry.canSeek(positionInfo)
-	val playPauseEnabled = seekEnabled
+	val playPauseEnabled = seekEnabled || playState == PlayState.ERROR
 	val coroutineScope = rememberCoroutineScope()
 	val liveTvChannelNavigator = rememberLiveTvChannelNavigator()
 	val showPreviousEntry = isLiveTv || entryIndex > 0
@@ -192,7 +193,7 @@ fun VideoPlayerControls(
 					}
 			) {
 				PlayPauseButton(
-					playState = playState,
+					playState = if (playState == PlayState.BUFFERING && !playWhenReady) PlayState.PAUSED else playState,
 					onClick = onPlayPauseClick,
 					enabled = playPauseEnabled,
 					modifier = if (playPauseEnabled) initialFocusModifier else Modifier,

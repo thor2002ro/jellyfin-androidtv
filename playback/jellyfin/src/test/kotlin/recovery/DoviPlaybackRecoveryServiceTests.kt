@@ -9,15 +9,14 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import org.jellyfin.playback.core.backend.HARDWARE_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.activate
 import org.jellyfin.playback.core.backend.activePlaybackErrorOrigin
 import org.jellyfin.playback.core.backend.createPlaybackErrorOrigin
-import org.jellyfin.playback.core.element.ElementKey
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.dovi.DoviDecision
@@ -27,8 +26,6 @@ import org.jellyfin.playback.dovi.DoviSourceLayer
 import org.jellyfin.playback.dovi.DoviSourceProfile
 import org.jellyfin.playback.dovi.DoviTransformEvidence
 import org.jellyfin.playback.dovi.doviDecision
-import org.jellyfin.playback.dovi.DoviRecoveryOwnership
-import org.jellyfin.playback.dovi.doviRecoveryOwnership
 import org.jellyfin.playback.dovi.doviTransformFailure
 import org.jellyfin.playback.dovi.doviTransformationRetryCount
 import org.jellyfin.playback.dovi.doviTransformationSuppressed
@@ -43,12 +40,12 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		DoviStatus.entries.filterNot { it == DoviStatus.OK }.forEach { status ->
 			doviTransformationFailureStatus("DOVI_TRANSFORMATION_FAILED_${status.name}") shouldBe status
 		}
-		isDoviTransformationError("DOVI_TRANSFORMATION_FAILED_OK") shouldBe false
-		isDoviTransformationError("DOVI_TRANSFORMATION_FAILED_UNKNOWN") shouldBe false
-		isDoviTransformationError("DOVI_TRANSFORMATION_FAILED_") shouldBe false
-		isDoviTransformationError("DOVI_TRANSFORMATION_FAILED_RPU__WRITE_FAILED") shouldBe false
-		isDoviTransformationError("DOVI_CONVERSION_FAILED_4") shouldBe false
-		isDoviTransformationError("ERROR_CODE_PARSING_CONTAINER_MALFORMED") shouldBe false
+		doviTransformationFailureStatus("DOVI_TRANSFORMATION_FAILED_OK") shouldBe null
+		doviTransformationFailureStatus("DOVI_TRANSFORMATION_FAILED_UNKNOWN") shouldBe null
+		doviTransformationFailureStatus("DOVI_TRANSFORMATION_FAILED_") shouldBe null
+		doviTransformationFailureStatus("DOVI_TRANSFORMATION_FAILED_RPU__WRITE_FAILED") shouldBe null
+		doviTransformationFailureStatus("DOVI_CONVERSION_FAILED_4") shouldBe null
+		doviTransformationFailureStatus("ERROR_CODE_PARSING_CONTAINER_MALFORMED") shouldBe null
 	}
 
 	test("MEL Profile 8.1 metadata repair and source-base routes each claim one server fallback") {
@@ -65,14 +62,12 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 
 		decisions.forEach { decision ->
 			val entry = transformationEntry(decision)
-			val recovery = claimDoviTransformationRecovery(
+			val recovery = switchToTranscoding(
 				entry = entry,
 				error = transformationError(entry),
-				position = 91.seconds,
-				playWhenReady = true,
 			)
 
-			recovery?.failedTransform shouldBe decision.transformEvidence
+			recovery shouldBe true
 			entry.doviTransformationRetryCount shouldBe 1
 			entry.doviTransformationSuppressed shouldBe true
 			entry.doviTransformFailure shouldBe DoviStatus.RPU_WRITE_FAILED
@@ -86,17 +81,15 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		val entry = transformationEntry(
 			DoviDecision(DoviRoute.Native, DoviDecisionReason.NATIVE_SUPPORTED),
 		)
-		val recovery = claimDoviTransformationRecovery(
+		val recovery = switchToTranscoding(
 			entry = entry,
 			error = PlaybackError(
 				codeName = "DOVI_VIDEO_DECODER_FAILED",
 				origin = activeOrigin(entry),
 			),
-			position = 27.seconds,
-			playWhenReady = true,
 		)
 
-		recovery?.failedTransform shouldBe null
+		recovery shouldBe true
 		entry.doviTransformationRetryCount shouldBe 1
 		entry.doviTransformationSuppressed shouldBe true
 		entry.doviTransformFailure shouldBe null
@@ -105,44 +98,16 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		entry.doviDecision?.route shouldBe DoviRoute.ServerFallback
 	}
 
-	test("recovery preserves position and playing or paused state") {
-		val queueDataKey = ElementKey<String>("Task11QueueData")
-		val playingEntry = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
-		playingEntry.put(queueDataKey, "audio-subtitle-selection")
-		val playing = claimDoviTransformationRecovery(
-			playingEntry,
-			transformationError(playingEntry),
-			74.seconds,
-			playWhenReady = true,
-		)
-		playing?.position shouldBe 74.seconds
-		playing?.playWhenReady shouldBe true
-		playingEntry.mediaSourceId shouldBe "source-a"
-		playingEntry.get(queueDataKey) shouldBe "audio-subtitle-selection"
-
-		val pausedEntry = transformationEntry(transformDecision(DoviTarget.MEL, DoviDecisionReason.FEL_TO_MEL))
-		val paused = claimDoviTransformationRecovery(
-			pausedEntry,
-			transformationError(pausedEntry),
-			18.seconds,
-			playWhenReady = false,
-		)
-		paused?.position shouldBe 18.seconds
-		paused?.playWhenReady shouldBe false
-	}
-
-	test("Live TV recovery retains target offset and lets the server resolve its current point") {
+	test("switching Live TV to transcoding retains the target offset") {
 		val entry = transformationEntry(sourceBaseDecision()).apply {
 			liveStreamTargetOffset = 12.seconds
 		}
-		val recovery = claimDoviTransformationRecovery(
+		val recovery = switchToTranscoding(
 			entry,
 			transformationError(entry),
-			position = null,
-			playWhenReady = true,
 		)
 
-		recovery?.position shouldBe null
+		recovery shouldBe true
 		entry.liveStreamTargetOffset shouldBe 12.seconds
 	}
 
@@ -150,40 +115,24 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		val entry = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
 		val error = transformationError(entry)
 
-		(claimDoviTransformationRecovery(entry, error, 2.seconds, true) != null) shouldBe true
-		claimDoviTransformationRecovery(entry, error, 3.seconds, true) shouldBe null
+		switchToTranscoding(entry, error) shouldBe true
+		switchToTranscoding(entry, error) shouldBe false
 		entry.doviTransformationRetryCount shouldBe 1
-		entry.doviRecoveryOwnership shouldBe DoviRecoveryOwnership.TERMINAL
 	}
 
 	test("the first validated transformation failure is retained") {
 		val entry = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
 
-		claimDoviTransformationRecovery(entry, transformationError(entry), 2.seconds, true)
-		claimDoviTransformationRecovery(
+		switchToTranscoding(entry, transformationError(entry))
+		switchToTranscoding(
 			entry,
 			PlaybackError(
 				codeName = "DOVI_TRANSFORMATION_FAILED_REPAIR_FAILED",
 				origin = entry.activePlaybackErrorOrigin,
 			),
-			3.seconds,
-			true,
 		)
 
 		entry.doviTransformFailure shouldBe DoviStatus.RPU_WRITE_FAILED
-	}
-
-	test("successful fallback clears temporary ownership and permits later generic recovery") {
-		val entry = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
-		claimDoviTransformationRecovery(entry, transformationError(entry), 2.seconds, true)!!
-		blocksGenericRecovery(entry) shouldBe true
-
-		completeDoviRecoveryOnPlaybackState(entry, org.jellyfin.playback.core.model.PlayState.PLAYING)
-
-		entry.doviTransformationSuppressed shouldBe true
-		entry.doviRecoveryOwnership shouldBe null
-		blocksGenericRecovery(entry) shouldBe false
-		isRecoverablePlaybackError("ERROR_CODE_IO_NETWORK_CONNECTION_FAILED") shouldBe true
 	}
 
 	test("concurrent duplicate errors atomically produce one recovery") {
@@ -193,9 +142,9 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		val recoveries = coroutineScope {
 			List(16) {
 				async(Dispatchers.Default) {
-					claimDoviTransformationRecovery(entry, error, 5.seconds, true)
+					switchToTranscoding(entry, error)
 				}
-			}.awaitAll().filterNotNull()
+			}.awaitAll().filter { it }
 		}
 
 		recoveries shouldHaveSize 1
@@ -206,21 +155,11 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		val entry = transformationEntry(transformDecision(DoviTarget.MEL, DoviDecisionReason.FEL_TO_MEL))
 		val otherEntry = transformationEntry(transformDecision(DoviTarget.MEL, DoviDecisionReason.FEL_TO_MEL))
 
-		claimDoviTransformationRecovery(
+		switchToTranscoding(
 			entry,
 			transformationError(otherEntry),
-			1.seconds,
-			true,
-		) shouldBe null
+		) shouldBe false
 
-		val recovery = claimDoviTransformationRecovery(entry, transformationError(entry), 1.seconds, true)!!
-		entry.createPlaybackErrorOrigin("replacement-source").activate()
-		var reloaded = false
-		DoviTransformationRecoveryRunner().run(recovery, { entry }, {}) { _, _ ->
-			reloaded = true
-			true
-		} shouldBe false
-		reloaded shouldBe false
 	}
 
 	test("late failure from an older source load on the same entry is ignored") {
@@ -228,7 +167,7 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		val oldLoadError = transformationError(entry)
 		entry.createPlaybackErrorOrigin("source-b").activate()
 
-		claimDoviTransformationRecovery(entry, oldLoadError, 4.seconds, true) shouldBe null
+		switchToTranscoding(entry, oldLoadError) shouldBe false
 		entry.doviTransformationRetryCount shouldBe null
 		entry.doviTransformationSuppressed shouldBe null
 		entry.forceTranscoding shouldBe null
@@ -239,56 +178,45 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		val oldLoadError = transformationError(entry)
 		entry.createPlaybackErrorOrigin("source-a").activate()
 
-		claimDoviTransformationRecovery(entry, oldLoadError, 6.seconds, true) shouldBe null
+		switchToTranscoding(entry, oldLoadError) shouldBe false
 		entry.doviTransformationRetryCount shouldBe null
 	}
 
 	test("unrelated errors unbound errors and native routes do not recover") {
 		val transformed = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
-		claimDoviTransformationRecovery(
+		switchToTranscoding(
 			transformed,
 			PlaybackError("ERROR_CODE_IO_NETWORK_CONNECTION_FAILED", origin = activeOrigin(transformed)),
-			1.seconds,
-			true,
-		) shouldBe null
-		claimDoviTransformationRecovery(
+		) shouldBe false
+		switchToTranscoding(
 			transformed,
 			PlaybackError("ERROR_CODE_DECODING_FAILED", origin = activeOrigin(transformed)),
-			1.seconds,
-			true,
-		) shouldBe null
-		claimDoviTransformationRecovery(
+		) shouldBe false
+		switchToTranscoding(
 			transformed,
 			PlaybackError("DOVI_TRANSFORMATION_FAILED_INTERNAL_ERROR"),
-			1.seconds,
-			true,
-		) shouldBe null
+		) shouldBe false
 
 		val nativeEntry = transformationEntry(
 			DoviDecision(DoviRoute.Native, DoviDecisionReason.NATIVE_SUPPORTED),
 		)
-		claimDoviTransformationRecovery(
+		switchToTranscoding(
 			nativeEntry,
 			transformationError(nativeEntry),
-			1.seconds,
-			true,
-		) shouldBe null
+		) shouldBe false
 
 		val externalEntry = transformationEntry(
 			DoviDecision(DoviRoute.ServerFallback, DoviDecisionReason.BACKEND_UNSUPPORTED),
 		)
-		claimDoviTransformationRecovery(
+		switchToTranscoding(
 			externalEntry,
 			transformationError(externalEntry),
-			1.seconds,
-			true,
-		) shouldBe null
+		) shouldBe false
 	}
 
 	test("generic network and Live TV recovery ignore the dedicated error") {
 		val entry = transformationEntry(sourceBaseDecision())
 		val error = transformationError(entry)
-		entry.doviRecoveryOwnership = DoviRecoveryOwnership.IN_FLIGHT
 
 		isRecoverablePlaybackError(error.codeName) shouldBe false
 		shouldSuppressLiveTvGenericRecovery(error, entry) shouldBe true
@@ -299,43 +227,14 @@ class DoviPlaybackRecoveryServiceTests : FunSpec({
 		) shouldBe false
 	}
 
-	test("runner clears its active entry when reload throws") {
-		val entry = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
-		val recovery = claimDoviTransformationRecovery(entry, transformationError(entry), 8.seconds, true)!!
-		val runner = DoviTransformationRecoveryRunner()
+	test("a confirmed hardware decoder failure requests transcoding without a DV decision") {
+		val entry = QueueEntry()
+		val error = PlaybackError(HARDWARE_VIDEO_DECODER_ERROR_CODE, origin = activeOrigin(entry))
 
-		runner.run(recovery, { entry }, {}) { _, _ -> error("playback info failed") } shouldBe false
-		runner.isActive(entry) shouldBe false
-		entry.doviRecoveryOwnership shouldBe DoviRecoveryOwnership.TERMINAL
-	}
-
-	test("dedicated reload waits until generic recovery cancellation completes") {
-		val entry = transformationEntry(transformDecision(DoviTarget.PROFILE_8_1, DoviDecisionReason.PROFILE_8_1))
-		val recovery = claimDoviTransformationRecovery(entry, transformationError(entry), 8.seconds, true)!!
-		val cancellationEntered = CompletableDeferred<Unit>()
-		val allowCancellationToFinish = CompletableDeferred<Unit>()
-		var reloadStarted = false
-
-		coroutineScope {
-			val run = async {
-				DoviTransformationRecoveryRunner().run(
-					recovery,
-					{ entry },
-					{
-						cancellationEntered.complete(Unit)
-						allowCancellationToFinish.await()
-					},
-				) { _, _ ->
-					reloadStarted = true
-					true
-				}
-			}
-			cancellationEntered.await()
-			reloadStarted shouldBe false
-			allowCancellationToFinish.complete(Unit)
-			run.await() shouldBe true
-		}
-		reloadStarted shouldBe true
+		switchToTranscoding(entry, error) shouldBe true
+		entry.forceTranscoding shouldBe true
+		entry.doviTransformationSuppressed shouldBe null
+		switchToTranscoding(entry, error) shouldBe false
 	}
 })
 

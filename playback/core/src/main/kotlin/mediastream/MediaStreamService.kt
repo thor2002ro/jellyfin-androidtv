@@ -17,6 +17,7 @@ import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.QueueService
 import org.jellyfin.playback.core.queue.isLiveTv
+import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.core.timedevent.TimedEvent
 import org.jellyfin.playback.core.timedevent.addTimedEvent
@@ -156,7 +157,10 @@ internal class MediaStreamService(
 			entry.startPosition = null
 			return true
 		} else {
-			Timber.e("Unable to resolve stream for entry $entry")
+			Timber.w(
+				"Playback stream resolution failed itemId=%s cause=%s",
+				entry.metadata.mediaId, networkError?.javaClass?.simpleName ?: "no compatible stream",
+			)
 			if (networkError != null) {
 				backend.stop()
 				val origin = entry.createPlaybackErrorOrigin("stream-resolution").also { it.activate() }
@@ -194,6 +198,7 @@ internal class MediaStreamService(
 		val newStream = try {
 			entry.resolveMediaStream(startPosition = position)
 		} catch (error: IOException) {
+			Timber.w("Playback reload request failed itemId=%s cause=%s", entry.metadata.mediaId, error.javaClass.simpleName)
 			null
 		}
 		// Resolution suspends for the server: playback may have stopped, changed, or been reloaded meanwhile.

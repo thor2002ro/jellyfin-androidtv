@@ -156,7 +156,7 @@ fun VideoPlayerOverlay(
 	var liveTvGuideItem by remember { mutableStateOf(currentLiveTvItem) }
 	val positionInfo by rememberPlayerPositionInfo(playbackManager, resetKey = positionResetKey, updateWhilePaused = entry?.isLiveTv == true)
 	val seekEnabled = entry.canSeek(positionInfo)
-	val playPauseEnabled = seekEnabled
+	val playPauseEnabled = seekEnabled || playState == PlayState.ERROR
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
 	val stream = entry?.run { mediaStreamFlow.collectAsStateWithLifecycle(mediaStream) }?.value

@@ -403,6 +403,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.first.mediaStream?.errorOrigin))
 					fixture.events.onPlayStateChange(PlayState.ERROR)
 					if (pause) {
+						fixture.events.onPlayStateChange(PlayState.BUFFERING)
 						fixture.manager.state.pause()
 						withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 						fixture.manager.state.unpause()
@@ -442,7 +443,10 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.events.onPlayStateChange(PlayState.ERROR)
 					delay(4.seconds)
 					calls.get() shouldBe 1
-					if (pause) fixture.manager.state.pause() else fixture.manager.state.stop()
+					if (pause) {
+						fixture.events.onPlayStateChange(PlayState.BUFFERING)
+						fixture.manager.state.pause()
+					} else fixture.manager.state.stop()
 					withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 					response.complete(stream(fixture.first, "late"))
 					delay(100L)

@@ -73,6 +73,7 @@ import io.github.thor2002ro.libdovi.DoviTransformSessionState
 import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
+import org.jellyfin.playback.core.backend.HARDWARE_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlaybackErrorOrigin
 import org.jellyfin.playback.core.backend.activate
@@ -106,6 +107,7 @@ import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
+import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.support.PlaySupportReport
 import org.jellyfin.playback.core.timedevent.TimedEvent
 import org.jellyfin.playback.core.ui.PlayerSubtitleStyle
@@ -520,22 +522,6 @@ class ExoPlayerBackend(
 			Player.STATE_ENDED -> "ENDED"
 			else -> playbackState.toString()
 		}
-
-		private fun MediaItem.safeUriForLogging(): String = localConfiguration
-			?.uri
-			?.buildUpon()
-			?.clearQuery()
-			?.fragment(null)
-			?.build()
-			?.toString()
-			.orEmpty()
-
-		private fun String.safeUriForLogging(): String = toUri()
-			.buildUpon()
-			.clearQuery()
-			.fragment(null)
-			.build()
-			.toString()
 
 		private fun PlaybackException.canRecoverLiveTvWithIncreasedOffset(): Boolean = when (errorCode) {
 			PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
@@ -1173,10 +1159,9 @@ class ExoPlayerBackend(
 	private fun QueueEntry.createMediaSource(stream: PlayableMediaStream): MediaSource {
 		val mediaItem = toMediaItem(stream)
 		Timber.i(
-			"Creating explicit media source mediaId=%s isLiveTv=%s uri=%s",
+			"Creating explicit media source mediaId=%s isLiveTv=%s",
 			mediaItem.mediaId,
 			liveStreamTargetOffset != null,
-			mediaItem.safeUriForLogging(),
 		)
 		return mediaSourceFactory.createMediaSource(mediaItem)
 	}
@@ -1718,20 +1703,23 @@ class ExoPlayerBackend(
 				isVideoRendererError = isVideoRendererError,
 				hasDoviDecision = errorEntry?.doviDecision?.requiresHardwareVideoDecoder == true,
 			)
+			val hardwareDecoderError = if (activeVideoDecoder == VideoDecoder.HARDWARE &&
+				doviVideoDecoderPlaybackErrorCode(error.errorCode, isVideoRendererError, hasDoviDecision = true) != null
+			) HARDWARE_VIDEO_DECODER_ERROR_CODE else null
 			val isLiveTv = errorEntry?.liveStreamTargetOffset != null
 			val playbackError = PlaybackError(
-				codeName = doviErrorCode ?: doviVideoDecoderErrorCode ?: error.errorCodeName,
+				codeName = doviErrorCode ?: doviVideoDecoderErrorCode ?: hardwareDecoderError ?: error.errorCodeName,
 				recoverWithIncreasedLiveTvOffset = isLiveTv && error.canRecoverLiveTvWithIncreasedOffset(),
 				origin = errorOrigin,
 			)
 			Timber.e(
-				error,
-				"ExoPlayer error code=%s mediaId=%s uri=%s method=%s recoverWithIncreasedLiveTvOffset=%s",
+				"ExoPlayer error code=%s classifiedCode=%s itemId=%s method=%s causes=%s",
 				error.errorCodeName,
-				exoPlayer.currentMediaItem?.mediaId,
-				exoPlayer.currentMediaItem?.safeUriForLogging(),
+				playbackError.codeName,
+				errorEntry?.metadata?.mediaId,
 				currentStream?.conversionMethod,
-				playbackError.recoverWithIncreasedLiveTvOffset,
+				// Exception messages may contain the stream URL. Log the cause types only.
+				generateSequence<Throwable>(error) { it.cause }.take(8).joinToString(" -> ") { it.javaClass.simpleName },
 			)
 			listener?.onPlaybackError(playbackError)
 			listener?.onPlayStateChange(PlayState.ERROR)
@@ -1970,14 +1958,13 @@ class ExoPlayerBackend(
 			val isLiveTv = item.liveStreamTargetOffset != null
 			val tsExtractorFlags = if (isLiveTv) item.liveTvTsExtractorFlags(usesHardwareVideoDecoder()) else 0
 			Timber.i(
-				"Playback source check mediaId=%s isLiveTv=%s liveTargetOffsetMs=%s method=%s container=%s intendedTsExtractorFlags=%s uri=%s",
+				"Playback source check mediaId=%s isLiveTv=%s liveTargetOffsetMs=%s method=%s container=%s intendedTsExtractorFlags=%s",
 				stream.hashCode().toString(),
 				isLiveTv,
 				item.liveStreamTargetOffset?.inWholeMilliseconds?.toString() ?: "none",
 				stream.conversionMethod,
 				stream.container,
 				formatTsExtractorFlags(tsExtractorFlags),
-				stream.url.safeUriForLogging(),
 			)
 			exoPlayer.play()
 		}
@@ -2674,10 +2661,9 @@ class ExoPlayerBackend(
 			}
 
 			Timber.i(
-				"Creating %s media source for mediaId=%s uri=%s liveTargetOffsetMs=%s tsExtractorFlags=%s",
+				"Creating %s media source for mediaId=%s liveTargetOffsetMs=%s tsExtractorFlags=%s",
 				if (isLiveTv) "Live TV" else "default",
 				mediaItem.mediaId,
-				mediaItem.safeUriForLogging(),
 				queueEntry?.liveStreamTargetOffset?.inWholeMilliseconds?.toString() ?: "none",
 				formatTsExtractorFlags(tsExtractorFlags),
 			)

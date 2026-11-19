@@ -58,6 +58,19 @@ class PlayerStateTests : FunSpec({
 		state.playWhenReady.value shouldBe false
 	}
 
+	test("pause leaves play intent active while the backend reports an error") {
+		val service = BackendService()
+		val backend = backend()
+		val state = playerState(backend, QueueEntry(), backendService = service)
+		state.setPlayWhenReady(true)
+		service.BackendEventListener().onPlayStateChange(PlayState.ERROR)
+
+		state.pause()
+
+		state.playWhenReady.value shouldBe true
+		verify(exactly = 0) { backend.pause() }
+	}
+
 	test("playback manager switches its active backend") {
 		val initial = backend()
 		val replacement = backend()

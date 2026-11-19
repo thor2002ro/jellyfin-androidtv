@@ -1,6 +1,7 @@
 package org.jellyfin.playback.jellyfin.recovery
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -33,7 +34,7 @@ import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
-import org.jellyfin.playback.dovi.doviRecoveryOwnership
+import org.jellyfin.playback.dovi.doviDecision
 import org.jellyfin.playback.jellyfin.livetv.LiveTvPlaybackPolicy
 import timber.log.Timber
 import kotlin.time.Duration
@@ -42,7 +43,6 @@ import kotlin.time.Duration.Companion.seconds
 class NetworkPlaybackRecoveryService(
 	private val liveTvPlaybackPolicy: LiveTvPlaybackPolicy,
 	private val networkAvailable: () -> Boolean = { true },
-	private val doviRecoveryHandoff: DoviRecoveryHandoffCoordinator? = null,
 ) : PlayerService() {
 	private var recoveryOwnership: NetworkRecoveryJobOwnership? = null
 	private var recoveringEntry: QueueEntry? = null
@@ -59,7 +59,6 @@ class NetworkPlaybackRecoveryService(
 	val recovering: StateFlow<Boolean> = _recovering.asStateFlow()
 
 	override suspend fun onInitialize() {
-		doviRecoveryHandoff?.register(::cancelAndJoinOwnedRecovery)
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
 			override fun onPlayWhenReadyRequested(playWhenReady: Boolean) {
 				if (!playWhenReady) {
@@ -70,14 +69,14 @@ class NetworkPlaybackRecoveryService(
 				pausedEntryRevision = null
 				fatalRecoveryOrigin = null
 				val entry = manager.queue.entry.value ?: return
-				if (wasPaused && savedRecoveryPosition(entry) != null) {
+				if ((wasPaused || entry.hasTranscodeFallback) && savedRecoveryPosition(entry) != null) {
 					startRecovery(entry, "Resuming interrupted playback", playWhenReady = true)
 				}
 			}
 
 			override fun onSeekRequested(position: Duration) {
 				val entry = manager.queue.entry.value ?: return
-				if (liveTvPlaybackPolicy.isLiveTv(entry) || entry.doviRecoveryOwnership != null || isFatalRecoveryBlocked(entry)) return
+				if (!handles(entry) || isFatalRecoveryBlocked(entry)) return
 				if (recoveringEntry !== entry && savedRecoveryPosition(entry) == null &&
 					(pendingRecoveryStream == null || pendingRecoveryStream !== entry.mediaStream)
 				) return
@@ -108,7 +107,7 @@ class NetworkPlaybackRecoveryService(
 
 			override fun shouldHandleMediaStreamEnd(mediaStream: PlayableMediaStream): Boolean {
 				val entry = mediaStream.queueEntry
-				if (manager.queue.entry.value !== entry || liveTvPlaybackPolicy.isLiveTv(entry) || entry.doviRecoveryOwnership != null) return true
+				if (manager.queue.entry.value !== entry || !handles(entry)) return true
 				if (failedRecoveryStream === mediaStream) return false
 				val pendingReplacement = pendingRecoveryStream === mediaStream
 				val position = state.positionInfo
@@ -120,7 +119,10 @@ class NetworkPlaybackRecoveryService(
 						owner != null && mediaStream !== owner.sourceStream
 				)
 				// Allow final-frame rounding; without a duration, connectivity loss alone cannot disprove a native EOF.
-				if (duration != null && position.active >= duration - 1.seconds || duration == null && !interrupted) {
+				if (!liveTvPlaybackPolicy.isLiveTv(entry) && (
+						duration != null && position.active >= duration - 1.seconds || duration == null && !interrupted
+					)
+				) {
 					if (pendingReplacement) pendingRecoveryStream = null
 					clearRecovering(entry)
 					return true
@@ -135,16 +137,28 @@ class NetworkPlaybackRecoveryService(
 			override fun onPlaybackError(error: PlaybackError) {
 				val entry = manager.queue.entry.value
 				if (failedRecoveryStream !== entry?.mediaStream) failedRecoveryStream = null
-				if (doviTransformationFailureStatus(error.codeName) != null) {
+				if (entry == null || error.origin?.matches(entry) != true) return
+				// Capture the failed route before switching replaces the Dolby Vision decision.
+				val previousDoviDecision = entry.doviDecision
+				if (switchToTranscoding(entry, error)) {
+					Timber.w(
+						"Switching to server transcoding itemId=%s code=%s previousDvRoute=%s previousDvReason=%s",
+						entry.metadata.mediaId, error.codeName, previousDoviDecision?.route, previousDoviDecision?.reason,
+					)
+					fatalRecoveryOrigin = null
+					recoveryOwnership?.takeIf { it.entry === entry }?.job?.cancel()
+				}
+				if (!handles(entry)) return
+				val transcodeFallback = entry.hasTranscodeFallback
+				if (transcodeFallback && !state.playWhenReady.value) {
+					recoveryPosition = NetworkRecoveryPosition(
+						manager.queue.entryRevision, entry.mediaStream, entry.startPosition ?: state.positionInfo.active,
+					)
 					return
 				}
-				if (
-					entry == null ||
-					entry.doviRecoveryOwnership != null ||
-					liveTvPlaybackPolicy.isLiveTv(entry)
-				) return
-				if (!isOrdinaryRecoveryErrorEligible(error, entry)) {
+				if (!transcodeFallback && !isOrdinaryRecoveryErrorEligible(error, entry)) {
 					if (error.codeName != "MEDIA_STREAM_RECOVERY_FAILED" && error.origin?.matches(entry) == true) {
+						Timber.w("Playback recovery blocked itemId=%s code=%s", entry.metadata.mediaId, error.codeName)
 						fatalRecoveryOrigin = error.origin
 						fatalRecoveryEntryRevision = manager.queue.entryRevision
 						recoveryOwnership?.takeIf { it.entry === entry }?.job?.cancel()
@@ -177,6 +191,7 @@ class NetworkPlaybackRecoveryService(
 			var lastPlayState = state.playState.value
 			var bufferingEntry: QueueEntry? = null
 			var consecutiveBufferingChecks = 0
+			var checksWithoutPlaybackProgress = 0
 			var playedEntry: QueueEntry? = null
 			var lastPositionInfo = state.positionInfo
 
@@ -191,6 +206,7 @@ class NetworkPlaybackRecoveryService(
 				}
 				val playState = state.playState.value
 				val positionInfo = state.positionInfo
+				val lastPlaybackPositionChanged = lastPositionInfo.active != positionInfo.active
 				val bufferingProgressed = hasBufferingProgress(lastPositionInfo, positionInfo)
 				lastPositionInfo = positionInfo
 				if (playState == PlayState.PLAYING) playedEntry = entry
@@ -210,8 +226,7 @@ class NetworkPlaybackRecoveryService(
 				}
 				if (
 					entry == null ||
-					entry.doviRecoveryOwnership != null ||
-					liveTvPlaybackPolicy.isLiveTv(entry) ||
+					!handles(entry) ||
 					!state.playWhenReady.value || pausedEntryRevision == manager.queue.entryRevision ||
 					isFatalRecoveryBlocked(entry) ||
 					playState == PlayState.STOPPED && recoveringEntry !== entry
@@ -219,6 +234,7 @@ class NetworkPlaybackRecoveryService(
 					disconnectedEntry = null
 					bufferingEntry = null
 					consecutiveBufferingChecks = 0
+					checksWithoutPlaybackProgress = 0
 					bufferingRecoveryAttemptedEntry = null
 					playedEntry = null
 					clearRecovering()
@@ -231,6 +247,7 @@ class NetworkPlaybackRecoveryService(
 				if (!networkAvailable) {
 					bufferingEntry = null
 					consecutiveBufferingChecks = 0
+					checksWithoutPlaybackProgress = 0
 					if (disconnectedEntry == null && (playState.isActivePlayback || lastPlayState.isActivePlayback || playState == PlayState.ERROR)) {
 						Timber.w("Network unavailable during playback; waiting for connectivity to return")
 						disconnectedEntry = entry
@@ -245,13 +262,16 @@ class NetworkPlaybackRecoveryService(
 					if (bufferingEntry !== entry) {
 						bufferingEntry = entry
 						consecutiveBufferingChecks = 0
+						checksWithoutPlaybackProgress = 0
 					}
 					consecutiveBufferingChecks = if (bufferingProgressed) 0 else consecutiveBufferingChecks + 1
+					checksWithoutPlaybackProgress = if (lastPlaybackPositionChanged) 0 else checksWithoutPlaybackProgress + 1
 					if (
 						shouldRecoverStalledBuffer(
 							consecutiveChecks = consecutiveBufferingChecks,
 							requiredChecks = BUFFERING_RECOVERY_CHECKS,
-							hasPlayed = playedEntry === entry,
+							hasPlayed = playedEntry === entry || entry.hasTranscodeFallback,
+							checksWithoutPlaybackProgress = checksWithoutPlaybackProgress,
 						) &&
 						bufferingRecoveryAttemptedEntry !== entry
 					) {
@@ -265,6 +285,7 @@ class NetworkPlaybackRecoveryService(
 				} else {
 					bufferingEntry = null
 					consecutiveBufferingChecks = 0
+					checksWithoutPlaybackProgress = 0
 				}
 
 				if (!wasNetworkAvailable && disconnectedEntry === entry) {
@@ -283,7 +304,7 @@ class NetworkPlaybackRecoveryService(
 	}
 
 	private fun startRecovery(entry: QueueEntry, reason: String, playWhenReady: Boolean) {
-		if (!playWhenReady || !state.playWhenReady.value || pausedEntryRevision == manager.queue.entryRevision || isFatalRecoveryBlocked(entry) || entry.doviRecoveryOwnership != null) return
+		if (!playWhenReady || !state.playWhenReady.value || pausedEntryRevision == manager.queue.entryRevision || isFatalRecoveryBlocked(entry)) return
 		val entryRevision = manager.queue.entryRevision
 		val sourceStream = entry.mediaStream
 		val previous = recoveryOwnership
@@ -308,6 +329,15 @@ class NetworkPlaybackRecoveryService(
 				withContext(NonCancellable) { previous?.job?.join() }
 				currentCoroutineContext().ensureActive()
 				recoverEntry(entry, entryRevision, sourceStream, retryPosition, reason, playWhenReady)
+			} catch (error: CancellationException) {
+				val outcome = when {
+					manager.queue.entry.value !== entry || manager.queue.entryRevision != entryRevision -> "stopped or item changed"
+					!state.playWhenReady.value -> "paused"
+					isFatalRecoveryBlocked(entry) -> "unrecoverable playback error"
+					else -> "superseded or service ended"
+				}
+				Timber.i("Playback recovery canceled itemId=%s outcome=%s", entry.metadata.mediaId, outcome)
+				throw error
 			} finally {
 				val owner = recoveryOwnership
 				if (owner?.token === token && owner.job === coroutineContext[Job]) {
@@ -321,14 +351,17 @@ class NetworkPlaybackRecoveryService(
 	}
 
 	private suspend fun recoverEntry(entry: QueueEntry, entryRevision: Long, sourceStream: PlayableMediaStream?, retryPosition: Duration, reason: String, playWhenReady: Boolean) {
+		val itemId = entry.metadata.mediaId
+		var attempt = 0
 		var loggedWaitingForNetwork = false
+		var checksWithoutPlaybackProgress = 0
 		var expectedStream = sourceStream
 		val preparingEntry = manager.preparingEntry ?: return
 
 		while (isCurrentRecoverableEntry(entry, entryRevision, expectedStream)) {
 			if (!isNetworkAvailable()) {
 				if (!loggedWaitingForNetwork) {
-					Timber.i("$reason; waiting for network before reloading playback")
+					Timber.i("Playback recovery waiting for network itemId=%s reason=%s", itemId, reason)
 					loggedWaitingForNetwork = true
 				}
 				delay(NETWORK_RECOVERY_CHECK_INTERVAL)
@@ -343,15 +376,34 @@ class NetworkPlaybackRecoveryService(
 			val playState = state.playState.value
 			val positionAfterGrace = state.positionInfo
 			if (playState != PlayState.PAUSED && hasPlaybackRecovered(playState, positionBeforeGrace.active, positionAfterGrace.active)) {
-				Timber.i("Playback progressed without reloading")
+				Timber.i("Playback recovery finished itemId=%s outcome=playback progressing", itemId)
 				recoveryPosition = null
 				if (pendingRecoveryStream === expectedStream) pendingRecoveryStream = null
 				return
 			}
-			if (playState == PlayState.BUFFERING && hasBufferingProgress(positionBeforeGrace, positionAfterGrace)) continue
+			checksWithoutPlaybackProgress = if (positionBeforeGrace.active != positionAfterGrace.active) 0 else checksWithoutPlaybackProgress + 1
+			if (playState == PlayState.BUFFERING && hasBufferingProgress(positionBeforeGrace, positionAfterGrace) &&
+				!shouldRecoverStalledBuffer(0, BUFFERING_RECOVERY_CHECKS, hasPlayed = false, checksWithoutPlaybackProgress = checksWithoutPlaybackProgress)
+			) continue
+			checksWithoutPlaybackProgress = 0
 
-			Timber.i("$reason; reloading playback at $retryPosition")
-			val reloadResult = manager.reloadCurrentMediaStreamResult(position = retryPosition, playWhenReady = playWhenReady)
+			attempt++
+			Timber.i(
+				"Playback recovery attempt itemId=%s attempt=%d reason=%s position=%s transcodeFallback=%s",
+				itemId, attempt, reason, retryPosition, entry.hasTranscodeFallback,
+			)
+			val reloadResult = try {
+				manager.reloadCurrentMediaStreamResult(
+					position = retryPosition.takeUnless { liveTvPlaybackPolicy.isLiveTv(entry) },
+					playWhenReady = playWhenReady,
+				)
+			} catch (error: CancellationException) {
+				throw error
+			} catch (error: Exception) {
+				Timber.w("Playback recovery request threw itemId=%s attempt=%d cause=%s", itemId, attempt, error.javaClass.simpleName)
+				if (!entry.hasTranscodeFallback) throw error
+				MediaStreamReloadResult.FAILED
+			}
 			if (reloadResult == MediaStreamReloadResult.RELOADED) {
 				val replacement = entry.mediaStream ?: return
 				expectedStream = replacement
@@ -359,18 +411,21 @@ class NetworkPlaybackRecoveryService(
 				recoveryOwnership?.takeIf { it.job === currentCoroutineContext()[Job] }?.expectedStream = replacement
 				if (state.playState.value != PlayState.PLAYING) recoveryPosition = NetworkRecoveryPosition(entryRevision, replacement, retryPosition)
 				pendingRecoveryStream = replacement
+				// The backend accepting a replacement does not mean playback has resumed.
 				val result = withTimeoutOrNull(NETWORK_RECOVERY_CHECK_INTERVAL * BUFFERING_RECOVERY_CHECKS * 2) {
 					combine(state.playState, manager.queue.entry, entry.mediaStreamFlow, preparingEntry) { playState, currentEntry, currentStream, preparing ->
 						if (currentEntry !== entry || currentStream !== replacement || preparing === entry) PlayState.STOPPED else playState
 					}.first { it != PlayState.BUFFERING }
 				}
+				val outcome = result?.name ?: "STARTUP_TIMEOUT"
+				Timber.i("Playback recovery result itemId=%s attempt=%d outcome=%s", itemId, attempt, outcome)
 				if (isCurrentRecoverableEntry(entry, entryRevision, expectedStream) && entry.mediaStream === replacement &&
 					(result == null || result == PlayState.STOPPED) && failedRecoveryStream !== replacement
 				) {
 					manager.reportPlaybackError(PlaybackError("MEDIA_STREAM_RECOVERY_FAILED", origin = replacement.errorOrigin))
 				}
 			} else if (reloadResult == MediaStreamReloadResult.FAILED) {
-				Timber.w("Unable to reload playback after error")
+				Timber.w("Playback recovery result itemId=%s attempt=%d outcome=RELOAD_FAILED", itemId, attempt)
 				val playState = state.playState.value
 				val stream = entry.mediaStream
 				if (isCurrentRecoverableEntry(entry, entryRevision, expectedStream) && (playState == PlayState.STOPPED || playState == PlayState.BUFFERING) &&
@@ -379,7 +434,11 @@ class NetworkPlaybackRecoveryService(
 					manager.reportPlaybackError(PlaybackError("MEDIA_STREAM_RECOVERY_FAILED", origin = stream?.errorOrigin))
 				}
 			}
-			if (reloadResult == MediaStreamReloadResult.SUPERSEDED || !state.playWhenReady.value || !playWhenReady) return
+			if (reloadResult == MediaStreamReloadResult.SUPERSEDED) {
+				Timber.i("Playback recovery result itemId=%s attempt=%d outcome=SUPERSEDED", itemId, attempt)
+				return
+			}
+			if (!state.playWhenReady.value || !playWhenReady) return
 		}
 	}
 
@@ -388,18 +447,8 @@ class NetworkPlaybackRecoveryService(
 		return currentEntry === entry &&
 			manager.queue.entryRevision == entryRevision &&
 			entry.mediaStream === expectedStream && manager.preparingEntry?.value !== entry &&
-			entry.doviRecoveryOwnership == null &&
-			!liveTvPlaybackPolicy.isLiveTv(entry) &&
+			state.playWhenReady.value && handles(entry) &&
 			recoveringEntry === entry
-	}
-
-	private suspend fun cancelAndJoinOwnedRecovery(entry: QueueEntry) {
-		val owner = recoveryOwnership?.takeIf { it.entry === entry } ?: return
-		if (!cancelAndJoinRecoveryJob(owner.job, currentCoroutineContext()[Job])) return
-		if (recoveryOwnership?.token === owner.token) {
-			recoveryOwnership = null
-			clearRecovering(entry)
-		}
 	}
 
 	private fun pauseRecovery() {
@@ -417,6 +466,8 @@ class NetworkPlaybackRecoveryService(
 	private fun savedRecoveryPosition(entry: QueueEntry) = recoveryPosition?.takeIf {
 		it.entryRevision == manager.queue.entryRevision && it.stream === entry.mediaStream
 	}
+
+	private fun handles(entry: QueueEntry) = !liveTvPlaybackPolicy.isLiveTv(entry) || entry.hasTranscodeFallback
 
 	private fun isFatalRecoveryBlocked(entry: QueueEntry) =
 		fatalRecoveryEntryRevision == manager.queue.entryRevision && fatalRecoveryOrigin?.matches(entry) == true
@@ -473,8 +524,13 @@ internal suspend fun cancelAndJoinRecoveryJob(job: Job, currentJob: Job?): Boole
 internal fun hasBufferingProgress(before: PositionInfo, after: PositionInfo) =
 	after.active != before.active || after.buffer > before.buffer
 
-internal fun shouldRecoverStalledBuffer(consecutiveChecks: Int, requiredChecks: Int, hasPlayed: Boolean) =
-	consecutiveChecks >= if (hasPlayed) requiredChecks else requiredChecks * 2
+internal fun shouldRecoverStalledBuffer(
+	consecutiveChecks: Int,
+	requiredChecks: Int,
+	hasPlayed: Boolean,
+	checksWithoutPlaybackProgress: Int = 0,
+) = consecutiveChecks >= (if (hasPlayed) requiredChecks else requiredChecks * 2) ||
+	checksWithoutPlaybackProgress >= requiredChecks * 2
 
 internal fun hasPlaybackRecovered(
 	playState: PlayState,
