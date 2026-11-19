@@ -65,7 +65,6 @@ import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.VideoOutputTransform
-import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -106,8 +105,7 @@ fun VideoPlayerScreen(
 		backgroundService.clearBackgrounds()
 	}
 
-	val playState by playbackManager.state.playState.collectAsState()
-	val playing = playState.isActivePlayback
+	val playing by playbackManager.state.playWhenReady.collectAsState()
 	TrickplayTileSheetPrefetcher(
 		playbackManager = playbackManager,
 		enabled = userPreferences[UserPreferences.trickPlayEnabled],

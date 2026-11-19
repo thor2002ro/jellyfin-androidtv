@@ -51,7 +51,6 @@ import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.model.DEFAULT_SUBTITLE_TIMING_SPEED
 import org.jellyfin.playback.core.resetSubtitleTiming
-import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.media3.exoplayer.mapping.getFfmpegSubtitleMimeType
 import org.jellyfin.playback.media3.exoplayer.subtitle.isSubtitleTimingOffsetSupported
@@ -260,7 +259,7 @@ private fun reloadCurrentMediaStreamAfterTrackSelection(
 ) {
 	val isLiveTv = playbackManager.queue.entry.value?.baseItem?.isLiveTv() == true
 	val position = playbackManager.state.positionInfo.active.takeUnless { isLiveTv }
-	val playWhenReady = playbackManager.state.playState.value.isActivePlayback
+	val playWhenReady = playbackManager.state.playWhenReady.value
 
 	coroutineScope.launch {
 		try {

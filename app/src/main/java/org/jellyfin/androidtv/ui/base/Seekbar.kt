@@ -72,6 +72,8 @@ fun Seekbar(
 	duration: Duration = Duration.ZERO,
 	seekForwardAmount: Duration = duration / 100,
 	seekRewindAmount: Duration = duration / 100,
+	minSeek: Duration = Duration.ZERO,
+	maxSeek: Duration = duration,
 	onScrubbing: ((scrubbing: Boolean) -> Unit)? = null,
 	onSeek: ((progress: Duration) -> Unit)? = null,
 	onPreviewSeek: ((progress: Duration?) -> Unit)? = null,
@@ -98,6 +100,8 @@ fun Seekbar(
 		buffer = bufferPercentage,
 		seekForwardAmount = seekForwardPercentage,
 		seekRewindAmount = seekRewindPercentage,
+		minSeek = (minSeek.inWholeMilliseconds.toFloat() / durationMs).coerceIn(0f, 1f),
+		maxSeek = (maxSeek.inWholeMilliseconds.toFloat() / durationMs).coerceIn(0f, 1f),
 		onScrubbing = onScrubbing,
 		onSeek = if (onSeek == null) null else { progress -> onSeek(progress.toDouble() * duration) },
 		onPreviewSeek = if (onPreviewSeek == null) null else { progress ->
@@ -117,6 +121,8 @@ fun Seekbar(
 	buffer: Float = 0f,
 	seekForwardAmount: Float = 0.01f,
 	seekRewindAmount: Float = 0.01f,
+	minSeek: Float = 0f,
+	maxSeek: Float = 1f,
 	onScrubbing: ((scrubbing: Boolean) -> Unit)? = null,
 	onSeek: ((progress: Float) -> Unit)? = null,
 	onPreviewSeek: ((progress: Float?) -> Unit)? = null,
@@ -180,8 +186,8 @@ fun Seekbar(
 				if (isKeyUp && isScrubbing) lastHeldSeekAt = 0L
 
 				val newProgress = when {
-					handleSeekKeyDown && isForward -> (visibleProgress + seekForwardAmount).coerceAtMost(1f)
-					handleSeekKeyDown && isRewind -> (visibleProgress - seekRewindAmount).coerceAtLeast(0f)
+					handleSeekKeyDown && isForward -> (visibleProgress + seekForwardAmount).coerceAtMost(maxSeek)
+					handleSeekKeyDown && isRewind -> (visibleProgress - seekRewindAmount).coerceAtLeast(minSeek)
 					else -> visibleProgress
 				}
 				val progressChanged = visibleProgress != newProgress

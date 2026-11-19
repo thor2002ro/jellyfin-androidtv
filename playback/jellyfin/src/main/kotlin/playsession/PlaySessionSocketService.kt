@@ -53,8 +53,8 @@ class PlaySessionSocketService(
 					PlaystateCommand.FAST_FORWARD -> state.fastForward()
 					PlaystateCommand.PLAY_PAUSE -> if (playPauseEnabled) {
 						when (state.playState.value) {
-							PlayState.PLAYING,
-							PlayState.BUFFERING -> state.pause()
+							PlayState.PLAYING -> state.pause()
+							PlayState.BUFFERING -> if (state.playWhenReady.value) state.pause() else state.unpause()
 
 							else -> state.unpause()
 						}

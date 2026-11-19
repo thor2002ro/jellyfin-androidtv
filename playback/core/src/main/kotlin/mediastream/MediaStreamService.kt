@@ -47,6 +47,7 @@ internal class MediaStreamService(
 			Timber.d("Queue entry changed to $entry")
 
 			if (entry == null) {
+				manager.mutableState.setPlayWhenReady(false)
 				val backend = requireNotNull(manager.backend)
 				backend.stop()
 			} else {
@@ -151,6 +152,7 @@ internal class MediaStreamService(
 			) return false
 			manager.state.resetSubtitleTiming()
 			backend.playItem(entry)
+			if (!state.playWhenReady.value) backend.pause()
 			entry.startPosition = null
 			return true
 		} else {
@@ -162,12 +164,9 @@ internal class MediaStreamService(
 				return false
 			}
 
-			// TODO: Somehow notify the user that we skipped an unplayable entry
-			if (manager.queue.peekNext() != null) {
-				manager.queue.next(usePlaybackOrder = true, useRepeatMode = false)
-			} else {
-				backend.stop()
-			}
+			backend.stop()
+			val origin = entry.createPlaybackErrorOrigin("stream-resolution").also { it.activate() }
+			manager.backendService.reportPlaybackError(PlaybackError("MEDIA_STREAM_UNAVAILABLE", origin = origin))
 
 			return false
 		}
@@ -187,6 +186,7 @@ internal class MediaStreamService(
 		position: Duration?,
 		playWhenReady: Boolean,
 	): MediaStreamReloadResult {
+		val playIntentRevision = manager.mutableState.playIntentRevision
 		val queue = requireNotNull(manager.getService<QueueService>())
 		val entryRevision = queue.entryRevision
 		val originalStream = entry.mediaStream
@@ -229,7 +229,12 @@ internal class MediaStreamService(
 		entry.startPosition = position?.coerceAtLeast(Duration.ZERO)
 		backend.replaceItem(entry)
 		entry.startPosition = null
-		if (!playWhenReady) manager.state.pause()
+		if (manager.mutableState.playIntentRevision == playIntentRevision) {
+			manager.mutableState.setPlayWhenReady(playWhenReady)
+			if (!playWhenReady) manager.state.pause()
+		} else if (!state.playWhenReady.value) {
+			backend.pause()
+		}
 
 		return MediaStreamReloadResult.RELOADED
 	}

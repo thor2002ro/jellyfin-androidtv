@@ -18,6 +18,7 @@ data class PositionInfo(
 	 */
 	val duration: Duration,
 	val isSeekable: Boolean = duration > Duration.ZERO,
+	val liveOffset: Duration? = null,
 ) {
 	companion object {
 		val EMPTY = PositionInfo(Duration.ZERO, Duration.ZERO, Duration.ZERO)

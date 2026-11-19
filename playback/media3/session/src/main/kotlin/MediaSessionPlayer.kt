@@ -24,7 +24,6 @@ import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.PlaybackOrder
 import org.jellyfin.playback.core.model.RepeatMode
-import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
@@ -56,6 +55,7 @@ internal class MediaSessionPlayer(
 			.flatMapLatest { entry -> entry?.mediaStreamFlow ?: flowOf(null) }
 			.invalidateStateOnEach(scope)
 		state.playState.invalidateStateOnEach(scope)
+		state.playWhenReady.invalidateStateOnEach(scope)
 		state.videoGeometry.invalidateStateOnEach(scope)
 		state.speed.invalidateStateOnEach(scope)
 		state.playbackOrder.invalidateStateOnEach(scope)
@@ -149,7 +149,7 @@ internal class MediaSessionPlayer(
 		setContentBufferedPositionMs { state.positionInfo.buffer.inWholeMilliseconds }
 
 		setPlayWhenReady(
-			state.playState.value.isActivePlayback,
+			state.playWhenReady.value,
 			PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
 		)
 		setPlaybackParameters(PlaybackParameters(state.speed.value))

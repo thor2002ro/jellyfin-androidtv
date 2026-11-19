@@ -180,3 +180,27 @@ private fun durationBetween(
 	start: LocalDateTime,
 	end: LocalDateTime,
 ): Duration = ChronoUnit.MILLIS.between(start, end).milliseconds
+
+internal fun liveTvTimeshiftPosition(
+	timeline: LiveTvProgramTimeline,
+	streamOrigin: LocalDateTime?,
+	playerPosition: Duration,
+	now: LocalDateTime,
+	liveOffset: Duration? = null,
+): Duration? {
+	if (now.isBefore(timeline.start) || !now.isBefore(timeline.end)) return null
+	val livePosition = durationBetween(timeline.start, now)
+	val position = liveOffset?.let { livePosition - it }
+		?: streamOrigin?.let { durationBetween(timeline.start, it) + playerPosition }
+		?: return null
+	return position.takeIf { it >= Duration.ZERO && it <= livePosition && it < timeline.duration }
+}
+
+internal fun liveTvTimeshiftSeekTarget(
+	target: Duration,
+	programPosition: Duration,
+	livePosition: Duration,
+	playerPosition: Duration,
+	playerDuration: Duration,
+): Duration = (playerPosition + target.coerceAtMost(livePosition) - programPosition)
+	.coerceIn(Duration.ZERO, playerDuration)

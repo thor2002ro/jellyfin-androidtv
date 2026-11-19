@@ -47,6 +47,41 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class MediaStreamServiceTests : FunSpec({
+	test("pause during stream preparation remains paused after the backend starts") {
+		val fixture = ReloadFixture()
+		fixture.selectFirst()
+		fixture.first.mediaStream = null
+		fixture.manager.state.play()
+		coroutineScope {
+			val startup = async(start = CoroutineStart.UNDISPATCHED) { fixture.service.playEntry(fixture.first) }
+			fixture.resolver.started.await()
+			fixture.manager.state.pause()
+			fixture.resolver.response.complete(fixture.firstStream)
+			startup.await() shouldBe true
+		}
+		fixture.manager.state.playWhenReady.value shouldBe false
+		verify(exactly = 2) { fixture.backend.pause() }
+	}
+
+	test("latest play or pause request wins during stream replacement") {
+		for (pauseDuringReload in listOf(true, false)) {
+			val fixture = ReloadFixture()
+			fixture.selectFirst()
+			if (pauseDuringReload) fixture.manager.state.play() else fixture.manager.state.pause()
+			coroutineScope {
+				val reload = async(start = CoroutineStart.UNDISPATCHED) {
+					fixture.manager.reloadCurrentMediaStream(playWhenReady = pauseDuringReload)
+				}
+				fixture.resolver.started.await()
+				if (pauseDuringReload) fixture.manager.state.pause() else fixture.manager.state.play()
+				fixture.resolver.response.complete(fixture.reloadedStream)
+				reload.await() shouldBe true
+			}
+			fixture.manager.state.playWhenReady.value shouldBe !pauseDuringReload
+			verify(exactly = if (pauseDuringReload) 2 else 1) { fixture.backend.pause() }
+		}
+	}
+
 	test("a wrapped startup timeout preserves the entry and reports a current recoverable error") {
 		val resolver = mockk<MediaStreamResolver>()
 		coEvery { resolver.getStream(any(), any()) } throws IllegalStateException("SDK timeout", SocketTimeoutException())
@@ -153,16 +188,16 @@ class MediaStreamServiceTests : FunSpec({
 		verify(exactly = 1) { fixture.backend.stop() }
 	}
 
-	test("a genuinely unsupported item still advances the queue without network recovery") {
+	test("an unavailable item stays selected for recovery") {
 		val resolver = mockk<MediaStreamResolver>()
 		coEvery { resolver.getStream(any(), any()) } returns null
 		val fixture = ReloadFixture(resolver)
 		fixture.selectFirst()
 		fixture.first.mediaStream = null
 		fixture.service.playEntry(fixture.first) shouldBe false
-		fixture.queue.entry.value shouldBeSameInstanceAs fixture.second
-		fixture.manager.state.playState.value shouldBe PlayState.STOPPED
-		verify(exactly = 0) { fixture.backend.stop() }
+		fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
+		fixture.manager.state.playState.value shouldBe PlayState.ERROR
+		verify(exactly = 1) { fixture.backend.stop() }
 	}
 
 	test("startup loading covers stream resolution and display preparation and clears on cancellation") {

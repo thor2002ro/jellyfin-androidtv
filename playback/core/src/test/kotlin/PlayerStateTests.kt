@@ -33,6 +33,31 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class PlayerStateTests : FunSpec({
+	test("stop emits a request for the player screen to close") {
+		val state = playerState(backend(), QueueEntry())
+		coroutineScope {
+			val stopped = async(start = CoroutineStart.UNDISPATCHED) { state.stopRequests.first() }
+			state.stop()
+			stopped.await()
+		}
+	}
+
+	test("play intent follows requests while buffering and clears on stop") {
+		val service = BackendService()
+		val state = playerState(backend(), QueueEntry(), backendService = service)
+		state.playWhenReady.value shouldBe false
+		state.setPlayWhenReady(true)
+		service.BackendEventListener().onPlayStateChange(PlayState.BUFFERING)
+		state.playWhenReady.value shouldBe true
+		state.pause()
+		state.playWhenReady.value shouldBe false
+		service.BackendEventListener().onPlayStateChange(PlayState.BUFFERING)
+		state.playWhenReady.value shouldBe false
+		state.play()
+		state.stop()
+		state.playWhenReady.value shouldBe false
+	}
+
 	test("playback manager switches its active backend") {
 		val initial = backend()
 		val replacement = backend()

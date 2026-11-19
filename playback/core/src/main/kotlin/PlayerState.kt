@@ -25,6 +25,8 @@ import kotlin.time.Duration
 interface PlayerState {
 	val volume: PlayerVolumeState
 	val playState: StateFlow<PlayState>
+	val playWhenReady: StateFlow<Boolean>
+	val stopRequests: SharedFlow<Unit>
 	val speed: StateFlow<Float>
 	val videoGeometry: StateFlow<VideoGeometry>
 	val playbackOrder: StateFlow<PlaybackOrder>
@@ -82,6 +84,12 @@ class MutablePlayerState(
 
 	private val _playState = MutableStateFlow(PlayState.STOPPED)
 	override val playState: StateFlow<PlayState> get() = _playState.asStateFlow()
+	private val _playWhenReady = MutableStateFlow(false)
+	override val playWhenReady: StateFlow<Boolean> get() = _playWhenReady.asStateFlow()
+	internal var playIntentRevision = 0L
+		private set
+	private val _stopRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+	override val stopRequests: SharedFlow<Unit> get() = _stopRequests.asSharedFlow()
 
 	private val _speed = MutableStateFlow(1f)
 	override val speed: StateFlow<Float> get() = _speed.asStateFlow()
@@ -122,6 +130,10 @@ class MutablePlayerState(
 
 	init {
 		backendService.addListener(object : PlayerBackendEventListener() {
+			override fun onPlayWhenReadyRequested(playWhenReady: Boolean) {
+				_playWhenReady.value = playWhenReady
+			}
+
 			override fun onPlayStateChange(state: PlayState) {
 				if ((state == PlayState.STOPPED || state == PlayState.ERROR) && _scrubbing.value) setScrubbing(false)
 				if (queue?.entry?.value == null && state != PlayState.STOPPED) return
@@ -159,12 +171,14 @@ class MutablePlayerState(
 	}
 
 	override fun play() {
+		playIntentRevision++
 		backendService.notifyPlayWhenReadyRequested(true)
 		backendService.backend?.play()
 	}
 
 	override fun pause() {
 		if (!canSeek) return
+		playIntentRevision++
 		// TODO: enqueue action when backend is not set
 		backendService.notifyPlayWhenReadyRequested(false)
 		backendService.backend?.pause()
@@ -176,12 +190,17 @@ class MutablePlayerState(
 	}
 
 	override fun stop() {
+		playIntentRevision++
+		_playWhenReady.value = false
 		_scrubbing.value = false
 		backendService.clearVideoOutput()
 		backendService.backend?.stop()
 		queue?.clear()
 		_playState.value = PlayState.STOPPED
+		_stopRequests.tryEmit(Unit)
 	}
+
+	internal fun setPlayWhenReady(playing: Boolean) { _playWhenReady.value = playing }
 
 	override fun seek(to: Duration) {
 		if (!canSeek) return
@@ -219,7 +238,7 @@ class MutablePlayerState(
 		val backend = backendService.backend ?: return
 		setScrubbing(false)
 		if (backend.seekToLiveEdge()) {
-			backend.play()
+			play()
 			_seekRequests.tryEmit(backend.getPositionInfo().active)
 		}
 	}

@@ -219,7 +219,9 @@ class RewriteMediaManager(
 
 	override fun togglePlayPause() {
 		val playState = playbackManager.state.playState.value
-		if (playState == PlayState.PAUSED || playState == PlayState.STOPPED) playbackManager.state.unpause()
+		if (playState == PlayState.PAUSED || playState == PlayState.STOPPED ||
+			(playState == PlayState.BUFFERING && !playbackManager.state.playWhenReady.value)
+		) playbackManager.state.unpause()
 		else if (playState.isActivePlayback) playbackManager.state.pause()
 	}
 

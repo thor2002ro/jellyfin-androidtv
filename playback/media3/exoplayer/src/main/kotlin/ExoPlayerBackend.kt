@@ -708,6 +708,9 @@ class ExoPlayerBackend(
 			buffer = safeBufferedPositionMs.milliseconds,
 			duration = duration,
 			isSeekable = mediaItemMatchesCurrentStream && exoPlayer.isCurrentMediaItemSeekable,
+			liveOffset = exoPlayer.currentLiveOffset.takeIf {
+				mediaItemMatchesCurrentStream && exoPlayer.isCurrentMediaItemLive && it != C.TIME_UNSET && it >= 0
+			}?.milliseconds,
 		)
 	}
 

@@ -9,7 +9,6 @@ import org.jellyfin.playback.core.backend.PlaybackErrorOrigin
 import org.jellyfin.playback.core.backend.PlayerBackendEventListener
 import org.jellyfin.playback.core.backend.matches
 import org.jellyfin.playback.core.model.PlayState
-import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.plugin.PlayerService
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.liveStreamTargetOffset
@@ -113,7 +112,7 @@ class DoviPlaybackRecoveryService(
 					entry = entry,
 					error = error,
 					position = state.positionInfo.active.takeUnless { entry.liveStreamTargetOffset != null },
-					playWhenReady = state.playState.value.isActivePlayback,
+					playWhenReady = state.playWhenReady.value,
 				) ?: return
 
 				coroutineScope.launch(Dispatchers.Main) {

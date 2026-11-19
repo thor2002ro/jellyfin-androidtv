@@ -221,7 +221,10 @@ class QueueService internal constructor() : PlayerService(), Queue {
 		}
 
 		// Set new index
-		if (_entry.value !== currentEntry) entryRevision++
+		if (_entry.value !== currentEntry) {
+			entryRevision++
+			if (currentEntry != null) manager.mutableState.setPlayWhenReady(true)
+		}
 		_entryIndex.value = if (currentEntry == null) Queue.INDEX_NONE else index
 		_entry.value = currentEntry
 

@@ -83,7 +83,7 @@ class NetworkPlaybackRecoveryService(
 				) return
 				recoveryPosition = NetworkRecoveryPosition(manager.queue.entryRevision, entry.mediaStream, position)
 				recoveryOwnership?.takeIf { it.entry === entry }?.job?.cancel()
-				startRecovery(entry, "Playback seek during recovery", playWhenReady = state.playState.value != PlayState.PAUSED)
+				startRecovery(entry, "Playback seek during recovery", playWhenReady = state.playWhenReady.value)
 			}
 
 			override fun onPlayStateChange(state: PlayState) {
@@ -93,10 +93,10 @@ class NetworkPlaybackRecoveryService(
 				if (pendingRecoveryStream?.queueEntry !== entry || pendingRecoveryStream !== entry?.mediaStream) {
 					pendingRecoveryStream = null
 				}
-				if (state == PlayState.PAUSED) {
+				if (state == PlayState.PAUSED && !this@NetworkPlaybackRecoveryService.state.playWhenReady.value) {
 					pauseRecovery()
 				}
-				if (state != PlayState.PLAYING || entry == null) return
+				if (state != PlayState.PLAYING || entry == null || !this@NetworkPlaybackRecoveryService.state.playWhenReady.value) return
 				pausedEntryRevision = null
 				fatalRecoveryOrigin = null
 				recoveryPosition = null
@@ -158,7 +158,7 @@ class NetworkPlaybackRecoveryService(
 				startRecovery(
 					entry = entry,
 					reason = "Playback error ${error.codeName}",
-					playWhenReady = state.playState.value != PlayState.PAUSED,
+					playWhenReady = state.playWhenReady.value,
 				)
 			}
 		})
@@ -212,7 +212,7 @@ class NetworkPlaybackRecoveryService(
 					entry == null ||
 					entry.doviRecoveryOwnership != null ||
 					liveTvPlaybackPolicy.isLiveTv(entry) ||
-					pausedEntryRevision == manager.queue.entryRevision ||
+					!state.playWhenReady.value || pausedEntryRevision == manager.queue.entryRevision ||
 					isFatalRecoveryBlocked(entry) ||
 					playState == PlayState.STOPPED && recoveringEntry !== entry
 				) {
@@ -271,7 +271,7 @@ class NetworkPlaybackRecoveryService(
 					startRecovery(
 						entry = entry,
 						reason = "Network restored",
-						playWhenReady = playState != PlayState.PAUSED,
+						playWhenReady = state.playWhenReady.value,
 					)
 					disconnectedEntry = null
 				}
@@ -283,7 +283,7 @@ class NetworkPlaybackRecoveryService(
 	}
 
 	private fun startRecovery(entry: QueueEntry, reason: String, playWhenReady: Boolean) {
-		if (!playWhenReady || pausedEntryRevision == manager.queue.entryRevision || isFatalRecoveryBlocked(entry) || entry.doviRecoveryOwnership != null) return
+		if (!playWhenReady || !state.playWhenReady.value || pausedEntryRevision == manager.queue.entryRevision || isFatalRecoveryBlocked(entry) || entry.doviRecoveryOwnership != null) return
 		val entryRevision = manager.queue.entryRevision
 		val sourceStream = entry.mediaStream
 		val previous = recoveryOwnership
@@ -342,7 +342,7 @@ class NetworkPlaybackRecoveryService(
 
 			val playState = state.playState.value
 			val positionAfterGrace = state.positionInfo
-			if (hasPlaybackRecovered(playState, positionBeforeGrace.active, positionAfterGrace.active)) {
+			if (playState != PlayState.PAUSED && hasPlaybackRecovered(playState, positionBeforeGrace.active, positionAfterGrace.active)) {
 				Timber.i("Playback progressed without reloading")
 				recoveryPosition = null
 				if (pendingRecoveryStream === expectedStream) pendingRecoveryStream = null
@@ -379,7 +379,7 @@ class NetworkPlaybackRecoveryService(
 					manager.reportPlaybackError(PlaybackError("MEDIA_STREAM_RECOVERY_FAILED", origin = stream?.errorOrigin))
 				}
 			}
-			if (reloadResult == MediaStreamReloadResult.SUPERSEDED || state.playState.value == PlayState.PAUSED || !playWhenReady) return
+			if (reloadResult == MediaStreamReloadResult.SUPERSEDED || !state.playWhenReady.value || !playWhenReady) return
 		}
 	}
 
@@ -491,6 +491,7 @@ internal fun isRecoverablePlaybackError(codeName: String) = doviTransformationFa
 	"MPV_ERROR",
 	"LIBVLC_ERROR",
 	"MEDIA_STREAM_NETWORK_ERROR",
+	"MEDIA_STREAM_UNAVAILABLE",
 	-> true
 	else -> false
 }
