@@ -11,12 +11,9 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior
 import org.jellyfin.androidtv.ui.InteractionTrackerViewModel
-import org.jellyfin.playback.core.PlaybackManager
-import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
@@ -39,9 +36,7 @@ class StillWatchingPlaybackTests : FunSpec({
 		val preferences = mockk<UserPreferences>()
 		every { preferences[UserPreferences.screensaverInAppEnabled] } returns false
 		every { preferences[UserPreferences.stillWatchingBehavior] } returns StillWatchingBehavior.SHORT
-		val manager = mockk<PlaybackManager>()
-		every { manager.state.playState } returns MutableStateFlow(PlayState.STOPPED)
-		val tracker = InteractionTrackerViewModel(preferences, manager)
+		val tracker = InteractionTrackerViewModel(preferences)
 		val episode = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.EPISODE)
 
 		tracker.notifyStart(episode)

@@ -81,6 +81,7 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 	private val interactionTracker by inject<InteractionTrackerViewModel>()
 	private var remoteKeyEventHandler: ((keyCode: Int, event: KeyEvent?) -> Boolean)? = null
 	private var closingPlayer = false
+	private var resumeAfterPause = true
 	private var hasSeenVideoQueueEntry = false
 	private var showingPostPlaybackPrompt = false
 	private var handingOffPlayer = false
@@ -156,6 +157,9 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 
 		lifecycleScope.launch {
 			repeatOnLifecycle(Lifecycle.State.STARTED) {
+				playbackManager.state.stopRequests.onEach {
+					if (!showingPostPlaybackPrompt && !handingOffPlayer) closePlayer()
+				}.launchIn(this)
 				playbackManager.state.playState.onEach { playState ->
 					interactionTracker.notifyPlaybackState(playState == PlayState.PLAYING)
 				}.launchIn(this)
@@ -291,13 +295,6 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		remoteKeyEventHandler = null
 
 		notifyPlaybackChanged()
-		if (shouldReturnToLiveTvGuide()) {
-			if (!navigationRepository.goBack()) {
-				navigationRepository.reset(Destinations.home)
-			}
-			return
-		}
-
 		playbackManager.getService<PlaySessionService>()?.sendStopIfActive()
 		playbackManager.state.stop()
 		if (arguments?.getBoolean(EXTRA_CLOSE_TO_LIVE_TV_LIBRARY) == true) {
@@ -451,13 +448,14 @@ class VideoPlayerFragment : Fragment(), View.OnKeyListener {
 		interactionTracker.notifyPlaybackState(false)
 
 		if (closingPlayer && shouldReturnToLiveTvGuide()) return
+		resumeAfterPause = playbackManager.state.playWhenReady.value
 		playbackManager.state.pause()
 	}
 
 	override fun onResume() {
 		super.onResume()
 
-		playbackManager.state.unpause()
+		if (resumeAfterPause) playbackManager.state.unpause()
 	}
 
 	override fun onStart() {

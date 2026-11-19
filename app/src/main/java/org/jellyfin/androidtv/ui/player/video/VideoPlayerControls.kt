@@ -53,7 +53,6 @@ import org.jellyfin.androidtv.util.sdk.buildChapterItems
 import org.jellyfin.androidtv.util.sdk.isLiveTv
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.playback.core.model.PlayState
-import org.jellyfin.playback.core.model.isActivePlayback
 import org.jellyfin.playback.core.queue.canSeek
 import org.jellyfin.playback.core.queue.isLiveTv
 import org.jellyfin.playback.core.queue.queue
@@ -91,6 +90,7 @@ fun VideoPlayerControls(
 	onLiveTvGuideClick: () -> Unit = {},
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	liveTvTimeshiftPosition: Duration? = null,
 ) {
 	val playState by playbackManager.state.playState.collectAsState()
 	val currentQueueEntry by playbackManager.queue.entry.collectAsState()
@@ -254,6 +254,7 @@ fun VideoPlayerControls(
 			markers = chapterMarkers,
 			liveTvProgramTimeline = liveTvProgramTimeline,
 			liveTvProgramPosition = liveTvProgramPosition,
+			liveTvTimeshiftPosition = liveTvTimeshiftPosition,
 			onSeek = onSeekPreview,
 			enabled = seekEnabled,
 			modifier = Modifier
@@ -312,8 +313,10 @@ fun VideoPlayerControls(
 			Spacer(Modifier.weight(1f))
 			PositionText(
 				playbackManager = playbackManager,
+				position = seekPreviewPosition,
 				liveTvProgramTimeline = liveTvProgramTimeline,
 				liveTvProgramPosition = liveTvProgramPosition,
+				liveTvTimeshiftPosition = liveTvTimeshiftPosition,
 			)
 		}
 	}
@@ -355,6 +358,7 @@ fun VideoPlayerSeekControls(
 	position: Duration? = null,
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	liveTvTimeshiftPosition: Duration? = null,
 	enabled: Boolean = true,
 ) {
 	Column(
@@ -367,6 +371,7 @@ fun VideoPlayerSeekControls(
 			position = position,
 			liveTvProgramTimeline = liveTvProgramTimeline,
 			liveTvProgramPosition = liveTvProgramPosition,
+			liveTvTimeshiftPosition = liveTvTimeshiftPosition,
 			enabled = enabled,
 			modifier = Modifier
 				.fillMaxWidth()
@@ -379,9 +384,10 @@ fun VideoPlayerSeekControls(
 			Spacer(Modifier.weight(1f))
 			PositionText(
 				playbackManager = playbackManager,
-				position = position.takeIf { liveTvProgramTimeline == null },
+				position = position,
 				liveTvProgramTimeline = liveTvProgramTimeline,
 				liveTvProgramPosition = liveTvProgramPosition,
+				liveTvTimeshiftPosition = liveTvTimeshiftPosition,
 			)
 		}
 	}
@@ -584,13 +590,17 @@ private fun PositionText(
 	position: Duration? = null,
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	liveTvTimeshiftPosition: Duration? = null,
 ) {
 	val context = LocalContext.current
 	val timeFormatter = remember(context) { context.getTimeFormatter() }
+	if (liveTvProgramTimeline == null && playbackManager.queue.entry.value?.isLiveTv == true) return
 
 	if (liveTvProgramTimeline != null) {
 		val includeHours = liveTvProgramTimeline.duration.inWholeMinutes >= 60
-		val activeFormatted = liveTvProgramPosition
+		val positionInfo by rememberPlayerPositionInfo(playbackManager, updateWhilePaused = true)
+		val activeFormatted = (liveTvTimeshiftPosition?.let { it + ((position ?: positionInfo.active) - positionInfo.active) }
+			?: liveTvProgramPosition)
 			.coerceIn(Duration.ZERO, liveTvProgramTimeline.duration)
 			.formatted(includeHours)
 		val durationFormatted = liveTvProgramTimeline.duration.formatted(includeHours)
@@ -677,17 +687,31 @@ private fun TimelineSeekbar(
 	markers: List<Duration> = emptyList(),
 	liveTvProgramTimeline: LiveTvProgramTimeline? = null,
 	liveTvProgramPosition: Duration = Duration.ZERO,
+	liveTvTimeshiftPosition: Duration? = null,
 	onPreviewSeek: ((Duration?) -> Unit)? = null,
 	onSeek: ((Duration) -> Unit)? = null,
 	modifier: Modifier = Modifier,
 	enabled: Boolean = true,
 ) {
+	if (liveTvProgramTimeline == null && playbackManager.queue.entry.value?.isLiveTv == true) return
 	if (liveTvProgramTimeline != null) {
+		val positionInfo by rememberPlayerPositionInfo(playbackManager, updateWhilePaused = true)
+		val programPosition = liveTvTimeshiftPosition?.let { it + ((position ?: positionInfo.active) - positionInfo.active) }
 		Seekbar(
-			progress = liveTvProgramPosition.coerceIn(Duration.ZERO, liveTvProgramTimeline.duration),
+			progress = (programPosition ?: liveTvProgramPosition).coerceIn(Duration.ZERO, liveTvProgramTimeline.duration),
 			duration = liveTvProgramTimeline.duration,
-			buffer = Duration.ZERO,
-			enabled = false,
+			buffer = if (programPosition != null) liveTvProgramPosition else Duration.ZERO,
+			seekForwardAmount = playbackManager.options.defaultFastForwardAmount(),
+			seekRewindAmount = playbackManager.options.defaultRewindAmount(),
+			minSeek = liveTvTimeshiftPosition?.let { (it - positionInfo.active).coerceAtLeast(Duration.ZERO) } ?: Duration.ZERO,
+			maxSeek = liveTvTimeshiftPosition?.let {
+				(it + positionInfo.duration - positionInfo.active).coerceAtMost(liveTvProgramPosition)
+			} ?: liveTvProgramTimeline.duration,
+			onSeek = liveTvTimeshiftPosition?.let { current -> { target ->
+				val playerTarget = liveTvTimeshiftSeekTarget(target, current, liveTvProgramPosition, positionInfo.active, positionInfo.duration)
+				if (onSeek != null) onSeek(playerTarget) else playbackManager.state.seek(playerTarget)
+			} },
+			enabled = enabled && liveTvTimeshiftPosition != null,
 			modifier = modifier,
 		)
 	} else {
@@ -756,7 +780,7 @@ private fun VideoDecoderButton(playbackManager: PlaybackManager) {
 						val previousDecoder = backend.forcedVideoDecoderOption
 						val position = playbackManager.state.positionInfo.active
 							.takeUnless { playbackManager.queue.entry.value?.isLiveTv == true }
-						val playWhenReady = playbackManager.state.playState.value.isActivePlayback
+						val playWhenReady = playbackManager.state.playWhenReady.value
 						switching = true
 						backend.setForcedVideoDecoderOption(decoder)
 

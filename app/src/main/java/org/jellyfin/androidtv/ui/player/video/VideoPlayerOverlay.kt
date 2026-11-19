@@ -60,9 +60,12 @@ import org.jellyfin.playback.core.backend.PlayerBackend
 import org.jellyfin.playback.core.model.PositionInfo
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.isActivePlayback
+import org.jellyfin.playback.core.mediastream.mediaStream
+import org.jellyfin.playback.core.mediastream.mediaStreamFlow
 import org.jellyfin.playback.core.queue.QueueEntry
 import org.jellyfin.playback.core.queue.canSeek
 import org.jellyfin.playback.core.queue.isLiveTv
+import org.jellyfin.playback.core.queue.liveStreamTargetOffset
 import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.queue.queue
 import org.jellyfin.playback.jellyfin.queue.baseItem
@@ -71,6 +74,7 @@ import org.jellyfin.playback.jellyfin.queue.mediaSourceId
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.koin.compose.koinInject
 import timber.log.Timber
+import java.time.LocalDateTime
 import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -154,8 +158,20 @@ fun VideoPlayerOverlay(
 	val seekEnabled = entry.canSeek(positionInfo)
 	val playPauseEnabled = seekEnabled
 	val liveTvProgramTimeline = rememberLiveTvProgramTimeline(item)
-	val playbackTimeline = liveTvProgramTimeline.takeUnless { entry?.isLiveTv == true && seekEnabled }
 	val liveTvProgramPosition = rememberLiveTvProgramPosition(liveTvProgramTimeline)
+	val stream = entry?.run { mediaStreamFlow.collectAsStateWithLifecycle(mediaStream) }?.value
+	var streamOrigin by remember(entry, stream) { mutableStateOf<LocalDateTime?>(null) }
+	LaunchedEffect(entry, stream, playState, seekEnabled) {
+		if (entry?.isLiveTv == true && seekEnabled && playState == PlayState.PLAYING && streamOrigin == null) {
+			// shortcut: target delay may differ from live, use backend timestamps when available.
+			val offset = entry?.liveStreamTargetOffset ?: Duration.ZERO
+			streamOrigin = LocalDateTime.now().minusNanos((positionInfo.active + offset).inWholeNanoseconds)
+		}
+	}
+	val timeshiftPosition = liveTvProgramTimeline?.takeIf { entry?.isLiveTv == true && seekEnabled }?.let {
+		liveTvTimeshiftPosition(it, streamOrigin, positionInfo.active, LocalDateTime.now(), positionInfo.liveOffset)
+	}
+	val playbackTimeline = liveTvProgramTimeline
 	val liveTvGuideKeyEventHandler = remember { KeyEventHandlerHolder() }
 	val currentOnRemoteKeyEventHandlerChanged by rememberUpdatedState(onRemoteKeyEventHandlerChanged)
 	val currentOnPlaybackComplete by rememberUpdatedState(onPlaybackComplete)
@@ -372,7 +388,7 @@ fun VideoPlayerOverlay(
 			PlayState.ERROR -> playbackManager.state.play()
 
 			PlayState.PLAYING -> playbackManager.state.pause()
-			PlayState.BUFFERING -> playbackManager.state.pause()
+			PlayState.BUFFERING -> if (playbackManager.state.playWhenReady.value) playbackManager.state.pause() else playbackManager.state.unpause()
 			PlayState.PAUSED -> playbackManager.state.unpause()
 		}
 	}
@@ -671,6 +687,7 @@ fun VideoPlayerOverlay(
 					onPlayPauseClick = ::togglePlayback,
 					onGoLiveClick = {
 						cancelPendingSeek()
+						streamOrigin = null
 						playbackManager.state.goLive()
 					},
 					initialFocusRequester = initialControlsFocusRequester,
@@ -687,6 +704,7 @@ fun VideoPlayerOverlay(
 					onLiveTvGuideClick = ::openLiveTvGuide,
 					liveTvProgramTimeline = playbackTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
+					liveTvTimeshiftPosition = timeshiftPosition,
 				)
 			},
 			onCenterClick = {
@@ -751,6 +769,7 @@ fun VideoPlayerOverlay(
 					position = previewPosition,
 					liveTvProgramTimeline = playbackTimeline,
 					liveTvProgramPosition = liveTvProgramPosition,
+					liveTvTimeshiftPosition = timeshiftPosition,
 					enabled = seekEnabled,
 				)
 				VideoPlayerTrickplayThumbnail(

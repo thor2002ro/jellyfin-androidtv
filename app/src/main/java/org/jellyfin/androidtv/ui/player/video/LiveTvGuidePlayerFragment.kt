@@ -167,7 +167,8 @@ private fun LiveTvGuidePlayerScreen(
 		animationSpec = tween(durationMillis = 260),
 		label = "live-tv-guide-player-expansion",
 	)
-	ScreensaverLock(enabled = true)
+	val playWhenReady by playbackManager.state.playWhenReady.collectAsState()
+	ScreensaverLock(enabled = playWhenReady)
 
 	LaunchedEffect(liveTvChannelNavigator) {
 		if (hasLiveTvPlayback) {

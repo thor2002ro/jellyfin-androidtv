@@ -43,6 +43,17 @@ class LiveTvPlaybackRecoveryService(
 	override suspend fun onInitialize() {
 		doviRecoveryHandoff?.register(::cancelAndJoinGenericRecovery)
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
+			override fun onPlayWhenReadyRequested(playWhenReady: Boolean) {
+				if (!playWhenReady) {
+					cancelPlaybackErrorRecovery()
+					cancelStalledBufferRecovery()
+					streamEndRecoveryJob?.cancel()
+				} else when (state.playState.value) {
+					PlayState.BUFFERING -> startStalledBufferRecovery()
+					PlayState.ERROR -> startPlaybackErrorRecovery()
+					else -> Unit
+				}
+			}
 			override fun onPlaybackError(error: PlaybackError) {
 				val entry = manager.queue.entry.value
 				if (shouldSuppressLiveTvGenericRecovery(error, entry)) {
@@ -108,6 +119,7 @@ class LiveTvPlaybackRecoveryService(
 	}
 
 	private fun startPlaybackErrorRecovery() {
+		if (!state.playWhenReady.value) return
 		val currentEntry = manager.queue.entry.value
 		if (currentEntry?.doviRecoveryOwnership != null || doviTransformationErrorEntry === currentEntry) return
 		if (playbackErrorRecoveryJob?.isActive == true) return
@@ -177,6 +189,7 @@ class LiveTvPlaybackRecoveryService(
 	}
 
 	private fun startStreamEndRecovery() {
+		if (!state.playWhenReady.value) return
 		if (streamEndRecoveryJob?.isActive == true) return
 		if (lastPlaybackError != null) return
 
@@ -225,6 +238,7 @@ class LiveTvPlaybackRecoveryService(
 	}
 
 	private fun startStalledBufferRecovery() {
+		if (!state.playWhenReady.value) return
 		if (stalledBufferRecoveryJob?.isActive == true) return
 		if (!manager.backend.reportsBufferedPosition) {
 			Timber.i("Skipping Live TV stalled-buffer recovery; backend does not report buffered position")

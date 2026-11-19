@@ -34,11 +34,12 @@ class PlaybackManager internal constructor(
 	val activeBackends: List<PlayerBackend> get() = backendService.activeBackends
 	/** The entry resolving its stream or preparing the display before backend playback starts. */
 	val preparingEntry: StateFlow<QueueEntry?>? get() = mediaStreamService()?.preparingEntry
-	val state: PlayerState = MutablePlayerState(
+	internal val mutableState = MutablePlayerState(
 		options = options,
 		backendService = backendService,
 		queue = getService()
 	)
+	val state: PlayerState get() = mutableState
 
 	/**
 	 * Get the track selection interface if the current backend supports it.

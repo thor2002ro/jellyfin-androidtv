@@ -181,6 +181,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					withTimeout(10.seconds) { fixture.reloaded.await() }
 					val replacement = requireNotNull(fixture.first.mediaStream)
 					if (paused) {
+						fixture.manager.state.pause()
 						fixture.events.onPlayStateChange(PlayState.PAUSED)
 						withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 					}
