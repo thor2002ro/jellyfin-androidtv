@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.PlaybackBufferOptions
 import org.jellyfin.playback.core.backend.BasePlayerBackend
+import org.jellyfin.playback.core.backend.HARDWARE_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.core.backend.PlaybackError
 import org.jellyfin.playback.core.backend.PlaybackErrorOrigin
 import org.jellyfin.playback.core.backend.activate
@@ -318,6 +319,7 @@ class LibMPVBackend(
 				val generation = playerGeneration
 				onPlayerEvent(generation) {
 					if (hasActiveDoviHardwareRoute()) doviVideoDecoderFailureObserved = true
+					hardwareVideoDecoderFailureObserved = true
 				}
 			}
 		}
@@ -355,6 +357,7 @@ class LibMPVBackend(
 	private var fileLoaded = false
 	private var playbackRestarted = false
 	private var doviVideoDecoderFailureObserved = false
+	private var hardwareVideoDecoderFailureObserved = false
 	private var doviHardwareFailureReported = false
 	private var isPaused = true
 	// Native startup notifications describe the new instance, not the requested playback state.
@@ -821,6 +824,7 @@ class LibMPVBackend(
 		fileLoaded = false
 		playbackRestarted = false
 		doviVideoDecoderFailureObserved = false
+		hardwareVideoDecoderFailureObserved = false
 		doviHardwareFailureReported = false
 		isPaused = false
 		requestedPaused = false
@@ -1526,6 +1530,7 @@ class LibMPVBackend(
 				fileLoaded = false
 				playbackRestarted = false
 				doviVideoDecoderFailureObserved = false
+				hardwareVideoDecoderFailureObserved = false
 				doviHardwareFailureReported = false
 				terminalState = null
 				pausedForCache = false
@@ -1560,6 +1565,7 @@ class LibMPVBackend(
 				publishPlayState()
 			}
 			MPV.mpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
+				hardwareVideoDecoderFailureObserved = false
 				val fallbackResync = nvidiaFallbackResync.consume()
 				playbackRestarted = fallbackResync == null
 				seeking = fallbackResync != null
@@ -1660,7 +1666,11 @@ class LibMPVBackend(
 			}
 			"error" -> {
 				val fileError = data["file_error"]?.asString() ?: "unknown MPV file error"
-				handlePlaybackError(fileError, mpvPlaybackErrorCode(fileError))
+				val code = mpvPlaybackErrorCode(fileError)
+				val hardwareOnly = effectiveVideoDecoder == LibMPVVideoDecoder.MEDIACODEC ||
+					effectiveVideoDecoder == LibMPVVideoDecoder.MEDIACODEC_COPY
+				val decoderFailure = code == "MPV_ERROR" && hardwareOnly && hardwareVideoDecoderFailureObserved
+				handlePlaybackError(fileError, if (decoderFailure) HARDWARE_VIDEO_DECODER_ERROR_CODE else code)
 			}
 			else -> handlePlaybackError("MPV ended playback for reason: $reason")
 		}

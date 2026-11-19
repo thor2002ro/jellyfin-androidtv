@@ -13,6 +13,7 @@ import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.VideoOutputTransform
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import org.jellyfin.playback.core.queue.QueueEntry
+import kotlin.time.Duration
 
 class BackendServiceTests : FunSpec({
 	test("only the current stream can complete an entry after a retry replaces it") {
@@ -24,12 +25,12 @@ class BackendServiceTests : FunSpec({
 		val replacement = original.copy()
 		val completed = mutableListOf<PlayableMediaStream>()
 		service.addListener(object : PlayerBackendEventListener() {
-			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) { completed += mediaStream }
+			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) { completed += mediaStream }
 		})
 		entry.mediaStream = replacement
-		service.BackendEventListener().onMediaStreamEnd(original)
+		service.BackendEventListener().onMediaStreamEnd(original, Duration.ZERO)
 		completed shouldBe emptyList()
-		service.BackendEventListener().onMediaStreamEnd(replacement)
+		service.BackendEventListener().onMediaStreamEnd(replacement, Duration.ZERO)
 		completed.size shouldBe 1
 	}
 

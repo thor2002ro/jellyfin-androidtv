@@ -73,12 +73,12 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				val replacement = requireNotNull(fixture.first.mediaStream)
 				val errors = listOf("MPV_ERROR", "MPV_HTTP_ERROR")
 				for ((index, codeName) in errors.withIndex()) {
-					if (index > 0) fixture.events.onPlayStateChange(PlayState.PLAYING)
+					if (index > 0) fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 					fixture.events.onPlaybackError(PlaybackError(codeName, origin = replacement.errorOrigin))
-					fixture.events.onPlayStateChange(PlayState.ERROR)
-					fixture.events.onPlayStateChange(PlayState.STOPPED)
-					fixture.events.onMediaStreamEnd(replacement)
-					fixture.events.onMediaStreamEnd(replacement)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
+					fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+					fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
+					fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
 					fixture.completed shouldBe emptyList()
 					fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 					fixture.errors.map { it.codeName } shouldBe errors.take(index + 1)
@@ -87,10 +87,10 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.resolutionCount.get() shouldBe 1
 				}
 
-				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 				fixture.position = PositionInfo(99.5.seconds, 100.seconds, 100.seconds)
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(replacement)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
 				withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 				fixture.completed shouldBe listOf(replacement)
 			} finally {
@@ -106,10 +106,10 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.startRecovery()
 				withTimeout(10.seconds) { fixture.reloaded.await() }
 				val replacement = requireNotNull(fixture.first.mediaStream)
-				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 				fixture.position = PositionInfo(21.seconds, 21.seconds, Duration.ZERO)
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(replacement)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
 				withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 				fixture.completed shouldBe listOf(replacement)
 			} finally {
@@ -126,11 +126,11 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.second.baseItem = BaseItemDto(id = UUID.randomUUID(), type = BaseItemKind.TV_CHANNEL)
 				fixture.queue.setIndex(1)
 				val channel = requireNotNull(fixture.second.mediaStream)
-				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 				fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = channel.errorOrigin))
-				fixture.events.onPlayStateChange(PlayState.ERROR)
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(channel)
+				fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(channel, Duration.ZERO)
 				fixture.completed shouldBe listOf(channel)
 			} finally {
 				fixture.job.cancel()
@@ -147,8 +147,8 @@ class NetworkRecoveryCompletionTests : FunSpec({
 						fixture.position = fixture.position.copy(duration = Duration.ZERO)
 						fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.original.errorOrigin))
 					}
-					fixture.events.onPlayStateChange(PlayState.STOPPED)
-					fixture.events.onMediaStreamEnd(fixture.original)
+					fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+					fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 					fixture.completed shouldBe emptyList()
 					fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 
@@ -157,12 +157,12 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 					fixture.manager.state.playState.value shouldBe PlayState.BUFFERING
 					fixture.recovery.recovering.value shouldBe true
-					fixture.events.onPlayStateChange(PlayState.PLAYING)
+					fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 					withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 
 					fixture.position = PositionInfo(99.5.seconds, 100.seconds, 100.seconds)
-					fixture.events.onPlayStateChange(PlayState.STOPPED)
-					fixture.events.onMediaStreamEnd(requireNotNull(fixture.first.mediaStream))
+					fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+					fixture.events.onMediaStreamEnd(requireNotNull(fixture.first.mediaStream), Duration.ZERO)
 					withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 					fixture.completed.size shouldBe 1
 				} finally {
@@ -182,21 +182,21 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					val replacement = requireNotNull(fixture.first.mediaStream)
 					if (paused) {
 						fixture.manager.state.pause()
-						fixture.events.onPlayStateChange(PlayState.PAUSED)
+						fixture.events.onPlayStateChange(PlayState.PAUSED, null, null)
 						withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 					}
-					fixture.events.onPlayStateChange(PlayState.STOPPED)
-					fixture.events.onMediaStreamEnd(replacement)
+					fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+					fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
 					withTimeout(2.seconds) { fixture.manager.state.playState.first { it == PlayState.ERROR } }
 					fixture.recovery.recovering.value shouldBe !paused
-					fixture.events.onMediaStreamEnd(replacement)
+					fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
 					fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 					fixture.completed shouldBe emptyList()
 					fixture.errors.single().codeName shouldBe "MEDIA_STREAM_RECOVERY_FAILED"
-					fixture.events.onPlayStateChange(PlayState.PLAYING)
+					fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 					fixture.position = PositionInfo(99.5.seconds, 100.seconds, 100.seconds)
-					fixture.events.onPlayStateChange(PlayState.STOPPED)
-					fixture.events.onMediaStreamEnd(replacement)
+					fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+					fixture.events.onMediaStreamEnd(replacement, Duration.ZERO)
 					withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 					fixture.completed shouldBe listOf(replacement)
 				} finally {
@@ -222,8 +222,8 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.startRecovery()
 				withTimeout(10.seconds) { fixture.manager.state.playState.first { it == PlayState.ERROR } }
 				fixture.recovery.recovering.value shouldBe true
-				fixture.events.onMediaStreamEnd(fixture.original)
-				fixture.events.onMediaStreamEnd(fixture.original)
+				fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
+				fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 				delay(2.seconds)
 				calls.get() shouldBe 1
 				withTimeout(12.seconds) { fixture.reloaded.await() } shouldBe 20.seconds
@@ -233,7 +233,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				calls.get() shouldBe 4
 				positions shouldBe listOf(20.seconds, 20.seconds, 20.seconds, 20.seconds)
 				fixture.replacementCount shouldBe 1
-				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 				withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 			} finally {
 				fixture.job.cancel()
@@ -254,8 +254,8 @@ class NetworkRecoveryCompletionTests : FunSpec({
 			try {
 				fixture.first.metadata = QueueEntryMetadata(duration = 100.seconds)
 				fixture.startPlaying()
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(fixture.original)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 
 				fixture.completed shouldBe emptyList()
 				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
@@ -326,7 +326,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				val newer = async { fixture.manager.reloadCurrentMediaStream(30.seconds) }
 				withTimeout(2.seconds) { newerStarted.await() }
 				fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.first.mediaStream?.errorOrigin))
-				fixture.events.onPlayStateChange(PlayState.ERROR)
+				fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 				withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 				delay(4.seconds)
 				calls.get() shouldBe 2
@@ -369,7 +369,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				withTimeout(10.seconds) { fixture.reloaded.await() }
 				withTimeout(35.seconds) { fixture.manager.state.playState.first { it == PlayState.ERROR } }
 				fixture.recovery.recovering.value shouldBe true
-				fixture.events.onPlayStateChange(PlayState.BUFFERING)
+				fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 				fixture.position = fixture.position.copy(buffer = 21.seconds)
 				delay(4.seconds)
 				fixture.recovery.recovering.value shouldBe true
@@ -380,7 +380,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.replacementCount shouldBe 2
 				fixture.resolutionCount.get() shouldBe 2
 				fixture.errors.single().codeName shouldBe "MEDIA_STREAM_RECOVERY_FAILED"
-				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 				withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 			} finally {
 				fixture.job.cancel()
@@ -395,24 +395,25 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				try {
 					fixture.startRecovery()
 					withTimeout(10.seconds) { fixture.reloaded.await() }
-					if (pause) fixture.events.onPlayStateChange(PlayState.PLAYING)
+					if (pause) fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 					if (manualReplacement) {
 						fixture.first.mediaStream = stream(fixture.first, "manual").also { it.errorOrigin?.activate() }
 						fixture.position = PositionInfo(30.seconds, 30.seconds, 100.seconds)
 					} else fixture.position = PositionInfo.EMPTY
 					fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.first.mediaStream?.errorOrigin))
-					fixture.events.onPlayStateChange(PlayState.ERROR)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 					if (pause) {
+						fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 						fixture.manager.state.pause()
 						withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 						fixture.manager.state.unpause()
-						fixture.events.onPlayStateChange(PlayState.BUFFERING)
+						fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 					}
 					withTimeout(5.seconds) { fixture.replacementPositions.first { it.size == 2 } } shouldBe
 						listOf(20.seconds, if (manualReplacement) 30.seconds else 20.seconds)
 					fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 					fixture.completed shouldBe emptyList()
-					fixture.events.onPlayStateChange(PlayState.PLAYING)
+					fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 					withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 				} finally {
 					fixture.job.cancel()
@@ -439,10 +440,13 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.startRecovery()
 					withTimeout(10.seconds) { started.await() }
 					repeat(3) { fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.original.errorOrigin)) }
-					fixture.events.onPlayStateChange(PlayState.ERROR)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 					delay(4.seconds)
 					calls.get() shouldBe 1
-					if (pause) fixture.manager.state.pause() else fixture.manager.state.stop()
+					if (pause) {
+						fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
+						fixture.manager.state.pause()
+					} else fixture.manager.state.stop()
 					withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 					response.complete(stream(fixture.first, "late"))
 					delay(100L)
@@ -450,17 +454,17 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.first.mediaStream shouldBeSameInstanceAs fixture.original
 					if (pause) {
 						fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.original.errorOrigin))
-						fixture.events.onPlayStateChange(PlayState.ERROR)
+						fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 						delay(4.seconds)
 						calls.get() shouldBe 1
 						fixture.recovery.recovering.value shouldBe false
-						fixture.events.onPlayStateChange(PlayState.PAUSED)
+						fixture.events.onPlayStateChange(PlayState.PAUSED, null, null)
 					}
 					fixture.manager.state.playState.value shouldBe if (pause) PlayState.PAUSED else PlayState.STOPPED
 					fixture.errors.map { it.codeName } shouldBe List(if (pause) 4 else 3) { "MPV_HTTP_ERROR" }
 					if (pause) {
 						fixture.manager.state.unpause()
-						fixture.events.onPlayStateChange(PlayState.BUFFERING)
+						fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 						withTimeout(5.seconds) { fixture.reloaded.await() }
 						calls.get() shouldBe 2
 					}
@@ -491,7 +495,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					override suspend fun getItem(index: Int) = fixture.first.takeIf { index == 0 }
 				})
 				fixture.queue.setIndex(0)
-				fixture.events.onPlayStateChange(PlayState.BUFFERING)
+				fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 				delay(4.seconds)
 				calls.get() shouldBe 1
 				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
@@ -512,11 +516,11 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					withTimeout(10.seconds) { fixture.reloaded.await() }
 					if (pause) fixture.manager.state.pause()
 					fixture.events.onPlaybackError(PlaybackError("ERROR_CODE_DECODING_FAILED", origin = fixture.first.mediaStream?.errorOrigin))
-					fixture.events.onPlayStateChange(PlayState.ERROR)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 					withTimeout(2.seconds) { fixture.recovery.recovering.first { !it } }
 					if (pause) {
 						fixture.manager.state.unpause()
-						fixture.events.onPlayStateChange(PlayState.BUFFERING)
+						fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 					}
 					delay(4.seconds)
 					fixture.replacementCount shouldBe 1
@@ -541,14 +545,14 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				val backend = fixture.manager.backend
 				every { backend.seekTo(60.seconds) } answers {
 					fixture.position = PositionInfo(60.seconds, 60.seconds, 100.seconds)
-					fixture.events.onPlayStateChange(PlayState.BUFFERING)
+					fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 					true
 				}
 				fixture.manager.state.seek(60.seconds)
 				delay(4.seconds)
 				fixture.resolutionCount.get() shouldBe 0
 				fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.original.errorOrigin))
-				fixture.events.onPlayStateChange(PlayState.ERROR)
+				fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 				withTimeout(5.seconds) { fixture.reloaded.await() } shouldBe 60.seconds
 				fixture.resolutionCount.get() shouldBe 1
 				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
@@ -569,8 +573,8 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.position = PositionInfo(25.seconds, 25.seconds, Duration.ZERO)
 				withTimeout(5.seconds) { fixture.recovery.recovering.first { !it } }
 				fixture.resolutionCount.get() shouldBe 0
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(fixture.original)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 				withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 				fixture.completed shouldBe listOf(fixture.original)
 			} finally { fixture.job.cancel() }
@@ -586,7 +590,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					withTimeout(10.seconds) { fixture.reloaded.await() }
 					if (paused) {
 						fixture.manager.state.pause()
-						fixture.events.onPlayStateChange(PlayState.PAUSED)
+						fixture.events.onPlayStateChange(PlayState.PAUSED, null, null)
 					}
 					val backend = fixture.manager.backend
 					every { backend.seekTo(60.seconds) } answers {
@@ -595,13 +599,13 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					}
 					fixture.manager.state.seek(60.seconds)
 					fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.first.mediaStream?.errorOrigin))
-					fixture.events.onPlayStateChange(PlayState.ERROR)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 					if (paused) {
 						delay(4.seconds)
 						fixture.resolutionCount.get() shouldBe 1
 						fixture.recovery.recovering.value shouldBe false
 						fixture.manager.state.unpause()
-						fixture.events.onPlayStateChange(PlayState.BUFFERING)
+						fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 					}
 					withTimeout(5.seconds) { fixture.replacementPositions.first { it.size == 2 } } shouldBe
 						listOf(20.seconds, if (accepted) 60.seconds else 20.seconds)
@@ -673,24 +677,24 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.startAndDisconnect()
 				fixture.manager.state.pause()
 				fixture.recovery.recovering.value shouldBe false
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(fixture.original)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 				delay(200L)
 				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 				fixture.completed shouldBe emptyList()
-				fixture.events.onPlayStateChange(PlayState.PAUSED)
+				fixture.events.onPlayStateChange(PlayState.PAUSED, null, null)
 				fixture.online.set(true)
 				delay(4.seconds)
 				fixture.resolutionCount.get() shouldBe 0
 				fixture.replacementCount shouldBe 0
 				fixture.manager.state.playState.value shouldBe PlayState.PAUSED
 				fixture.manager.state.unpause()
-				fixture.events.onPlayStateChange(PlayState.BUFFERING)
+				fixture.events.onPlayStateChange(PlayState.BUFFERING, null, null)
 				withTimeout(10.seconds) { fixture.reloaded.await() } shouldBe 20.seconds
-				fixture.events.onPlayStateChange(PlayState.PLAYING)
+				fixture.events.onPlayStateChange(PlayState.PLAYING, null, null)
 				fixture.position = PositionInfo(99.5.seconds, 100.seconds, 100.seconds)
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(requireNotNull(fixture.first.mediaStream))
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(requireNotNull(fixture.first.mediaStream), Duration.ZERO)
 				withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 			} finally { fixture.job.cancel() }
 		}
@@ -703,7 +707,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				try {
 					fixture.startAndDisconnect()
 					fixture.events.onPlaybackError(PlaybackError("ERROR_CODE_DECODING_FAILED", origin = fixture.original.errorOrigin))
-					fixture.events.onPlayStateChange(PlayState.ERROR)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 					fixture.recovery.recovering.value shouldBe false
 					fixture.online.set(true)
 					delay(7.seconds)
@@ -713,7 +717,7 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					if (newStream) fixture.first.mediaStream = stream(fixture.first, "manual").also { it.errorOrigin?.activate() }
 					else fixture.manager.state.play()
 					fixture.events.onPlaybackError(PlaybackError("MPV_HTTP_ERROR", origin = fixture.first.mediaStream?.errorOrigin))
-					fixture.events.onPlayStateChange(PlayState.ERROR)
+					fixture.events.onPlayStateChange(PlayState.ERROR, null, null)
 					withTimeout(5.seconds) { fixture.reloaded.await() } shouldBe 20.seconds
 					fixture.resolutionCount.get() shouldBe 1
 					fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
@@ -746,8 +750,8 @@ class NetworkRecoveryCompletionTests : FunSpec({
 					fixture.startAndDisconnect()
 					fixture.first.metadata = QueueEntryMetadata(duration = metadataDuration)
 					fixture.position = PositionInfo(99.5.seconds, 100.seconds, duration)
-					fixture.events.onPlayStateChange(PlayState.STOPPED)
-					fixture.events.onMediaStreamEnd(fixture.original)
+					fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+					fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 					withTimeout(2.seconds) { fixture.queue.entry.first { it === fixture.second } }
 					fixture.completed shouldBe listOf(fixture.original)
 				} finally {
@@ -764,8 +768,8 @@ class NetworkRecoveryCompletionTests : FunSpec({
 				fixture.startAndDisconnect()
 				fixture.first.metadata = QueueEntryMetadata(duration = 100.seconds)
 				fixture.position = PositionInfo(20.seconds, 20.seconds, Duration.ZERO)
-				fixture.events.onPlayStateChange(PlayState.STOPPED)
-				fixture.events.onMediaStreamEnd(fixture.original)
+				fixture.events.onPlayStateChange(PlayState.STOPPED, null, null)
+				fixture.events.onMediaStreamEnd(fixture.original, Duration.ZERO)
 				fixture.completed shouldBe emptyList()
 				fixture.queue.entry.value shouldBeSameInstanceAs fixture.first
 			} finally {
@@ -808,7 +812,7 @@ private class RecoveryCompletionFixture(resolverOverride: MediaStreamResolver? =
 			replacementCount++
 			replacementPositions.value += first.startPosition
 			first.mediaStream?.errorOrigin?.activate()
-			events.onPlayStateChange(PlayState.BUFFERING)
+			events.onPlayStateChange(PlayState.BUFFERING, null, null)
 			reloaded.complete(first.startPosition)
 		}
 	}
@@ -829,15 +833,15 @@ private class RecoveryCompletionFixture(resolverOverride: MediaStreamResolver? =
 		first.mediaStream = original
 		second.mediaStream = stream(second, "next")
 		manager.addBackendEventListener(object : PlayerBackendEventListener() {
-			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream) { completed += mediaStream }
+			override fun onMediaStreamEnd(mediaStream: PlayableMediaStream, position: Duration) { completed += mediaStream }
 			override fun onPlaybackError(error: PlaybackError) { errors += error }
 		})
 	}
 
 	suspend fun startRecovery() {
 		startAndDisconnect()
-		events.onPlayStateChange(PlayState.STOPPED)
-		events.onMediaStreamEnd(original)
+		events.onPlayStateChange(PlayState.STOPPED, null, null)
+		events.onMediaStreamEnd(original, Duration.ZERO)
 		online.set(true)
 	}
 
@@ -854,7 +858,7 @@ private class RecoveryCompletionFixture(resolverOverride: MediaStreamResolver? =
 			override suspend fun getItem(index: Int) = listOf(first, second).getOrNull(index)
 		})
 		withTimeout(2.seconds) { started.await() }
-		events.onPlayStateChange(PlayState.PLAYING)
+		events.onPlayStateChange(PlayState.PLAYING, null, null)
 	}
 }
 

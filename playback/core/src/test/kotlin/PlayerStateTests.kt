@@ -47,15 +47,28 @@ class PlayerStateTests : FunSpec({
 		val state = playerState(backend(), QueueEntry(), backendService = service)
 		state.playWhenReady.value shouldBe false
 		state.setPlayWhenReady(true)
-		service.BackendEventListener().onPlayStateChange(PlayState.BUFFERING)
+		service.BackendEventListener().onPlayStateChange(PlayState.BUFFERING, null, null)
 		state.playWhenReady.value shouldBe true
 		state.pause()
 		state.playWhenReady.value shouldBe false
-		service.BackendEventListener().onPlayStateChange(PlayState.BUFFERING)
+		service.BackendEventListener().onPlayStateChange(PlayState.BUFFERING, null, null)
 		state.playWhenReady.value shouldBe false
 		state.play()
 		state.stop()
 		state.playWhenReady.value shouldBe false
+	}
+
+	test("pause leaves play intent active while the backend reports an error") {
+		val service = BackendService()
+		val backend = backend()
+		val state = playerState(backend, QueueEntry(), backendService = service)
+		state.setPlayWhenReady(true)
+		service.BackendEventListener().onPlayStateChange(PlayState.ERROR, null, null)
+
+		state.pause()
+
+		state.playWhenReady.value shouldBe true
+		verify(exactly = 0) { backend.pause() }
 	}
 
 	test("playback manager switches its active backend") {
@@ -314,7 +327,7 @@ class PlayerStateTests : FunSpec({
 			val state = playerState(backend, QueueEntry(), backendService = backendService)
 			state.setScrubbing(true)
 
-			backendService.BackendEventListener().onPlayStateChange(terminalState)
+			backendService.BackendEventListener().onPlayStateChange(terminalState, null, null)
 
 			state.scrubbing.value shouldBe false
 			verify(exactly = 1) { backend.setScrubbing(false) }

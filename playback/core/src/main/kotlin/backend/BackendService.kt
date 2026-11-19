@@ -6,6 +6,7 @@ import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
 import org.jellyfin.playback.core.model.VideoGeometry
 import org.jellyfin.playback.core.model.VideoOutputTransform
+import org.jellyfin.playback.core.queue.metadata
 import org.jellyfin.playback.core.ui.PlayerSubtitleView
 import org.jellyfin.playback.core.ui.PlayerSurfaceView
 import timber.log.Timber
@@ -93,8 +94,20 @@ class BackendService {
 	}
 
 	internal fun reportPlaybackError(error: PlaybackError) {
+		dispatchPlaybackError(error)
+		callListeners { onPlayStateChange(PlayState.ERROR, error.origin?.queueEntry?.mediaStream, null) }
+	}
+
+	private fun dispatchPlaybackError(error: PlaybackError) {
+		// Log native and synthetic errors here so they use the same item ID as recovery.
+		Timber.w(
+			"Playback error itemId=%s backend=%s code=%s liveOffsetRecovery=%s",
+			error.origin?.queueEntry?.metadata?.mediaId,
+			backend?.javaClass?.simpleName,
+			error.codeName,
+			error.recoverWithIncreasedLiveTvOffset,
+		)
 		callListeners { onPlaybackError(error) }
-		callListeners { onPlayStateChange(PlayState.ERROR) }
 	}
 
 	internal fun notifyPlayWhenReadyRequested(playWhenReady: Boolean) {
@@ -148,9 +161,7 @@ class BackendService {
 			callListeners { onPlayStateChange(state, stream, position) }
 		}
 
-		override fun onPlaybackError(error: PlaybackError) {
-			callListeners { onPlaybackError(error) }
-		}
+		override fun onPlaybackError(error: PlaybackError) = dispatchPlaybackError(error)
 
 		override fun onVideoGeometryChange(geometry: VideoGeometry) {
 			if (geometry.videoAspectRatio > 0f) {

@@ -14,8 +14,6 @@ import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamOptions
 import org.jellyfin.playback.jellyfin.mediastream.JellyfinMediaStreamResolver
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionService
 import org.jellyfin.playback.jellyfin.playsession.PlaySessionSocketService
-import org.jellyfin.playback.jellyfin.recovery.DoviPlaybackRecoveryService
-import org.jellyfin.playback.jellyfin.recovery.DoviRecoveryHandoffCoordinator
 import org.jellyfin.playback.jellyfin.recovery.NetworkPlaybackRecoveryService
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
@@ -45,12 +43,10 @@ fun jellyfinPlugin(
 	doviDecisionValidator: JellyfinDoviDecisionValidator = { _, _, _, _, _ -> },
 ) = playbackPlugin {
 	val liveTvPlaybackPolicy = LiveTvPlaybackPolicy(liveTvDirectPlayEnabled)
-	val doviRecoveryHandoff = DoviRecoveryHandoffCoordinator()
 
 	provide(JellyfinMediaStreamResolver(api, deviceProfileBuilder, mediaStreamOptionsProvider, liveTvPlaybackPolicy, doviDecisionValidator))
-	provide(DoviPlaybackRecoveryService(doviRecoveryHandoff))
-	provide(NetworkPlaybackRecoveryService(liveTvPlaybackPolicy, networkAvailable, doviRecoveryHandoff))
-	provide(LiveTvPlaybackRecoveryService(liveTvPlaybackPolicy, networkAvailable, doviRecoveryHandoff))
+	provide(NetworkPlaybackRecoveryService(liveTvPlaybackPolicy, networkAvailable))
+	provide(LiveTvPlaybackRecoveryService(liveTvPlaybackPolicy, networkAvailable))
 	provide(LiveTvPlaybackResetService(liveTvPlaybackPolicy))
 
 	val playSessionService = PlaySessionService(api)

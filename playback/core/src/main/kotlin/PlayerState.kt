@@ -183,7 +183,7 @@ class MutablePlayerState(
 	}
 
 	override fun pause() {
-		if (!canSeek) return
+		if (_playState.value == PlayState.ERROR || !canSeek) return
 		playIntentRevision++
 		// TODO: enqueue action when backend is not set
 		backendService.notifyPlayWhenReadyRequested(false)

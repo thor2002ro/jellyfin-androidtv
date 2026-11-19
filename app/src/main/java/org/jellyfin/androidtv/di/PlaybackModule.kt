@@ -228,8 +228,8 @@ fun Scope.createPlaybackManager() = playbackManager(androidContext()) {
 		}
 		if (doviPlan != null) {
 			Timber.i(
-				"Dolby Vision negotiation source=%s range=%s route=%s reason=%s",
-				doviPlan.mediaSourceId,
+				"Dolby Vision negotiation itemId=%s range=%s route=%s reason=%s",
+				queueEntry.baseItem?.id,
 				doviPlan.sourceRangeType,
 				doviPlan.decision.route,
 				doviPlan.decision.reason,

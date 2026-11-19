@@ -30,6 +30,8 @@ fun PlaybackErrorOrigin.activate() {
 fun PlaybackErrorOrigin.matches(entry: QueueEntry?): Boolean =
 	entry != null && queueEntry === entry && entry.activePlaybackErrorOrigin === this
 
+const val HARDWARE_VIDEO_DECODER_ERROR_CODE = "HARDWARE_VIDEO_DECODER_FAILED"
+
 data class PlaybackError(
 	val codeName: String,
 	val recoverWithIncreasedLiveTvOffset: Boolean = false,
