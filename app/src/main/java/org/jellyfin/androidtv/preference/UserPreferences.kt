@@ -22,6 +22,10 @@ import org.jellyfin.androidtv.preference.constant.LibassRenderType
 import org.jellyfin.androidtv.preference.constant.NextUpBehavior
 import org.jellyfin.androidtv.preference.constant.PlaybackResolution
 import org.jellyfin.androidtv.preference.constant.PlayerHeaderLayout
+import org.jellyfin.androidtv.preference.constant.ScreensaverBackdropSource
+import org.jellyfin.androidtv.preference.constant.ScreensaverMotion
+import org.jellyfin.androidtv.preference.constant.ScreensaverTransition
+import org.jellyfin.androidtv.preference.constant.ScreensaverWeatherUnits
 import org.jellyfin.androidtv.preference.constant.StillWatchingBehavior
 import org.jellyfin.androidtv.preference.constant.WatchedIndicatorBehavior
 import org.jellyfin.androidtv.preference.constant.ZoomMode
@@ -296,15 +300,26 @@ class UserPreferences(context: Context) : SharedPreferenceStore(
 		 */
 		var screensaverInAppTimeout = longPreference("screensaver_inapp_timeout", 5.minutes.inWholeMilliseconds)
 
+		val screensaverMotion = enumPreference("screensaver_motion", ScreensaverMotion.RANDOM)
+		val screensaverBackdropSource = enumPreference("screensaver_backdrop_source", ScreensaverBackdropSource.SERVER_PROVIDERS)
+		val screensaverTransition = enumPreference("screensaver_transition", ScreensaverTransition.RANDOM)
+		val screensaverBouncingLogo = booleanPreference("screensaver_bouncing_logo", false)
+		val screensaverSnow = booleanPreference("screensaver_snow", false)
+		val screensaverWeather = booleanPreference("screensaver_weather", true)
+		val screensaverWeatherEffects = booleanPreference("screensaver_weather_effects", true)
+		val screensaverWeatherEnabled = booleanPreference("screensaver_weather_enabled", true)
+		val screensaverWeatherUnits = enumPreference("screensaver_weather_units", ScreensaverWeatherUnits.CELSIUS)
+		val screensaverWeatherLocation = stringPreference("screensaver_weather_location", "")
+
 		/**
 		 * Age rating used to filter items in the screensaver. Use -1 to disable (omits parameter from requests).
 		 */
-		var screensaverAgeRatingMax = intPreference("screensaver_agerating_max", 13)
+		var screensaverAgeRatingMax = intPreference("screensaver_agerating_max", -1)
 
 		/**
 		 * Whether items shown in the screensaver are required to have an age rating set.
 		 */
-		var screensaverAgeRatingRequired = booleanPreference("screensaver_agerating_required", true)
+		var screensaverAgeRatingRequired = booleanPreference("screensaver_agerating_required", false)
 
 		/**
 		 * Delay when starting video playback after loading the video player.
