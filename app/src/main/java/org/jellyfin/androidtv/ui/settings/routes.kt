@@ -1,7 +1,12 @@
 package org.jellyfin.androidtv.ui.settings
 
+import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.preference.UserPreferences
 import org.jellyfin.androidtv.preference.constant.BitstreamAudioFormat
 import org.jellyfin.androidtv.preference.constant.HdrFormat
+import org.jellyfin.androidtv.preference.constant.ScreensaverBackdropSource
+import org.jellyfin.androidtv.preference.constant.ScreensaverMotion
+import org.jellyfin.androidtv.preference.constant.ScreensaverTransition
 import org.jellyfin.androidtv.ui.navigation.RouteComposable
 import org.jellyfin.androidtv.ui.settings.screen.SettingsBackupScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsDebugCapabilitiesScreen
@@ -71,8 +76,11 @@ import org.jellyfin.androidtv.ui.settings.screen.playback.mediasegment.SettingsP
 import org.jellyfin.androidtv.ui.settings.screen.playback.nextup.SettingsPlaybackNextUpBehaviorScreen
 import org.jellyfin.androidtv.ui.settings.screen.playback.nextup.SettingsPlaybackNextUpScreen
 import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverAgeRatingScreen
+import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverEffectScreen
 import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverScreen
 import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverTimeoutScreen
+import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverWeatherLocationScreen
+import org.jellyfin.androidtv.ui.settings.screen.screensaver.SettingsScreensaverWeatherScreen
 import org.jellyfin.androidtv.updater.AppUpdateSettingsScreen
 import org.jellyfin.sdk.model.api.MediaSegmentType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
@@ -94,6 +102,11 @@ object Routes {
 	const val CUSTOMIZATION_SCREENSAVER = "/customization/screensaver"
 	const val CUSTOMIZATION_SCREENSAVER_TIMEOUT = "/customization/screensaver/timeout"
 	const val CUSTOMIZATION_SCREENSAVER_AGE_RATING = "/customization/screensaver/age-rating"
+	const val CUSTOMIZATION_SCREENSAVER_MOTION = "/customization/screensaver/motion"
+	const val CUSTOMIZATION_SCREENSAVER_TRANSITION = "/customization/screensaver/transition"
+	const val CUSTOMIZATION_SCREENSAVER_SOURCE = "/customization/screensaver/source"
+	const val CUSTOMIZATION_SCREENSAVER_WEATHER = "/customization/screensaver/weather"
+	const val CUSTOMIZATION_SCREENSAVER_WEATHER_LOCATION = "/customization/screensaver/weather/location"
 	const val CUSTOMIZATION_SUBTITLES = "/customization/subtitles"
 	const val CUSTOMIZATION_SUBTITLES_TEXT_COLOR = "/customization/subtitles/text-color"
 	const val CUSTOMIZATION_SUBTITLES_HDR_TEXT_COLOR = "/customization/subtitles/hdr-text-color"
@@ -202,6 +215,21 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.CUSTOMIZATION_SCREENSAVER_AGE_RATING to {
 		SettingsScreensaverAgeRatingScreen()
+	},
+	Routes.CUSTOMIZATION_SCREENSAVER_MOTION to {
+		SettingsScreensaverEffectScreen(R.string.pref_screensaver_motion, UserPreferences.screensaverMotion, ScreensaverMotion.entries)
+	},
+	Routes.CUSTOMIZATION_SCREENSAVER_TRANSITION to {
+		SettingsScreensaverEffectScreen(R.string.pref_screensaver_transition, UserPreferences.screensaverTransition, ScreensaverTransition.entries)
+	},
+	Routes.CUSTOMIZATION_SCREENSAVER_SOURCE to {
+		SettingsScreensaverEffectScreen(R.string.pref_screensaver_source, UserPreferences.screensaverBackdropSource, ScreensaverBackdropSource.entries)
+	},
+	Routes.CUSTOMIZATION_SCREENSAVER_WEATHER to {
+		SettingsScreensaverWeatherScreen()
+	},
+	Routes.CUSTOMIZATION_SCREENSAVER_WEATHER_LOCATION to {
+		SettingsScreensaverWeatherLocationScreen()
 	},
 	Routes.CUSTOMIZATION_SUBTITLES to {
 		SettingsSubtitlesScreen()

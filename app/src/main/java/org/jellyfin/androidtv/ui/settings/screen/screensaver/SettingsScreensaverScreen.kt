@@ -63,14 +63,18 @@ fun SettingsScreensaverScreen() {
 			ListButton(
 				headingContent = { Text(stringResource(R.string.pref_screensaver_ageratingrequired_title)) },
 				trailingContent = { Checkbox(checked = screensaverAgeRatingRequired) },
-				captionContent = { Text(stringResource(R.string.pref_screensaver_ageratingrequired_enabled)) },
+				captionContent = {
+					val caption = if (screensaverAgeRatingRequired) R.string.pref_screensaver_ageratingrequired_enabled
+					else R.string.pref_screensaver_ageratingrequired_disabled
+					Text(stringResource(caption))
+				},
 				onClick = { screensaverAgeRatingRequired = !screensaverAgeRatingRequired },
 				modifier = Modifier.focusKey("screensaver_age_rating_required")
 			)
 		}
 
 		item {
-			var screensaverAgeRatingMax by rememberPreference(userPreferences, UserPreferences.screensaverAgeRatingMax)
+			val screensaverAgeRatingMax by rememberPreference(userPreferences, UserPreferences.screensaverAgeRatingMax)
 			val caption = getScreensaverAgeRatingOptions()
 				.firstOrNull { (ageRating) -> ageRating == screensaverAgeRatingMax }
 				?.second.orEmpty()
@@ -80,6 +84,65 @@ fun SettingsScreensaverScreen() {
 				captionContent = { Text(caption) },
 				onClick = { router.push(Routes.CUSTOMIZATION_SCREENSAVER_AGE_RATING) },
 				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SCREENSAVER_AGE_RATING)
+			)
+		}
+
+		item {
+			val motion by rememberPreference(userPreferences, UserPreferences.screensaverMotion)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_screensaver_motion)) },
+				captionContent = { Text(stringResource(motion.nameRes)) },
+				onClick = { router.push(Routes.CUSTOMIZATION_SCREENSAVER_MOTION) },
+				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SCREENSAVER_MOTION),
+			)
+		}
+
+		item {
+			val transition by rememberPreference(userPreferences, UserPreferences.screensaverTransition)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_screensaver_transition)) },
+				captionContent = { Text(stringResource(transition.nameRes)) },
+				onClick = { router.push(Routes.CUSTOMIZATION_SCREENSAVER_TRANSITION) },
+				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SCREENSAVER_TRANSITION),
+			)
+		}
+
+		item {
+			var bouncingLogo by rememberPreference(userPreferences, UserPreferences.screensaverBouncingLogo)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_screensaver_bouncing_logo)) },
+				captionContent = { Text(stringResource(R.string.pref_screensaver_bouncing_logo_description)) },
+				trailingContent = { Checkbox(checked = bouncingLogo) },
+				onClick = { bouncingLogo = !bouncingLogo },
+				modifier = Modifier.focusKey("screensaver_bouncing_logo"),
+			)
+		}
+
+		item {
+			var snow by rememberPreference(userPreferences, UserPreferences.screensaverSnow)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_screensaver_snow)) },
+				trailingContent = { Checkbox(checked = snow) },
+				onClick = { snow = !snow },
+				modifier = Modifier.focusKey("screensaver_snow"),
+			)
+		}
+
+		item {
+			val source by rememberPreference(userPreferences, UserPreferences.screensaverBackdropSource)
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_screensaver_source)) },
+				captionContent = { Text(stringResource(source.nameRes)) },
+				onClick = { router.push(Routes.CUSTOMIZATION_SCREENSAVER_SOURCE) },
+				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SCREENSAVER_SOURCE),
+			)
+		}
+
+		item {
+			ListButton(
+				headingContent = { Text(stringResource(R.string.pref_screensaver_weather)) },
+				onClick = { router.push(Routes.CUSTOMIZATION_SCREENSAVER_WEATHER) },
+				modifier = Modifier.focusKey(Routes.CUSTOMIZATION_SCREENSAVER_WEATHER),
 			)
 		}
 	}
