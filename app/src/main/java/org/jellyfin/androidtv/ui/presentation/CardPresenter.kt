@@ -76,6 +76,7 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.compose.koinInject
+import kotlin.math.roundToInt
 
 class CardPresenter(
 	val showInfo: Boolean,
@@ -92,9 +93,9 @@ class CardPresenter(
 	private val handler by lazy { Handler(Looper.getMainLooper()) }
 	private val drain = object : Runnable {
 		override fun run() {
-			val next = pending.firstOrNull()
-			if (next != null && !next.isScrolling()) {
-				pending.removeFirst()
+			val next = pending.firstOrNull { !it.isScrolling() }
+			if (next != null) {
+				pending.remove(next)
 				next.showContent()
 			}
 			if (pending.isNotEmpty()) handler.postDelayed(this, HOME_CARD_STAGGER_MS)
@@ -129,7 +130,7 @@ class CardPresenter(
 			descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
 			clipChildren = false
 			clipToPadding = false
-			setBackgroundResource(R.drawable.channel_card_background)
+			addView(View(context).apply { setBackgroundResource(R.drawable.home_card_placeholder) })
 		} else view
 		return CardViewHolder(view, root)
 	}
@@ -204,8 +205,8 @@ class CardPresenter(
 			setContent()
 			root.minimumWidth = 0
 			root.minimumHeight = 0
-			root.background = null
-			(root as FrameLayout).addView(composeView)
+			(root as FrameLayout).removeAllViews()
+			root.addView(composeView)
 		}
 
 		private fun setContent() {
@@ -230,9 +231,17 @@ class CardPresenter(
 				val config = rowItem.getDisplayConfig(imageType, uniformAspect)
 				val size = cardImageSize(rowItem.staticHeight, staticHeight, config.resolvedAspectRatio())
 				val density = root.resources.displayMetrics.density
-				root.minimumWidth = (size.width.value * density).toInt()
+				val artworkHeight = (size.height.value * density).roundToInt()
+				val hasLiveTvFooter = rowItem.baseItem != null &&
+					(rowItem.baseRowType == BaseRowType.LiveTvChannel || rowItem.baseRowType == BaseRowType.LiveTvProgram)
+				val hasPreviewText = !hasLiveTvFooter && (showBrowserTitle || (config.overrideShowInfo ?: showInfo))
+				root.minimumWidth = (size.width.value * density).roundToInt()
 				// shortcut: metadata height is approximate; measure text if placeholder shifts become visible.
-				root.minimumHeight = ((size.height.value + if (showInfo) 45 else 0) * density).toInt()
+				root.minimumHeight = artworkHeight + if (hasPreviewText) (40 * density).roundToInt() else 0
+				(root as FrameLayout).getChildAt(0).layoutParams = FrameLayout.LayoutParams(
+					root.minimumWidth,
+					artworkHeight,
+				)
 				enqueue()
 			}
 			root.tag = rowItem.itemId
@@ -252,7 +261,8 @@ class CardPresenter(
 	}
 }
 
-private const val HOME_CARD_STAGGER_MS = 80L
+// Leave time for a frame between cards on 30 Hz displays.
+private const val HOME_CARD_STAGGER_MS = 34L
 
 internal data class BaseRowItemDisplayConfig(
 	val image: JellyfinImage?,
