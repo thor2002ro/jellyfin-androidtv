@@ -186,6 +186,13 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
+		var watchedUpdate = dataRefreshService.lastWatchedUpdate.value
+		dataRefreshService.observeWatchedChanges(viewLifecycleOwner.lifecycle) { changedAt ->
+			if (changedAt != watchedUpdate) {
+				watchedUpdate = changedAt
+				refreshHomeRows()
+			}
+		}
 		rowsDensityDpi = resources.configuration.densityDpi
 		rowsFontScale = resources.configuration.fontScale
 		if (!homeRowsLoaded) {

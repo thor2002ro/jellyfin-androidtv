@@ -11,14 +11,12 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.data.repository.ItemMutationRepository
-import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.util.TimeUtils
 import org.jellyfin.androidtv.util.apiclient.getSeriesOverview
 import org.jellyfin.androidtv.util.popupMenu
 import org.jellyfin.androidtv.util.sdk.TrailerUtils.getExternalTrailerIntent
-import org.jellyfin.androidtv.util.sdk.compat.canResume
 import org.jellyfin.androidtv.util.sdk.compat.copyWithUserData
 import org.jellyfin.androidtv.util.showIfNotEmpty
 import org.jellyfin.androidtv.util.TrackSelectionServerSync
@@ -26,7 +24,6 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
-import org.jellyfin.sdk.api.client.extensions.showApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaType
@@ -110,25 +107,17 @@ fun FullDetailsFragment.toggleFavorite() {
 
 fun FullDetailsFragment.togglePlayed() {
 	val itemMutationRepository by inject<ItemMutationRepository>()
-	val dataRefreshService by inject<DataRefreshService>()
+	val item = mBaseItem
 
-	lifecycleScope.launch {
-		val userData = itemMutationRepository.setPlayed(
-			item = mBaseItem.id,
-			played = !(mBaseItem.userData?.played ?: false)
-		)
-		mBaseItem = mBaseItem.copyWithUserData(userData)
-		mWatchedToggleButton.isActivated = userData.played
-
-		// Adjust resume
-		mResumeButton?.apply {
-			isVisible = mBaseItem.canResume
+	requireActivity().lifecycleScope.launch {
+		val userData = itemMutationRepository.setPlayed(item.id, !(item.userData?.played ?: false))
+		if (view != null && mBaseItem.id == item.id) {
+			val updated = mBaseItem.copyWithUserData(userData)
+			if (updated.type == BaseItemKind.SERIES) {
+				mBaseItem = updated
+				mWatchedToggleButton.isActivated = userData.played
+			} else updatePlaybackDetails(updated, false)
 		}
-
-		// Force lists to re-fetch
-		dataRefreshService.notifyPlayback(mBaseItem)
-
-		showMoreButtonIfNeeded()
 	}
 }
 
@@ -200,31 +189,6 @@ fun FullDetailsFragment.getItem(id: UUID, callback: (item: BaseItemDto?) -> Unit
 	}
 }
 
-fun FullDetailsFragment.getNextUpEpisode(callback: (BaseItemDto?) -> Unit) {
-	lifecycleScope.launch {
-		val nextUpEpisode = getNextUpEpisode()
-		callback(nextUpEpisode)
-	}
-}
-
-suspend fun FullDetailsFragment.getNextUpEpisode(): BaseItemDto? {
-	val api by inject<ApiClient>()
-
-	try {
-		val episodes = withContext(Dispatchers.IO) {
-			api.showApi.getNextUp(
-				seriesId = mBaseItem.seriesId ?: mBaseItem.id,
-				fields = ItemRepository.itemFields,
-				limit = 1,
-			).content
-		}
-		return episodes.items.firstOrNull()
-	} catch (err: ApiClientException) {
-		Timber.w(err, "Failed to get next up items")
-		return null
-	}
-}
-
 fun FullDetailsFragment.resumePlayback(v: View) {
 	if (mBaseItem.type != BaseItemKind.SERIES) {
 		val pos = (mBaseItem.userData?.playbackPositionTicks?.ticks
@@ -233,21 +197,15 @@ fun FullDetailsFragment.resumePlayback(v: View) {
 		return
 	}
 
-	lifecycleScope.launch {
-		val nextUpEpisode = getNextUpEpisode()
-		if (nextUpEpisode == null) {
-			mResumeButton?.isVisible = false
-			playButton?.requestFocus()
-			Toast.makeText(
-				requireContext(),
-				getString(R.string.msg_video_playback_error),
-				Toast.LENGTH_LONG
-			).show()
-		} else if (nextUpEpisode.userData?.playbackPositionTicks == 0L) {
-			play(nextUpEpisode, 0, false)
-		} else {
-			showResumeMenu(v, nextUpEpisode)
-		}
+	val nextUpEpisode = seriesResumeEpisode
+	if (nextUpEpisode == null) {
+		mResumeButton?.isVisible = false
+		playButton?.requestFocus()
+		Toast.makeText(requireContext(), getString(R.string.msg_video_playback_error), Toast.LENGTH_LONG).show()
+	} else if ((nextUpEpisode.userData?.playbackPositionTicks ?: 0L) == 0L) {
+		play(nextUpEpisode, 0, false)
+	} else {
+		showResumeMenu(v, nextUpEpisode)
 	}
 }
 

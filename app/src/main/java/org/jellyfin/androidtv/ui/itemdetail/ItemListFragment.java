@@ -192,7 +192,10 @@ public class ItemListFragment extends Fragment implements View.OnKeyListener {
         // and fire it to be sure we're updated
         mAudioEventListener.onPlaybackStateChange(mediaManager.getValue().isPlayingAudio() ? PlaybackController.PlaybackState.PLAYING : PlaybackController.PlaybackState.IDLE, mediaManager.getValue().getCurrentAudioItem());
 
-        if (!firstTime && dataRefreshService.getValue().getLastPlayback() != null && dataRefreshService.getValue().getLastPlayback().isAfter(lastUpdated)) {
+        Instant lastPlayback = dataRefreshService.getValue().getLastPlayback();
+        Instant lastWatched = dataRefreshService.getValue().getLastWatchedUpdate().getValue();
+        if (!firstTime && ((lastPlayback != null && lastPlayback.isAfter(lastUpdated))
+                || (lastWatched != null && lastWatched.isAfter(lastUpdated)))) {
             if (MediaType.VIDEO.equals(mBaseItem.getMediaType())) {
                 new Handler().postDelayed(new Runnable() {
                     @Override

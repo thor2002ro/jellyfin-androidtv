@@ -152,6 +152,16 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
 
         setupEventListeners();
         startLiveTvProgramUpdates();
+        KoinJavaComponent.<DataRefreshService>get(DataRefreshService.class)
+                .observeWatchedChanges(getViewLifecycleOwner().getLifecycle(), changedAt -> {
+                    if (mRowsAdapter == null) return null;
+                    for (Row row : mRowsAdapter) {
+                        if (row instanceof ListRow && ((ListRow) row).getAdapter() instanceof ItemRowAdapter) {
+                            ((ItemRowAdapter) ((ListRow) row).getAdapter()).refreshWatchedCards(changedAt);
+                        }
+                    }
+                    return null;
+                });
     }
 
     @Override

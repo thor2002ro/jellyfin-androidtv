@@ -99,6 +99,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var retrieveFinishedRunnable: Runnable? = null
 	private var reRetrieveTriggers: Array<ChangeTriggerType>? = emptyArray()
 	private var lastFullRetrieve: Instant? = null
+	private var fullRetrieveStartedAt: Instant? = null
 
 	private var persons: Array<BaseItemPerson>? = null
 	private var chapters: List<ChapterItemInfo>? = null
@@ -133,6 +134,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private val currentlyRetrievingSemaphore = Any()
 	private var currentlyRetrieving = false
 	private var pendingFullRetrieve = false
+	private var retainWatchedPages = false
 	private var interruptedRetrieve = false
 	internal val retrievalScope by lazy { MainScope() }
 	private var liveTvProgramUpdates: Job? = null
@@ -747,6 +749,25 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		}
 	}
 
+	fun hasRefreshedSince(changedAt: Instant): Boolean =
+		lastFullRetrieve?.isBefore(changedAt) == false
+
+	fun refreshWatchedCards(changedAt: Instant): Boolean {
+		val requestedAt = fullRetrieveStartedAt ?: lastFullRetrieve
+		if (requestedAt != null && !requestedAt.isBefore(changedAt)) return false
+		when (queryType) {
+			QueryType.Items, QueryType.NextUp, QueryType.Season, QueryType.Upcoming,
+			QueryType.SimilarSeries, QueryType.SimilarMovies, QueryType.Specials,
+			QueryType.AdditionalParts, QueryType.Trailers, QueryType.LatestItems,
+			QueryType.LiveTvRecording, QueryType.Premieres, QueryType.Resume -> {
+				retainWatchedPages = true
+				Retrieve()
+				return true
+			}
+			else -> return false
+		}
+	}
+
 	@Suppress("FunctionName")
 	fun ReRetrieveIfNeeded(): Boolean {
 		if (interruptedRetrieve) {
@@ -779,9 +800,14 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	fun Retrieve() {
 		if (!notifyRetrieveStarted(queueIfBusy = true)) return
 		interruptedRetrieve = false
-		lastFullRetrieve = Instant.now()
-		itemsLoaded = 0
-		itemsRetrieved = 0
+		fullRetrieveStartedAt = Instant.now()
+		val retainPages = retainWatchedPages && queryType == QueryType.Items
+		val loadedEnd = if (retainPages) itemsRetrieved else 0
+		retainWatchedPages = false
+		if (!retainPages) {
+			itemsLoaded = 0
+			itemsRetrieved = 0
+		}
 
 		when (queryType) {
 			QueryType.Items -> {
@@ -789,9 +815,9 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 				val startIndex = request.startIndex
 				val limit = request.limit
 				if (startIndex != null && limit != null) {
-					retrieveItems(api, request, startIndex, limit)
+					retrieveItems(api, request, startIndex, maxOf(limit, loadedEnd - startIndex), replaceLoaded = retainPages)
 				} else {
-					retrieveItems(api, request, 0, chunkSize)
+					retrieveItems(api, request, 0, maxOf(chunkSize, loadedEnd), replaceLoaded = retainPages)
 				}
 			}
 
@@ -889,6 +915,8 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 		if (exception is CancellationException) return
 		if (exception != null) Timber.w(exception, "Failed to retrieve items")
 
+		if (exception == null) fullRetrieveStartedAt?.let { lastFullRetrieve = it }
+		fullRetrieveStartedAt = null
 		val retrieveAgain = finishRetrieveAndConsumePendingFullRetrieve()
 		if (retrieveFinishedListener != null) {
 			if (exception == null) retrieveFinishedListener?.onResponse()
@@ -903,12 +931,15 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 			interruptedRetrieve = interruptedRetrieve || currentlyRetrieving
 			currentlyRetrieving = false
 			pendingFullRetrieve = false
+			retainWatchedPages = false
+			fullRetrieveStartedAt = null
 		}
 		retrievalScope.coroutineContext.cancelChildren()
 	}
 
 	internal fun notifyObsoleteRetrieveFinished() {
 		Timber.d("Ignoring items retrieved for an obsolete query")
+		fullRetrieveStartedAt = null
 		if (finishRetrieveAndConsumePendingFullRetrieve()) Retrieve()
 	}
 

@@ -33,6 +33,7 @@ import org.jellyfin.androidtv.util.sdk.videoBadgeCodecText
 import org.jellyfin.androidtv.util.sdk.videoBadgeResolutionText
 import org.jellyfin.playback.jellyfin.livetv.liveTvChannelId
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.exception.ApiClientException
 import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.extensions.artistApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
@@ -229,17 +230,22 @@ fun ItemRowAdapter.retrieveNextUpItems(
 				// If we have exactly 1 episode returned, the series is currently partially watched
 				// we want to query the server for all episodes in the same season starting from
 				// this one to create a list of all unwatched episodes
-				val episodesResponse = withContext(Dispatchers.IO) {
-					api.libraryApi.getItems(
-						parentId = firstNextUp.seasonId,
-						startIndex = firstNextUp.indexNumber,
-					).content
+				val followingEpisodes = try {
+					withContext(Dispatchers.IO) {
+						api.libraryApi.getItems(
+							parentId = firstNextUp.seasonId,
+							startIndex = firstNextUp.indexNumber,
+						).content.items
+					}
+				} catch (error: ApiClientException) {
+					Timber.w(error, "Unable to load episodes after Next Up")
+					emptyList()
 				}
 
 				// Combine the next up episode with the additionally retrieved episodes
 				val items = buildList {
 					add(firstNextUp)
-					addAll(episodesResponse.items)
+					addAll(followingEpisodes.filterNot { it.id == firstNextUp.id })
 				}
 				displayedItems = items
 
@@ -1535,6 +1541,7 @@ fun ItemRowAdapter.retrieveItems(
 	startIndex: Int,
 	batchSize: Int,
 	queryVersion: Int = currentQueryVersion(),
+	replaceLoaded: Boolean = false,
 ) {
 	retrievalScope.launch {
 		var streamBadgeItems = emptyList<BaseItemDto>()
@@ -1549,6 +1556,10 @@ fun ItemRowAdapter.retrieveItems(
 			}
 
 			applyIfQueryCurrent(queryVersion) {
+				if (replaceLoaded) {
+					itemsLoaded = 0
+					itemsRetrieved = 0
+				}
 				totalItems = response.totalRecordCount
 				val initialSelectedPosition = getPendingInitialSelectedPosition()
 				if (initialSelectedPosition != null && totalItems <= initialSelectedPosition) {

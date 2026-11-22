@@ -93,6 +93,7 @@ import timber.log.Timber.Forest.e
 import timber.log.Timber.Forest.v
 import java.text.MessageFormat
 import java.util.Objects
+import java.time.Instant
 import java.util.UUID
 import kotlin.math.max
 import kotlin.math.min
@@ -166,6 +167,7 @@ class BrowseGridFragment : Fragment(), View.OnKeyListener {
 	private var mOverlayFocusTarget: Int = OVERLAY_FOCUS_NONE
 	private var mViewInitialized = false
 	private var mPendingSelectedPosition = -1
+	private var watchedSelection: Pair<Instant, UUID>? = null
 	private var mRestoringSelectedPosition = false
 	private var mSelectionRestoreGeneration = 0
 	private val imagePrefetcher = BrowseImagePrefetcher()
@@ -271,6 +273,14 @@ class BrowseGridFragment : Fragment(), View.OnKeyListener {
 
 		if (mainTitle != null) binding.title.setText(mainTitle)
 		initializeView()
+		dataRefreshService.value.observeWatchedChanges(viewLifecycleOwner.lifecycle) { changedAt ->
+			val adapter = mAdapter ?: return@observeWatchedChanges
+			val itemId = if (mSelectedPosition in 0 until adapter.size()) (adapter[mSelectedPosition] as? BaseRowItem)?.itemId else null
+			if (adapter.refreshWatchedCards(changedAt)) {
+				watchedSelection = itemId?.let { changedAt to it }
+				mPendingSelectedPosition = mSelectedPosition
+			}
+		}
 	}
 
 	private fun initializeView() {
@@ -1065,6 +1075,7 @@ class BrowseGridFragment : Fragment(), View.OnKeyListener {
 			requireContext(), mRowDef!!, mCardPresenter!!, mCardsScreenEst, mCardsScreenStride
 		)
 		mAdapter = adapter
+		watchedSelection = null
 		mDirty = false
 
 		val filters =
@@ -1082,6 +1093,14 @@ class BrowseGridFragment : Fragment(), View.OnKeyListener {
 					updateCounter(if (adapter.totalItems > 0) 1 else 0)
 				}
 				updateAlphabetPickerVisibility()
+				val selection = watchedSelection
+				if (mQueryChangePending) {
+					watchedSelection = null
+				} else if (selection != null && adapter.hasRefreshedSince(selection.first)) {
+					watchedSelection = null
+					val position = (0 until adapter.size()).firstOrNull { (adapter[it] as? BaseRowItem)?.itemId == selection.second }
+					if (position != null) mPendingSelectedPosition = position
+				}
 				if (mQueryChangePending) {
 					val position = nextSelectionAfterQueryChange(adapter.itemsLoaded)
 					mQueryChangePending = false

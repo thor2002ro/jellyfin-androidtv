@@ -129,6 +129,10 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     protected UUID mChannelId;
     protected BaseRowItem mCurrentItem;
     private Instant mLastUpdated;
+    private Instant mLastWatchedRefresh;
+    private Instant mWatchedRequest;
+    private ItemRowAdapter mSeriesNextUp;
+    private boolean mSeriesNextUpReady;
 
     private RowsSupportFragment mRowsFragment;
     private MutableObjectAdapter<Row> mRowsAdapter;
@@ -221,6 +225,36 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         return binding.getRoot();
     }
 
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        Lifecycle viewLifecycle = getViewLifecycleOwner().getLifecycle();
+        dataRefreshService.getValue().observeWatchedChanges(viewLifecycle, changedAt -> {
+            refreshWatchedDetails(changedAt, viewLifecycle);
+            return null;
+        });
+    }
+
+    private void refreshWatchedDetails(Instant changedAt, Lifecycle viewLifecycle) {
+        if (mRowsAdapter == null) return;
+        for (ItemRowAdapter row : itemRowAdapters) row.refreshWatchedCards(changedAt);
+
+        if (mWatchedToggleButton == null || !changedAt.isAfter(mLastWatchedRefresh) || changedAt.equals(mWatchedRequest)) return;
+        mWatchedRequest = changedAt;
+        UUID itemId = mBaseItem.getId();
+        FullDetailsFragmentHelperKt.getItem(this, itemId, item -> {
+            if (!changedAt.equals(mWatchedRequest)) return null;
+            mWatchedRequest = null;
+            if (item != null && item.getUserData() != null
+                    && viewLifecycle.getCurrentState().isAtLeast(Lifecycle.State.STARTED)
+                    && itemId.equals(mBaseItem.getId())) {
+                mLastWatchedRefresh = changedAt;
+                updatePlaybackDetails(item, false);
+            }
+            return null;
+        });
+    }
+
     int getResumePreroll() {
         try {
             return Integer.parseInt(KoinJavaComponent.<UserPreferences>get(UserPreferences.class).get(UserPreferences.Companion.getResumeSubtractDuration())) * 1000;
@@ -249,6 +283,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
             public void run() {
                 if (!getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
 
+                if (mRowsAdapter == null) return;
                 Instant lastPlaybackTime = dataRefreshService.getValue().getLastPlayback();
                 Timber.d("current time %s last playback event time %s last refresh time %s", Instant.now().toEpochMilli(), lastPlaybackTime, mLastUpdated.toEpochMilli());
 
@@ -265,21 +300,8 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                         FullDetailsFragmentHelperKt.getItem(FullDetailsFragment.this, mBaseItem.getId(), item -> {
                             if (item == null) return null;
 
-                            mBaseItem = item;
-                            if (mResumeButton != null) {
-                                boolean resumeVisible = (mBaseItem.getType() == BaseItemKind.SERIES && !mBaseItem.getUserData().getPlayed()) || JavaCompat.getCanResume(mBaseItem);
-                                mResumeButton.setVisibility(resumeVisible ? View.VISIBLE : View.GONE);
-                                if (JavaCompat.getCanResume(mBaseItem)) {
-                                    mResumeButton.setLabel(getString(R.string.lbl_resume_from, TimeUtils.formatMillis((mBaseItem.getUserData().getPlaybackPositionTicks() / 10000) - getResumePreroll())));
-                                }
-                                if (resumeVisible) {
-                                    mResumeButton.requestFocus();
-                                } else if (playButton != null && ViewKt.isVisible(playButton)) {
-                                    playButton.requestFocus();
-                                }
-                                showMoreButtonIfNeeded();
-                            }
-                            updateWatched();
+                            if (mSeriesNextUp != null) mSeriesNextUp.refreshWatchedCards(lastPlaybackTime);
+                            updatePlaybackDetails(item, true);
                             mLastUpdated = Instant.now();
                             return null;
                         });
@@ -287,6 +309,43 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 }
             }
         }, 750);
+    }
+
+    void updatePlaybackDetails(BaseItemDto item, boolean moveFocus) {
+        mBaseItem = item;
+        if (mResumeButton != null && item.getUserData() != null && item.getType() == BaseItemKind.SERIES) {
+            updateSeriesResume(moveFocus);
+        } else if (mResumeButton != null && item.getUserData() != null) {
+            boolean canResume = JavaCompat.getCanResume(item);
+            if (canResume) {
+                mResumeButton.setLabel(getString(R.string.lbl_resume_from, TimeUtils.formatMillis((item.getUserData().getPlaybackPositionTicks() / 10000) - getResumePreroll())));
+            }
+            setResumeVisibility(canResume, moveFocus);
+        }
+        updateWatched();
+    }
+
+    private void updateSeriesResume(boolean moveFocus) {
+        if (mResumeButton == null || mBaseItem.getUserData() == null) return;
+        setResumeVisibility(canResumeSeries(getSeriesResumeEpisode()), moveFocus);
+    }
+
+    @Nullable
+    BaseItemDto getSeriesResumeEpisode() {
+        if (mSeriesNextUp == null || mSeriesNextUp.size() == 0) return null;
+        Object first = mSeriesNextUp.get(0);
+        return first instanceof BaseRowItem ? ((BaseRowItem) first).getBaseItem() : null;
+    }
+
+    private void setResumeVisibility(boolean visible, boolean moveFocus) {
+        boolean resumeHadFocus = mResumeButton.hasFocus();
+        mResumeButton.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && moveFocus) {
+            mResumeButton.requestFocus();
+        } else if (!visible && (moveFocus || resumeHadFocus) && playButton != null && ViewKt.isVisible(playButton)) {
+            playButton.requestFocus();
+        }
+        showMoreButtonIfNeeded();
     }
 
     @Override
@@ -298,12 +357,15 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     @Override
     public void onDestroyView() {
         cancelRowRetrievals();
+        mRowsAdapter = null;
         super.onDestroyView();
     }
 
     private void cancelRowRetrievals() {
         for (ItemRowAdapter row : itemRowAdapters) row.cancelRetrieval();
         itemRowAdapters.clear();
+        mSeriesNextUp = null;
+        mSeriesNextUpReady = false;
     }
 
     @Override
@@ -378,6 +440,8 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
     }
 
     private void loadItem(UUID id) {
+        mLastWatchedRefresh = Instant.now();
+        mWatchedRequest = null;
         if (mChannelId != null && mProgramInfo == null) {
             // if we are displaying a live tv channel - we want to get whatever is showing now on that channel
             FullDetailsFragmentHelperKt.getLiveTvChannel(this, mChannelId, channel -> {
@@ -506,6 +570,8 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 );
             }
             buildDetailsOverviewRow(item);
+            Instant changedAt = dataRefreshService.getValue().getLastWatchedUpdate().getValue();
+            if (changedAt != null) refreshWatchedDetails(changedAt, getViewLifecycleOwner().getLifecycle());
         }
     }
 
@@ -603,6 +669,12 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
                 break;
             case SERIES:
                 ItemRowAdapter nextUpAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createSeriesGetNextUpRequest(mBaseItem.getId()), false, new CardPresenter(true, 130), adapter);
+                mSeriesNextUp = nextUpAdapter;
+                nextUpAdapter.setRetrieveFinishedListener((Runnable) () -> {
+                    boolean moveFocus = !mSeriesNextUpReady && playButton != null && playButton.hasFocus();
+                    mSeriesNextUpReady = true;
+                    updateSeriesResume(moveFocus);
+                });
                 addItemRow(adapter, nextUpAdapter, 0, getString(R.string.lbl_next_up));
 
                 ItemRowAdapter seasonsAdapter = new ItemRowAdapter(requireContext(), BrowsingUtils.createSeasonsRequest(mBaseItem.getId()), new CardPresenter(), adapter);
@@ -820,7 +892,6 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
 
         if (BaseItemExtensionsKt.canPlay(baseItem)) {
             mDetailsOverviewRow.addAction(mResumeButton);
-            boolean isSeries = baseItem.getType() == BaseItemKind.SERIES;
             boolean isStarted = baseItem.getUserData().getPlayedPercentage() != null && baseItem.getUserData().getPlayedPercentage() > 0;
 
             playButton = TextUnderButton.create(requireContext(), R.drawable.ic_play, buttonSize, 2, getString(BaseItemExtensionsKt.isLiveTv(mBaseItem) ? R.string.lbl_tune_to_channel : Utils.getSafeValue(mBaseItem.isFolder(), false) ? R.string.lbl_play_all : R.string.lbl_play), new View.OnClickListener() {
@@ -831,14 +902,7 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
             });
             mDetailsOverviewRow.addAction(playButton);
 
-            if (isSeries) {
-                FullDetailsFragmentHelperKt.getNextUpEpisode(this, nextUpEpisode -> {
-                    handleResumeButtonAndFocus(nextUpEpisode);
-                    return null;
-                });
-            } else {
-                handleResumeButtonAndFocus(null);
-            }
+            handleResumeButtonAndFocus(null);
 
             boolean isMusic = baseItem.getType() == BaseItemKind.MUSIC_ALBUM
                     || baseItem.getType() == BaseItemKind.MUSIC_ARTIST
@@ -1109,17 +1173,19 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         }
     }
 
-    private void handleResumeButtonAndFocus(BaseItemDto nextUpEpisode) {
-        boolean isSeries = mBaseItem.getType() == BaseItemKind.SERIES;
+    private boolean canResumeSeries(BaseItemDto nextUpEpisode) {
         boolean isFinished = mBaseItem.getUserData().getPlayed();
         boolean isStarted = mBaseItem.getUserData().getPlayedPercentage() != null && mBaseItem.getUserData().getPlayedPercentage() > 0;
-        if (!isStarted && nextUpEpisode != null) {
+        if (!isStarted && nextUpEpisode != null && nextUpEpisode.getUserData() != null) {
             isStarted = nextUpEpisode.getUserData().getPlaybackPositionTicks() > 0;
         }
 
-        boolean resumeButtonVisible = isSeries
-                ? nextUpEpisode != null && isStarted && !isFinished
-                : JavaCompat.getCanResume(mBaseItem);
+        return nextUpEpisode != null && isStarted && !isFinished;
+    }
+
+    private void handleResumeButtonAndFocus(BaseItemDto nextUpEpisode) {
+        boolean resumeButtonVisible = mBaseItem.getType() == BaseItemKind.SERIES
+                ? canResumeSeries(nextUpEpisode) : JavaCompat.getCanResume(mBaseItem);
         mResumeButton.setVisibility(resumeButtonVisible ? View.VISIBLE : View.GONE);
 
         if (resumeButtonVisible) {

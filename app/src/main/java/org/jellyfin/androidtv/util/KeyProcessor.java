@@ -348,12 +348,9 @@ public class KeyProcessor {
     };
 
     private void togglePlayed(LifecycleOwner lifecycleOwner, UUID itemId, boolean played) {
-
         CoroutineUtils.runOnLifecycle(lifecycleOwner.getLifecycle(), (scope, continuation) ->
                 itemMutationRepository.getValue().setPlayed(itemId, played, continuation)
         );
-
-        customMessageRepository.getValue().pushMessage(CustomMessage.RefreshCurrentItem.INSTANCE);
     }
 
     private void toggleFavorite(LifecycleOwner lifecycleOwner, UUID itemId, boolean favorite) {

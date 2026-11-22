@@ -29,11 +29,12 @@ class ItemMutationRepositoryImpl(
 	}
 
 	override suspend fun setPlayed(item: UUID, played: Boolean): UserItemDataDto {
-		val response by when {
-			played -> withContext(Dispatchers.IO) { api.userDataApi.markPlayedItem(itemId = item) }
-			else -> withContext(Dispatchers.IO) { api.userDataApi.markUnplayedItem(itemId = item) }
+		val userData = withContext(Dispatchers.IO) {
+			if (played) api.userDataApi.markPlayedItem(itemId = item).content
+			else api.userDataApi.markUnplayedItem(itemId = item).content
 		}
 
-		return response
+		dataRefreshService.notifyWatchedChanged()
+		return userData
 	}
 }
