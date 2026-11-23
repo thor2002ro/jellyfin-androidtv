@@ -16,6 +16,7 @@ import org.jellyfin.androidtv.preference.TelemetryPreferences
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.DISABLED
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.LAST_USER
 import org.jellyfin.androidtv.preference.constant.UserSelectBehavior.SPECIFIC_USER
+import org.jellyfin.androidtv.ui.home.HomeRowsCache
 import org.jellyfin.androidtv.ui.itemhandling.DirectStreamBadgeCache
 import org.jellyfin.androidtv.ui.itemhandling.SeriesStreamBadgeCache
 import org.jellyfin.androidtv.util.sdk.clientLogUrl
@@ -116,6 +117,7 @@ class SessionRepositoryImpl(
 
 		userApiClient.applySession(null)
 		clearStreamBadgeCaches()
+		HomeRowsCache.clear()
 		userRepository.setCurrentUser(null)
 		serverRepository.setCurrentServer(null)
 		_currentSession.value = null
@@ -148,6 +150,7 @@ class SessionRepositoryImpl(
 		}
 
 		// Update session after binding the apiclient settings
+		HomeRowsCache.clear()
 		val deviceInfo = session?.let { defaultDeviceInfo.forUser(it.userId) } ?: defaultDeviceInfo
 		Timber.i("Updating current session. userId=${session?.userId} server=${server?.serverVersion}")
 

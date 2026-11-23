@@ -31,6 +31,7 @@ import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.GridButton
 import org.jellyfin.androidtv.ui.browsing.EnhancedBrowseFragment
+import org.jellyfin.androidtv.ui.home.HomeRowRequests
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.OrderedListRow
 import org.jellyfin.androidtv.ui.presentation.TextItemPresenter
@@ -66,6 +67,7 @@ class ItemRowAdapter : MutableObjectAdapter<Any>, KoinComponent {
 	private var query: GetItemsRequest? = null
 	private var nextUpQuery: GetNextUpRequest? = null
 	internal var nextUpQueryProvider: (() -> GetNextUpRequest)? = null
+	internal var homeRowRequests: HomeRowRequests? = null
 	internal var combinedResumeQuery: GetResumeItemsRequest? = null
 	private var seasonQuery: GetSeasonsRequest? = null
 	private var upcomingQuery: GetUpcomingEpisodesRequest? = null

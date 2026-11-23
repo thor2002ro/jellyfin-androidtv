@@ -10,6 +10,7 @@ import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.data.querying.GetUserViewsRequest
 import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.browsing.BrowseRowDef
+import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
@@ -74,9 +75,33 @@ class HomeFragmentBrowseRowDefRow(
 		}
 
 		rowAdapter.showTitleYears = showTitleYears
+		rowAdapter.homeRowRequests = (rowsAdapter as? HomeRowsAdapter)?.requests
 		rowAdapter.setReRetrieveTriggers(browseRowDef.changeTriggers)
 		val row = OrderedListRow(header, rowAdapter, rowOrder)
 		rowAdapter.setRow(row, rowOrder)
+		(rowsAdapter as? HomeRowsAdapter)?.cache?.let { cache ->
+			val request = when (browseRowDef.queryType) {
+				QueryType.NextUp -> listOf(
+					browseRowDef.nextUpQuery,
+					browseRowDef.supplementalResumeQuery,
+					userSettingPreferences[UserSettingPreferences.homeNextUpMaxDays],
+				)
+				QueryType.Resume -> browseRowDef.resumeQuery
+				QueryType.LatestItems -> browseRowDef.latestItemsQuery
+				QueryType.Items -> browseRowDef.query.copy(maxPremiereDate = null)
+				QueryType.LiveTvProgram -> browseRowDef.programQuery
+				QueryType.LiveTvRecording -> browseRowDef.recordingQuery
+				else -> null
+			}
+			if (request != null) {
+				val key = listOf(request, rowAdapter.preferParentThumb, rowAdapter.isStaticHeight, showTitleYears)
+				cache.rows.get(key)?.forEach(rowAdapter::add)
+				rowAdapter.setRetrieveFinishedListener(Runnable {
+					val items = rowAdapter.filterIsInstance<BaseRowItem>()
+					if (items.isEmpty()) cache.rows.remove(key) else cache.rows.put(key, items)
+				})
+			}
+		}
 		rowsAdapter.addOrderedRow(row)
 		rowAdapter.Retrieve()
 	}

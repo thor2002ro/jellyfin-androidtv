@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.jellyfin.androidtv.R
+import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
@@ -85,6 +86,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val mediaManager by inject<MediaManager>()
 	private val notificationsRepository by inject<NotificationsRepository>()
 	private val userRepository by inject<UserRepository>()
+	private val sessionRepository by inject<SessionRepository>()
 	private val userSettingPreferences by inject<UserSettingPreferences>()
 	private val userViewsRepository by inject<UserViewsRepository>()
 	private val dataRefreshService by inject<DataRefreshService>()
@@ -140,7 +142,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 
-		adapter = MutableObjectAdapter<Row>(PositionableListRowPresenter())
+		adapter = HomeRowsAdapter(PositionableListRowPresenter())
 
 		onItemViewClickedListener = CompositeClickedListener().apply {
 			registerListener(ItemViewClickedListener())
@@ -197,8 +199,10 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		rowsFontScale = resources.configuration.fontScale
 		if (!homeRowsLoaded) {
 			viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-				val currentUser = withTimeout(30.seconds) {
-					userRepository.currentUser.filterNotNull().first()
+				val (session, currentUser) = withTimeout(30.seconds) {
+					val session = sessionRepository.currentSession.filterNotNull().first()
+					val user = userRepository.currentUser.filterNotNull().first { it.id == session.userId }
+					session to user
 				}
 
 				if (!isActive) return@launch
@@ -208,8 +212,11 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				)
 				val liveTvEnabled = currentUser.policy?.enableLiveTvAccess == true
 				val includeRecentlyReleased = userSettingPreferences[UserSettingPreferences.homeRecentlyReleased]
-				val cardPresenter = withContext(Dispatchers.Main) {
-					val rowsAdapter = adapter as MutableObjectAdapter<Row>
+				val (cardPresenter, cache) = withContext(Dispatchers.Main) {
+					if (sessionRepository.currentSession.value !== session) return@withContext null
+					val rowsAdapter = adapter as HomeRowsAdapter
+					val cache = HomeRowsCache.forSession(session)
+					rowsAdapter.cache = cache
 					// A destroyed view may have left an incomplete initial load.
 					rowsAdapter.clear()
 					homeRowAdapters.clear()
@@ -219,13 +226,20 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 					(activity as? MainActivity)?.profileLoginAnimation?.let { animation ->
 						verticalGridView?.prepareProfileTransition(animation)
 					}
-					cardPresenter
-				}
+					cardPresenter to cache
+				} ?: return@launch
 
+				var cachedViews: Collection<BaseItemDto>? = null
 				val userViews = loadHomeSections(
 					sections = layout.sections,
 					includeRecentlyReleased = includeRecentlyReleased,
-					loader = { userViewsRepository.views.first() },
+					loader = {
+						val previous = withContext(Dispatchers.Main) { cache.userViews }
+						cachedViews = previous
+						previous ?: userViewsRepository.views.first().also { views ->
+							withContext(Dispatchers.Main) { cache.userViews = views }
+						}
+					},
 				) { section, views ->
 					withContext(Dispatchers.Main) {
 						val rows = createHomeRows(section, views, liveTvEnabled, layout.combineContinueWatchingAndNextUp)
@@ -246,6 +260,14 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 					}
 					homeRowsLoaded = true
 					startHomeRowUpdates()
+				}
+				cachedViews?.let { previous ->
+					val fresh = loadHomeUserViews(required = true) { userViewsRepository.views.first() }
+					if (fresh != null) withContext(Dispatchers.Main) {
+						if (sessionRepository.currentSession.value !== session) return@withContext
+						cache.userViews = fresh
+						if (fresh != previous) customMessageRepository.pushMessage(CustomMessage.RefreshHomeConfiguration)
+					}
 				}
 			}
 		} else {

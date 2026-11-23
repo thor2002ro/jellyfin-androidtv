@@ -178,29 +178,71 @@ internal fun GetItemsRequest.showsRemainingTimeBadges() = filters?.contains(Item
 
 private fun ItemRowAdapter.replaceIfChanged(items: List<BaseRowItem>, signature: (BaseRowItem) -> List<Any?>) {
 	val oldItems = List(size()) { index -> get(index) as? BaseRowItem }
-	if (oldItems.map { it?.let(signature) } != items.map(signature)) replaceAll(items)
+	if (oldItems.map { it?.let(signature) } != items.map(signature)) {
+		replaceAll(
+			items,
+			areItemsTheSame = ::areAdapterItemsTheSame,
+			areContentsTheSame = { old, new -> (old as? BaseRowItem)?.let(signature) == (new as? BaseRowItem)?.let(signature) },
+		)
+	}
 	itemsLoaded = items.size
 	totalItems = items.size
 	addRowToParentIfResultsReceived()
 }
 
+private suspend fun ItemRowAdapter.loadHomePages(
+	startIndex: Int,
+	limit: Int?,
+	hasPublishedFirstPage: Boolean = false,
+	deferPublication: Boolean = size() > 0,
+	fetch: suspend (startIndex: Int, limit: Int?) -> List<BaseItemDto>,
+	publish: (List<BaseItemDto>, Boolean) -> Boolean,
+) {
+	val requests = homeRowRequests
+	if (requests == null || limit == null) {
+		publish(withContext(Dispatchers.IO) { fetch(startIndex, limit) }, false)
+		return
+	}
+
+	val seen = hashSetOf<UUID>()
+	requests.loadPages(startIndex, limit, hasPublishedFirstPage, deferPublication, fetch = { offset, pageLimit ->
+		withContext(Dispatchers.IO) { fetch(offset, pageLimit) }
+	}) { page, append ->
+		publish(page.filter { seen.add(it.id) }, append)
+	}
+}
+
+private fun ItemRowAdapter.publishHomePage(
+	items: List<BaseRowItem>,
+	append: Boolean,
+	signature: (BaseRowItem) -> List<Any?> = BaseRowItem::itemSignature,
+) {
+	if (append) {
+		items.forEach(::add)
+		itemsLoaded = size()
+		totalItems = itemsLoaded
+	} else {
+		replaceIfChanged(items, signature)
+		if (items.isEmpty()) removeRow()
+	}
+}
+
 fun ItemRowAdapter.retrieveResumeItems(api: ApiClient, query: GetResumeItemsRequest) {
 	retrievalScope.launch {
 		runCatching {
-			val response = withContext(Dispatchers.IO) {
-				api.libraryApi.getResumeItems(query).content
+			loadHomePages(query.startIndex ?: 0, query.limit, fetch = { offset, limit ->
+				api.libraryApi.getResumeItems(query.copy(startIndex = offset, limit = limit)).content.items
+			}) { page, append ->
+				val items = page.map {
+					it.toBaseItemRowItem(
+						preferParentThumb = preferParentThumb,
+						staticHeight = isStaticHeight,
+						showRemainingTimeBadge = true,
+					)
+				}
+				publishHomePage(items, append, BaseRowItem::resumeSignature)
+				true
 			}
-
-			val items = response.items.map {
-				it.toBaseItemRowItem(
-					preferParentThumb = preferParentThumb,
-					staticHeight = isStaticHeight,
-					showRemainingTimeBadge = true,
-				)
-			}
-
-			replaceIfChanged(items, BaseRowItem::resumeSignature)
-			if (items.isEmpty()) removeRow()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -216,6 +258,67 @@ fun ItemRowAdapter.retrieveNextUpItems(
 	retrievalScope.launch {
 		var displayedItems = emptyList<BaseItemDto>()
 		runCatching {
+			val refreshingHomeRow = homeRowRequests != null && size() > 0
+			var refreshedRows = emptyList<BaseRowItem>()
+			fun displayNextUp(resumeItems: List<BaseItemDto>, nextUpItems: List<BaseItemDto>, append: Boolean = false) {
+				val rowItems = combinedContinueWatchingAndNextUpRowItems(
+					resumeItems = resumeItems,
+					nextUpItems = nextUpItems,
+					limit = query.limit,
+					preferParentThumb = preferParentThumb,
+					staticHeight = isStaticHeight,
+				)
+				if (refreshingHomeRow) {
+					refreshedRows = rowItems
+				} else {
+					publishHomePage(if (append) rowItems.drop(displayedItems.size) else rowItems, append)
+				}
+				displayedItems = rowItems.mapNotNull(BaseRowItem::baseItem)
+			}
+
+			val limit = query.limit
+			if (homeRowRequests != null && limit != null) {
+				coroutineScope {
+					val startIndex = query.startIndex ?: 0
+					suspend fun fetchNextUp(offset: Int, pageLimit: Int?) =
+						api.showApi.getNextUp(query.copy(startIndex = offset, limit = pageLimit)).content.items
+
+					val firstNextUp = combinedResumeQuery?.let {
+						async(Dispatchers.IO) { fetchNextUp(startIndex, minOf(5, limit)) }
+					}
+					val resumeItems = mutableListOf<BaseItemDto>()
+					if (combinedResumeQuery != null) {
+						loadHomePages(combinedResumeQuery.startIndex ?: 0, limit, deferPublication = false, fetch = { offset, pageLimit ->
+							api.libraryApi.getResumeItems(combinedResumeQuery.copy(startIndex = offset, limit = pageLimit)).content.items
+						}) { page, append ->
+							resumeItems.addAll(page)
+							if (page.isNotEmpty()) displayNextUp(resumeItems, emptyList(), append)
+							displayedItems.size < limit
+						}
+					}
+					if (resumeItems.size >= limit) {
+						firstNextUp?.cancel()
+						return@coroutineScope
+					}
+					val nextUpItems = mutableListOf<BaseItemDto>()
+					loadHomePages(
+						startIndex, limit,
+						hasPublishedFirstPage = resumeItems.isNotEmpty(),
+						deferPublication = false,
+						fetch = { offset, pageLimit ->
+							if (offset == startIndex && firstNextUp != null) firstNextUp.await()
+							else fetchNextUp(offset, pageLimit)
+						},
+					) { page, append ->
+						nextUpItems.addAll(page)
+						displayNextUp(resumeItems, nextUpItems, append)
+						displayedItems.size < limit
+					}
+				}
+				if (refreshingHomeRow) publishHomePage(refreshedRows, append = false)
+				return@runCatching
+			}
+
 			val (response, resumeItems) = coroutineScope {
 				val nextUp = async(Dispatchers.IO) { api.showApi.getNextUp(query).content }
 				val resume = combinedResumeQuery?.let { request ->
@@ -260,17 +363,7 @@ fun ItemRowAdapter.retrieveNextUpItems(
 
 				if (items.isEmpty()) removeRow()
 			} else {
-				val rowItems = combinedContinueWatchingAndNextUpRowItems(
-					resumeItems = resumeItems,
-					nextUpItems = response.items,
-					limit = query.limit,
-					preferParentThumb = preferParentThumb,
-					staticHeight = isStaticHeight,
-				)
-				displayedItems = rowItems.mapNotNull(BaseRowItem::baseItem)
-				replaceIfChanged(rowItems, BaseRowItem::itemSignature)
-
-				if (rowItems.isEmpty()) removeRow()
+				displayNextUp(resumeItems, response.items)
 			}
 		}.fold(
 			onSuccess = {
@@ -387,6 +480,15 @@ private fun ItemRowAdapter.refreshLatestStreamBadges(api: ApiClient, items: List
 }
 
 private fun ItemRowAdapter.replaceLatestMediaItems(items: Collection<BaseItemDto>, seriesYears: Map<UUID, BaseItemDto>) {
+	if (homeRowRequests != null) {
+		val existing = filterIsInstance<BaseItemDtoBaseRowItem>().associateBy { it.itemId }
+		val rowItems = items.map { item ->
+			existing[item.id]?.takeIf { it.baseItem == item }
+				?: latestMediaRowItem(item, preferParentThumb, isStaticHeight, item.seriesId?.let(seriesYears::get))
+		}
+		replaceIfChanged(rowItems) { listOf(it.baseItem) }
+		return
+	}
 	replaceAll(
 		items = items.map { item -> latestMediaRowItem(item, preferParentThumb, isStaticHeight, item.seriesId?.let(seriesYears::get)) },
 		areItemsTheSame = { old, new -> (old as? BaseRowItem)?.itemId == (new as? BaseRowItem)?.itemId },
@@ -1189,29 +1291,25 @@ fun ItemRowAdapter.retrieveLiveTvRecommendedPrograms(
 	val queryVersion = currentQueryVersion()
 	return retrievalScope.launch {
 		runCatching {
-			val items = withContext(Dispatchers.IO) {
-				api.liveTvApi.getRecommendedPrograms(query).content.items
+			val items = mutableListOf<BaseItemDto>()
+			loadHomePages(query.startIndex ?: 0, query.limit, fetch = { offset, limit ->
+				api.liveTvApi.getRecommendedPrograms(query.copy(startIndex = offset, limit = limit)).content.items
+			}) { page, append ->
+				applyIfQueryCurrent(queryVersion) {
+					items.addAll(page)
+					val rowItems = page.map { item ->
+						BaseItemDtoBaseRowItem(item, false, isStaticHeight, selectAction)
+					}
+					publishHomePage(rowItems, append, BaseRowItem::liveTvProgramSignature)
+				}
 			}
-
-			val rowItems = items.map { item ->
-				BaseItemDtoBaseRowItem(
-					item,
-					false,
-					isStaticHeight,
-					selectAction,
-				)
-			}
-			if (!applyIfQueryCurrent(queryVersion) {
-				replaceIfChanged(rowItems, BaseRowItem::liveTvProgramSignature)
-			}) {
+			if (queryVersion != currentQueryVersion()) {
 				notifyObsoleteRetrieveFinished()
 				return@launch
 			}
 			prefetchLiveTvTracks(api, items)
 			// Missing channel images are optional and must not delay the program row.
 			refreshLiveTvChannelImages(api, items, queryVersion)
-
-			if (items.isEmpty()) removeRow()
 		}.fold(
 			onSuccess = { notifyRetrieveFinished() },
 			onFailure = { error -> notifyRetrieveFinished(error as? Exception) }
@@ -1275,6 +1373,15 @@ private fun ItemRowAdapter.refreshLiveTvTrackBadge(channelId: UUID) {
 fun ItemRowAdapter.retrieveLiveTvRecordings(api: ApiClient, query: GetRecordingsRequest) {
 	retrievalScope.launch {
 		runCatching {
+			if (homeRowRequests != null) {
+				loadHomePages(query.startIndex ?: 0, query.limit, fetch = { offset, limit ->
+					api.liveTvApi.getRecordings(query.copy(startIndex = offset, limit = limit, enableTotalRecordCount = false)).content.items
+				}) { page, append ->
+					publishHomePage(page.map { BaseItemDtoBaseRowItem(it, false, isStaticHeight) }, append)
+					true
+				}
+				return@runCatching
+			}
 			val response = withContext(Dispatchers.IO) {
 				api.liveTvApi.getRecordings(query).content
 			}
@@ -1546,6 +1653,27 @@ fun ItemRowAdapter.retrieveItems(
 	retrievalScope.launch {
 		var streamBadgeItems = emptyList<BaseItemDto>()
 		runCatching {
+			if (homeRowRequests != null && query.limit != null) {
+				val items = mutableListOf<BaseItemDto>()
+				loadHomePages(startIndex, query.limit, fetch = { offset, limit ->
+					api.libraryApi.getItems(query.copy(startIndex = offset, limit = limit)).content.items
+				}) { page, append ->
+					applyIfQueryCurrent(queryVersion) {
+						items.addAll(page)
+						val rowItems = page.map { item ->
+							val rowItem = item.toBaseItemRowItem(
+								preferParentThumb = preferParentThumb,
+								staticHeight = isStaticHeight,
+								showRemainingTimeBadge = query.showsRemainingTimeBadges(),
+							)
+							if (showTitleYears) rowItem.copyWithItem(item, latestTitleYear = item.titleYear()) else rowItem
+						}
+						publishHomePage(rowItems, append)
+					}
+				}
+				streamBadgeItems = items
+				return@runCatching queryVersion == currentQueryVersion()
+			}
 			val response = withContext(Dispatchers.IO) {
 				api.libraryApi.getItems(
 					query.copy(
