@@ -13,6 +13,7 @@ import androidx.annotation.OptIn
 import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.MediaItem
@@ -772,7 +773,21 @@ class ExoPlayerBackend(
 		return targetLiveTvBufferDuration(liveStreamTargetOffset, liveTvBufferDuration)
 	}
 
+	override fun onActivated() {
+		reportVideoDynamicRange(null)
+	}
+
+	private fun reportVideoDynamicRange(format: Format?) {
+		listener?.onVideoDynamicRangeChanged(ColorInfo.isTransferHdr(format?.colorInfo))
+	}
+
+	private fun selectedVideoFormat(tracks: Tracks): Format? {
+		val group = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected } ?: return null
+		return (0 until group.length).firstOrNull(group::isTrackSelected)?.let(group::getTrackFormat)
+	}
+
 	private fun resetPlaybackStats() {
+		reportVideoDynamicRange(null)
 		audioOutputFormat = null
 		audioPipeline.surroundGain = 0
 		resetVideoDecoderFallback()
@@ -1565,6 +1580,7 @@ class ExoPlayerBackend(
 			decoderReuseEvaluation: DecoderReuseEvaluation?,
 		) {
 			videoInputFormat = format
+			reportVideoDynamicRange(format)
 			videoDecoderName?.let(::scheduleVideoFirstFrameFallback)
 		}
 
@@ -1753,6 +1769,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onTracksChanged(tracks: Tracks) {
+			if (videoInputFormat == null) reportVideoDynamicRange(selectedVideoFormat(tracks))
 			notifyTracksChanged()
 			logExternalSubtitleTracks()
 			applyPendingInitialTrackSelection()
@@ -1921,12 +1938,18 @@ class ExoPlayerBackend(
 				preparedItemIndex = exoPlayer.mediaItemCount - 1
 			}
 
+			val currentItemIndex = exoPlayer.currentMediaItemIndex
+			if (preparedItemIndex == currentItemIndex) {
+				// The renderer may have reported this item's format before playItem reset the state.
+				reportVideoDynamicRange(exoPlayer.videoFormat ?: selectedVideoFormat(exoPlayer.currentTracks))
+			}
+
 			// Seek to prepared media item
 			when {
 				startPositionMs != null -> exoPlayer.seekTo(preparedItemIndex, startPositionMs)
-				preparedItemIndex == exoPlayer.currentMediaItemIndex - 1 -> exoPlayer.seekToPreviousMediaItem()
-				preparedItemIndex == exoPlayer.currentMediaItemIndex + 1 -> exoPlayer.seekToNextMediaItem()
-				preparedItemIndex == exoPlayer.currentMediaItemIndex -> Unit
+				preparedItemIndex == currentItemIndex - 1 -> exoPlayer.seekToPreviousMediaItem()
+				preparedItemIndex == currentItemIndex + 1 -> exoPlayer.seekToNextMediaItem()
+				preparedItemIndex == currentItemIndex -> Unit
 				else -> exoPlayer.seekToDefaultPosition(preparedItemIndex)
 			}
 		}

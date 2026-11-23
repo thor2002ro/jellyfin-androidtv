@@ -17,6 +17,7 @@ abstract class PlayerBackendEventListener {
 	/** Recovery can keep an interrupted stream selected instead of completing its queue entry. */
 	open fun shouldHandleMediaStreamEnd(mediaStream: PlayableMediaStream) = true
 	open fun onTracksChanged() = Unit
+	open fun onVideoDynamicRangeChanged(isHdr: Boolean) = Unit
 	open fun onSubtitleTimingOffsetSupportChange(
 		supported: Boolean,
 		resetTimingOnUnsupported: Boolean = true,

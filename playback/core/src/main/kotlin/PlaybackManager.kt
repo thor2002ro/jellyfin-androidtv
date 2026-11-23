@@ -32,6 +32,8 @@ class PlaybackManager internal constructor(
 	private val job = SupervisorJob(parentJob)
 	val backend: PlayerBackend get() = requireNotNull(backendService.backend)
 	val activeBackends: List<PlayerBackend> get() = backendService.activeBackends
+	/** HDR status reported by the active backend, or null when it does not report video color. */
+	val videoIsHdr: StateFlow<Boolean?> get() = backendService.videoIsHdr
 	/** The entry resolving its stream or preparing the display before backend playback starts. */
 	val preparingEntry: StateFlow<QueueEntry?>? get() = mediaStreamService()?.preparingEntry
 	internal val mutableState = MutablePlayerState(

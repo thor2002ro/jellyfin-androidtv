@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.ColorInfo;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
@@ -33,6 +34,7 @@ import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.DecoderReuseEvaluation;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
@@ -51,7 +53,6 @@ import org.jellyfin.androidtv.data.compat.StreamInfo;
 import org.jellyfin.androidtv.preference.UserPreferences;
 import org.jellyfin.androidtv.preference.constant.BufferLength;
 import org.jellyfin.androidtv.preference.constant.ZoomMode;
-import org.jellyfin.androidtv.util.sdk.compat.JavaCompat;
 import org.jellyfin.playback.core.font.SubtitleFontProvider;
 import org.jellyfin.playback.media3.exoplayer.ExternalSubtitleMediaSourceFactory;
 import org.jellyfin.playback.media3.exoplayer.subtitle.SubtitleTimingOffsetRenderersFactory;
@@ -60,7 +61,6 @@ import org.jellyfin.sdk.api.client.ApiClient;
 import org.jellyfin.sdk.model.api.MediaStream;
 import org.jellyfin.sdk.model.api.MediaStreamType;
 import org.jellyfin.sdk.model.api.SubtitleDeliveryMethod;
-import org.jellyfin.sdk.model.api.VideoRangeType;
 import org.koin.java.KoinJavaComponent;
 
 import java.util.ArrayList;
@@ -152,7 +152,14 @@ public class VideoManager {
 
         mExoPlayerView = view.findViewById(R.id.exoPlayerView);
         mExoPlayerView.setPlayer(mExoPlayer);
-        applySubtitleStyle(VideoRangeType.SDR);
+        applySubtitleStyle(false);
+        mExoPlayer.addAnalyticsListener(new AnalyticsListener() {
+            @Override
+            public void onVideoInputFormatChanged(
+                    EventTime eventTime, Format format, @Nullable DecoderReuseEvaluation decoderReuseEvaluation) {
+                applySubtitleStyle(ColorInfo.isTransferHdr(format.colorInfo));
+            }
+        });
 
         if (assHandler != null) {
             assHandler.init(mExoPlayer);
@@ -222,14 +229,14 @@ public class VideoManager {
         });
     }
 
-    private void applySubtitleStyle(@Nullable VideoRangeType videoRangeType) {
+    private void applySubtitleStyle(boolean videoIsHdr) {
         int strokeColor = userPreferences.get(UserPreferences.Companion.getSubtitleTextStrokeColor()).intValue();
         int textWeight = userPreferences.get(UserPreferences.Companion.getSubtitlesTextWeight());
         CaptionStyleCompat subtitleStyle = new CaptionStyleCompat(
                 selectSubtitleTextColor(
                         userPreferences.get(UserPreferences.Companion.getSubtitlesTextColor()),
                         userPreferences.get(UserPreferences.Companion.getSubtitlesHdrTextColor()),
-                        videoRangeType
+                        videoIsHdr
                 ),
                 userPreferences.get(UserPreferences.Companion.getSubtitlesBackgroundColor()).intValue(),
                 Color.TRANSPARENT,
@@ -478,8 +485,7 @@ public class VideoManager {
         }
         Timber.d("Video path set to: %s", path);
 
-        MediaStream videoStream = JavaCompat.getVideoStream(streamInfo.getMediaSource());
-        applySubtitleStyle(videoStream == null ? null : videoStream.getVideoRangeType());
+        applySubtitleStyle(false);
 
         try {
             // Add external subtitles

@@ -525,7 +525,9 @@ class LibMPVBackend(
 	private inner class PlayerObserver(
 		private val generation: Long,
 	) : MPV.EventObserver {
-		override fun eventProperty(property: String) = Unit
+		override fun eventProperty(property: String) {
+			if (property in videoColorProperties) onPlayerEvent(generation) { reportVideoDynamicRange() }
+		}
 
 		override fun eventProperty(property: String, value: Long) = Unit
 
@@ -533,6 +535,7 @@ class LibMPVBackend(
 			handleEventProperty(generation, property, value)
 
 		override fun eventProperty(property: String, value: String) {
+			if (property in videoColorProperties) onPlayerEvent(generation) { reportVideoDynamicRange() }
 			if (property == "hwdec-current") handleEventProperty(generation, property, value)
 		}
 
@@ -556,6 +559,7 @@ class LibMPVBackend(
 		target.observeProperty("seeking", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("eof-reached", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
+		videoColorProperties.forEach { target.observeProperty(it, MPV.mpvFormat.MPV_FORMAT_STRING) }
 		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("hwdec-current", MPV.mpvFormat.MPV_FORMAT_STRING)
 		target.observePlaybackProperties()
@@ -822,6 +826,7 @@ class LibMPVBackend(
 		loadRequested = true
 		activePlaylistEntryId = null
 		fileLoaded = false
+		reportVideoDynamicRange()
 		playbackRestarted = false
 		doviVideoDecoderFailureObserved = false
 		hardwareVideoDecoderFailureObserved = false
@@ -955,6 +960,7 @@ class LibMPVBackend(
 	}
 
 	override fun stop() {
+		listener?.onVideoDynamicRangeChanged(false)
 		setSurroundBoostFilter(null)
 		doviRequestSession.clear()
 		handler.removeCallbacks(tick)
@@ -1488,6 +1494,17 @@ class LibMPVBackend(
 		}
 	}
 
+	private fun reportVideoDynamicRange() {
+		val transfer = if (fileLoaded) {
+			runCatching {
+				val currentOutput = player.getPropertyString("current-vo")
+				val property = if (currentOutput == "mediacodec_embed") "video-params/gamma" else "video-target-params/gamma"
+				player.getPropertyString(property)
+			}.getOrNull()
+		} else null
+		listener?.onVideoDynamicRangeChanged(transfer == "pq" || transfer == "hlg" || transfer == "scrgb")
+	}
+
 	private fun handleEventProperty(generation: Long, property: String, value: MPVNode) = onPlayerEvent(generation) {
 		when (property) {
 			"audio-out-params", "audio-params" -> updateSurroundVolumeBoost()
@@ -1522,6 +1539,7 @@ class LibMPVBackend(
 				}
 			}
 			MPV.mpvEvent.MPV_EVENT_START_FILE -> {
+				listener?.onVideoDynamicRangeChanged(false)
 				setSurroundBoostFilter(null)
 				clearVideoGeometry()
 				cancelNvidiaFallbackResync(restorePlayback = false)
@@ -1539,6 +1557,7 @@ class LibMPVBackend(
 			}
 			MPV.mpvEvent.MPV_EVENT_FILE_LOADED -> {
 				fileLoaded = true
+				reportVideoDynamicRange()
 				terminalState = null
 				applyShieldFallbackIfNeeded()
 				addExternalSubtitles()
@@ -1555,6 +1574,7 @@ class LibMPVBackend(
 			}
 			MPV.mpvEvent.MPV_EVENT_VIDEO_RECONFIG -> {
 				applyShieldFallbackIfNeeded()
+				reportVideoDynamicRange()
 				refreshVideoGeometry()
 				updateNativeSubtitleOverlayMode()
 			}
@@ -2211,3 +2231,5 @@ internal fun formatLibMPVBufferDetails(
 private fun Int.mpvColor() = String.format(Locale.US, "#%08X", toLong() and 0xFFFF_FFFFL)
 
 private fun Int.alpha() = this ushr 24 and 0xFF
+
+private val videoColorProperties = setOf("video-target-params/gamma", "video-params/gamma", "current-vo")

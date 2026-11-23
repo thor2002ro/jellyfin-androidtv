@@ -1,6 +1,8 @@
 package org.jellyfin.playback.core.backend
 
 import androidx.core.view.doOnDetach
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.jellyfin.playback.core.mediastream.PlayableMediaStream
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.model.PlayState
@@ -16,6 +18,9 @@ import kotlin.time.Duration
  * Service keeping track of the current playback backend and its related surface view.
  */
 class BackendService {
+	private val mutableVideoIsHdr = MutableStateFlow<Boolean?>(null)
+	val videoIsHdr = mutableVideoIsHdr.asStateFlow()
+
 	private var _backend: PlayerBackend? = null
 	val backend get() = _backend
 	val activeBackends: List<PlayerBackend> get() = listOfNotNull(_backend)
@@ -35,6 +40,7 @@ class BackendService {
 		videoOutputTransform = VideoOutputTransform.NONE
 		callListeners { onVideoGeometryChange(VideoGeometry.EMPTY) }
 
+		mutableVideoIsHdr.value = null
 		_backend = backend.apply {
 			_surfaceView?.let(::setSurfaceView)
 			_subtitleView?.let(::setSubtitleView)
@@ -185,6 +191,10 @@ class BackendService {
 
 		override fun onMediaStreamReplaced(mediaStream: PlayableMediaStream, position: Duration) {
 			callListeners { onMediaStreamReplaced(mediaStream, position) }
+		}
+
+		override fun onVideoDynamicRangeChanged(isHdr: Boolean) {
+			mutableVideoIsHdr.value = isHdr
 		}
 
 		override fun onTracksChanged() {
