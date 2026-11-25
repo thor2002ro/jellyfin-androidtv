@@ -114,6 +114,21 @@ class DoviPlaybackSupportTests : FunSpec({
 		)
 	}
 
+	test("MPV HDR base playback keeps the remux metadata needed to strip disabled Profile 8") {
+		for (backend in listOf(DoviPlaybackBackend.MPV, DoviPlaybackBackend.MEDIA3)) {
+			val plan = decideDoviPlayback(
+				request(
+					backend = backend,
+					range = VideoRangeType.DOVI_WITH_HDR10_PLUS,
+					source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS),
+					device = DoviDeviceCapabilities(supportsHdr10Plus = true),
+				),
+			)
+			plan.decision.request?.target shouldBe DoviTarget.SOURCE_BASE_PRESENTATION
+			plan.advertiseRemuxDoviMetadata shouldBe (backend == DoviPlaybackBackend.MPV)
+		}
+	}
+
 	test("Native Dolby Vision remux metadata is independent of backend") {
 		DoviPlaybackBackend.entries.forEach { backend ->
 			val plan = decideDoviPlayback(request(
@@ -356,7 +371,9 @@ class DoviPlaybackSupportTests : FunSpec({
 			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
 		))
 		// StreamBuilder emits rangetype only from conditions applicable to this input.
-		val requestedRanges = profile(mpvPlan).codecProfiles
+		val profileWithProfile5Disabled = profile(mpvPlan, forceDisabled = setOf(VideoRangeType.DOVI))
+		profileWithProfile5Disabled.unsupportedRanges(Codec.Video.HEVC).contains("DOVI") shouldBe true
+		val requestedRanges = profileWithProfile5Disabled.codecProfiles
 			.filter { it.codec == Codec.Video.HEVC }
 			.filter { it.applyConditions.any { condition -> condition.value == "DOVIWithHDR10" } }
 			.flatMap { it.conditions }
@@ -423,6 +440,18 @@ class DoviPlaybackSupportTests : FunSpec({
 		entry.bindDoviPlaybackPlan(plan)
 		val mismatchedSource = doviMediaSource("source-b", "mkv")
 		entry.retainDoviPlaybackPlanFor(plan, mismatchedSource, plan.decision)
+		entry.doviDecision shouldBe null
+	}
+
+	test("PlaybackInfo can report a MOV alias for a negotiated MP4 Dolby Vision source") {
+		val entry = QueueEntry()
+		val plan = decideDoviPlayback(request(container = "mp4")).copy(mediaSourceId = "source-a")
+		entry.bindDoviPlaybackPlan(plan)
+
+		entry.retainDoviPlaybackPlanFor(plan, doviMediaSource("source-a", "mov"), plan.decision)
+		entry.doviDecision shouldBe plan.decision
+
+		entry.retainDoviPlaybackPlanFor(plan, doviMediaSource("source-a", "mkv"), plan.decision)
 		entry.doviDecision shouldBe null
 	}
 
@@ -520,7 +549,7 @@ class DoviPlaybackSupportTests : FunSpec({
 				mediaTest = mediaTest,
 				retrySuppressed = false,
 				bridge = bridge,
-				displayHdrTypes = setOf(DISPLAY_HDR_TYPE_HDR10, DISPLAY_HDR_TYPE_HDR10_PLUS),
+				displayHdrTypes = setOf(DISPLAY_HDR_TYPE_DOLBY_VISION, DISPLAY_HDR_TYPE_HDR10, DISPLAY_HDR_TYPE_HDR10_PLUS),
 			)
 
 		create(null)?.decision?.route shouldBe DoviRoute.ServerFallback
@@ -751,6 +780,33 @@ class DoviPlaybackSupportTests : FunSpec({
 		}
 	}
 
+	test("Profile 8 overrides apply to every backend and cannot bypass the display requirement") {
+		val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true)
+		val range = VideoRangeType.DOVI_WITH_HDR10
+		val source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10)
+		val hdrDisplay = setOf(DISPLAY_HDR_TYPE_HDR10)
+		val doviDisplay = hdrDisplay + DISPLAY_HDR_TYPE_DOLBY_VISION
+		val enabled = effectiveDoviDeviceCapabilities(mediaTest, setOf(range), emptySet(), doviDisplay)
+		val disabled = effectiveDoviDeviceCapabilities(mediaTest, setOf(range), setOf(range), doviDisplay)
+		val unsupportedDisplay = effectiveDoviDeviceCapabilities(mediaTest, setOf(range), emptySet(), hdrDisplay)
+
+		for (backend in DoviPlaybackBackend.entries) {
+			decideDoviPlayback(request(backend = backend, range = range, source = source, device = enabled))
+				.decision.route shouldBe DoviRoute.Native
+			for (device in listOf(disabled, unsupportedDisplay)) {
+				val plan = decideDoviPlayback(request(backend = backend, range = range, source = source, device = device))
+				val expected = if (backend == DoviPlaybackBackend.MPV || backend == DoviPlaybackBackend.MEDIA3) {
+					DoviTarget.SOURCE_BASE_PRESENTATION
+				} else null
+				plan.decision.request?.target shouldBe expected
+				(plan.decision.route == DoviRoute.Native) shouldBe false
+			}
+			decideDoviPlayback(request(
+				backend = backend, range = range, source = source, device = unsupportedDisplay, codec = DoviVideoCodec.AV1,
+			)).decision.route shouldBe DoviRoute.ServerFallback
+		}
+	}
+
 	test("HLG capability requires positive decoder format and display evidence") {
 		val mediaTest = mockk<MediaCodecCapabilitiesTest>(relaxed = true) {
 			every { supportsHevcDolbyVisionProfile8() } returns true
@@ -760,7 +816,7 @@ class DoviPlaybackSupportTests : FunSpec({
 			mediaTest,
 			enabled = emptySet(),
 			disabled = emptySet(),
-			displayHdrTypes = setOf(DISPLAY_HDR_TYPE_HLG),
+			displayHdrTypes = setOf(DISPLAY_HDR_TYPE_DOLBY_VISION, DISPLAY_HDR_TYPE_HLG),
 		)
 		positive.supportsHlg shouldBe true
 		positive.supportsProfile84 shouldBe true

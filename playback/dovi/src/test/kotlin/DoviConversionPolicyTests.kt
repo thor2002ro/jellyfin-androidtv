@@ -177,7 +177,7 @@ class DoviConversionPolicyTests : FunSpec({
 		}
 	}
 
-	test("Auto selects fast HDR base fallback only for Media3 Profile 8.1 PQ bases") {
+	test("Auto uses libdovi for Media3 Profile 8.1 HDR10 and HDR10+ bases") {
 		listOf(
 			DoviPresentation.HDR10 to DoviDeviceCapabilities(supportsHdr10 = true),
 			DoviPresentation.HDR10_PLUS to DoviDeviceCapabilities(supportsHdr10Plus = true),
@@ -188,11 +188,11 @@ class DoviConversionPolicyTests : FunSpec({
 			)
 
 			(decision.route as DoviRoute.SourceBase).strategy shouldBe
-				DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+				DoviTransformStrategy.LIBDOVI
 		}
 	}
 
-	test("Fast HDR forces an eligible Media3 Profile 8.1 source base") {
+	test("Prefer HDR forces an eligible Media3 Profile 8.1 source base through libdovi") {
 		val decision = decide(
 			mode = DoviCompatibilityMode.FAST_HDR,
 			source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10),
@@ -200,7 +200,7 @@ class DoviConversionPolicyTests : FunSpec({
 		)
 
 		(decision.route as DoviRoute.SourceBase).strategy shouldBe
-			DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
+			DoviTransformStrategy.LIBDOVI
 	}
 
 	test("Fast HDR behaves exactly like Auto with MPV") {

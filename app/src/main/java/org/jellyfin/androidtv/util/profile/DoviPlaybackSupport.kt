@@ -25,8 +25,9 @@ import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStream
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.VideoRangeType
+import timber.log.Timber
 
-private val recognizedDoviVideoRangeTypes = setOf(
+internal val recognizedDoviVideoRangeTypes = setOf(
 	VideoRangeType.DOVI,
 	VideoRangeType.DOVI_WITH_EL,
 	VideoRangeType.DOVI_WITH_ELHDR10_PLUS,
@@ -107,21 +108,23 @@ internal fun decideDoviPlayback(request: DoviPlaybackRequest): DoviPlaybackPlan 
 		container = request.container,
 		codec = request.codec,
 		sourceRangeType = request.sourceRangeType,
-		advertiseRemuxDoviMetadata = decision.needsServerDoviRemuxMetadataWorkaround(request.sourceRangeType),
+		advertiseRemuxDoviMetadata = decision.needsServerDoviRemuxMetadataWorkaround(request.sourceRangeType, request.backend),
 	)
 }
 
 /**
  * Server 12 requires an extra DOVI range to preserve DV configuration during remux.
- * Derive the opt-in from the selected presentation, not the backend: native DV and
- * libdovi DV conversion need that metadata; HDR base playback and server fallback
- * must not advertise fallback-free DV. This does not change the conversion policy.
+ * MPV also needs the configuration to activate the source-base transform.
  * Remove with addServerDoviRemuxMetadataWorkaround once the server preserves DV
  * metadata on video copy without this extra capability.
  */
-private fun DoviDecision.needsServerDoviRemuxMetadataWorkaround(sourceRangeType: VideoRangeType): Boolean =
+private fun DoviDecision.needsServerDoviRemuxMetadataWorkaround(
+	sourceRangeType: VideoRangeType,
+	backend: DoviPlaybackBackend,
+): Boolean =
 	sourceRangeType in recognizedDoviVideoRangeTypes &&
-		(route == DoviRoute.Native || route is DoviRoute.Transform)
+		(route == DoviRoute.Native || route is DoviRoute.Transform ||
+			route is DoviRoute.SourceBase && backend == DoviPlaybackBackend.MPV)
 
 internal fun QueueEntry.bindDoviPlaybackPlan(plan: DoviPlaybackPlan?) {
 	// Clear an earlier source's decision before binding the current request.
@@ -136,10 +139,24 @@ internal fun QueueEntry.retainDoviPlaybackPlanFor(
 	val video = mediaSource.mediaStreams.orEmpty().firstOrNull { it.type == MediaStreamType.VIDEO }
 	val matches = plan != null &&
 		mediaSource.id == plan.mediaSourceId &&
-		mediaSource.container.equals(plan.container, ignoreCase = true) &&
+		mediaSource.container.doviContainerFamily() == plan.container.doviContainerFamily() &&
 		video?.toDoviVideoCodec() == plan.codec &&
 		video.videoRangeType == plan.sourceRangeType
 	doviDecision = plan?.decision.takeIf { matches && it == expectedDecision }
+	if (expectedDecision?.request != null && doviDecision == null && plan != null) {
+		Timber.w(
+			"Dolby Vision transform plan discarded sameSource=%s container=%s/%s codec=%s/%s range=%s/%s",
+			mediaSource.id == plan.mediaSourceId,
+			plan.container, mediaSource.container,
+			plan.codec, video?.toDoviVideoCodec(),
+			plan.sourceRangeType, video?.videoRangeType,
+		)
+	}
+}
+
+private fun String?.doviContainerFamily(): String? = when (val container = this?.lowercase()) {
+	"mov", "mp4", "m4v" -> "mp4"
+	else -> container
 }
 
 internal fun createDoviPlaybackPlan(
@@ -225,12 +242,13 @@ internal fun effectiveDoviDeviceCapabilities(
 		else -> detected
 	}
 
+	val supportsDolbyVisionDisplay = DISPLAY_HDR_TYPE_DOLBY_VISION in displayHdrTypes
 	val reportedProfile7 = mediaTest.supportsHevcDolbyVisionProfile7()
 	val knownProfile7 = KnownDefects.unreportedDoviProfile7Support &&
 		mediaTest.supportsHevcDolbyVision() &&
 		mediaTest.supportsHevcMain10() &&
 		mediaTest.supportsHevcHDR10()
-	val supportsProfile7 = effective(profile7Ranges, reportedProfile7 || knownProfile7)
+	val supportsProfile7 = supportsDolbyVisionDisplay && effective(profile7Ranges, reportedProfile7 || knownProfile7)
 	val supportsHlgDecoder = effective(setOf(VideoRangeType.HLG), mediaTest.supportsHevcHlg()) &&
 		DISPLAY_HDR_TYPE_HLG in displayHdrTypes
 	// Main10 decoding is enough to attempt a base presentation: Android TV devices may
@@ -248,10 +266,10 @@ internal fun effectiveDoviDeviceCapabilities(
 		setOf(VideoRangeType.HLG),
 		canAttemptHdrBase || DISPLAY_HDR_TYPE_HLG in displayHdrTypes,
 	)
-	val supportsProfile8 = effective(profile8Ranges, mediaTest.supportsHevcDolbyVisionProfile8())
+	val supportsProfile8 = supportsDolbyVisionDisplay && effective(profile8Ranges, mediaTest.supportsHevcDolbyVisionProfile8())
 
 	return DoviDeviceCapabilities(
-		supportsProfile5 = effective(profile5Ranges, mediaTest.supportsHevcDolbyVisionProfile5()),
+		supportsProfile5 = supportsDolbyVisionDisplay && effective(profile5Ranges, mediaTest.supportsHevcDolbyVisionProfile5()),
 		supportsProfile7 = supportsProfile7,
 		supportsProfile8 = supportsProfile8,
 		supportsProfile84 = supportsProfile8 && supportsHlgDecoder,
@@ -261,6 +279,7 @@ internal fun effectiveDoviDeviceCapabilities(
 		supportsHdr10 = supportsHdr10Base,
 		supportsHdr10Plus = supportsHdr10PlusBase,
 		supportsHlg = supportsHlgBase,
+		supportsDolbyVisionDisplay = supportsDolbyVisionDisplay,
 	)
 }
 

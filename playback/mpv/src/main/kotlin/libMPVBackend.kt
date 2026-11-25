@@ -526,7 +526,7 @@ class LibMPVBackend(
 		private val generation: Long,
 	) : MPV.EventObserver {
 		override fun eventProperty(property: String) {
-			if (property in videoColorProperties) onPlayerEvent(generation) { reportVideoDynamicRange() }
+			if (property == VIDEO_TRANSFER_PROPERTY) onPlayerEvent(generation) { reportVideoDynamicRange() }
 		}
 
 		override fun eventProperty(property: String, value: Long) = Unit
@@ -535,7 +535,7 @@ class LibMPVBackend(
 			handleEventProperty(generation, property, value)
 
 		override fun eventProperty(property: String, value: String) {
-			if (property in videoColorProperties) onPlayerEvent(generation) { reportVideoDynamicRange() }
+			if (property == VIDEO_TRANSFER_PROPERTY) onPlayerEvent(generation) { reportVideoDynamicRange() }
 			if (property == "hwdec-current") handleEventProperty(generation, property, value)
 		}
 
@@ -559,7 +559,7 @@ class LibMPVBackend(
 		target.observeProperty("seeking", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("eof-reached", MPV.mpvFormat.MPV_FORMAT_FLAG)
 		target.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NODE)
-		videoColorProperties.forEach { target.observeProperty(it, MPV.mpvFormat.MPV_FORMAT_STRING) }
+		target.observeProperty(VIDEO_TRANSFER_PROPERTY, MPV.mpvFormat.MPV_FORMAT_STRING)
 		target.observeProperty("video-dec-params", MPV.mpvFormat.MPV_FORMAT_NODE)
 		target.observeProperty("hwdec-current", MPV.mpvFormat.MPV_FORMAT_STRING)
 		target.observePlaybackProperties()
@@ -1379,7 +1379,7 @@ class LibMPVBackend(
 		val decoderDropped = integer("decoder-frame-drop-count") ?: 0
 		val outputDropped = integer("frame-drop-count") ?: 0
 		val hardwareDecoder = string("hwdec-current")?.takeUnless { it == "no" }
-		val videoGamma = string("video-params/gamma")
+		val videoGamma = string(VIDEO_TRANSFER_PROPERTY)
 		val dolbyVisionProfile = integer("current-tracks/video/dolby-vision-profile")
 		val videoOutput = string("current-vo")
 		val videoOutputDisplay = mpvSelectionDisplay(effectiveVideoOutput, videoOutput)
@@ -1431,6 +1431,9 @@ class LibMPVBackend(
 			string("video-params/pixelformat")?.let { put("Output pixel format", it) }
 			string("video-params/colormatrix")?.let { put("Color matrix", it) }
 			string("video-params/primaries")?.let { put("Color primaries", it) }
+			mpvHdrMode(string("video-dec-params/gamma"), null, false)?.let { put("Decoder transfer", it) }
+			mpvHdrMode(videoGamma, null, false)?.let { put("Video transfer", it) }
+			mpvHdrMode(string("video-target-params/gamma"), null, false)?.let { put("Renderer target transfer", it) }
 			number("video-params/max-luma", " nits")?.let { put("Mastering peak", it) }
 			number("video-params/max-cll", " nits")?.let { put("MaxCLL", it) }
 			number("video-params/max-fall", " nits")?.let { put("MaxFALL", it) }
@@ -1496,11 +1499,7 @@ class LibMPVBackend(
 
 	private fun reportVideoDynamicRange() {
 		val transfer = if (fileLoaded) {
-			runCatching {
-				val currentOutput = player.getPropertyString("current-vo")
-				val property = if (currentOutput == "mediacodec_embed") "video-params/gamma" else "video-target-params/gamma"
-				player.getPropertyString(property)
-			}.getOrNull()
+			runCatching { player.getPropertyString(VIDEO_TRANSFER_PROPERTY) }.getOrNull()
 		} else null
 		listener?.onVideoDynamicRangeChanged(transfer == "pq" || transfer == "hlg" || transfer == "scrgb")
 	}
@@ -2232,4 +2231,4 @@ private fun Int.mpvColor() = String.format(Locale.US, "#%08X", toLong() and 0xFF
 
 private fun Int.alpha() = this ushr 24 and 0xFF
 
-private val videoColorProperties = setOf("video-target-params/gamma", "video-params/gamma", "current-vo")
+private const val VIDEO_TRANSFER_PROPERTY = "video-params/gamma"

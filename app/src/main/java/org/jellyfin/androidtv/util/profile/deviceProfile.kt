@@ -164,6 +164,7 @@ internal fun createDeviceProfile(
 		forceEnabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.ENABLE),
 		forceDisabledHdr = userPreferences.getHdrRangeTypesFor(HdrOverrideMode.DISABLE),
 		doviPlaybackPlan = doviPlaybackPlan,
+		supportsDolbyVisionDisplay = DISPLAY_HDR_TYPE_DOLBY_VISION in getSupportedDisplayHdrTypes(context),
 		passthroughAudioCodecs = if (allowPassthrough) userPreferences.profilePassthroughAudioCodecs(supportedPassthroughAudioMimes) else emptySet(),
 		// Keep original surround audio for MPV's encoder instead of requesting server conversion.
 		transcodeToPassthrough = allowPassthrough && audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH && !convertAudioLocally,
@@ -199,6 +200,7 @@ internal fun createDeviceProfile(
 	enableMpvAudio: Boolean = false,
 	enableFfmpegVideo: Boolean = false,
 	preferFmp4HlsContainer: Boolean = true,
+	supportsDolbyVisionDisplay: Boolean = true,
 ) = buildDeviceProfile {
 	val canMixAudioLocally = enableFfmpegAudio || enableMpvAudio
 	val supportsOpus = mediaTest.supportsOpus() || enableMpvAudio ||
@@ -688,6 +690,7 @@ internal fun createDeviceProfile(
 
 	/// HDR exclude list
 
+	val displayExcludedDoviRanges = if (supportsDolbyVisionDisplay) emptySet() else recognizedDoviVideoRangeTypes
 	val unsupportedRangeTypesAv1 = buildSet {
 		add(VideoRangeType.DOVI_INVALID)
 
@@ -699,7 +702,7 @@ internal fun createDeviceProfile(
 
 		if (!supportsAV1HDR10Plus) add(VideoRangeType.HDR10_PLUS)
 		if (!supportsAV1HDR10) add(VideoRangeType.HDR10)
-	} - forceEnabledHdr + forceDisabledHdr
+	} - forceEnabledHdr + forceDisabledHdr + displayExcludedDoviRanges
 	val unsupportedRangeTypesVP9 = buildSet {
 		if (!supportsVP9HDR10Plus) add(VideoRangeType.HDR10_PLUS)
 		if (!supportsVP9HDR) add(VideoRangeType.HDR10)
@@ -709,7 +712,9 @@ internal fun createDeviceProfile(
 		mediaTest = mediaTest,
 		forceEnabledHdr = forceEnabledHdr,
 		forceDisabledHdr = forceDisabledHdr,
-	).keys
+	).keys + displayExcludedDoviRanges
+	val unrelatedExcludedDoviRanges = (forceDisabledHdr + displayExcludedDoviRanges)
+		.filterNot { it == doviPlaybackPlan?.sourceRangeType }
 	val unsupportedRangeTypesHevc = when {
 		doviPlaybackPlan?.codec != DoviVideoCodec.HEVC -> baselineUnsupportedRangeTypesHevc
 		doviPlaybackPlan.decision.route == DoviRoute.ServerFallback ->
@@ -719,7 +724,7 @@ internal fun createDeviceProfile(
 		is DoviRoute.SourceBase,
 		is DoviRoute.Transform,
 		-> baselineUnsupportedRangeTypesHevc -
-			doviPlaybackPlan.advertisedHevcRangeTypes
+			(doviPlaybackPlan.advertisedHevcRangeTypes - unrelatedExcludedDoviRanges)
 		DoviRoute.ServerFallback -> error("Handled above")
 		}
 	}
@@ -822,18 +827,17 @@ private fun DeviceProfileBuilder.addServerDoviRemuxMetadataWorkaround(
 	excludedRanges: Set<VideoRangeType>,
 	plan: DoviPlaybackPlan?,
 ) {
-	// Only native/converted DV routes opt in; never override codec/range exclusions
-	// or advertise DV for source-base playback and server tone-mapping routes.
+	// Preserve configuration for the selected route without overriding range exclusions.
 	if (plan?.advertiseRemuxDoviMetadata != true ||
 		!plan.codec.name.equals(videoCodec, ignoreCase = true) ||
-		plan.sourceRangeType in excludedRanges || VideoRangeType.DOVI in excludedRanges
+		plan.sourceRangeType in excludedRanges
 	) return
 	codecProfile {
 		type = CodecType.VIDEO
 		codec = videoCodec
 		conditions {
 			ProfileConditionValue.VIDEO_RANGE_TYPE inCollection
-				(VideoRangeType.entries - excludedRanges).map { it.serialName }
+				(VideoRangeType.entries - excludedRanges + VideoRangeType.DOVI).map { it.serialName }
 		}
 		// Scope the extra capability to the source selected by the DV policy.
 		applyConditions {

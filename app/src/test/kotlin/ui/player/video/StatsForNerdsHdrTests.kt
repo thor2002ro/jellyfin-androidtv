@@ -4,17 +4,17 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 
 class StatsForNerdsHdrTests : StringSpec({
-	"direct HDR10+ metadata corrects incomplete player reports" {
+	"direct HDR10+ metadata fills in an unavailable player report" {
+		streamingHdrMode(
+			playerHdrMode = null,
+			streamHdrMode = "HDR10+",
+			isVideoDirect = null,
+		) shouldBe "HDR10+"
 		streamingHdrMode(
 			playerHdrMode = "SDR (BT.1886)",
 			streamHdrMode = "HDR10+",
 			isVideoDirect = null,
-		) shouldBe "HDR10+"
-		streamingHdrMode(
-			playerHdrMode = "HDR10",
-			streamHdrMode = "HDR10+",
-			isVideoDirect = null,
-		) shouldBe "HDR10+"
+		) shouldBe "SDR (BT.1886)"
 	}
 
 	"other player HDR reports remain authoritative" {

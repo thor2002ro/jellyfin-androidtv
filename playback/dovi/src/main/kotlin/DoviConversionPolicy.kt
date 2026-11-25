@@ -46,6 +46,7 @@ data class DoviDeviceCapabilities(
 	val supportsHdr10: Boolean = false,
 	val supportsHdr10Plus: Boolean = false,
 	val supportsHlg: Boolean = false,
+	val supportsDolbyVisionDisplay: Boolean = true,
 )
 
 data class DoviWorkarounds(
@@ -188,6 +189,8 @@ object DoviCompatibilityPolicy {
 		if (input.codec == DoviVideoCodec.AV1) {
 			return if (input.source.profile == DoviSourceProfile.PROFILE_7) {
 				serverFallback(DoviDecisionReason.INVALID_AV1_PROFILE_7, invalidStream = true)
+			} else if (!input.device.supportsDolbyVisionDisplay) {
+				serverFallback(DoviDecisionReason.NO_COMPATIBLE_ROUTE)
 			} else {
 				native()
 			}
@@ -197,17 +200,30 @@ object DoviCompatibilityPolicy {
 		}
 
 		if (input.mode == DoviCompatibilityMode.OFF) {
-			return if (input.device.supportsNative(input.source, requireLayerEvidence = false)) {
+			return if (input.device.supportsDolbyVisionDisplay && input.device.supportsNative(input.source, requireLayerEvidence = false)) {
 				native(DoviDecisionReason.DISABLED_BY_USER)
 			} else {
 				serverFallback(DoviDecisionReason.DISABLED_BY_USER)
 			}
 		}
-		if (!input.builtInPlayerSelected || !input.backend.isSupported()) {
+		if (!input.builtInPlayerSelected) {
 			return serverFallback(DoviDecisionReason.BACKEND_UNSUPPORTED)
+		}
+		if (!input.backend.isSupported()) {
+			return if (input.device.supportsDolbyVisionDisplay &&
+				input.device.supportsNative(input.source, requireLayerEvidence = false)
+			) {
+				native()
+			} else {
+				serverFallback(DoviDecisionReason.BACKEND_UNSUPPORTED)
+			}
 		}
 		if (input.container?.lowercase() !in supportedContainers) {
 			return serverFallback(DoviDecisionReason.CONTAINER_UNSUPPORTED)
+		}
+
+		if (!input.device.supportsDolbyVisionDisplay) {
+			return input.sourceBaseDecision().withTransformEvidence(input.source)
 		}
 
 		return when (input.mode) {
@@ -220,8 +236,8 @@ object DoviCompatibilityPolicy {
 	}
 
 	private fun decideFastHdr(input: Input): DoviDecision =
-		if (input.isFastHdrEligible()) {
-			input.sourceBaseDecision(DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK)
+		if (input.canPreferHdrBase()) {
+			input.sourceBaseDecision()
 		} else {
 			decideAuto(input)
 		}
@@ -250,18 +266,11 @@ object DoviCompatibilityPolicy {
 		) {
 			transform(DoviTarget.PROFILE_8_1, reason = DoviDecisionReason.PROFILE_8_1)
 		} else {
-			input.sourceBaseDecision(input.autoSourceBaseStrategy())
+			input.sourceBaseDecision()
 		}
 	}
 
-	private fun Input.autoSourceBaseStrategy(): DoviTransformStrategy =
-		if (isFastHdrEligible()) {
-			DoviTransformStrategy.FAST_SOURCE_BASE_FALLBACK
-		} else {
-			DoviTransformStrategy.LIBDOVI
-		}
-
-	private fun Input.isFastHdrEligible(): Boolean =
+	private fun Input.canPreferHdrBase(): Boolean =
 		backend == DoviPlaybackBackend.MEDIA3 &&
 			codec == DoviVideoCodec.HEVC &&
 			source.profile == DoviSourceProfile.PROFILE_8_1 &&
@@ -383,9 +392,7 @@ object DoviCompatibilityPolicy {
 		}
 	}
 
-	private fun Input.sourceBaseDecision(
-		strategy: DoviTransformStrategy = DoviTransformStrategy.LIBDOVI,
-	): DoviDecision {
+	private fun Input.sourceBaseDecision(): DoviDecision {
 		val baseSupported = when (source.sourceBasePresentation) {
 			DoviPresentation.HDR10 -> device.supportsHdr10
 			DoviPresentation.HDR10_PLUS -> device.supportsHdr10Plus
@@ -401,7 +408,6 @@ object DoviCompatibilityPolicy {
 			DoviDecision(
 				route = DoviRoute.SourceBase(
 					request = DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
-					strategy = strategy,
 				),
 				reason = DoviDecisionReason.SOURCE_BASE,
 			)

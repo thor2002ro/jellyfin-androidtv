@@ -840,13 +840,7 @@ internal fun streamingHdrMode(
 	playerHdrMode: String?,
 	streamHdrMode: String?,
 	isVideoDirect: Boolean?,
-): String? {
-	val directStreamHdrMode = streamHdrMode?.takeIf { isVideoDirect != false }
-	return when {
-		directStreamHdrMode == "HDR10+" -> directStreamHdrMode
-		else -> playerHdrMode ?: directStreamHdrMode
-	}
-}
+): String? = playerHdrMode ?: streamHdrMode?.takeIf { isVideoDirect != false }
 
 internal fun decoderModeDiagnostic(
 	selected: VideoDecoderOption?,
