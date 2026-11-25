@@ -492,6 +492,7 @@ private fun DoviTransformRequest.expectedOutput(
 	-> DoviPresentation.PROFILE_8_1
 	DoviTarget.PROFILE_8_4 -> DoviPresentation.PROFILE_8_4
 	DoviTarget.SOURCE_BASE_PRESENTATION -> sourceBase
+	DoviTarget.HDR10 -> DoviPresentation.HDR10
 }
 
 internal fun ByteArray.h265Nals(): List<H265Nal> {

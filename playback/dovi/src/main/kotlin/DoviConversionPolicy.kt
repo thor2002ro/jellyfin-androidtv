@@ -47,6 +47,7 @@ data class DoviDeviceCapabilities(
 	val supportsHdr10Plus: Boolean = false,
 	val supportsHlg: Boolean = false,
 	val supportsDolbyVisionDisplay: Boolean = true,
+	val preferPlainHdr10: Boolean = false,
 )
 
 data class DoviWorkarounds(
@@ -393,7 +394,10 @@ object DoviCompatibilityPolicy {
 	}
 
 	private fun Input.sourceBaseDecision(): DoviDecision {
-		val baseSupported = when (source.sourceBasePresentation) {
+		val usePlainHdr10 = source.sourceBasePresentation == DoviPresentation.HDR10_PLUS &&
+			device.supportsHdr10 && (device.preferPlainHdr10 || !device.supportsHdr10Plus)
+		val target = if (usePlainHdr10) DoviTarget.HDR10 else DoviTarget.SOURCE_BASE_PRESENTATION
+		val baseSupported = usePlainHdr10 || when (source.sourceBasePresentation) {
 			DoviPresentation.HDR10 -> device.supportsHdr10
 			DoviPresentation.HDR10_PLUS -> device.supportsHdr10Plus
 			DoviPresentation.HLG -> device.supportsHlg
@@ -402,12 +406,11 @@ object DoviCompatibilityPolicy {
 		return if (
 			bridgeAvailable &&
 			baseSupported &&
-			source.accepts(DoviTarget.SOURCE_BASE_PRESENTATION) &&
-			supports(DoviTarget.SOURCE_BASE_PRESENTATION)
+			source.accepts(target) && supports(target)
 		) {
 			DoviDecision(
 				route = DoviRoute.SourceBase(
-					request = DoviTransformRequest(DoviTarget.SOURCE_BASE_PRESENTATION),
+					request = DoviTransformRequest(target),
 				),
 				reason = DoviDecisionReason.SOURCE_BASE,
 			)
@@ -469,6 +472,7 @@ object DoviCompatibilityPolicy {
 			DoviTarget.PROFILE_8_1_PRESERVE_MAPPING -> DoviCapability.PROFILE_8_1_PRESERVE_MAPPING
 			DoviTarget.PROFILE_8_4 -> DoviCapability.PROFILE_8_4
 			DoviTarget.SOURCE_BASE_PRESENTATION -> DoviCapability.SOURCE_BASE_PRESENTATION
+			DoviTarget.HDR10 -> DoviCapability.HDR10
 		}
 
 	private val DoviRepair.capability: DoviCapability
@@ -515,6 +519,7 @@ internal fun DoviSource.accepts(target: DoviTarget): Boolean {
 		DoviTarget.PROFILE_8_1 -> pq && profile != DoviSourceProfile.UNKNOWN
 		DoviTarget.PROFILE_8_1_PRESERVE_MAPPING -> pq && profile in setOf(DoviSourceProfile.PROFILE_7, DoviSourceProfile.PROFILE_8_1)
 		DoviTarget.PROFILE_8_4 -> hlg && profile in setOf(DoviSourceProfile.PROFILE_8_1, DoviSourceProfile.PROFILE_8_4)
+		DoviTarget.HDR10 -> pq && profile != DoviSourceProfile.PROFILE_5 && profile != DoviSourceProfile.UNKNOWN
 		DoviTarget.SOURCE_BASE_PRESENTATION ->
 			sourceBasePresentation != DoviPresentation.UNKNOWN && profile != DoviSourceProfile.PROFILE_5
 	}

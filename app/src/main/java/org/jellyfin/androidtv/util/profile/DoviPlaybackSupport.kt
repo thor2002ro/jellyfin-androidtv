@@ -280,6 +280,9 @@ internal fun effectiveDoviDeviceCapabilities(
 		supportsHdr10Plus = supportsHdr10PlusBase,
 		supportsHlg = supportsHlgBase,
 		supportsDolbyVisionDisplay = supportsDolbyVisionDisplay,
+		preferPlainHdr10 = DISPLAY_HDR_TYPE_HDR10 in displayHdrTypes &&
+			(DISPLAY_HDR_TYPE_HDR10_PLUS !in displayHdrTypes ||
+				!effective(setOf(VideoRangeType.HDR10_PLUS), mediaTest.supportsHevcHDR10Plus())),
 	)
 }
 

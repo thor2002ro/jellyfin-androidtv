@@ -177,6 +177,20 @@ class DoviConversionPolicyTests : FunSpec({
 		}
 	}
 
+	test("HDR10-only playback requests plain HDR10 from libdovi on both players") {
+		val source = DoviSource(DoviPresentation.PROFILE_8_1, DoviPresentation.HDR10_PLUS)
+		for (backend in listOf(DoviPlaybackBackend.MEDIA3, DoviPlaybackBackend.MPV)) {
+			for (device in listOf(
+				DoviDeviceCapabilities(supportsHdr10 = true),
+				DoviDeviceCapabilities(supportsHdr10 = true, supportsHdr10Plus = true, preferPlainHdr10 = true),
+			)) {
+				val decision = decide(backend = backend, source = source, device = device)
+				decision.request?.target shouldBe DoviTarget.HDR10
+				(decision.route as DoviRoute.SourceBase).strategy shouldBe DoviTransformStrategy.LIBDOVI
+			}
+		}
+	}
+
 	test("Auto uses libdovi for Media3 Profile 8.1 HDR10 and HDR10+ bases") {
 		listOf(
 			DoviPresentation.HDR10 to DoviDeviceCapabilities(supportsHdr10 = true),
