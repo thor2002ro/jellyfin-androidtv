@@ -147,7 +147,7 @@ class DoviPlaybackSupportTests : FunSpec({
 
 	test("Auto advertises Profile 5 and Profile 7 conversion only with Profile 8 and native target support") {
 		listOf(
-			VideoRangeType.DOVI to DoviSource(DoviPresentation.PROFILE_5, DoviPresentation.HDR10),
+			VideoRangeType.DOVI to DoviSource(DoviPresentation.PROFILE_5),
 			VideoRangeType.DOVI_WITH_EL to DoviSource(
 				DoviPresentation.PROFILE_7_FEL,
 				DoviPresentation.HDR10,
@@ -197,9 +197,13 @@ class DoviPlaybackSupportTests : FunSpec({
 		)
 	}
 
-	test("Profile 5 without explicit compatible base evidence remains server fallback") {
+	test("Profile 5 remains server fallback on an HDR10-only display") {
 		val plan = decideDoviPlayback(
-			request(range = VideoRangeType.DOVI, source = DoviSource(DoviPresentation.PROFILE_5)),
+			request(
+				range = VideoRangeType.DOVI,
+				source = DoviSource(DoviPresentation.PROFILE_5),
+				device = DoviDeviceCapabilities(supportsHdr10 = true),
+			),
 		)
 		plan.decision.route shouldBe DoviRoute.ServerFallback
 		plan.advertisedHevcRangeTypes shouldBe emptySet()
@@ -493,7 +497,7 @@ class DoviPlaybackSupportTests : FunSpec({
 		)).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 	}
 
-	test("Profile 5 production metadata converts only with explicit compatibility id base evidence") {
+	test("Profile 5 production metadata converts with or without a compatibility id") {
 		fun plan(compatibilityId: Int?, range: VideoRangeType = VideoRangeType.DOVI): DoviPlaybackPlan {
 			val source = doviMediaSource(
 				id = "p5",
@@ -509,14 +513,14 @@ class DoviPlaybackSupportTests : FunSpec({
 			))
 		}
 
-		plan(null).decision.route shouldBe DoviRoute.ServerFallback
-		plan(0).decision.route shouldBe DoviRoute.ServerFallback
+		plan(null).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
+		plan(0).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 		plan(1).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 		// HDR10+ range evidence is more specific than the HDR10 compatibility id.
 		plan(1, VideoRangeType.DOVI_WITH_HDR10_PLUS).decision.request?.target shouldBe DoviTarget.PROFILE_8_1
 	}
 
-	test("create plan uses Profile 5 compatibility metadata and rejects absent base") {
+	test("create plan converts Profile 5 without HDR base metadata") {
 		val preferences = mockk<UserPreferences>()
 		val videoPlayer = UserPreferences.playbackPlayerPreferences(hdr = false)
 		val hdrPlayer = UserPreferences.playbackPlayerPreferences(hdr = true)
@@ -552,8 +556,8 @@ class DoviPlaybackSupportTests : FunSpec({
 				displayHdrTypes = setOf(DISPLAY_HDR_TYPE_DOLBY_VISION, DISPLAY_HDR_TYPE_HDR10, DISPLAY_HDR_TYPE_HDR10_PLUS),
 			)
 
-		create(null)?.decision?.route shouldBe DoviRoute.ServerFallback
-		create(0)?.decision?.route shouldBe DoviRoute.ServerFallback
+		create(null)?.decision?.request?.target shouldBe DoviTarget.PROFILE_8_1
+		create(0)?.decision?.request?.target shouldBe DoviTarget.PROFILE_8_1
 		create(1)?.decision?.request?.target shouldBe DoviTarget.PROFILE_8_1
 		create(1, VideoRangeType.DOVI_WITH_HDR10_PLUS)?.decision?.request?.target shouldBe DoviTarget.PROFILE_8_1
 	}

@@ -102,12 +102,22 @@ class DoviConversionPolicyTests : FunSpec({
 
 	test("Auto converts unsupported Profile 5 and Profile 7 to Profile 8.1") {
 		listOf(
-			DoviPresentation.PROFILE_5 to DoviPresentation.HDR10,
+			DoviPresentation.PROFILE_5 to DoviPresentation.UNKNOWN,
 			DoviPresentation.PROFILE_7_MEL to DoviPresentation.HDR10,
 			DoviPresentation.PROFILE_7_FEL to DoviPresentation.HDR10_PLUS,
 		).forEach { (presentation, base) ->
-			decide(source = DoviSource(presentation, base)).request?.target shouldBe DoviTarget.PROFILE_8_1
+			listOf(DoviPlaybackBackend.MEDIA3, DoviPlaybackBackend.MPV).forEach { backend ->
+				decide(source = DoviSource(presentation, base), backend = backend)
+					.request?.target shouldBe DoviTarget.PROFILE_8_1
+			}
 		}
+	}
+
+	test("Profile 5 cannot convert to Profile 8.1 on an HDR10-only display") {
+		decide(
+			source = DoviSource(DoviPresentation.PROFILE_5),
+			device = DoviDeviceCapabilities(supportsHdr10 = true),
+		).route shouldBe DoviRoute.ServerFallback
 	}
 
 	test("transform decision snapshots the exact negotiated source evidence") {
@@ -672,7 +682,7 @@ class DoviConversionPolicyTests : FunSpec({
 				DoviSource(profile, base).accepts(DoviTarget.PROFILE_8_1) shouldBe true
 			}
 			nonPqBases.forEach { base ->
-				DoviSource(profile, base).accepts(DoviTarget.PROFILE_8_1) shouldBe false
+				DoviSource(profile, base).accepts(DoviTarget.PROFILE_8_1) shouldBe (profile == profile5)
 			}
 		}
 

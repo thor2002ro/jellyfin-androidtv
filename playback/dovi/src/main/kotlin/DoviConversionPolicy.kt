@@ -516,7 +516,8 @@ internal fun DoviSource.accepts(target: DoviTarget): Boolean {
 	return when (target) {
 		DoviTarget.LOSSLESS_REWRITE -> true
 		DoviTarget.MEL -> pq && profile in setOf(DoviSourceProfile.PROFILE_7, DoviSourceProfile.PROFILE_8_1)
-		DoviTarget.PROFILE_8_1 -> pq && profile != DoviSourceProfile.UNKNOWN
+		DoviTarget.PROFILE_8_1 -> profile == DoviSourceProfile.PROFILE_5 ||
+			(pq && profile != DoviSourceProfile.UNKNOWN)
 		DoviTarget.PROFILE_8_1_PRESERVE_MAPPING -> pq && profile in setOf(DoviSourceProfile.PROFILE_7, DoviSourceProfile.PROFILE_8_1)
 		DoviTarget.PROFILE_8_4 -> hlg && profile in setOf(DoviSourceProfile.PROFILE_8_1, DoviSourceProfile.PROFILE_8_4)
 		DoviTarget.HDR10 -> pq && profile != DoviSourceProfile.PROFILE_5 && profile != DoviSourceProfile.UNKNOWN
