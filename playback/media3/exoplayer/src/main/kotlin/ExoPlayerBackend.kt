@@ -73,6 +73,7 @@ import io.github.thor2002ro.libdovi.DoviException
 import io.github.thor2002ro.libdovi.DoviTransformSessionState
 import io.github.thor2002ro.libdovi.DoviTransformStrategy
 import org.jellyfin.playback.core.PlaybackBufferOptions
+import org.jellyfin.playback.core.playbackCacheCeiling
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.HARDWARE_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.core.backend.PlaybackError
@@ -95,6 +96,7 @@ import org.jellyfin.playback.core.mediastream.allowsLocalSubtitleDisable
 import org.jellyfin.playback.core.mediastream.allowsLocalTrackSelection
 import org.jellyfin.playback.core.mediastream.mediaStream
 import org.jellyfin.playback.core.mediastream.startPosition
+import org.jellyfin.playback.core.mediastream.totalBitrate
 import org.jellyfin.playback.core.mediastream.mediatype.MediaType
 import org.jellyfin.playback.core.mediastream.mediatype.mediaType
 import org.jellyfin.playback.core.mediastream.normalizationGain
@@ -139,6 +141,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 
 enum class VideoDecoder {
 	HARDWARE,
@@ -652,6 +655,7 @@ class ExoPlayerBackend(
 	private var reportedEndedStream: PlayableMediaStream? = null
 	private var rendererPreferencesDirty = false
 	private var loadControlDirty = false
+	private var appliedTargetBufferBytes: Int? = null
 	private var bufferAllocator: DefaultAllocator? = null
 	private var estimatedBandwidthBytesPerSecond: Long? = null
 	private var appliedRendererPreferences: FfmpegRendererPreferences? = null
@@ -1220,6 +1224,16 @@ class ExoPlayerBackend(
 	private var exoPlayerDelegate = lazy(::createExoPlayer)
 	private val exoPlayer get() = exoPlayerDelegate.value
 
+	private fun targetBufferBytes(stream: PlayableMediaStream?): Int? = playbackCacheCeiling(
+		cacheSeconds = (bufferOptions.maxBufferDuration ?: DefaultLoadControl.DEFAULT_MAX_BUFFER_MS.milliseconds)
+			.toDouble(DurationUnit.SECONDS),
+		bitrate = stream?.totalBitrate() ?: 0,
+		maximum = bufferOptions.maxBufferBytes,
+	)?.takeIf { it > 0 }?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt()
+
+	private fun needsBufferTargetChange(stream: PlayableMediaStream?): Boolean =
+		exoPlayerDelegate.isInitialized() && appliedTargetBufferBytes != targetBufferBytes(stream)
+
 	private fun createExoPlayer(): ExoPlayer {
 		val audioGeneration = ++audioOutputGeneration
 		val onAudioOutputFormatChanged: (Format?) -> Unit = { format ->
@@ -1401,10 +1415,7 @@ class ExoPlayerBackend(
 		}
 
 		val allocator = DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE).also { bufferAllocator = it }
-		val targetBufferBytes = bufferOptions.maxBufferBytes
-			?.takeIf { it > 0 }
-			?.coerceAtMost(Int.MAX_VALUE.toLong())
-			?.toInt()
+		val targetBufferBytes = targetBufferBytes(currentStream)
 		val loadControlBuilder = DefaultLoadControl.Builder()
 			.setAllocator(allocator)
 			.setBufferDurationsMs(
@@ -1426,6 +1437,7 @@ class ExoPlayerBackend(
 			.build()
 			.also { player ->
 				appliedRendererPreferences = rendererPreferences
+				appliedTargetBufferBytes = targetBufferBytes
 				subtitleTimingRendererInvalidator
 				player.setVideoSurfaceView(playerSurfaceView?.surface)
 				player.addListener(PlayerListener())
@@ -1914,6 +1926,7 @@ class ExoPlayerBackend(
 		listener?.onSubtitleTimingOffsetSupportChange(false, resetTimingOnUnsupported = false)
 		currentStream = stream
 		reportedEndedStream = null
+		if (needsBufferTargetChange(stream)) loadControlDirty = true
 		ensureRendererPreferences()
 		resetPlaybackStats()
 		setPendingInitialTrackSelection(stream.initialTrackSelection())
@@ -2030,14 +2043,14 @@ class ExoPlayerBackend(
 	}
 
 	override fun replaceItem(item: QueueEntry) {
-		if (exoPlayerOptions.enableLibass) {
+		val stream = requireNotNull(item.mediaStream)
+		if (exoPlayerOptions.enableLibass || needsBufferTargetChange(stream)) {
 			currentStream = null
 			playItem(item, delayLiveStart = false)
 			return
 		}
 		applyRendererPreferences()
 		clearPendingLiveStart()
-		val stream = requireNotNull(item.mediaStream)
 		stream.errorOrigin?.activate()
 		val player = exoPlayer
 		val currentIndex = player.currentMediaItemIndex.takeIf { index ->
@@ -2105,6 +2118,7 @@ class ExoPlayerBackend(
 		}
 		clearSubtitleCues()
 		currentStream = null
+		if (needsBufferTargetChange(null)) loadControlDirty = true
 		mediaSourceTsExtractorFlags.clear()
 		listener?.onSubtitleTimingOffsetSupportChange(false)
 		reportedEndedStream = null

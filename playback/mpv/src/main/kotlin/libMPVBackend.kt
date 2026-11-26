@@ -26,6 +26,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.playback.core.PlaybackBufferOptions
+import org.jellyfin.playback.core.playbackCacheCeiling
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.HARDWARE_VIDEO_DECODER_ERROR_CODE
 import org.jellyfin.playback.core.backend.PlaybackError
@@ -906,10 +907,9 @@ class LibMPVBackend(
 
 	private fun applyBufferOptions(stream: PlayableMediaStream) {
 		val bitrate = stream.totalBitrate()
-		val maximumBytes = bufferOptions.maxBufferBytes
-		val configuration = bufferOptions
-			.toLibMPVBufferConfiguration(stream.queueEntry.isLiveTv)
-			.cappedToBytes(bitrate, maximumBytes)
+		val requested = bufferOptions.toLibMPVBufferConfiguration(stream.queueEntry.isLiveTv)
+		val maximumBytes = playbackCacheCeiling(requested.cacheSeconds, bitrate, bufferOptions.maxBufferBytes)
+		val configuration = requested.cappedToBytes(bitrate, maximumBytes)
 		rebufferWaitSeconds = configuration.rebufferWaitSeconds
 
 		setOption("cache", if (configuration.cacheSeconds == null) "auto" else "yes")

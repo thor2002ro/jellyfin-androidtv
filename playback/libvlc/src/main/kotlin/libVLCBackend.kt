@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import org.jellyfin.playback.core.PlaybackBufferOptions
+import org.jellyfin.playback.core.playbackCacheCeiling
 import org.jellyfin.playback.core.surroundVolumeBoost
 import org.jellyfin.playback.core.backend.BasePlayerBackend
 import org.jellyfin.playback.core.backend.PlaybackError
@@ -62,6 +63,7 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 
 enum class LibVLCVideoDecoder(val vlcValue: Int, val label: String) {
 	AUTOMATIC(-1, "Auto"),
@@ -114,9 +116,10 @@ internal fun libVLCMediaOptions(
 	add(":audio-resampler=soxr")
 	if (options.dav1dThreadFrames >= 1) add(":dav1d-thread-frames=${options.dav1dThreadFrames}")
 
+	val bufferDuration = if (isLiveTv) liveTvBufferDuration else normalBufferDuration
 	val networkCachingMs = cappedBufferDuration(
-		duration = if (isLiveTv) liveTvBufferDuration else normalBufferDuration,
-		maxBufferBytes = maxBufferBytes,
+		duration = bufferDuration,
+		maxBufferBytes = playbackCacheCeiling(bufferDuration?.toDouble(DurationUnit.SECONDS), bitrate, maxBufferBytes),
 		bitrate = bitrate,
 	)
 		?.inWholeMilliseconds
