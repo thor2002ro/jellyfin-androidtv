@@ -54,6 +54,17 @@ class LibMPVAudioPreferencesTests : FunSpec({
 		}
 	}
 
+	test("local surround conversion prefers E-AC-3 and retains an AC3-only route") {
+		val preferences = preferences(audioBehavior = AudioBehavior.TRANSCODE_TO_PASSTHROUGH, convertAudioToAc3 = true)
+		val plus = preferences.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3))
+		plus.convertAudioToEac3 shouldBe true
+		plus.convertAudioToAc3 shouldBe false
+		preferences.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_E_AC3)).convertAudioToEac3 shouldBe true
+		val ac3 = preferences.mpvPlaybackOptions(setOf(MimeTypes.AUDIO_AC3))
+		ac3.convertAudioToEac3 shouldBe false
+		ac3.convertAudioToAc3 shouldBe true
+	}
+
 	test("local AC3 conversion respects route codec downmix and preset gates") {
 		val enabled = preferences(audioBehavior = AudioBehavior.TRANSCODE_TO_PASSTHROUGH, convertAudioToAc3 = true)
 		enabled.mpvPlaybackOptions(emptySet()).convertAudioToAc3 shouldBe false

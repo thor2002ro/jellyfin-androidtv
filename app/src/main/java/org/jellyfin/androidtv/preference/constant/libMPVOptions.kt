@@ -341,6 +341,7 @@ internal data class LibMPVAudioPolicy(
 	val audioSpdif: String,
 	val audioPreset: LibMPVAudioPreset,
 	val convertAudioToAc3: Boolean = false,
+	val convertAudioToEac3: Boolean = false,
 )
 
 @OptIn(UnstableApi::class)
@@ -379,6 +380,10 @@ internal fun UserPreferences.mpvAudioPolicy(supportedPassthroughMimes: Set<Strin
 		passthroughCodecs.joinToString(",")
 	}
 
+	val allowSurroundConversion = this[UserPreferences.audioBehaviour] == AudioBehavior.TRANSCODE_TO_PASSTHROUGH &&
+		this[UserPreferences.mpvConvertAudioToAc3] &&
+		audioPresetOption != LibMPVAudioPresetOption.CINEMA_SPATIAL
+
 	return LibMPVAudioPolicy(
 		audioOutput = if (audioSpdif.isEmpty()) {
 			this[UserPreferences.mpvAudioOutput].mpvValue
@@ -388,9 +393,8 @@ internal fun UserPreferences.mpvAudioPolicy(supportedPassthroughMimes: Set<Strin
 		audioChannels = "auto",
 		audioSpdif = audioSpdif,
 		audioPreset = audioPresetOption.preset,
-		convertAudioToAc3 = this[UserPreferences.audioBehaviour] == AudioBehavior.TRANSCODE_TO_PASSTHROUGH &&
-			this[UserPreferences.mpvConvertAudioToAc3] && "ac3" in passthroughCodecs &&
-			audioPresetOption != LibMPVAudioPresetOption.CINEMA_SPATIAL,
+		convertAudioToAc3 = allowSurroundConversion && "eac3" !in passthroughCodecs && "ac3" in passthroughCodecs,
+		convertAudioToEac3 = allowSurroundConversion && "eac3" in passthroughCodecs,
 	)
 }
 
@@ -422,6 +426,7 @@ fun UserPreferences.mpvPlaybackOptions(
 		audioChannels = audioPolicy.audioChannels,
 		audioSpdif = audioPolicy.audioSpdif,
 		convertAudioToAc3 = audioPolicy.convertAudioToAc3,
+		convertAudioToEac3 = audioPolicy.convertAudioToEac3,
 		audioPitchCorrection = this[UserPreferences.mpvAudioPitchCorrection],
 		replayGain = this[UserPreferences.mpvReplayGain].mpvValue,
 		surroundVolumeBoost = this[UserPreferences.surroundVolumeBoost],

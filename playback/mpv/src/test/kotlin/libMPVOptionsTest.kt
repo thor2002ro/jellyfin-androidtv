@@ -441,7 +441,13 @@ class LibMPVOptionsTest : StringSpec({
 		options.copy(convertAudioToAc3 = false).runtimeOptions(File("mpv-anime"))["af"] shouldBe "lavfi=[volume=0.5]"
 	}
 
-	"AC3 conversion survives the standard preset and clears when disabled" {
+	"E-AC-3 conversion uses the same passthrough filter with the E-AC-3 encoder" {
+	val options = LibMPVPlaybackOptions(audioSpdif = "eac3", convertAudioToEac3 = true)
+	options.runtimeOptions(File("mpv-anime"))["af"] shouldBe
+		"@jellyfin-eac3:lavcac3enc=encoder=eac3:tospdif=yes:bitrate=640:minch=3"
+}
+
+"AC3 conversion survives the standard preset and clears when disabled" {
 		val options = LibMPVPlaybackOptions(convertAudioToAc3 = true, audioPreset = LibMPVAudioPreset.STANDARD)
 		options.runtimeOptions(File("mpv-anime"))["af"] shouldBe
 			"@jellyfin-ac3:lavcac3enc=tospdif=yes:bitrate=640:minch=3"

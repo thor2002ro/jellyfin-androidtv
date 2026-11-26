@@ -146,8 +146,9 @@ internal fun createDeviceProfile(
 	} else {
 		getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
 	}
-	val convertAudioLocally = enableMpvAudio &&
-		userPreferences.mpvAudioPolicy(supportedPassthroughAudioMimes).convertAudioToAc3
+	val convertAudioLocally = enableMpvAudio && userPreferences.mpvAudioPolicy(supportedPassthroughAudioMimes).let {
+		it.convertAudioToAc3 || it.convertAudioToEac3
+	}
 	return createDeviceProfile(
 		mediaTest = mediaTest,
 		maxBitrate = userPreferences.getMaxBitrate(),

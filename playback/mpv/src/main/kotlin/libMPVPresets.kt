@@ -111,10 +111,12 @@ internal fun LibMPVPlaybackOptions.runtimeOptions(
 	putAll(customOptions.filterKeys { !isLibMPVOptionManagedByJellyfin(it) })
 	// Always write af so turning conversion off restores the configured filters.
 	val filters = get("af").orEmpty()
-	put("af", if (convertAudioToAc3) {
-		listOf(filters, "@jellyfin-ac3:lavcac3enc=tospdif=yes:bitrate=640:minch=3")
-			.filter(String::isNotEmpty).joinToString(",")
-	} else filters)
+	val surroundFilter = when {
+		convertAudioToEac3 -> "@jellyfin-eac3:lavcac3enc=encoder=eac3:tospdif=yes:bitrate=640:minch=3"
+		convertAudioToAc3 -> "@jellyfin-ac3:lavcac3enc=tospdif=yes:bitrate=640:minch=3"
+		else -> ""
+	}
+	put("af", listOf(filters, surroundFilter).filter(String::isNotEmpty).joinToString(","))
 }
 
 internal val BUNDLED_PRESET_SHADERS: List<String>

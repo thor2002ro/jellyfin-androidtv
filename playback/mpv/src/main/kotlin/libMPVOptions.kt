@@ -79,6 +79,7 @@ data class LibMPVPlaybackOptions(
 	val audioChannels: String = "auto-safe",
 	val audioSpdif: String = "",
 	val convertAudioToAc3: Boolean = false,
+	val convertAudioToEac3: Boolean = false,
 	val audioTrackPcmFloat: Boolean = true,
 	val audioPitchCorrection: Boolean = true,
 	val replayGain: String = "no",
