@@ -2294,7 +2294,7 @@ class ExoPlayerBackend(
 			audioDecoderType = audioDecoderType,
 			audioCodec = audioInputFormat?.sampleMimeType,
 			localAudioConversionCodec = audioOutputFormat?.sampleMimeType.takeIf { audioOutputIsLocalConversion },
-			audioPassthroughSupported = audioPassthroughSupported,
+			audioPassthroughSupported = if (audioOutputIsLocalConversion && audioOutputFormat != null) true else audioPassthroughSupported,
 			bufferedBytes = bufferDetails,
 			subtitleExtractor = subtitleExtractorDebug(),
 			subtitleRender = subtitleRenderDebug(),
