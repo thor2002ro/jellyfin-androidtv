@@ -120,7 +120,7 @@ private fun MainToolbar(
 
 							// Open login activity
 							activity?.startActivity(ActivityDestinations.startup(activity))
-							activity?.finishAfterTransition()
+							activity?.finish()
 						}
 					},
 					colors = if (activeButton == MainToolbarActiveButton.User) activeButtonColors else ButtonDefaults.colors(),
