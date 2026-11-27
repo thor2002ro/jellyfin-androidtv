@@ -316,6 +316,20 @@ class LibMPVBackend(
 				level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_INFO -> Timber.i("MPV %s%s", source, message)
 				else -> Timber.d("MPV %s%s", source, message)
 			}
+			if (prefix == "ao/audiotrack") {
+				val generation = playerGeneration
+				when {
+					message.startsWith("requested format:") -> onPlayerEvent(generation) {
+						openingPassthroughCodec = when (val format = message.substringAfterLast(' ')) {
+							"spdif-dtshd" -> "dts-hd"
+							"spdif-ac3", "spdif-eac3", "spdif-dts", "spdif-truehd" -> format.removePrefix("spdif-")
+							else -> null
+						}
+					}
+					level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_ERROR && "AudioTrack Init failed" in message ->
+						onPlayerEvent(generation, ::retryRejectedPassthrough)
+				}
+			}
 			if (isDoviMpvVideoDecoderErrorLog(prefix, level)) {
 				val generation = playerGeneration
 				onPlayerEvent(generation) {
@@ -333,6 +347,9 @@ class LibMPVBackend(
 
 	private var bufferOptions = PlaybackBufferOptions()
 	private var currentStream: PlayableMediaStream? = null
+	private var openingPassthroughCodec: String? = null
+	private var passthroughRetryItem: QueueEntry? = null
+	private var rejectedPassthroughCodec: String? = null
 	private var surfaceView: PlayerSurfaceView? = null
 	private var surfaceHolder: SurfaceHolder? = null
 	private var surfaceAttached = false
@@ -808,12 +825,32 @@ class LibMPVBackend(
 		setMedia(requireNotNull(item.mediaStream))
 	}
 
-	private fun setMedia(stream: PlayableMediaStream) {
+	private fun retryRejectedPassthrough() {
+		val codec = openingPassthroughCodec ?: return
+		openingPassthroughCodec = null
+		val stream = currentStream ?: return
+		if (playbackRestarted || terminalState != null || passthroughRetryItem === stream.queueEntry) return
+
+		passthroughRetryItem = stream.queueEntry
+		rejectedPassthroughCodec = codec
+		Timber.w("Retrying MPV startup after %s passthrough rejection", codec)
+		setMedia(stream, retryStart = initialStartPosition)
+	}
+
+	private fun setMedia(stream: PlayableMediaStream, retryStart: Duration? = null) {
+		currentStream?.takeIf { it !== stream }?.let { previous ->
+			listener?.onMediaStreamReplaced(previous, getPositionInfo().active)
+		}
 		doviRequestSession.clear()
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		stopNativeSubtitleOverlay()
 		clearVideoGeometry()
-		val forceRecreate = currentStream?.queueEntry !== stream.queueEntry
+		val forceRecreate = retryStart != null || currentStream?.queueEntry !== stream.queueEntry
+		openingPassthroughCodec = null
+		if (passthroughRetryItem !== stream.queueEntry) {
+			passthroughRetryItem = null
+			rejectedPassthroughCodec = null
+		}
 		currentStream = stream
 		playbackErrorOrigin = stream.errorOrigin
 		playbackErrorOrigin?.activate()
@@ -844,7 +881,7 @@ class LibMPVBackend(
 			if (stream.selectedAudioStreamIndex != null) pendingInitialTrackTypes += TrackType.AUDIO
 			if (stream.selectedSubtitleStreamIndex != null) pendingInitialTrackTypes += TrackType.SUBTITLE
 		}
-		val startPosition = stream.queueEntry.startPosition ?: Duration.ZERO
+		val startPosition = retryStart ?: stream.queueEntry.startPosition ?: Duration.ZERO
 		// The queue clears its one-shot position before our deferred load runs.
 		initialStartPosition = startPosition
 		observedProperties.clear("time-pos", "duration", "demuxer-cache-time", "demuxer-cache-duration", "seekable")
@@ -969,7 +1006,9 @@ class LibMPVBackend(
 		cancelNvidiaFallbackResync(restorePlayback = false)
 		loadRequested = false
 		endReported = true
-		lastPositionInfo = getPositionInfo()
+		val stoppedStream = currentStream
+		val stoppedPosition = getPositionInfo()
+		lastPositionInfo = stoppedPosition
 		runCommand("stop")
 		stopNativeSubtitleOverlay()
 		currentStream = null
@@ -989,7 +1028,7 @@ class LibMPVBackend(
 		forcedVideoDecoder = null
 		restoreNvidiaFallbackOptions()
 		listener?.onSubtitleTimingOffsetSupportChange(false)
-		publishPlayState(force = true)
+		publishPlayState(force = true, stream = stoppedStream, position = stoppedPosition.active)
 	}
 
 	override fun reset() {
@@ -1205,7 +1244,20 @@ class LibMPVBackend(
 		removedPresetOptions.forEach(::restoreOptionDefault)
 		removedOptions.forEach(::restoreCustomOption)
 		val runtimeOptions = linkedMapOf<String, String>().apply {
-			putAll(playbackOptions.runtimeOptions(presetDirectory, vulkanSupported, effectiveVideoOutput))
+			val rejectedCodec = rejectedPassthroughCodec
+				?.takeIf { passthroughRetryItem != null && currentStream?.queueEntry === passthroughRetryItem }
+			val options = if (rejectedCodec == null) playbackOptions else {
+				val codecs = playbackOptions.audioSpdif.split(',').filterNot {
+					it == rejectedCodec || (rejectedCodec.startsWith("dts") && it.startsWith("dts"))
+				}
+				val convert = playbackOptions.convertAudioToAc3 || playbackOptions.convertAudioToEac3
+				playbackOptions.copy(
+					audioSpdif = codecs.joinToString(","),
+					convertAudioToEac3 = convert && "eac3" in codecs,
+					convertAudioToAc3 = convert && "eac3" !in codecs && "ac3" in codecs,
+				)
+			}
+			putAll(options.runtimeOptions(presetDirectory, vulkanSupported, effectiveVideoOutput))
 			putAll(fallbackOptions)
 		}
 		runtimeOptions.forEach { (name, value) ->
@@ -1674,10 +1726,13 @@ class LibMPVBackend(
 		stopNativeSubtitleOverlay()
 		when (reason) {
 			"eof" -> {
-				terminalState = PlayState.STOPPED
-				publishPlayState(force = true)
-				if (!endReported) currentStream?.let { stream -> listener?.onMediaStreamEnd(stream, getPositionInfo().active) }
+				if (endReported) return
 				endReported = true
+				terminalState = PlayState.STOPPED
+				val stream = currentStream
+				val position = getPositionInfo().active
+				publishPlayState(force = true, stream = stream, position = position)
+				stream?.let { listener?.onMediaStreamEnd(it, position) }
 			}
 			"stop", "quit" -> {
 				terminalState = PlayState.STOPPED
@@ -1780,7 +1835,11 @@ class LibMPVBackend(
 		return if (isPaused) PlayState.PAUSED else PlayState.PLAYING
 	}
 
-	private fun publishPlayState(force: Boolean = false) {
+	private fun publishPlayState(
+		force: Boolean = false,
+		stream: PlayableMediaStream? = currentStream,
+		position: Duration? = null,
+	) {
 		val state = resolvePlayState()
 		if (!force && state == lastReportedState) return
 		lastReportedState = state
@@ -1789,7 +1848,7 @@ class LibMPVBackend(
 			lastTickPosition = getPositionInfo().active
 			handler.post(tick)
 		}
-		listener?.onPlayStateChange(state, currentStream, getPositionInfo().active)
+		listener?.onPlayStateChange(state, stream, position ?: getPositionInfo().active)
 	}
 
 	private fun addExternalSubtitles() {
