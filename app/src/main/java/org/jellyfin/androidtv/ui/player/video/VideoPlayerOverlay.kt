@@ -133,7 +133,8 @@ fun VideoPlayerOverlay(
 	var showLiveTvGuide by remember { mutableStateOf(false) }
 	var nextUpStartInProgress by remember { mutableStateOf(false) }
 	val coroutineScope = rememberCoroutineScope()
-	val keepOverlayVisible = playState == PlayState.PAUSED && !pausedOverlayDismissed && !seekPauseOverlaySuppressed
+	val keepOverlayVisible = playState == PlayState.ERROR ||
+		(playState == PlayState.PAUSED && !pausedOverlayDismissed && !seekPauseOverlaySuppressed)
 	val visibilityState = rememberPlayerOverlayVisibility(keepVisible = keepOverlayVisible)
 	val windowInfo = LocalWindowInfo.current
 	val entry by rememberQueueEntry(playbackManager)
@@ -279,7 +280,7 @@ fun VideoPlayerOverlay(
 		if (now - lastBackRequestAt <= BackDuplicateGuardDuration.inWholeMilliseconds) return
 		lastBackRequestAt = now
 
-		if (now <= backToStopDeadline) {
+		if (playState == PlayState.ERROR || now <= backToStopDeadline) {
 			backToStopDeadline = 0L
 			onClosePlayer()
 			return

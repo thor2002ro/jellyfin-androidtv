@@ -662,6 +662,7 @@ class ExoPlayerBackend(
 	private var audioCapabilitiesReceiverRegistered = false
 	private var audioCapabilitiesReceiverFailed = false
 	private var reportedPlayState: PlayState? = null
+	private var stopping = false
 	private var reportedEndedStream: PlayableMediaStream? = null
 	private var rendererPreferencesDirty = false
 	private var loadControlDirty = false
@@ -729,7 +730,7 @@ class ExoPlayerBackend(
 			positionInfo.active.inWholeMilliseconds,
 			positionInfo.duration.inWholeMilliseconds,
 		)
-		listener?.onMediaStreamEnd(stream, exoPlayer.currentPosition.milliseconds)
+		listener?.onMediaStreamEnd(stream, positionInfo.active)
 	}
 
 	private fun clearSubtitleCues() {
@@ -1111,7 +1112,7 @@ class ExoPlayerBackend(
 		videoRendererSwitchHandler.removeCallbacksAndMessages(null)
 		listener?.onPlaybackError(PlaybackError(DOVI_VIDEO_DECODER_ERROR_CODE, origin = errorOrigin))
 		exoPlayer.stop()
-		listener?.onPlayStateChange(PlayState.ERROR)
+		reportPlayState(PlayState.ERROR)
 	}
 
 	private fun recreateCurrentLiveTvMediaSource(): Boolean {
@@ -1715,6 +1716,10 @@ class ExoPlayerBackend(
 
 	inner class PlayerListener : Player.Listener {
 		override fun onIsPlayingChanged(isPlaying: Boolean) {
+			if (stopping || currentStream == null) return
+			// onPlayerError owns the terminal state when Media3 also reports IDLE.
+			if (exoPlayer.playbackState == Player.STATE_IDLE && exoPlayer.playerError != null) return
+
 			val state = when {
 				isPlaying -> PlayState.PLAYING
 				pendingLiveStartStream != null && pendingLiveStartStream == currentStream -> PlayState.BUFFERING
@@ -2145,6 +2150,8 @@ class ExoPlayerBackend(
 	}
 
 	override fun stop() {
+		val stoppedStream = currentStream
+		val stoppedPosition = stoppedStream?.let { getSafePositionInfo().active }
 		rejectedPassthroughMediaId = null
 		rejectedPassthroughMimeTypes = emptySet()
 		audioOutputFormat = null
@@ -2153,8 +2160,13 @@ class ExoPlayerBackend(
 		clearPendingLiveStart()
 		listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 		if (exoPlayerDelegate.isInitialized()) {
-			exoPlayer.isScrubbingModeEnabled = false
-			exoPlayer.stop()
+			stopping = true
+			try {
+				exoPlayer.isScrubbingModeEnabled = false
+				exoPlayer.stop()
+			} finally {
+				stopping = false
+			}
 			if (exoPlayerOptions.enableLibass) assHandler.reset()
 		}
 		clearSubtitleCues()
@@ -2167,6 +2179,10 @@ class ExoPlayerBackend(
 		unregisterAudioCapabilitiesReceiver()
 		setForcedVideoDecoder(null)
 		resetPlaybackStats()
+		if (stoppedStream != null) {
+			reportedPlayState = PlayState.STOPPED
+			listener?.onPlayStateChange(PlayState.STOPPED, stoppedStream, stoppedPosition)
+		}
 	}
 
 	override fun reset() {
@@ -2404,8 +2420,8 @@ class ExoPlayerBackend(
 	}
 
 	private fun reportPlayState(state: PlayState) {
-		val entry = exoPlayer.currentMediaItem?.localConfiguration?.tag as? QueueEntry
-		val stream = entry?.mediaStream
+		val entry = exoPlayer.currentMediaItem?.queueEntryTag
+		val stream = currentStream?.takeIf { it.queueEntry === entry && currentMediaItemMatchesCurrentStream() }
 		val position = stream?.let { exoPlayer.currentPosition.milliseconds }
 		listener?.onPlayStateChange(state, stream, position)
 	}
