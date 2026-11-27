@@ -25,7 +25,8 @@ class SubtitleTimingOffsetRenderersFactory @JvmOverloads constructor(
 	private val isAudioPassthroughEnabled: (String) -> Boolean = { true },
 	private val downmixToStereo: () -> Boolean = { false },
 	private val onAudioSinkBufferAttempt: () -> Unit = {},
-	private val onAudioOutputFormat: (Format?) -> Unit = {},
+	private val onAudioOutputFormat: (Format?, Boolean) -> Unit = { _, _ -> },
+	private val convertToSupportedSurround: () -> Boolean = { false },
 ) : DefaultRenderersFactory(context) {
 	override fun buildAudioSink(
 		context: Context,
@@ -45,6 +46,7 @@ class SubtitleTimingOffsetRenderersFactory @JvmOverloads constructor(
 			onBufferAttempt = onAudioSinkBufferAttempt,
 			onOutputFormat = onAudioOutputFormat,
 			isPassthroughEnabled = isAudioPassthroughEnabled,
+			convertToSupportedSurround = convertToSupportedSurround,
 		)
 	}
 

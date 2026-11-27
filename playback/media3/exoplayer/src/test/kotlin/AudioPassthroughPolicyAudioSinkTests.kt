@@ -25,7 +25,7 @@ class AudioPassthroughPolicyAudioSinkTests : FunSpec({
 		val sink = AudioPassthroughPolicyAudioSink(
 			delegate,
 			downmixToStereo = { true },
-			onOutputFormat = { output = it },
+			onOutputFormat = { format, _ -> output = format },
 			isPassthroughEnabled = { true },
 		)
 		val pcm = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_RAW).setChannelCount(6).build()

@@ -41,6 +41,7 @@ import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioCapabilitiesReceiver
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
@@ -543,6 +544,14 @@ class ExoPlayerBackend(
 	private var subtitleView: SubtitleView? = null
 	private val audioPipeline = ExoPlayerAudioPipeline()
 	private var audioOutputFormat: Format? = null
+	private var audioOutputIsLocalConversion = false
+	private var rejectedPassthroughMediaId: String? = null
+
+	@Volatile
+	private var rejectedPassthroughMimeTypes: Set<String> = emptySet()
+
+	private fun isAudioPassthroughEnabled(mimeType: String): Boolean =
+		mimeType !in rejectedPassthroughMimeTypes && exoPlayerOptions.isAudioPassthroughEnabled(mimeType)
 	private var audioOutputGeneration = 0L
 
 	private fun updateSurroundVolumeBoost() {
@@ -554,10 +563,11 @@ class ExoPlayerBackend(
 		)
 	}
 
-	private fun onAudioOutputFormat(format: Format?, generation: Long) {
+	private fun onAudioOutputFormat(format: Format?, localConversion: Boolean, generation: Long) {
 		audioOutputHandler.post {
 			if (released || generation != audioOutputGeneration) return@post
 			audioOutputFormat = format
+			audioOutputIsLocalConversion = localConversion
 			updateSurroundVolumeBoost()
 		}
 	}
@@ -1051,6 +1061,28 @@ class ExoPlayerBackend(
 		}, AUDIO_DECODER_STALL_TIMEOUT_MS)
 	}
 
+	private fun retryRejectedPassthrough(error: PlaybackException): Boolean {
+		if (!exoPlayerOptions.convertToSupportedSurround()) return false
+		val failure = generateSequence<Throwable>(error) { it.cause }
+			.filterIsInstance<AudioSink.InitializationException>()
+			.firstOrNull() ?: return false
+		val mimeType = failure.format.sampleMimeType ?: return false
+		if (mimeType == MimeTypes.AUDIO_RAW || !MimeTypes.isAudio(mimeType)) return false
+
+		val player = exoPlayer
+		val mediaId = player.currentMediaItem?.mediaId ?: return false
+		if (rejectedPassthroughMediaId != mediaId) rejectedPassthroughMimeTypes = emptySet()
+		if (mimeType in rejectedPassthroughMimeTypes) return false
+		rejectedPassthroughMediaId = mediaId
+		rejectedPassthroughMimeTypes += mimeType
+
+		val positionMs = player.currentPosition
+		Timber.w("ExoPlayer audio output rejected %s; retrying mediaId=%s at %d ms", mimeType, mediaId, positionMs)
+		player.seekTo(player.currentMediaItemIndex, positionMs)
+		player.prepare()
+		return true
+	}
+
 	private fun fallbackToFfmpegAudio(error: ExoPlaybackException): Boolean {
 		val rendererIndex = error.rendererIndex
 		val format = error.rendererFormat ?: audioInputFormat
@@ -1236,8 +1268,8 @@ class ExoPlayerBackend(
 
 	private fun createExoPlayer(): ExoPlayer {
 		val audioGeneration = ++audioOutputGeneration
-		val onAudioOutputFormatChanged: (Format?) -> Unit = { format ->
-			onAudioOutputFormat(format, audioGeneration)
+		val onAudioOutputFormatChanged: (Format?, Boolean) -> Unit = { format, localConversion ->
+			onAudioOutputFormat(format, localConversion, audioGeneration)
 		}
 		val rendererPreferences = rendererPreferences()
 		val dataSourceFactory = DefaultDataSource.Factory(
@@ -1386,7 +1418,8 @@ class ExoPlayerBackend(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
 				subtitleParserFactory = subtitleParserFactory,
-				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
+				isAudioPassthroughEnabled = ::isAudioPassthroughEnabled,
+				convertToSupportedSurround = exoPlayerOptions.convertToSupportedSurround,
 				downmixToStereo = exoPlayerOptions.downmixToStereo,
 				onAudioSinkBufferAttempt = onAudioSinkBufferAttempt,
 				onAudioOutputFormat = onAudioOutputFormatChanged,
@@ -1403,7 +1436,8 @@ class ExoPlayerBackend(
 				context = context,
 				offsetState = subtitleTimingOffsetState,
 				subtitleParserFactory = defaultSubtitleParserFactory,
-				isAudioPassthroughEnabled = exoPlayerOptions.isAudioPassthroughEnabled,
+				isAudioPassthroughEnabled = ::isAudioPassthroughEnabled,
+				convertToSupportedSurround = exoPlayerOptions.convertToSupportedSurround,
 				downmixToStereo = exoPlayerOptions.downmixToStereo,
 				onAudioSinkBufferAttempt = onAudioSinkBufferAttempt,
 				onAudioOutputFormat = onAudioOutputFormatChanged,
@@ -1705,6 +1739,7 @@ class ExoPlayerBackend(
 		}
 
 		override fun onPlayerError(error: PlaybackException) {
+			if (retryRejectedPassthrough(error)) return
 			val doviErrorCode = error.doviTransformationPlaybackErrorCode()
 			val rendererError = (error as? ExoPlaybackException)
 				?.takeIf { playbackError -> playbackError.type == ExoPlaybackException.TYPE_RENDERER }
@@ -1812,6 +1847,10 @@ class ExoPlayerBackend(
 		}
 
 		override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+			if (mediaItem?.mediaId != rejectedPassthroughMediaId) {
+				rejectedPassthroughMediaId = null
+				rejectedPassthroughMimeTypes = emptySet()
+			}
 			cancelAudioDecoderStallCheck()
 			listener?.onVideoGeometryChange(VideoGeometry.EMPTY)
 			val queueEntry = mediaItem?.queueEntryTag
@@ -2106,6 +2145,8 @@ class ExoPlayerBackend(
 	}
 
 	override fun stop() {
+		rejectedPassthroughMediaId = null
+		rejectedPassthroughMimeTypes = emptySet()
 		audioOutputFormat = null
 		audioPipeline.surroundGain = 0
 		audioPipeline.normalizationGain = null
@@ -2232,6 +2273,7 @@ class ExoPlayerBackend(
 			audioDecoderName = audioDecoderName,
 			audioDecoderType = audioDecoderType,
 			audioCodec = audioInputFormat?.sampleMimeType,
+			localAudioConversionCodec = audioOutputFormat?.sampleMimeType.takeIf { audioOutputIsLocalConversion },
 			audioPassthroughSupported = audioPassthroughSupported,
 			bufferedBytes = bufferDetails,
 			subtitleExtractor = subtitleExtractorDebug(),

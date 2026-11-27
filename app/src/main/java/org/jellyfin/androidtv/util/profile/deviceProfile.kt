@@ -10,6 +10,7 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
+import androidx.media3.decoder.ffmpeg.FfmpegSurroundEncoder
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import kotlin.math.roundToInt
 import org.jellyfin.androidtv.constant.Codec
@@ -146,8 +147,16 @@ internal fun createDeviceProfile(
 	} else {
 		getSupportedPassthroughAudioMimes(context, passthroughAudioCodecMimes.keys)
 	}
-	val convertAudioLocally = enableMpvAudio && userPreferences.mpvAudioPolicy(supportedPassthroughAudioMimes).let {
-		it.convertAudioToAc3 || it.convertAudioToEac3
+	val convertAudioLocally = when {
+		enableMpvAudio -> userPreferences.mpvAudioPolicy(supportedPassthroughAudioMimes).let {
+			it.convertAudioToAc3 || it.convertAudioToEac3
+		}
+		enableFfmpegAudio && audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH ->
+			listOf(MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_AC3).any { mime ->
+				mime in supportedPassthroughAudioMimes && userPreferences.isAudioPassthroughEnabled(mime) &&
+					FfmpegSurroundEncoder.isAvailable(mime == MimeTypes.AUDIO_E_AC3)
+			}
+		else -> false
 	}
 	return createDeviceProfile(
 		mediaTest = mediaTest,
@@ -167,7 +176,7 @@ internal fun createDeviceProfile(
 		doviPlaybackPlan = doviPlaybackPlan,
 		supportsDolbyVisionDisplay = DISPLAY_HDR_TYPE_DOLBY_VISION in getSupportedDisplayHdrTypes(context),
 		passthroughAudioCodecs = if (allowPassthrough) userPreferences.profilePassthroughAudioCodecs(supportedPassthroughAudioMimes) else emptySet(),
-		// Keep original surround audio for MPV's encoder instead of requesting server conversion.
+		// Keep the original surround audio when the selected player can encode locally.
 		transcodeToPassthrough = allowPassthrough && audioBehavior == AudioBehavior.TRANSCODE_TO_PASSTHROUGH && !convertAudioLocally,
 		supportsDtsHdPassthrough = MimeTypes.AUDIO_DTS_HD in supportedPassthroughAudioMimes,
 		enableFfmpegAudio = enableFfmpegAudio,

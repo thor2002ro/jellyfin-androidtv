@@ -27,4 +27,5 @@ data class ExoPlayerOptions(
 	val bufferForPlaybackDuration: Duration? = null,
 	val bufferForPlaybackAfterRebufferDuration: Duration? = null,
 	val liveTvBufferDuration: Duration? = null,
+	val convertToSupportedSurround: () -> Boolean = { false },
 )

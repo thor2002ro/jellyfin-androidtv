@@ -121,6 +121,7 @@ private fun Scope.createExoPlayerBackend(): ExoPlayerBackend {
 	val userPreferences = get<UserPreferences>()
 	val exoPlayerOptions = ExoPlayerOptions(
 		isAudioPassthroughEnabled = userPreferences::isAudioPassthroughEnabled,
+		convertToSupportedSurround = { userPreferences[UserPreferences.audioBehaviour] == AudioBehavior.TRANSCODE_TO_PASSTHROUGH },
 		downmixToStereo = { userPreferences[UserPreferences.audioBehaviour] == AudioBehavior.DOWNMIX_TO_STEREO },
 		surroundVolumeBoost = { userPreferences[UserPreferences.surroundVolumeBoost] },
 		preferFfmpegAudio = { userPreferences[UserPreferences.preferExoPlayerFfmpeg] },
