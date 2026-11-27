@@ -215,14 +215,14 @@ internal fun hasDecoderStalled(
 	currentRenderedOutputBufferCount <= renderedOutputBufferCount
 
 internal fun shouldWatchVideoDecoderStall(playWhenReady: Boolean, playbackState: Int) =
-	playWhenReady && (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING)
+	playWhenReady && playbackState == Player.STATE_READY
 
 internal fun shouldWatchAudioDecoderStall(
 	playWhenReady: Boolean,
 	playbackState: Int,
 	decoderName: String?,
 	isLoading: Boolean,
-) = shouldWatchVideoDecoderStall(playWhenReady, playbackState) &&
+) = playWhenReady && (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING) &&
 	decoderName?.startsWith("ffmpeg", ignoreCase = true) == false &&
 	!isLoading
 
@@ -495,7 +495,7 @@ class ExoPlayerBackend(
 		private const val LIVE_START_CHECK_INTERVAL_MS = 250L
 		private const val LIVE_START_TIMEOUT_MS = 15_000L
 		private const val VIDEO_FIRST_FRAME_TIMEOUT_MS = 5_000L
-		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 3_000L
+		private const val VIDEO_DECODER_STALL_TIMEOUT_MS = 15_000L
 		private const val AUDIO_DECODER_STALL_TIMEOUT_MS = 3_000L
 		private const val HARDWARE_VIDEO_DECODER_RETRY_LIMIT = 3
 
@@ -867,6 +867,7 @@ class ExoPlayerBackend(
 	}
 
 	private fun scheduleVideoFirstFrameFallback(decoderName: String) {
+		if (exoPlayer.playbackState != Player.STATE_READY || hasRenderedFirstVideoFrame) return
 		if (
 			forcedVideoDecoder == null &&
 			(preferFfmpegVideo() || decoderName.startsWith("ffmpeg", ignoreCase = true))
@@ -878,6 +879,7 @@ class ExoPlayerBackend(
 		val renderedOutputBufferCount = counters.renderedOutputBufferCount
 		videoFirstFrameHandler.removeCallbacksAndMessages(null)
 		videoFirstFrameHandler.postDelayed({
+			if (exoPlayer.playbackState != Player.STATE_READY) return@postDelayed
 			if (videoDecoderName != decoderName || exoPlayer.currentMediaItem?.mediaId != mediaId) {
 				return@postDelayed
 			}
@@ -1803,6 +1805,8 @@ class ExoPlayerBackend(
 
 		override fun onPlaybackStateChanged(playbackState: Int) {
 			updateSurroundVolumeBoost()
+			if (playbackState == Player.STATE_READY) videoDecoderName?.let(::scheduleVideoFirstFrameFallback)
+			else videoFirstFrameHandler.removeCallbacksAndMessages(null)
 			if (shouldWatchVideoDecoderStall(exoPlayer.playWhenReady, playbackState)) scheduleVideoDecoderStallFallback()
 			else videoBufferingHandler.removeCallbacksAndMessages(null)
 			if (playbackState == Player.STATE_BUFFERING) scheduleAudioDecoderStallFallback()

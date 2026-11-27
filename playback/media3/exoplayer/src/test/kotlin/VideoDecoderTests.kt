@@ -261,9 +261,9 @@ class VideoDecoderTests : FunSpec({
 		hasDecoderStalled(10, 5, 11, 6) shouldBe false
 	}
 
-	test("decoder stalls are watched during active ready and buffering playback") {
+	test("video decoder stalls are watched only during active ready playback") {
 		shouldWatchVideoDecoderStall(true, Player.STATE_READY) shouldBe true
-		shouldWatchVideoDecoderStall(true, Player.STATE_BUFFERING) shouldBe true
+		shouldWatchVideoDecoderStall(true, Player.STATE_BUFFERING) shouldBe false
 		shouldWatchVideoDecoderStall(false, Player.STATE_READY) shouldBe false
 		shouldWatchVideoDecoderStall(true, Player.STATE_IDLE) shouldBe false
 	}
