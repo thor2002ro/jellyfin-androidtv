@@ -3,7 +3,10 @@ package org.jellyfin.androidtv.ui.browsing.composable.inforow
 import android.content.Context
 import android.util.AttributeSet
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -11,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -20,7 +24,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.preference.UserPreferences
@@ -262,11 +268,48 @@ fun InfoRowMediaDetails(mediaSource: MediaSourceInfo) {
 }
 
 @Composable
+private fun ProgramBadges(item: BaseItemDto) {
+	if (item.isNew()) {
+		InfoRowItem(
+			contentDescription = null,
+			colors = InfoRowColors.Green,
+			modifier = Modifier.widthIn(min = 48.dp),
+			verticalPadding = 3.dp,
+		) {
+			Text(stringResource(R.string.lbl_new), maxLines = 1)
+		}
+	}
+
+	if (item.isSeries == true && item.isNews != true) {
+		InfoRowItem(
+			contentDescription = null,
+			colors = InfoRowColors.Default,
+			modifier = Modifier.widthIn(min = 48.dp),
+			verticalPadding = 3.dp,
+		) {
+			Text(stringResource(R.string.lbl_repeat), maxLines = 1)
+		}
+	}
+	if (item.isLive == true) {
+		InfoRowItem(
+			contentDescription = null,
+			colors = InfoRowColors.Default,
+			modifier = Modifier.widthIn(min = 48.dp),
+			verticalPadding = 3.dp,
+		) {
+			Text(stringResource(R.string.lbl_live), maxLines = 1)
+		}
+	}
+}
+
+@Composable
 fun BaseItemInfoRow(
 	item: BaseItemDto,
 	mediaSource: MediaSourceInfo?,
 	includeRuntime: Boolean,
 	includeProgramTime: Boolean = true,
+	programSubTextMaxLines: Int = 1,
+	showProgramMetadata: Boolean = true,
 ) {
 	val userPreferences = koinInject<UserPreferences>()
 
@@ -274,8 +317,10 @@ fun BaseItemInfoRow(
 		horizontalArrangement = Arrangement.spacedBy(8.dp),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
-		item.communityRating?.let { InfoRowCommunityRating(it / 10f) }
-		item.criticRating?.let { InfoRowCriticRating(it / 100f) }
+		if (item.type != BaseItemKind.PROGRAM || showProgramMetadata) {
+			item.communityRating?.let { InfoRowCommunityRating(it / 10f) }
+			item.criticRating?.let { InfoRowCriticRating(it / 100f) }
+		}
 
 		when (item.type) {
 			BaseItemKind.EPISODE -> {
@@ -316,41 +361,22 @@ fun BaseItemInfoRow(
 				val context = LocalContext.current
 				val subText = item.getProgramSubText(context, includeTime = includeProgramTime)
 				if (subText.isNotBlank()) {
-					InfoRowItem(contentDescription = null) {
-						Text(subText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+					InfoRowItem(contentDescription = null, modifier = Modifier.weight(1f, fill = false)) {
+						Text(
+							subText,
+							fontSize = if (programSubTextMaxLines > 1) 14.sp else TextUnit.Unspecified,
+							maxLines = programSubTextMaxLines,
+							overflow = TextOverflow.Ellipsis,
+						)
 					}
 				}
 
-				if (item.isNew()) {
-					InfoRowItem(
-						contentDescription = null,
-						colors = InfoRowColors.Green,
-					) {
-						Text(stringResource(R.string.lbl_new))
-					}
+				if (showProgramMetadata) {
+					ProgramBadges(item)
+					if (includeRuntime) item.runTimeTicks?.ticks?.let { BaseItemInfoRowRuntime(it) }
+					item.officialRating?.let { InfoRowParentalRating(it) }
+					mediaSource?.let { InfoRowMediaDetails(it) }
 				}
-
-				if (item.isSeries == true && item.isNews != true) {
-					InfoRowItem(
-						contentDescription = null,
-						colors = InfoRowColors.Default,
-					) {
-						Text(stringResource(R.string.lbl_repeat))
-					}
-				}
-
-				if (item.isLive == true) {
-					InfoRowItem(
-						contentDescription = null,
-						colors = InfoRowColors.Default,
-					) {
-						Text(stringResource(R.string.lbl_live))
-					}
-				}
-
-				if (includeRuntime) item.runTimeTicks?.ticks?.let { BaseItemInfoRowRuntime(it) }
-				item.officialRating?.let { InfoRowParentalRating(it) }
-				mediaSource?.let { InfoRowMediaDetails(it) }
 			}
 
 			BaseItemKind.MUSIC_ARTIST -> {
@@ -415,6 +441,9 @@ class BaseItemInfoRowView @JvmOverloads constructor(
 	private val _includeRuntime = MutableStateFlow(false)
 	var contentScale by mutableStateOf(1f)
 	var includeProgramTime by mutableStateOf(true)
+	var programSubTextMaxLines by mutableStateOf(1)
+	var showProgramMetadata by mutableStateOf(true)
+	var programMetadataOnly by mutableStateOf(false)
 
 	var item: BaseItemDto?
 		get() = _item.value
@@ -447,7 +476,26 @@ class BaseItemInfoRowView @JvmOverloads constructor(
 
 		val density = LocalDensity.current
 		CompositionLocalProvider(LocalDensity provides Density(density.density * contentScale, density.fontScale)) {
-			item?.let { BaseItemInfoRow(it, mediaSource, includeRuntime, includeProgramTime) }
+			item?.let {
+				if (programMetadataOnly) {
+					Box(contentAlignment = Alignment.Center) {
+						Row(
+							horizontalArrangement = Arrangement.spacedBy(8.dp),
+							verticalAlignment = Alignment.CenterVertically,
+							modifier = Modifier.heightIn(max = 24.dp),
+						) {
+							it.officialRating?.let { rating -> InfoRowParentalRating(rating, compact = true) }
+							ProgramBadges(it)
+							if (includeRuntime) it.runTimeTicks?.ticks?.let { ticks -> BaseItemInfoRowRuntime(ticks) }
+							it.communityRating?.let { rating -> InfoRowCommunityRating(rating / 10f) }
+							it.criticRating?.let { rating -> InfoRowCriticRating(rating / 100f) }
+							mediaSource?.let { source -> InfoRowMediaDetails(source) }
+						}
+					}
+				} else {
+					BaseItemInfoRow(it, mediaSource, includeRuntime, includeProgramTime, programSubTextMaxLines, showProgramMetadata)
+				}
+			}
 		}
 	}
 }

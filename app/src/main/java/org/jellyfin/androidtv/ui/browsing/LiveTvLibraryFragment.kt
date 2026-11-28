@@ -1,9 +1,17 @@
 package org.jellyfin.androidtv.ui.browsing
 
+import android.animation.ValueAnimator
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
 import android.view.View
+import android.widget.RelativeLayout
+import android.widget.TextView
+import androidx.core.view.OneShotPreDrawListener
+import androidx.core.view.doOnPreDraw
+import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
+import androidx.core.widget.doAfterTextChanged
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ListRow
@@ -15,6 +23,7 @@ import org.jellyfin.androidtv.constant.ImageType
 import org.jellyfin.androidtv.constant.LiveTvOption
 import org.jellyfin.androidtv.constant.QueryType
 import org.jellyfin.androidtv.ui.GridButton
+import org.jellyfin.androidtv.ui.browsing.composable.inforow.BaseItemInfoRowView
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItemSelectAction
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.livetv.LiveTvCardActionHandler
@@ -25,11 +34,13 @@ import org.jellyfin.androidtv.ui.presentation.ActionButtonPresenter
 import org.jellyfin.androidtv.ui.presentation.ActionButtonSize
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import org.jellyfin.androidtv.ui.presentation.startDescriptionScroll
 import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.androidtv.util.dimenDp
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -43,9 +54,14 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 	private val liveTvRowAdapters = mutableListOf<ItemRowAdapter>()
 	private val liveTvActions by lazy { LiveTvCardActionHandler(this, api, playbackHelper) { _, _ -> refreshLiveTvRows() } }
 
+	private var summaryPreDraw: OneShotPreDrawListener? = null
+	private var summaryAnimator: ValueAnimator? = null
+	private var titleMetadata: BaseItemInfoRowView? = null
+
 	override fun onResume() {
 		val wasJustLoaded = justLoaded
 		super.onResume()
+		updateSummaryScroll(requireView().findViewById(R.id.summary))
 		LiveTvGuidePlayback.stopIfStarted(
 			playbackManager = playbackManager,
 			videoQueueManager = videoQueueManager,
@@ -57,20 +73,56 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 
 	override fun onViewCreated(view: View, savedInstanceState: android.os.Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
-		view.findViewById<android.widget.TextView>(R.id.summary).apply {
+		titleMetadata = view.findViewById<BaseItemInfoRowView>(R.id.titleMetadata).apply {
+			includeRuntime = true
+			programMetadataOnly = true
+		}
+		val headerTextHeight = TypedValue.applyDimension(
+			TypedValue.COMPLEX_UNIT_SP,
+			LIVE_TV_HEADER_TEXT_HEIGHT_SP,
+			resources.displayMetrics,
+		).toInt()
+		view.findViewById<View>(R.id.infoRow).updateLayoutParams<RelativeLayout.LayoutParams> {
+			height = headerTextHeight
+		}
+		view.findViewById<View>(R.id.rowsFragment).updateLayoutParams<RelativeLayout.LayoutParams> {
+			topMargin += (LIVE_TV_HEADER_BOTTOM_GAP_DP * resources.displayMetrics.density).toInt()
+		}
+		view.findViewById<TextView>(R.id.summary).apply {
 			setTextSize(TypedValue.COMPLEX_UNIT_SP, LIVE_TV_SUMMARY_TEXT_SIZE_SP)
+			ellipsize = null
 			maxLines = LIVE_TV_SUMMARY_MAX_LINES
-			layoutParams = layoutParams.apply {
-				height = TypedValue.applyDimension(
-					TypedValue.COMPLEX_UNIT_DIP,
-					LIVE_TV_SUMMARY_HEIGHT_DP,
-					resources.displayMetrics,
-				).toInt()
+			doAfterTextChanged { updateSummaryScroll(this) }
+			updateLayoutParams<RelativeLayout.LayoutParams> {
+				height = headerTextHeight
 			}
 		}
 	}
 
+	private fun updateSummaryScroll(summary: TextView) {
+		stopSummaryScroll()
+		summary.scrollTo(0, 0)
+		if (!isResumed) return
+
+		summaryPreDraw = summary.doOnPreDraw {
+			summaryPreDraw = null
+			val textHeight = summary.layout?.height ?: return@doOnPreDraw
+			val visibleHeight = summary.height - summary.totalPaddingTop - summary.totalPaddingBottom
+			if (visibleHeight > 0) {
+				summaryAnimator = startDescriptionScroll(summary, textHeight - visibleHeight)
+			}
+		}
+	}
+
+	private fun stopSummaryScroll() {
+		summaryPreDraw?.removeListener()
+		summaryPreDraw = null
+		summaryAnimator?.cancel()
+		summaryAnimator = null
+	}
+
 	override fun onPause() {
+		stopSummaryScroll()
 		liveTvActions.dismiss()
 		super.onPause()
 	}
@@ -193,6 +245,25 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 
 	override fun getDefaultCardImageType() = ImageType.THUMB
 
+	override fun updateInfoRow(item: BaseItemDto?): BaseItemInfoRowView? {
+		val info = super.updateInfoRow(item)
+		val program = item?.takeIf { it.type == BaseItemKind.PROGRAM }
+		titleMetadata?.apply {
+			this.item = program
+			mediaSource = info?.mediaSource
+			isVisible = program != null
+		}
+		if (program != null) info?.showProgramMetadata = false
+		return info
+	}
+
+	override fun onDestroyView() {
+		titleMetadata = null
+		super.onDestroyView()
+	}
+
+	override fun getProgramSubTextMaxLines() = LIVE_TV_SUMMARY_MAX_LINES
+
 	override fun getDefaultCardHeight() = requireContext().dimenDp(R.dimen.live_tv_card_height)
 
 	override fun getDefaultGridButtonWidth() = requireContext().dimenDp(R.dimen.live_tv_action_tile_width)
@@ -200,9 +271,10 @@ open class LiveTvLibraryFragment : EnhancedBrowseFragment() {
 	override fun getDefaultGridButtonHeight() = requireContext().dimenDp(R.dimen.live_tv_action_tile_height)
 
 	private companion object {
-		const val LIVE_TV_SUMMARY_TEXT_SIZE_SP = 11f
-		const val LIVE_TV_SUMMARY_HEIGHT_DP = 72f
-		const val LIVE_TV_SUMMARY_MAX_LINES = 4
+		const val LIVE_TV_HEADER_TEXT_HEIGHT_SP = 40f
+		const val LIVE_TV_SUMMARY_TEXT_SIZE_SP = 14f
+		const val LIVE_TV_SUMMARY_MAX_LINES = 2
+		const val LIVE_TV_HEADER_BOTTOM_GAP_DP = 6f
 		const val SMART_ROW_INSERT_INDEX = 2
 		const val SMART_ROW_ORDER = 0.5
 		const val LIVE_TV_ROWS_REFRESH_DELAY_MS = 3_500L

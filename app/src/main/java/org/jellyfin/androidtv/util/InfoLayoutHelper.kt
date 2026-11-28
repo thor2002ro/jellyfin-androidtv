@@ -14,7 +14,7 @@ object InfoLayoutHelper {
 		mediaSource: MediaSourceInfo?,
 		layout: LinearLayout,
 		includeRuntime: Boolean
-	) {
+	): BaseItemInfoRowView {
 		// Find existing BaseItemInfoRowView or create a new one
 		var baseItemInfoRowView: BaseItemInfoRowView? = null
 
@@ -36,6 +36,7 @@ object InfoLayoutHelper {
 		baseItemInfoRowView.item = item
 		baseItemInfoRowView.mediaSource = mediaSource ?: item?.mediaSources?.firstOrNull()
 		baseItemInfoRowView.includeRuntime = includeRuntime
+		return baseItemInfoRowView
 	}
 
 	@JvmStatic

@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jellyfin.androidtv.ui.base.Icon
@@ -32,15 +33,17 @@ fun InfoRowItem(
 	contentDescription: String?,
 	// Styling
 	colors: Pair<Color, Color> = InfoRowColors.Transparent,
+	modifier: Modifier = Modifier.fillMaxHeight(),
+	verticalPadding: Dp = 0.dp,
 	// Content
 	content: @Composable RowScope.() -> Unit,
 ) {
 	val (backgroundColor, foregroundColor) = colors
 
-	val modifier = when {
+	val badgeStyle = when {
 		backgroundColor.alpha > 0f -> Modifier
 			.background(backgroundColor, RoundedCornerShape(3.dp))
-			.padding(horizontal = 5.dp)
+			.padding(horizontal = 5.dp, vertical = verticalPadding)
 
 		else -> Modifier
 	}
@@ -53,9 +56,9 @@ fun InfoRowItem(
 		)
 	) {
 		Row(
-			horizontalArrangement = Arrangement.spacedBy(3.dp),
+			horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
 			verticalAlignment = Alignment.CenterVertically,
-			modifier = modifier.fillMaxHeight(),
+			modifier = modifier.then(badgeStyle),
 		) {
 			if (icon != null) {
 				Icon(

@@ -1,10 +1,14 @@
 package org.jellyfin.androidtv.ui.browsing.composable.inforow
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.dp
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.ui.base.Text
 import java.text.NumberFormat
@@ -50,11 +54,13 @@ fun InfoRowCriticRating(criticRating: Float) {
  * A parental rating item in the [BaseItemInfoRow].
  */
 @Composable
-fun InfoRowParentalRating(parentalRating: String) {
+fun InfoRowParentalRating(parentalRating: String, compact: Boolean = false) {
 	InfoRowItem(
 		contentDescription = stringResource(R.string.lbl_rating),
 		colors = InfoRowColors.Default,
+		modifier = if (compact) Modifier.widthIn(min = 48.dp) else Modifier.fillMaxHeight(),
+		verticalPadding = if (compact) 3.dp else 0.dp,
 	) {
-		Text(parentalRating)
+		Text(parentalRating, maxLines = if (compact) 1 else Int.MAX_VALUE)
 	}
 }

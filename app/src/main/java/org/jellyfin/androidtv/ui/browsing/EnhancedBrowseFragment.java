@@ -54,6 +54,7 @@ import org.jellyfin.androidtv.ui.presentation.GridButtonPresenter;
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter;
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter;
 import org.jellyfin.androidtv.util.CoroutineUtils;
+import org.jellyfin.androidtv.ui.browsing.composable.inforow.BaseItemInfoRowView;
 import org.jellyfin.androidtv.util.InfoLayoutHelper;
 import org.jellyfin.androidtv.util.KeyProcessor;
 import org.jellyfin.androidtv.util.MarkdownRenderer;
@@ -539,6 +540,19 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
         return 155;
     }
 
+    @Nullable
+    protected BaseItemInfoRowView updateInfoRow(@Nullable BaseItemDto item) {
+        mInfoRow.removeAllViews();
+        if (item == null) return null;
+        BaseItemInfoRowView info = InfoLayoutHelper.addInfoRow(requireContext(), item, mInfoRow, true);
+        info.setProgramSubTextMaxLines(getProgramSubTextMaxLines());
+        return info;
+    }
+
+    protected int getProgramSubTextMaxLines() {
+        return 1;
+    }
+
     protected int getDefaultGridButtonHeight() {
         return 140;
     }
@@ -563,8 +577,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
                 mSummary.setText(markdownRenderer.getValue().toMarkdownSpanned(summary));
             else mSummary.setText(null);
 
-            mInfoRow.removeAllViews();
-            InfoLayoutHelper.addInfoRow(requireContext(), rowItem.getDetailBaseItem(), mInfoRow, true);
+            updateInfoRow(rowItem.getDetailBaseItem());
             backgroundService.getValue().setBackground(rowItem.getDetailBaseItem());
         }
     };
@@ -576,7 +589,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
             mHandler.removeCallbacks(mDelayedSetItem);
             if (!(item instanceof BaseRowItem)) {
                 mTitle.setText(mFolder != null ? mFolder.getName() : "");
-                mInfoRow.removeAllViews();
+                updateInfoRow(null);
                 mSummary.setText("");
                 mCurrentItem = null;
                 mCurrentRow = null;
@@ -590,7 +603,7 @@ public class EnhancedBrowseFragment extends Fragment implements RowLoader, View.
             mCurrentItem = rowItem;
             mCurrentRow = (ListRow) row;
             mTitle.setText(rowItem.getName(requireContext()));
-            mInfoRow.removeAllViews();
+            updateInfoRow(null);
             mSummary.setText(null);
             mHandler.postDelayed(mDelayedSetItem, VIEW_SELECT_UPDATE_DELAY);
 

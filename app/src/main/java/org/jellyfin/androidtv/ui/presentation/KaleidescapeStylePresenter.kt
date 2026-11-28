@@ -354,19 +354,7 @@ private class KaleidescapeStyleDetails(context: Context) : LinearLayout(context)
 		description.scrollTo(0, 0)
 		val distance = overview.height - description.height
 		if (!isShown || distance <= 0 || description.height <= 0) return
-		val scrollDuration = (distance / resources.displayMetrics.density / DESCRIPTION_SPEED_DP_PER_SECOND * 1000).toLong()
-		val cycleDuration = DESCRIPTION_PAUSE_MS * 2 + scrollDuration
-		descriptionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-			duration = cycleDuration
-			repeatCount = ValueAnimator.INFINITE
-			interpolator = LinearInterpolator()
-			addUpdateListener { animator ->
-				val elapsed = animator.animatedFraction * cycleDuration
-				val progress = ((elapsed - DESCRIPTION_PAUSE_MS) / scrollDuration).coerceIn(0f, 1f)
-				description.scrollTo(0, (distance * progress).toInt())
-			}
-			start()
-		}
+		descriptionAnimator = startDescriptionScroll(description, distance)
 	}
 
 	private fun stopDescriptionScroll() {
@@ -489,3 +477,21 @@ private const val DESCRIPTION_PAUSE_MS = 2000L
 private const val DESCRIPTION_SPEED_DP_PER_SECOND = 12f
 private const val DETAILS_BACKGROUND_COLOR = 0xff08192d.toInt()
 private const val DETAILS_FALLBACK_COLOR = 0xe608192d.toInt()
+
+
+internal fun startDescriptionScroll(view: View, distance: Int): ValueAnimator? {
+	if (distance <= 0) return null
+	val scrollDuration = (distance / view.resources.displayMetrics.density / DESCRIPTION_SPEED_DP_PER_SECOND * 1000).toLong().coerceAtLeast(1)
+	val cycleDuration = DESCRIPTION_PAUSE_MS * 2 + scrollDuration
+	return ValueAnimator.ofFloat(0f, 1f).apply {
+		duration = cycleDuration
+		repeatCount = ValueAnimator.INFINITE
+		interpolator = LinearInterpolator()
+		addUpdateListener { animator ->
+			val elapsed = animator.animatedFraction * cycleDuration
+			val progress = ((elapsed - DESCRIPTION_PAUSE_MS) / scrollDuration).coerceIn(0f, 1f)
+			view.scrollTo(0, (distance * progress).toInt())
+		}
+		start()
+	}
+}
